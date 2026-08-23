@@ -36,7 +36,9 @@ import { driveSpirit, spiritDriver } from '../src/world/games/ember-rally/spirit
 import { isRun, runAt, runDurationMs } from '../src/world/games/ember-rally/model'
 
 const DT = 1 / 120
-const IDLE: CarInput = { steer: 0, brake: 0, handbrake: false, boost: false }
+const IDLE: CarInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false }
+/** Flat out, straight ahead. */
+const FLAT: CarInput = { steer: 0, throttle: 1, brake: 0, handbrake: false, boost: false }
 
 function fixed(n: number, places = 2): string {
   return Number.isFinite(n) ? n.toFixed(places) : String(n)
@@ -108,7 +110,7 @@ function straightLine() {
   const gears: number[] = []
 
   for (let step = 0; step < 120 * 60; step++) {
-    advanceCar(track, car, IDLE, DT)
+    advanceCar(track, car, FLAT, DT)
     const v = speedOf(car)
     top = Math.max(top, v)
     spinPeak = Math.max(spinPeak, wheelspinOf(car))
@@ -125,7 +127,7 @@ function straightLine() {
   let boostTop = 0
   for (let step = 0; step < 120 * 60; step++) {
     boosted.ember = 1
-    const input = { ...IDLE, boost: boosted.boostLeft <= 0 }
+    const input = { ...FLAT, boost: boosted.boostLeft <= 0 }
     advanceCar(track, boosted, input, DT)
     boostTop = Math.max(boostTop, speedOf(boosted))
   }
@@ -158,7 +160,7 @@ function skidPad() {
     // wide enough to be about to leave.
     const steer = Math.max(-1, Math.min(1, -car.n * 0.1 - car.psi * 1.9 - car.yaw * 0.12))
     const wide = Math.abs(car.n) > 6
-    advanceCar(track, car, { steer, brake: wide ? 0.55 : 0, handbrake: false, boost: false }, DT)
+    advanceCar(track, car, { steer, throttle: wide ? 0 : 1, brake: wide ? 0.55 : 0, handbrake: false, boost: false }, DT)
     if (car.elapsed > 8 && Math.abs(car.n) < 4) best = Math.max(best, speedOf(car))
     const why = sane(car)
     if (why) return `  BROKE (${why}) at ${fixed(car.elapsed)}s`
@@ -181,13 +183,13 @@ function skidPad() {
 function handbrake() {
   const track = flatTrack(4000)
   const car = createCar(track)
-  while (speedOf(car) < 25) advanceCar(track, car, IDLE, DT)
+  while (speedOf(car) < 25) advanceCar(track, car, FLAT, DT)
 
   let peakSlip = 0
   let peakScrub = 0
   const before = speedOf(car)
   for (let step = 0; step < 120 * 1.1; step++) {
-    advanceCar(track, car, { steer: 0.8, brake: 0.4, handbrake: true, boost: false }, DT)
+    advanceCar(track, car, { steer: 0.8, throttle: 0, brake: 0.4, handbrake: true, boost: false }, DT)
     peakSlip = Math.max(peakSlip, Math.abs(slipOf(car)))
     peakScrub = Math.max(peakScrub, scrubOf(car, true))
   }
@@ -197,7 +199,7 @@ function handbrake() {
   let caught = -1
   for (let step = 0; step < 120 * 4; step++) {
     const counter = Math.max(-1, Math.min(1, -slipOf(car) * 3))
-    advanceCar(track, car, { steer: counter, brake: 0, handbrake: false, boost: false }, DT)
+    advanceCar(track, car, { steer: counter, throttle: 0.5, brake: 0, handbrake: false, boost: false }, DT)
     if (caught < 0 && Math.abs(slipOf(car)) < 0.06) caught = step / 120
   }
 
@@ -213,10 +215,10 @@ function handbrake() {
 function lift() {
   const track = flatTrack(4000)
   const car = createCar(track)
-  while (speedOf(car) < 38) advanceCar(track, car, IDLE, DT)
+  while (speedOf(car) < 38) advanceCar(track, car, FLAT, DT)
   let peak = 0
   for (let step = 0; step < 120 * 3; step++) {
-    advanceCar(track, car, { steer: 1, brake: 0, handbrake: false, boost: false }, DT)
+    advanceCar(track, car, { steer: 1, throttle: 1, brake: 0, handbrake: false, boost: false }, DT)
     peak = Math.max(peak, Math.abs(slipOf(car)))
   }
   const front = scrubOf(car, false)
@@ -225,6 +227,48 @@ function lift() {
     `  slip at full lock ${fixed(peak)} rad`,
     `  scrub front/rear  ${fixed(front)} / ${fixed(rear)}  ${front > rear ? '(understeer — right)' : '(oversteer)'}`,
   ].join('\n')
+}
+
+/**
+ * What a brief correction does at racing speed.
+ *
+ * The sustained full-lock test above catches a spin, but it does not describe
+ * the failure a person actually feels: a small key tap or thumb nudge that
+ * keeps growing after their hand has already come off. These pulses are short
+ * enough to be corrections, not cornering instructions. The useful numbers
+ * are the peak heading/slip and how much remains two seconds after release.
+ */
+function steeringPulse() {
+  const rows: string[] = []
+  for (const [name, amount, heldFor] of [
+    ['thumb nudge', 0.18, 0.15],
+    ['quick key  ', 0.42, 0.12],
+    ['firm key   ', 0.7, 0.18],
+  ] as const) {
+    const track = flatTrack(4000)
+    const car = createCar(track)
+    while (speedOf(car) < 42) advanceCar(track, car, FLAT, DT)
+
+    let peakN = 0
+    let peakHeading = 0
+    let peakSlip = 0
+    const steps = Math.round(2.2 / DT)
+    for (let step = 0; step < steps; step++) {
+      const steer = step * DT < heldFor ? amount : 0
+      advanceCar(track, car, { steer, brake: 0, handbrake: false, boost: false }, DT)
+      peakN = Math.max(peakN, Math.abs(car.n))
+      peakHeading = Math.max(peakHeading, Math.abs(car.psi))
+      peakSlip = Math.max(peakSlip, Math.abs(slipOf(car)))
+    }
+
+    rows.push(
+      `  ${name}  n ${fixed(peakN, 1).padStart(4)} m   ` +
+        `heading ${fixed((peakHeading * 180) / Math.PI, 1).padStart(5)}°   ` +
+        `slip ${fixed((peakSlip * 180) / Math.PI, 1).padStart(5)}°   ` +
+        `after ${fixed((car.psi * 180) / Math.PI, 1).padStart(5)}°`,
+    )
+  }
+  return rows.join('\n')
 }
 
 /**
@@ -253,7 +297,7 @@ function hairpin() {
   ] as const) {
     const track = flatTrack(3000)
     const car = createCar(track)
-    while (speedOf(car) < 25) advanceCar(track, car, IDLE, DT)
+    while (speedOf(car) < 25) advanceCar(track, car, FLAT, DT)
     const entry = speedOf(car)
 
     let turned = 0
@@ -261,7 +305,7 @@ function hairpin() {
     let widest = 0
     let radius = Infinity
     for (let step = 0; step < 120 * 6; step++) {
-      advanceCar(track, car, { steer: 1, brake, handbrake: yank, boost: false }, DT)
+      advanceCar(track, car, { steer: 1, throttle: brake > 0 ? 0 : 1, brake, handbrake: yank, boost: false }, DT)
       // The road here is dead straight, so how far the car has come round is
       // simply how far its heading has left the road's.
       turned = Math.abs(car.psi)
@@ -379,11 +423,526 @@ function cost() {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The understeer gradient, which is the number that says whether the car is
+ * stable at all.
+ *
+ * On a circle of fixed radius, the steering angle a car needs is
+ * `δ = L/R + K·a`, where `a` is the lateral acceleration and `K` is the
+ * understeer gradient. Drive the same circle at several speeds, plot the extra
+ * steering against the extra cornering, and the slope *is* `K`.
+ *
+ *   K > 0   understeer. Disturb the car and it converges. This is what every
+ *           road car ever sold is built to do, and what this one must do
+ *   K = 0   neutral. Stable only in the sense that a pencil on its point is
+ *   K < 0   oversteer, and above a critical speed of `sqrt(gL / −K)` it is
+ *           divergently unstable: push it and it leaves
+ *
+ * The four-wheel car had `K = 0` exactly — one shared cornering stiffness, and
+ * force linear in load — which is why cornering at speed felt like the car was
+ * falling over rather than turning.
+ */
+function understeerGradient() {
+  const radius = 90
+  const rows: string[] = []
+  const points: [number, number][] = []
+
+  for (const target of [12, 18, 24, 28, 31]) {
+    const track = flatTrack(30_000, 1 / radius)
+    const car = createCar(track)
+
+    let steerHeld = 0
+    let latHeld = 0
+    /*
+      An integral term, because the steering ratio is not known here.
+
+      A proportional controller settles wherever its gain and the car's
+      understeer balance out, which is a number about the controller. Letting
+      the error accumulate makes it find whatever lock this car actually needs
+      to hold the circle — which is the thing being measured.
+    */
+    let wind = 0
+    for (let step = 0; step < 120 * 40; step++) {
+      const v = speedOf(car)
+      const off = -car.n * 0.09 - car.psi * 1.7 - car.yaw * 0.1
+      wind = Math.max(-1, Math.min(1, wind + off * 0.9 * DT))
+      const steer = Math.max(-1, Math.min(1, off + wind))
+      const wantsMore = target - v
+      advanceCar(
+        track,
+        car,
+        {
+          steer,
+          throttle: Math.max(0, Math.min(1, wantsMore * 0.4)),
+          brake: Math.max(0, Math.min(1, -wantsMore * 0.3)),
+          handbrake: false,
+          boost: false,
+        },
+        DT,
+      )
+      const why = sane(car)
+      if (why) return `  BROKE (${why}) at ${fixed(car.elapsed)}s`
+      /*
+        Read it only once it has settled, and average over the last stretch.
+
+        The lateral acceleration is `v · yaw rate`, not `car.lateral`. In a
+        steady turn `car.lateral` — the rate of change of sideways velocity in
+        the body frame — is very nearly *zero*, because the tyres are providing
+        exactly the centripetal acceleration and nothing is left over. Reading
+        it gave a flat 0.00 g at every speed and no gradient at all.
+      */
+      if (car.elapsed > 24 && Math.abs(car.n) < 3) {
+        steerHeld = steerHeld * 0.995 + car.steerAngle * 0.005
+        latHeld = latHeld * 0.995 + Math.abs(v * car.yaw) * 0.005
+      }
+    }
+    if (latHeld > 0.5) points.push([latHeld, steerHeld])
+    rows.push(
+      `  ${fixed(speedOf(car), 1).padStart(5)} m/s   ` +
+        `${fixed(latHeld / 9.81).padStart(5)} g   ` +
+        `steering ${fixed((steerHeld * 180) / Math.PI, 2).padStart(6)}°`,
+    )
+  }
+
+  if (points.length < 2) return rows.join('\n') + '\n  (not enough settled points to fit)'
+  // Least squares through the points: the slope is K.
+  const n = points.length
+  const sumA = points.reduce((s, p) => s + p[0], 0)
+  const sumD = points.reduce((s, p) => s + p[1], 0)
+  const sumAA = points.reduce((s, p) => s + p[0] * p[0], 0)
+  const sumAD = points.reduce((s, p) => s + p[0] * p[1], 0)
+  const K = (n * sumAD - sumA * sumD) / Math.max(1e-9, n * sumAA - sumA * sumA)
+  const degPerG = (K * 9.81 * 180) / Math.PI
+
+  return [
+    ...rows,
+    '',
+    `  understeer gradient  ${fixed(degPerG, 2)}°/g   ${
+      degPerG > 0.4
+        ? 'understeer — stable, self-correcting'
+        : degPerG < -0.2
+          ? 'OVERSTEER — divergently unstable above its critical speed'
+          : 'neutral — on the knife edge, which is not stable enough'
+    }`,
+    '  (a road car is 2–6°/g. Under about half a degree it starts to feel',
+    '   like the car is falling over rather than turning.)',
+  ].join('\n')
+}
+
+/**
+ * Kick it, then take your hands off.
+ *
+ * The practical form of the same question. A stable car straightens itself; an
+ * unstable one keeps going. No steering input at all after the kick, because
+ * the point is what the *car* does, not what a driver could rescue.
+ */
+function recovery() {
+  const rows: string[] = []
+  for (const v of [22, 34, 44]) {
+    const track = flatTrack(9000)
+    const car = createCar(track)
+    while (speedOf(car) < v) advanceCar(track, car, FLAT, DT)
+
+    // A yaw impulse, as if a stone had caught the back of the car.
+    car.yaw += 0.75
+    const wasHeading = car.psi
+    let worstSlip = 0
+    let settled = -1
+    for (let step = 0; step < 120 * 8; step++) {
+      advanceCar(
+        track,
+        car,
+        { steer: 0, throttle: 0.45, brake: 0, handbrake: false, boost: false },
+        DT,
+      )
+      worstSlip = Math.max(worstSlip, Math.abs(slipOf(car)))
+      /*
+        Settled means it has stopped *rotating* and stopped *sliding*.
+
+        Not that its heading came back to where it started — it never will, and
+        it should not. A disturbed car with nobody steering settles onto a new
+        straight line, in a new direction; that is what stability is. Asking
+        for the old heading back is asking for an autopilot, and measuring for
+        it reported a perfectly stable car as "never came back".
+      */
+      if (
+        settled < 0 &&
+        step > 30 &&
+        Math.abs(car.yaw) < 0.05 &&
+        Math.abs(slipOf(car)) < 0.02
+      ) {
+        settled = step / 120
+      }
+    }
+    const turned = Math.abs(car.psi - wasHeading)
+    rows.push(
+      `  ${String(v).padStart(2)} m/s   slid to ${fixed((worstSlip * 180) / Math.PI, 1).padStart(5)}°   ` +
+        `${settled < 0 ? 'STILL SLIDING — unstable' : `straight again in ${fixed(settled)} s`}   ` +
+        `ended ${fixed((turned * 180) / Math.PI, 0)}° off its old heading`,
+    )
+  }
+  return rows.join('\n')
+}
+
+/**
+ * The complaint, as a test.
+ *
+ * "When you are speeding and you corner it loses its balance and goes to the
+ * walls." So: arrive at a real corner at a real speed, drive it the way a
+ * person would — lift, brake, turn, pick the throttle back up — and measure
+ * how far off the line the car ends up. The road is six metres wide, so
+ * anything past about three is the rock.
+ */
+function throughACorner() {
+  const rows: string[] = []
+  for (const [name, radius, entry] of [
+    ['fast sweep  ', 140, 38],
+    ['medium bend ', 70, 30],
+    ['tight corner', 34, 22],
+  ] as const) {
+    const track = flatTrack(9000, 1 / radius)
+    const car = createCar(track)
+    car.vs = entry
+    for (const wheel of car.wheels) wheel.omega = entry / 0.34
+    /*
+      Started already turning, and measured only once it has settled.
+
+      Dropped onto a curving road pointing straight ahead with no lock on, the
+      car understandably runs wide while the driver winds the steering in — at
+      38 m/s on a 140 m radius that alone is five metres before anything about
+      the car is involved. That is a fact about being teleported into a corner,
+      not about the handling, and measuring it was measuring the test.
+    */
+    car.yaw = entry / radius
+
+    let worst = 0
+    let worstSlip = 0
+    // Integral again: the driver has to find the lock this car needs for this
+    // radius, rather than being handed a guess that only suits one of them.
+    let wind = 0
+    for (let step = 0; step < 120 * 14; step++) {
+      const v = speedOf(car)
+      // What this corner will actually take, and a driver aiming to sit on it.
+      const limit = Math.sqrt(1.15 * 9.81 * radius)
+      const over = v - limit
+      const ahead = 7 + v * 0.5
+      const toward = Math.atan2(-car.n, ahead) - car.psi
+      const off = toward * 2.6 - car.yaw * 0.2
+      wind = Math.max(-1, Math.min(1, wind + off * 1.4 * DT))
+      const steer = Math.max(-1, Math.min(1, off + wind))
+      advanceCar(
+        track,
+        car,
+        {
+          steer,
+          throttle: over < -1 ? Math.min(1, -over * 0.3) : 0,
+          brake: over > 0.5 ? Math.min(1, over * 0.22) : 0,
+          handbrake: false,
+          boost: false,
+        },
+        DT,
+      )
+      if (step > 120 * 3) {
+        worst = Math.max(worst, Math.abs(car.n))
+        worstSlip = Math.max(worstSlip, Math.abs(slipOf(car)))
+      }
+      const why = sane(car)
+      if (why) return `  BROKE (${why})`
+    }
+    rows.push(
+      `  ${name}  r=${String(radius).padStart(3)} m at ${entry} m/s   ` +
+        `wandered ${fixed(worst).padStart(5)} m off line   ` +
+        `settled ${fixed(Math.abs(car.n), 1).padStart(4)} m   ` +
+        `slip ${fixed((worstSlip * 180) / Math.PI, 1).padStart(4)}°   ` +
+        `${worst > 3 ? 'INTO THE ROCK' : worst > 1.6 ? 'untidy' : 'held it'}`,
+    )
+  }
+  return rows.join('\n')
+}
+
+/** The throttle, the coast, the brake, and reverse. */
+function pedals() {
+  const track = flatTrack(9000)
+  const car = createCar(track)
+
+  // Up to speed, then off the power entirely and let it run down.
+  while (speedOf(car) < 30) advanceCar(track, car, FLAT, DT)
+  const from = speedOf(car)
+  const liftedAt = car.elapsed
+  let coastTo = -1
+  for (let step = 0; step < 120 * 60; step++) {
+    advanceCar(track, car, IDLE, DT)
+    if (car.vs < 0.5) {
+      coastTo = car.elapsed - liftedAt
+      break
+    }
+  }
+
+  // Again, this time on the brakes from the same speed.
+  const braked = createCar(track)
+  while (speedOf(braked) < 30) advanceCar(track, braked, FLAT, DT)
+  const brakeFrom = braked.elapsed
+  let stopIn = -1
+  let stopped = 0
+  for (let step = 0; step < 120 * 20; step++) {
+    advanceCar(
+      track,
+      braked,
+      { steer: 0, throttle: 0, brake: 1, handbrake: false, boost: false },
+      DT,
+    )
+    if (stopIn < 0 && braked.vs < 0.5) {
+      stopIn = braked.elapsed - brakeFrom
+      stopped = braked.s
+    }
+  }
+  // and, still holding it, into reverse
+  const backedUp = braked.s - stopped
+
+  /*
+    Which way it turns going backwards.
+
+    Reversing with right lock swings the nose *left*, in this model and in
+    every real car: the rear axle leads, so the steered end sweeps the other
+    way. It feels wrong the first time to everybody who has ever reversed a
+    car, which is exactly why it is worth measuring — if it ever comes out the
+    other way round, that is a bug rather than the world being strange.
+  */
+  const back = createCar(track)
+  back.reversing = true
+  back.vs = -4
+  for (const wheel of back.wheels) wheel.omega = -4 / 0.34
+  /*
+    Measured over one second, and accumulated step by step.
+
+    `psi` is an angle and lives on a circle — past a half turn it wraps, so
+    reading `end − start` after three seconds of full lock in reverse reported
+    a car that had swung 120° to the *left* as having gone 160° to the right.
+    The model was right and the measurement was wrong, which is the more
+    dangerous of the two ways round.
+  */
+  let swung = 0
+  let last = back.psi
+  for (let step = 0; step < 120; step++) {
+    advanceCar(
+      track,
+      back,
+      { steer: 1, throttle: 0, brake: 0.8, handbrake: false, boost: false },
+      DT,
+    )
+    let step2 = back.psi - last
+    if (step2 > Math.PI) step2 -= Math.PI * 2
+    else if (step2 < -Math.PI) step2 += Math.PI * 2
+    swung += step2
+    last = back.psi
+  }
+
+  return [
+    `  lift off at ${fixed(from)} m/s   rolls to a stop in ${
+      coastTo < 0 ? 'over a minute' : fixed(coastTo) + ' s'
+    }`,
+    `  full brakes from ${fixed(from)} m/s   stops in ${
+      stopIn < 0 ? 'NEVER' : fixed(stopIn) + ' s'
+    }`,
+    `  brake held at the stand   ${
+      backedUp < -0.5
+        ? `reversed ${fixed(-backedUp, 1)} m at ${fixed(Math.abs(braked.vs), 1)} m/s`
+        : 'DID NOT REVERSE'
+    }`,
+    `  reversing with right lock   nose swung ${
+      swung < 0 ? 'left' : 'RIGHT'
+    } ${fixed((Math.abs(swung) * 180) / Math.PI, 0)}°   ${
+      swung < 0 ? '(correct — the steered end leads the other way)' : '(WRONG)'
+    }`,
+  ].join('\n')
+}
+
+/**
+ * Lift off, and does the car come alive?
+ *
+ * The whole reason for having a throttle. Coming into a corner too fast you
+ * lift, the weight moves onto the front tyres, the rear goes light, and the
+ * car *rotates* — so you can point it where you want and then drive out. If
+ * lifting does nothing, a manual throttle is just a key you have to hold, and
+ * every corner is whatever line you happened to arrive on.
+ *
+ * Same steering input, same speed, twice: once flat out, once with the
+ * throttle released. The lifted run has to turn more, and turn sooner.
+ */
+function liftOff() {
+  const rows: string[] = []
+  const results: { yaw: number; slip: number; quick: number }[] = []
+
+  for (const [name, gas] of [
+    ['flat out    ', 1],
+    ['lifted      ', 0],
+    ['on the brake', -1],
+    ['trail-braking', -2],
+  ] as const) {
+    const track = flatTrack(9000)
+    const car = createCar(track)
+    while (speedOf(car) < 34) advanceCar(track, car, FLAT, DT)
+
+    let peakYaw = 0
+    let peakSlip = 0
+    let quick = -1
+    for (let step = 0; step < 120 * 2.2; step++) {
+      advanceCar(
+        track,
+        car,
+        {
+          /*
+            Trail-braking arrives at the corner already slowing, and eases off
+            the brake as the steering goes on — which is how anybody actually
+            drives. Stamping on both at once, as the plain brake case does, is
+            a provocation, and a car that spins when you do it is not wrong.
+            The one that matters is this one.
+          */
+          steer: gas === -2 ? Math.min(0.55, step / 60) : 0.55,
+          throttle: gas > 0 ? 1 : 0,
+          brake:
+            gas === -2
+              ? Math.max(0, 0.75 - step / 90)
+              : gas < 0
+                ? 0.55
+                : 0,
+          handbrake: false,
+          boost: false,
+        },
+        DT,
+      )
+      peakYaw = Math.max(peakYaw, Math.abs(car.yaw))
+      peakSlip = Math.max(peakSlip, Math.abs(slipOf(car)))
+      if (quick < 0 && Math.abs(car.yaw) > 0.3) quick = step / 120
+    }
+    results.push({ yaw: peakYaw, slip: peakSlip, quick })
+    rows.push(
+      `  ${name}   turned at ${fixed(peakYaw).padStart(5)} rad/s   ` +
+        `slip ${fixed((peakSlip * 180) / Math.PI, 1).padStart(5)}°   ` +
+        `${quick < 0 ? 'never really turned' : `into it in ${fixed(quick)} s`}   ` +
+        `${fixed(speedOf(car), 1)} m/s left`,
+    )
+  }
+
+  const gain = results[1].yaw / Math.max(0.01, results[0].yaw)
+  return [
+    ...rows,
+    '',
+    `  lifting turns it ${fixed((gain - 1) * 100, 0)}% harder than staying flat`,
+    '  (under about 15% and there is no reason to ever lift, which means the',
+    '   throttle is decoration and the corner is decided before you arrive.)',
+  ].join('\n')
+}
+
+/**
+ * The drift, which is a game rather than a car.
+ *
+ * Four things have to be true, and the third is the one that matters:
+ *
+ *   1. pulling the handbrake with lock on puts you in one
+ *   2. holding an arrow bends the *path* that way — you go round a corner
+ *   3. **flicking the other arrow swaps the car onto its other side and bends
+ *      the path back**, without ever leaving the drift. This is what lets one
+ *      drift carry through a left and then a right
+ *   4. the ember cancels it, and so does two seconds of going straight
+ *
+ * Measured as heading change, because that is what "did it go round the
+ * corner" actually means.
+ */
+function driftMode() {
+  const track = flatTrack(9000)
+  const car = createCar(track)
+  while (speedOf(car) < 30) advanceCar(track, car, FLAT, DT)
+
+  const rows: string[] = []
+  /** Heading change over a stretch, unwrapped — `psi` lives on a circle. */
+  const swing = (steps: number, input: CarInput) => {
+    let turned = 0
+    let last = car.psi
+    let angle = 0
+    for (let i = 0; i < steps; i++) {
+      advanceCar(track, car, input, DT)
+      let step = car.psi - last
+      if (step > Math.PI) step -= Math.PI * 2
+      else if (step < -Math.PI) step += Math.PI * 2
+      turned += step
+      last = car.psi
+      angle = Math.max(angle, Math.abs(slipOf(car)))
+    }
+    return { turned, angle, speed: speedOf(car) }
+  }
+
+  // 1. Into it: handbrake with lock on.
+  const entrySpeed = speedOf(car)
+  const enter = swing(
+    Math.round(120 * 0.8),
+    { steer: 1, throttle: 0.6, brake: 0, handbrake: true, boost: false },
+  )
+  rows.push(
+    `  pull it, hold right   swung ${fixed((enter.turned * 180) / Math.PI, 0).padStart(4)}°   ` +
+      `hanging ${fixed((enter.angle * 180) / Math.PI, 0)}°   ` +
+      `${car.drifting ? 'in the drift' : 'NOT IN A DRIFT'}`,
+  )
+
+  // 2. Still holding right, handbrake released: it must keep going round.
+  const held = swing(
+    Math.round(120 * 1.2),
+    { steer: 1, throttle: 0.6, brake: 0, handbrake: false, boost: false },
+  )
+  rows.push(
+    `  let go of the button  swung ${fixed((held.turned * 180) / Math.PI, 0).padStart(4)}°   ` +
+      `${car.drifting ? 'still drifting' : 'DROPPED OUT'}`,
+  )
+
+  // 3. The flick. Now hold left — it has to come back the other way.
+  const flick = swing(
+    Math.round(120 * 1.6),
+    { steer: -1, throttle: 0.6, brake: 0, handbrake: false, boost: false },
+  )
+  const swapped = flick.turned < -0.2
+  rows.push(
+    `  flick to the left     swung ${fixed((flick.turned * 180) / Math.PI, 0).padStart(4)}°   ` +
+      `${car.drifting ? 'still drifting' : 'DROPPED OUT'}   ` +
+      `${swapped ? 'CAME BACK THE OTHER WAY' : 'IGNORED THE ARROW'}   ` +
+      `kept ${fixed((flick.speed / entrySpeed) * 100, 0)}% of ${fixed(entrySpeed, 0)} m/s`,
+  )
+
+  // 4a. The ember cancels it.
+  swing(1, { steer: -1, throttle: 0.6, brake: 0, handbrake: false, boost: true })
+  const afterBoost = car.drifting
+  rows.push(`  press the ember       ${afterBoost ? 'STILL DRIFTING' : 'let go, as it should'}`)
+
+  // 4b. And so does going straight.
+  car.drifting = true
+  car.driftStraight = 0
+  swing(Math.round(120 * 1.2), { steer: 0, throttle: 0.6, brake: 0, handbrake: false, boost: false })
+  const earlyOut = !car.drifting
+  swing(Math.round(120 * 1.2), { steer: 0, throttle: 0.6, brake: 0, handbrake: false, boost: false })
+  rows.push(
+    `  hold it straight      ${
+      earlyOut
+        ? 'LET GO TOO SOON (under a second)'
+        : car.drifting
+          ? 'STILL DRIFTING after two seconds'
+          : 'let go after about two seconds'
+    }`,
+  )
+
+  return rows.join('\n')
+}
+
 const sections: [string, () => string][] = [
   ['A straight', straightLine],
+  ['The two pedals, and reverse', pedals],
+  ['Is it stable at all?', understeerGradient],
+  ['Kicked, hands off', recovery],
+  ['Lifting off in a corner', liftOff],
+  ['The drift', driftMode],
+  ['Through a corner, driven properly', throughACorner],
   ['A constant corner', skidPad],
   ['The handbrake', handbrake],
   ['Full lock, no handbrake', lift],
+  ['Brief steering at speed', steeringPulse],
   ['Turning in, three ways', hairpin],
   ['The fire-spirit, on real roads', realRoad],
   ['The ghost, written and read back', ghostRoundTrip],

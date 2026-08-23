@@ -48,12 +48,14 @@ export interface RallyRun {
    * it.** Version 3 is the four-wheel car, which brakes, locks, spins its
    * wheels and takes a different amount of time over the same road — so a
    * version 2 time is not a time this car can be compared with, and a version
-   * 2 ghost would be driving a line the new tyres would not hold.
+   * 2 ghost would be driving a line the new tyres would not hold. Version 4
+   * is the stable arcade handling tune: its speed-sensitive steering and
+   * recovery make a v3 racing line and time equally incomparable.
    *
    * Refusing to read them is the honest option. Silently racing you against a
    * number from a machine that no longer exists is not.
    */
-  v: 3
+  v: 4
   /** Milliseconds from the fire to the fire. */
   timeMs: number
   path: number[]
@@ -142,7 +144,7 @@ export function isRun(value: unknown): value is RallyRun {
   if (!value || typeof value !== 'object') return false
   const run = value as Partial<RallyRun>
   return (
-    run.v === 3 &&
+    run.v === 4 &&
     typeof run.timeMs === 'number' &&
     Number.isFinite(run.timeMs) &&
     run.timeMs > 3_000 &&

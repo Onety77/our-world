@@ -131,6 +131,15 @@ the river.**
   done. Swipe must feel native there.
 - **Two people, forever.** No leaderboards, no per-person scores. Nothing may
   make being far apart feel worse.
+- **"No interface" has exactly two exceptions, and both had to earn it.** The
+  rule stands everywhere else. Ember Rally now has an **ember bar**, because
+  the three lamps on the back of the car could show *how much* you had but
+  nothing could show *where it came from* — a reward you cannot aim at is not a
+  reward, it is weather. It fills from one thing only: seconds spent drifting.
+  Word Duel's time challenge has a **clock**, because a race against five
+  minutes without a visible five minutes is just a duel you feel anxious
+  during. Both are drawn as light or as plain text on the dark — no box, no
+  border, no progress ring — and neither exists outside the mode that needs it.
 - **Honest states.** Never say "waiting for her" when the truth is "the server
   won't say". Never fake a rate, a time, a total.
 - **Everything touchable announces itself.** The recurring historical failure
@@ -239,6 +248,121 @@ the river.**
   emitting both windings has, at every vertex, two opposite normals that
   average to *zero*: the wheel arches rendered as arch-shaped holes. Close the
   shape instead.
+- **An asynchronous round names itself; a live one cannot.** Every other round
+  in the garden gets its id from the date, so both phones arrive at it
+  independently and neither has to be told. A round the two of you open *at the
+  same moment* has no such name — and deriving one from a shared clock bucket
+  almost works and then fails at the boundary, which is the worst way for a
+  thing to fail. So the invitation goes down the one channel that is already
+  live and already shared: `Presence.racing` carries the key, she sees it within
+  the second, and joins that round rather than inventing one. Ties are broken by
+  user id, so exactly one of you yields and always the same one. **Adding a
+  presence field needs `database.rules.json` updating too** — it has
+  `"$other": { ".validate": false }`, so an unlisted field is silently rejected.
+- **A word list can be *fair* and still be cruel.** The standard Wordle answer
+  set is 2,315 words with no unfair plurals and nothing obscure by dictionary
+  standards — and it contains several hundred nobody says out loud. Losing to a
+  word you have never used is not losing a game. `word-duel/easy.ts` is the
+  pile the game actually deals from, and it is filtered against `fair.ts` at
+  load so a typo in it can only ever make the pile smaller, never deal a word
+  the other player would be told is not in the book.
+- **A drift is a game mechanic, not a physics outcome — and the physics has to
+  be told to get out of the way.** Simulated honestly, a handbrake turn sends
+  the car one way and keeps sending it: once the rear has gone, steering has
+  almost no authority, so the drift is something that happens *to* you. Ember
+  Rally now switches to a different control model while drifting, where the
+  arrows steer the **path** rather than the wheels, so one drift can be flicked
+  through a left and then a right. Two things had to be disabled for it to work
+  at all: the model's own anti-spin, which was pulling against the drift in a
+  way the player could feel but not name; and most of the tyres' cornering
+  load, because the friction circle was otherwise spending their whole budget
+  on a lateral force that the drift overrides anyway — the car could not put
+  any power down and came out of a long drift at a third of the speed. Where a
+  game deliberately stops simulating, **say so at the top of the block.**
+- **Evidence on the ground is what makes a moving thing real.** Dust and smoke
+  hang in the *air* and drift away — they say something is happening, not that
+  it happened *there*. Rubber left on the stone stays where the tyre was, so it
+  is the only thing that proves the car and the road are touching. It also
+  turns out to be the only feedback in the racer you can look *back* at: a few
+  seconds after a bend, the road behind you is a drawing of what you did to it.
+  `games/ember-rally/marks` — a ring buffer of flat quads, no decal targets, no
+  persistence between runs.
+- **A strip laid once a frame must be as long as the gap it is filling.** At
+  forty metres a second and a fixed length, tyre marks came out as a dashed
+  line of tiles. Size each one to the distance travelled since the last, lay it
+  *behind* the wheel, and overlap it generously — the shader tapers both ends,
+  so a strip sized exactly to the gap still leaves a faded seam.
+- **Subtle means an order of magnitude quieter than the first attempt.** The
+  glowing mineral veins went in four times too bright with bands four times too
+  wide, and the tunnel came out looking like neon tubing stapled to the
+  ceiling: the veins became the brightest thing on screen and the car, the road
+  and the lanterns vanished behind them. A seam in rock is a hairline that
+  catches the eye once. The fix was thinner bands, a much darker colour, a
+  distance fade, and a hash to break the contours into flecks — a smooth
+  contour is a *loop*, and unbroken it reads as somebody's doodle on the wall.
+  **Look at the render before believing any emissive number.**
+- **The road's right is −X, and half the racer's drawn detail was mirrored.**
+  The car is modelled facing +Z, and in three.js's right-handed axes with +Y up
+  the right-hand side of something facing +Z is **−X** — which is exactly what
+  `basisAt` says (`rx = −cos(heading)`). The physics numbers its wheels
+  right-positive, so `wheels[0]` is the front *left* while the mesh's
+  `WHEEL_POSITIONS[0]`, at −x, is the front *right*. Nothing about how the car
+  drove depended on it, and everything drawn from a wheel index did: the front
+  wheels visibly steered the **wrong way**, and the spring that compressed, the
+  disc that glowed and the smoke off a locked tyre were all on the wrong side
+  of the car. `MESH_FOR_WHEEL` in `games/ember-rally/rig` is the mapping, and
+  the steering angle is negated for the same reason. If you add anything drawn
+  per corner, go through it.
+- **Steady cornering has almost no lateral acceleration in the body frame.**
+  `Fy/m − v·ω` is what the sideways *velocity* is doing, and in a settled
+  corner the tyres are providing exactly the centripetal acceleration, so it is
+  very nearly zero. Feeding it to the lateral load transfer meant a car at a
+  full g transferred almost no weight — it leaned on turn-in, stood back up
+  while still cornering hard, and `rollFront` had nothing to distribute. What a
+  cornering car feels is `Fy/m`. The same mistake read 0.00 g at every speed in
+  the understeer-gradient test and hid the gradient entirely.
+- **Weight takes about a fifth of a second to arrive.** Load transfer computed
+  straight from this instant's acceleration says the whole mass lands on the
+  front tyres the moment you lift. It travels through springs. Left
+  instantaneous, lifting off mid-corner turned the car nearly *six times*
+  harder than staying flat and snapped it to forty-four degrees of slip — so
+  the only two things you could do with a corner were plough into the outside
+  of it or spin. One first-order lag is the difference between a car that
+  rotates when you lift and one that throws you off.
+- **Offer only as much steering lock as the tyres can use.** A cornering car at
+  its limit is on a radius of `v²/μg`, and the angle that asks for is `L/R` plus
+  the slip the tyres are running — at 38 m/s, about **two and a half degrees**.
+  The racer offered *ten*. Four times more lock than was usable at any speed
+  above about 20 m/s, so one touch of an arrow key put the front tyres four
+  times past their peak slip angle instantly: they saturated, scrubbed, and the
+  car washed wide. It reads as "the front tyres don't turn" *and* "it loses its
+  balance and goes into the wall" — two complaints, one line. `maxSteer` in
+  `games/ember-rally/physics` now derives the lock from the grip, so the two
+  cannot drift apart again.
+- **A car with no understeer gradient is not a car.** Stability is
+  `K = W_f/C_f − W_r/C_r`: positive is understeer and self-correcting, negative
+  is oversteer and divergently unstable above a critical speed. Give both axles
+  the same cornering stiffness and make tyre force linear in load and `K` is
+  *exactly zero* — balanced on a knife edge. That is what the four-wheel rewrite
+  did, and every assist bolted on afterwards was hiding it. Two lines fixed it:
+  the rear tyres are stiffer than the front, and peak force goes as `Fz^0.8`
+  rather than `Fz` so load transfer costs real grip. `npm run rally` measures
+  the gradient that comes out; keep it positive.
+- **An assist that exists to hide an unstable car is a sign the car needs
+  fixing.** There was a stability control here that steered *for* you whenever
+  your input was near centre, a throttle cut that began at six degrees of slip,
+  and a leash that clamped the car to sixteen. Each was reasonable on its own
+  and together they meant every input you made was blended with one the game
+  was making — which is what "the controls feel disconnected" actually is. They
+  are gone. What is left is one honest traction control watching the rear
+  wheels *spin*, and a countersteer assist that is named and stated.
+- **The player needs a way to slow down.** The car drove itself forward at full
+  power for a long time, on the argument that a forty-second race should be
+  playable one-handed. It cost more than it bought: a driver who cannot lift
+  cannot slow for a corner, so every corner had to be survivable flat out, and
+  arranging that is what produced the assist stack above. Throttle and brake
+  are real now, held at a stand the brake selects reverse, and the phone gets
+  both from one thumb's vertical position.
 - **A loop over a fixed array of lights must skip the empty slots.** The cave
   shader ran all ten lantern slots on every fragment whether or not any of them
   were lit. One `if (uLamps[i].w < 0.01) continue;` took the whole racer from
@@ -281,6 +405,14 @@ the river.**
   through the camera at every angle it reaches rather than judged by eye from
   one. A light that looked safely off to the side swung straight behind the
   tiles as the camera moved.
+- **A game you cannot put down is a game you can only play when nothing else is
+  happening.** Escape used to fall through the racer to the garden's own key
+  handling and walk you all the way out to the meadow, abandoning the run with
+  no warning and no way back to it. Ember Rally now takes Escape in the
+  *capture* phase and pauses: the world holds exactly where it is, and
+  "leaving" means back to the Hollow's own fire rather than out into the grass.
+  `ui/Places` also refuses to act on keys while `takenOverNow()` — the guard
+  that stops it *drawing* over a game belongs on its keyboard too.
 - **Anything that fills the screen asks `systems/attention` first, and anything
   ambient hides for it.** The place name, the marks, the two of you and the
   distance, the invitation — all four were rendered unconditionally by
@@ -353,6 +485,15 @@ once — so on a renderer taking seconds a frame, anything driven by elapsed tim
 crawls. Waiting for a turntable to reach the angle you want is not a plan;
 `?rally=studio&at=13.5` asks for it. Any future scripted view wants the same
 switch.
+
+`?shot=1` also publishes what the car is doing to `window.__rally`, once a
+frame. The headless harness answers every question about the *model* but none
+about the wiring — whether a key reaches the tyres runs through the browser's
+events, the controls, the frame loop and the session, none of which exist in
+Node — and the renderer is far too slow here to watch the answer. Without it
+the only available check was "no exception was thrown", which is not a check.
+It found a real bug within a minute of existing: the car could not reverse
+while scraping the rock, which is exactly when you want to.
 
 Physics does not need a browser at all: `npm run rally` drives the car headless
 and prints acceleration, top speed, cornering grip, what the handbrake does and

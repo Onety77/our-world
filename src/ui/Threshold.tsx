@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
+import { otherUser } from '@/data/types'
 import { SECTIONS } from '@/sections/registry'
 import { useSections } from '@/systems/sections'
 import { useReading } from '@/systems/reading'
@@ -30,6 +31,75 @@ import { GAMES } from '@/world/games/registry'
  * timezones apart, most evenings only one of you is here; a game you can only
  * start when she is available is a game you mostly cannot start.
  */
+/**
+ * The one way in that needs both of you here at once.
+ *
+ * ---------------------------------------------------------------------------
+ * Everything else in the garden is asynchronous on purpose — Lagos and
+ * Shanghai share a sliver of evening, and a game you can only start when she is
+ * available is a game you mostly cannot start. So this is deliberately *not*
+ * the default: it is dark until the two of you happen to be here together, and
+ * then it lights up. That is the whole appeal. It is the treat for the evenings
+ * that line up.
+ *
+ * **How the two phones end up in the same round.** An asynchronous round names
+ * itself — the id is the date, so both devices arrive at it independently. A
+ * live one cannot: it starts at a moment somebody chose. So whoever taps first
+ * puts the key in their presence, which the other sees within the second, and
+ * the second person joins *that* key rather than inventing one.
+ *
+ * If you both tap in the same instant you would each start your own, so the tie
+ * is broken by name: the one who sorts second gives way. Deterministic, needs
+ * no agreement, and settles in one frame.
+ * ---------------------------------------------------------------------------
+ */
+function TimeChallenge({ game, them }: { game: string; them: string }) {
+  const data = useData()
+  const me = data.me
+  const other = otherUser(me)
+  const presence = useWorldSlice((s) => s.presence)
+  const openRace = usePlaying((s) => s.openRace)
+
+  const mine = presence[me]
+  const hers = presence[other]
+  const bothHere = Boolean(mine?.online && hers?.online)
+  // A key she is already sitting in, waiting.
+  const waiting = hers?.racing ?? ''
+
+  const start = () => {
+    if (!bothHere) return
+    /*
+      Join hers if there is one, otherwise open your own.
+
+      The tie-break only matters in the instant where you have both tapped and
+      neither has seen the other's key yet: `me > other` compares 'warm' and
+      'cool' as strings, so exactly one of you yields, always the same one.
+    */
+    const key = waiting && (waiting < String(data.now()) || me > other)
+      ? waiting
+      : String(data.now())
+    data.publishPresence({ racing: key })
+    openRace(game, key)
+  }
+
+  return (
+    <button
+      type="button"
+      className="quiet game-live"
+      onClick={start}
+      disabled={!bothHere}
+      title={
+        bothHere
+          ? 'Five minutes each, same word'
+          : them + ' is not here right now'
+      }
+    >
+      {waiting ? `join ${them}` : 'time challenge'}
+      {!bothHere && <small>only when you are both here</small>}
+    </button>
+  )
+}
+
 function TheHollow() {
   const play = usePlaying((s) => s.open)
   const me = useData().me
@@ -92,6 +162,7 @@ function TheHollow() {
           <button type="button" className="quiet" onClick={() => play(game.id, true)}>
             one player
           </button>
+          <TimeChallenge game={game.id} them={them.name} />
         </div>
       ) : (
         <p className="game-soon">nothing to open here yet</p>

@@ -69,6 +69,12 @@ export function createLights(): RallyLights {
     uniforms: {
       uTime: { value: 0 },
       uAmbient: { value: new Color('#4a5b72') },
+      /*
+        Cold mineral in the walls — the same green as the fungus lanterns, so
+        the tunnel has exactly two colours of light in it: your fire, and
+        whatever grows down here.
+      */
+      uVeinColor: { value: new Color('#14514a') },
       uFogColor: { value: new Color('#0a0908') },
       uFogNear: { value: 22 },
       uFogFar: { value: 118 },
@@ -115,6 +121,7 @@ const LIGHT_HEAD = /* glsl */ `
 
   uniform float uTime;
   uniform vec3 uAmbient;
+  uniform vec3 uVeinColor;
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
@@ -342,6 +349,59 @@ ${LIGHT_BODY}
     albedo *= 1.0 - wet * 0.34;
 
     vec3 col = caveLight(vWorld, normal, albedo, wet * 0.9 + 0.04);
+
+    /*
+      --- something in the rock that glows -----------------------------------
+
+      Veins of cold mineral, running through the walls and the vault. They are
+      the one thing down here that is not shown to you by your own headlamps:
+      they are *already lit* when you arrive, so the tunnel has a shape before
+      the beams reach it and the far end of a straight is not a black hole.
+
+      Drawn as the contour of a sum of sines in world space rather than a
+      threshold on noise — a threshold gives blotches, and a contour gives thin
+      branching lines, which is what a mineral seam actually looks like. Three
+      frequencies, so it does not repeat within the length of the road.
+
+      Never on the road surface. Glowing stone underfoot would compete with the
+      three lamps on the back of your own car, and those are the only gauge the
+      game has.
+    */
+    float seam =
+      sin(vWorld.x * 3.9 + vWorld.y * 6.4) +
+      sin(vWorld.z * 5.1 - vWorld.y * 3.3) +
+      sin((vWorld.x + vWorld.z) * 2.1 + vWorld.y * 1.4);
+    /*
+      Thin, and it has to be thin.
+
+      The first attempt used a band four times this wide with a colour four
+      times this bright, and the tunnel came out looking like neon tubing
+      stapled to the ceiling — the veins became the brightest thing on screen
+      and the car, the road and the lanterns all disappeared behind them. A
+      seam in rock is a hairline that catches the eye once; anything wider is
+      a light fitting.
+    */
+    float vein = 1.0 - smoothstep(0.0, 0.07, abs(seam - 0.85));
+    vein *= smoothstep(0.28, 0.72, vSurface.y);
+    /*
+      Broken into pieces, because a contour is a *loop*.
+
+      The contour of a sum of sines is smooth and closed, so unbroken it reads
+      as somebody's doodle on the wall rather than as mineral. Cutting it with
+      a blocky hash turns each loop into a run of dashes and flecks, which is
+      what a seam in rock actually does — it appears, runs for a bit, and is
+      gone.
+    */
+    float patchy = fract(sin(dot(floor(vWorld * 2.3), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    vein *= smoothstep(0.3, 0.78, patchy);
+    // And gone by the middle distance, so it never flattens the depth of the
+    // tunnel by drawing the far wall as brightly as the near one.
+    vein *= 1.0 - smoothstep(uFogNear * 0.5, uFogFar * 0.5, vDepth);
+    // Breathing, very slowly, and out of phase along the road so a whole wall
+    // never brightens at once.
+    float breathe = 0.6 + 0.4 * sin(uTime * 0.45 + vWorld.x * 0.12 + vWorld.z * 0.1);
+    col += uVeinColor * vein * vein * breathe;
+
     gl_FragColor = vec4(caveFog(col, vDepth), 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -355,6 +415,101 @@ export function useRockMaterial(lights: RallyLights): ShaderMaterial {
         vertexShader: ROCK_VERT,
         fragmentShader: ROCK_FRAG,
         uniforms: lights.uniforms,
+      }),
+    [lights],
+  )
+  useEffect(() => () => material.dispose(), [material])
+  return material
+}
+
+// ---------------------------------------------------------------------------
+// What the tyres leave on the stone
+// ---------------------------------------------------------------------------
+
+const MARK_VERT = /* glsl */ `
+  attribute vec3 iAt;
+  /** Already scaled to half a length and half a width. */
+  attribute vec3 iFwd;
+  attribute vec3 iSide;
+  /** x: how black. y: when it was laid, in seconds. */
+  attribute vec2 iMark;
+
+  uniform float uNow;
+  uniform float uLife;
+
+  varying vec2 vUv;
+  varying float vFade;
+  varying float vDepth;
+
+  void main() {
+    vUv = uv;
+    float age = (uNow - iMark.y) / uLife;
+    // Holds its darkness for the first third and then goes. Rubber on stone
+    // does not fade linearly; it sits there and then one day it has gone.
+    vFade = iMark.x * clamp(1.0 - max(0.0, age - 0.3) / 0.7, 0.0, 1.0);
+
+    vec3 local = iAt + iSide * (position.x * 2.0) + iFwd * (position.y * 2.0);
+    vec4 mv = modelViewMatrix * vec4(local, 1.0);
+    vDepth = -mv.z;
+    gl_Position = projectionMatrix * mv;
+  }
+`
+
+const MARK_FRAG = /* glsl */ `
+  precision highp float;
+
+  uniform vec3 uFogColor;
+  uniform float uFogFar;
+
+  varying vec2 vUv;
+  varying float vFade;
+  varying float vDepth;
+
+  void main() {
+    if (vFade <= 0.001) discard;
+
+    // Soft along the width and tapered at both ends, so a run of them reads as
+    // one continuous smear rather than a row of dominoes.
+    float across = abs(vUv.x - 0.5) * 2.0;
+    float along = abs(vUv.y - 0.5) * 2.0;
+    float shape = (1.0 - smoothstep(0.45, 1.0, across)) *
+                  (1.0 - smoothstep(0.78, 1.0, along));
+
+    // Fades out into the fog with everything else, or a mark eighty metres
+    // back stays perfectly black on a wall of nothing.
+    float far = 1.0 - smoothstep(uFogFar * 0.35, uFogFar * 0.85, vDepth);
+
+    float alpha = vFade * shape * far * 0.62;
+    if (alpha <= 0.002) discard;
+    gl_FragColor = vec4(uFogColor * 0.35, alpha);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`
+
+/**
+ * Rubber on stone.
+ *
+ * Normal blending onto a near-black, so the mark *darkens* the road rather
+ * than adding to it — additive would make a skid glow, which is the one thing
+ * it must not do in a tunnel lit by two headlamps.
+ */
+export function useMarkMaterial(lights: RallyLights): ShaderMaterial {
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: MARK_VERT,
+        fragmentShader: MARK_FRAG,
+        transparent: true,
+        // Flat on the road and drawn after it: writing depth would make every
+        // mark fight the stone it is lying on.
+        depthWrite: false,
+        uniforms: {
+          uNow: { value: 0 },
+          uLife: { value: 12 },
+          uFogColor: lights.uniforms.uFogColor,
+          uFogFar: lights.uniforms.uFogFar,
+        },
       }),
     [lights],
   )

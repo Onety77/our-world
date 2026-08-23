@@ -148,3 +148,13 @@ export const BLUE_SPARK = new Color('#bcd4ff')
 export const ASH = new Color('#ff8a3c')
 export const MOTE = new Color('#a88a63')
 export const GHOST_GRIT = new Color('#9fb6e8')
+
+/**
+ * Water off the roof.
+ *
+ * Cold and pale against everything else down here, which is warm. It reads as
+ * water because of what it *does* — straight down, fast, gone — rather than
+ * because of its colour, but the colour is what makes it visible at all in a
+ * tunnel lit by two orange lamps.
+ */
+export const DRIP = new Color('#8fb6c9')

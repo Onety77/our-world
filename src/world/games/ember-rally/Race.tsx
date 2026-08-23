@@ -37,6 +37,7 @@ import {
   placeCar,
   poseGhostWheels,
   poseWheels,
+  MESH_FOR_WHEEL,
   shotBasis,
   shotRoad,
   useCarRig,
@@ -52,6 +53,7 @@ import {
   useDustMaterial,
   useGlowMaterial,
   useRockMaterial,
+  useMarkMaterial,
   useTrailMaterial,
   useWheelMaterials,
   type RallyLights,
@@ -77,12 +79,14 @@ import {
   GHOST_GRIT,
   GRIT,
   HOT_SPARK,
+  DRIP,
   MOTE,
   Particles,
   SMOKE,
   SPARK,
   WET_GRIT,
 } from './particles'
+import { MARK_LIFE, Marks } from './marks'
 import { useRace } from './session'
 import { emptyRoad, roadAt, type Track } from './track'
 
@@ -99,6 +103,26 @@ const COUNTDOWN = 3.1
 const RIDE =
   typeof location !== 'undefined' &&
   new URLSearchParams(location.search).get('rally') === 'ride'
+
+/**
+ * `?shot=1` also publishes what the car is doing to `window.__rally`.
+ *
+ * `scripts/rally-check.ts` can drive the physics headless, which answers every
+ * question about the *model* — but not one about the wiring. Whether a key
+ * reaches the tyres runs through the browser's event handling, `controls.ts`,
+ * the frame loop and the session, and none of that exists in Node. The renderer
+ * is far too slow under the software renderer used for screenshots to *watch*
+ * the answer, so twice now the only available check has been "no exception was
+ * thrown", which is not a check.
+ *
+ * So, behind the same switch that turns on the readable canvas: one object,
+ * written once a frame, saying where the car is and what is being asked of it.
+ * Off by default, costs nothing, and makes "does the throttle work" a question
+ * a script can answer.
+ */
+const TELEMETRY =
+  typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('shot') === '1'
 
 // ---------------------------------------------------------------------------
 // The stage
@@ -134,6 +158,7 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
   const dustMaterial = useDustMaterial(lights, false)
   const sparkMaterial = useDustMaterial(lights, true)
   const trailMaterial = useTrailMaterial(lights)
+  const markMaterial = useMarkMaterial(lights)
 
   // --- the road ------------------------------------------------------------
   const chunks = useMemo(() => buildTunnel(track), [track])
@@ -175,12 +200,15 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
   const budget = tier === 'low' ? 0.45 : tier === 'medium' ? 0.72 : 1
   const dust = useMemo(() => new Particles(Math.round(300 * budget)), [budget])
   const sparks = useMemo(() => new Particles(Math.round(220 * budget)), [budget])
+  // Rubber on the stone. Cheap — nothing moves once it is laid, it only fades.
+  const marks = useMemo(() => new Marks(Math.round(420 * budget)), [budget])
   useEffect(
     () => () => {
       dust.dispose()
+      marks.dispose()
       sparks.dispose()
     },
-    [dust, sparks],
+    [dust, sparks, marks],
   )
 
   // --- her line ------------------------------------------------------------
@@ -233,6 +261,8 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
       theirs,
       dust,
       sparks,
+      marks,
+      markMaterial,
       materials: {
         mine: mineMaterial,
         theirs: theirsMaterial,
@@ -282,6 +312,14 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
 
       <primitive object={mine.root} />
       {theirRun ? <primitive object={theirs.root} /> : null}
+
+      {/* Flat on the stone, so it goes down before anything in the air. */}
+      <mesh
+        geometry={marks.geometry}
+        material={markMaterial}
+        frustumCulled={false}
+        renderOrder={1}
+      />
 
       <mesh
         geometry={dust.geometry}
@@ -365,6 +403,8 @@ interface FrameArgs {
   theirs: CarRig
   dust: Particles
   sparks: Particles
+  marks: Marks
+  markMaterial: ShaderMaterial
   materials: {
     mine: ShaderMaterial
     theirs: ShaderMaterial
@@ -402,6 +442,9 @@ class Driving {
   private attempt = -1
   private cleared = false
   private motesDue = 0
+  private dripDue = 0
+  /** Whether the meter is currently drawn as full. Toggled, not set. */
+  private barFull = false
   private gritDue = 0
   private smokeDue = 0
   /**
@@ -412,7 +455,7 @@ class Driving {
    * and re-reading the controls for each of them would consume the boost tap
    * three times.
    */
-  private input: CarInput = { steer: 0, brake: 0, handbrake: false, boost: false }
+  private input: CarInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false }
   /** Eases to 1 once the run is over — see ChaseCamera. */
   private settle = 0
 
@@ -422,6 +465,12 @@ class Driving {
   }
   private readonly point = new Vector3()
   private readonly forward = new Vector3()
+  private readonly sideways = new Vector3()
+  private readonly heading = new Vector3()
+  private readonly across = new Vector3()
+  private readonly up = new Vector3(0, 1, 0)
+  /** Metres of travel since each wheel last laid a mark. */
+  private readonly markDue = [0, 0, 0, 0]
   private readonly colour = new Color()
 
   private readonly autopilot: ((car: CarState, dt: number) => CarInput) | null
@@ -474,6 +523,22 @@ class Driving {
       this.cleared = true
       args.dust.clear()
       args.sparks.clear()
+      args.marks.clear()
+    }
+
+    /*
+      Paused: the world stays exactly where it is.
+
+      Nothing is stepped — not the car, not the clock, not the dust, not the
+      lamps' flicker — so the frame you were looking at is the frame you come
+      back to. The engine is told the car is stopped rather than being torn
+      down, because rebuilding the voice would cost the tunnel's reverb tail
+      and you would come back to silence.
+    */
+    if (session.paused) {
+      this.engine?.set(SILENT)
+      this.engine?.pressure(0)
+      return
     }
 
     this.clock += args.delta
@@ -484,6 +549,11 @@ class Driving {
 
     this.updateChunks(args)
     this.updateLamps(args)
+    // The marks fade in the shader, so all they need is the clock and a push
+    // of whatever was laid this frame.
+    args.markMaterial.uniforms.uNow.value = this.clock
+    args.markMaterial.uniforms.uLife.value = MARK_LIFE
+    args.marks.flush()
     args.dust.step(args.delta, -1.6, 0.24)
     args.sparks.step(args.delta, -4.5, 0.1)
   }
@@ -525,13 +595,55 @@ class Driving {
         result comes up over the top of it. A race that stops dead on a line is
         an arcade game.
       */
+      /*
+        A gentle brake, deliberately under the threshold that selects reverse.
+
+        The car can stop now, and holding a heavy brake at a stand for a third
+        of a second is the request for reverse — so a car coasting in to the
+        fire with the brake buried would come to rest, select reverse, and
+        quietly drive itself back up the tunnel while the result was on screen.
+      */
       const centring = Math.max(-1, Math.min(1, (-car.n * 0.25 - car.psi * 1.6)))
-      this.input = { steer: centring, brake: 0.7, handbrake: false, boost: false }
+      this.input = { steer: centring, throttle: 0, brake: 0.3, handbrake: false, boost: false }
       advanceCar(track, car, this.input, delta)
     }
 
     const speed = speedOf(car)
     const slip = slipOf(car)
+
+    if (TELEMETRY) {
+      ;(window as unknown as { __rally?: unknown }).__rally = {
+        phase,
+        s: car.s,
+        n: car.n,
+        speed,
+        slip,
+        gear: car.gear,
+        revs: car.revs,
+        reversing: car.reversing,
+        steer: this.input.steer,
+        steerAngle: car.steerAngle,
+        throttle: this.input.throttle,
+        brake: this.input.brake,
+        handbrake: this.input.handbrake,
+        drifting: car.drifting,
+        ember: car.ember,
+        driftAngle: car.driftAngle,
+        touching: car.touching,
+        strikes: car.strikes,
+        /*
+          Which way the *drawn* front wheel is actually pointing, as an angle
+          off the car's own nose, right positive.
+
+          Reported rather than inferred because the mesh and the model do not
+          agree about which way round the car is — see `MESH_FOR_WHEEL` — and
+          the front wheels spent a long time visibly steering the wrong way
+          while driving perfectly correctly. A number that comes off the world
+          matrix is the only one that settles it.
+        */
+        drawnSteer: drawnSteerOf(args.mine),
+      }
+    }
 
     /*
       Squat, dive, lean and travel all come straight out of the physics now.
@@ -549,13 +661,31 @@ class Driving {
     // What the car is telling you about itself: the meter, the brake lamps,
     // the discs and the pipes.
     args.materials.mine.uniforms.uGlow.value = car.ember
-    args.materials.mine.uniforms.uBrake.value = this.input.brake
+
+    /*
+      The meter, written straight to its node.
+
+      Scaled rather than sized, so the browser never has to lay anything out —
+      a width in per cent once a frame is a reflow once a frame, and this is
+      the one thing on screen you are watching while cornering.
+    */
+    const bar = session.emberBar
+    if (bar) {
+      bar.style.transform = `scaleX(${car.ember.toFixed(3)})`
+      const full = car.ember >= 1
+      if (full !== this.barFull) {
+        this.barFull = full
+        bar.classList.toggle('full', full)
+      }
+    }
+    args.materials.mine.uniforms.uBrake.value = car.braking
     args.materials.mine.uniforms.uPipe.value = Math.max(
       car.boostLeft > 0 ? 1 : 0,
       car.throttle < 0.3 && car.revs > 0.45 ? 0.35 + Math.random() * 0.4 : 0,
     )
     for (let i = 0; i < 4; i++) {
-      const material = args.materials.mineWheels[i]
+      // The mesh numbers its wheels on the other side — see `MESH_FOR_WHEEL`.
+      const material = args.materials.mineWheels[MESH_FOR_WHEEL[i]]
       if (material) material.uniforms.uDisc.value = car.wheels[i].heat
     }
     this.updateLightsFrom(args, args.mine, car.ember)
@@ -588,6 +718,7 @@ class Driving {
     }
 
     this.throwDust(args, car, speed, slip)
+    this.layMarks(args, car, speed)
 
     /*
       What the ear is given.
@@ -605,8 +736,16 @@ class Driving {
       gear: car.gear,
       shifting: car.shiftLeft > 0 ? 1 : 0,
       throttle: phase === 'ready' ? rev : car.throttle,
-      brake: this.input.brake,
-      handbrake: this.input.handbrake,
+      brake: car.braking,
+      /*
+        A drift counts as the handbrake for as long as it lasts.
+
+        The button is only held for the moment that starts one — after that
+        you need both hands for the arrows — but the car is still sideways and
+        must still sound like it. This also means the ratchet clicks once per
+        drift, on the way in, rather than once per press.
+      */
+      handbrake: this.input.handbrake || car.drifting,
       scrubFront: scrubOf(car, false),
       scrubRear: scrubOf(car, true),
       wheelspin: wheelspinOf(car),
@@ -695,6 +834,7 @@ class Driving {
       rig,
       moved / Math.max(0.004, args.delta),
       sample.drift,
+      sample.yaw,
       sample.spinning,
       args.delta,
     )
@@ -762,7 +902,7 @@ class Driving {
     them.n -= split * side
 
     placeCar(args.mine, track, me.s, me.n, me.yaw, me.drift * 0.14, 0)
-    poseGhostWheels(args.mine, 30, me.drift, me.spinning, delta)
+    poseGhostWheels(args.mine, 30, me.drift, me.yaw, me.spinning, delta)
     args.materials.mine.uniforms.uGlow.value = me.boost ? 1 : 0.4
     args.materials.mine.uniforms.uBrake.value = me.braking ? 1 : 0
     args.materials.mine.uniforms.uPipe.value = me.boost ? 1 : 0
@@ -921,7 +1061,7 @@ class Driving {
               worst = i
             }
           }
-          this.smokeFrom(args.dust, args.mine, worst, Math.min(1, amount))
+          this.smokeFrom(args.dust, args.mine, MESH_FOR_WHEEL[worst], Math.min(1, amount))
         }
       }
     }
@@ -991,6 +1131,46 @@ class Driving {
         MOTE,
       )
     }
+
+    /*
+      And water off the roof.
+
+      Rarer than the dust and much faster: a bright cold streak falling out of
+      the dark, straight down, gone in under a second. Two of them a second at
+      most, and only where the rock is wet.
+
+      It is the smallest thing in the tunnel and it does more than its size.
+      Everything else down here either belongs to the car or is standing still,
+      so the drips are the only evidence that the cave is a *place* that goes on
+      whether or not anybody is driving through it — and being vertical, in a
+      world where everything else is streaming past horizontally, they read as
+      scale without anybody having to think about it.
+    */
+    const wet = car.road.wet
+    if (wet > 0.12) {
+      this.dripDue -= delta * (0.5 + wet * 2.6)
+      while (this.dripDue < 0) {
+        this.dripDue += 1
+        const road = roadAt(this.track, car.s + 14 + Math.random() * 40, shotRoad)
+        const basis = basisAt(road, shotBasis)
+        roadPoint(
+          road,
+          (Math.random() * 2 - 1) * road.width * 1.15,
+          road.ceiling * (0.72 + Math.random() * 0.24),
+          this.point,
+          basis,
+        )
+        args.dust.spawn(
+          this.point.x, this.point.y, this.point.z,
+          0, -2.6 - Math.random() * 1.8, 0,
+          1.1,
+          0.02 + Math.random() * 0.018,
+          // It stretches as it falls rather than swelling like dust.
+          1.6,
+          DRIP,
+        )
+      }
+    }
   }
 
   /**
@@ -1019,6 +1199,92 @@ class Driving {
       3.4,
       SMOKE,
     )
+  }
+
+  /**
+   * Lay rubber, wheel by wheel.
+   *
+   * Distance-based rather than time-based: a mark every twenty-five centimetres
+   * of travel, so the strips overlap into one smear at any speed instead of
+   * being sparse at forty metres a second and piled up at ten.
+   *
+   * The direction is the one the *tyre* is travelling, not the one the car is
+   * pointing — which is the whole difference. A car in a drift lays its marks
+   * along the line it is actually taking, at an angle to itself, and that
+   * angle is exactly what you can read off the road afterwards.
+   */
+  private layMarks(args: FrameArgs, car: CarState, speed: number) {
+    if (car.rough || speed < 4) return
+    const rig = args.mine
+    rig.body.updateMatrixWorld(true)
+
+    // The car's own axes in the world. Its right is −X of the mesh: see the
+    // note on the mirror in `rig.ts`.
+    this.forward.set(0, 0, 1).transformDirection(rig.body.matrixWorld).normalize()
+    this.sideways.set(-1, 0, 0).transformDirection(rig.body.matrixWorld).normalize()
+
+    // Where the car is going, as opposed to where it is facing.
+    const travel = Math.max(0.001, Math.hypot(car.vs, car.vn))
+    this.heading
+      .copy(this.forward)
+      .multiplyScalar(car.vs / travel)
+      .addScaledVector(this.sideways, car.vn / travel)
+      .normalize()
+    this.across.crossVectors(this.heading, this.up).normalize()
+
+    for (let i = 0; i < 4; i++) {
+      const wheel = car.wheels[i]
+      /*
+        How hard this tyre is working, as one number.
+
+        Sliding sideways, locked, or spinning up — any of the three leaves
+        rubber. The threshold is what keeps a straight line clean: an ordinary
+        tyre at speed carries a couple of degrees of slip and half a per cent
+        of slip ratio, and none of that should mark the road.
+      */
+      const scrub = Math.max(
+        Math.abs(wheel.slipAngle) - 0.075,
+        Math.abs(wheel.slipRatio) - 0.14,
+      )
+      if (scrub <= 0) {
+        this.markDue[i] = 0
+        continue
+      }
+
+      this.markDue[i] += speed * args.delta
+      if (this.markDue[i] < 0.25) continue
+      /*
+        Each mark is as long as the gap it is filling.
+
+        Only one strip is laid per wheel per frame, so a fixed length leaves
+        holes the moment the car travels further than that in a frame — which
+        at forty metres a second is every frame. The result was a dashed line,
+        which reads as a row of tiles rather than as rubber. Stretching the
+        strip to cover the distance since the last one makes it tile at any
+        speed and any frame rate, and costs nothing.
+      */
+      const gap = this.markDue[i]
+      this.markDue[i] = 0
+      // Generous overlap: the shader tapers each end, so strips sized exactly
+      // to the gap still leave a faded seam between them.
+      const half = Math.max(0.22, gap * 0.78)
+
+      const hub = rig.hubs[MESH_FOR_WHEEL[i]]
+      hub.updateMatrixWorld(true)
+      // The contact patch, lifted a centimetre so it does not fight the stone.
+      this.point.set(0, -WHEEL_RADIUS + 0.012, 0).applyMatrix4(hub.matrixWorld)
+      // Laid *behind* the wheel, because that is the ground it has covered.
+      this.point.addScaledVector(this.heading, -gap * 0.5)
+
+      const strength = Math.min(0.8, scrub * 2.4) * (1 - car.road.wet * 0.5)
+      args.marks.lay(
+        this.point.x, this.point.y, this.point.z,
+        this.heading.x * half, this.heading.y * half, this.heading.z * half,
+        this.across.x * 0.1, this.across.y * 0.1, this.across.z * 0.1,
+        strength,
+        this.clock,
+      )
+    }
   }
 
   /** Grit off the back tyres. Many, small, and they swell as they hang. */
@@ -1141,4 +1407,45 @@ class Driving {
   }
 }
 
-const IDLE: CarInput = { steer: 0, brake: 0, handbrake: false, boost: false }
+const IDLE: CarInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false }
+
+const drawnAhead = new Vector3()
+const drawnWheel = new Vector3()
+
+/**
+ * The angle the drawn front wheels make with the drawn car, right positive.
+ *
+ * Both directions are taken out of world matrices, so this reports what is on
+ * the screen rather than what anything intended. The cross product against the
+ * body's up gives the sign: positive means the wheel is turned toward the side
+ * of the car that the physics calls right.
+ */
+function drawnSteerOf(rig: CarRig): number {
+  rig.root.updateMatrixWorld(true)
+  drawnAhead.set(0, 0, 1).transformDirection(rig.body.matrixWorld).normalize()
+  drawnWheel.set(0, 0, 1).transformDirection(rig.hubs[0].matrixWorld).normalize()
+  const dot = Math.max(-1, Math.min(1, drawnAhead.dot(drawnWheel)))
+  // In this scene the car's right is −X of the mesh, so a wheel turned that
+  // way has a *negative* cross-product component about the world up.
+  const cross = drawnAhead.x * drawnWheel.z - drawnAhead.z * drawnWheel.x
+  return Math.acos(dot) * Math.sign(cross || 1)
+}
+
+/** What the engine is told while the race is paused: a car, stopped. */
+const SILENT = {
+  speed: 0,
+  revs: 0,
+  gear: 0,
+  shifting: 0,
+  throttle: 0,
+  brake: 0,
+  handbrake: false,
+  scrubFront: 0,
+  scrubRear: 0,
+  wheelspin: 0,
+  lockup: 0,
+  rough: 0,
+  wet: 0,
+  tight: 0,
+  boost: false,
+}

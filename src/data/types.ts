@@ -48,6 +48,26 @@ export interface Presence {
   heading: number
   /** epoch ms, from the server clock, not the device clock. */
   lastSeen: number
+  /**
+   * The key of a live round this person is sitting in, waiting for the other.
+   *
+   * ---------------------------------------------------------------------------
+   * **This is how two phones agree on the same round without a server.**
+   *
+   * Everything else in the garden is asynchronous, and asynchronous rounds name
+   * themselves: the id is the date, so both devices arrive at it independently
+   * and neither has to be told. A live round cannot do that — it starts at a
+   * moment somebody chose, and the other person has no way to guess which
+   * moment. Deriving a key from a shared clock bucket almost works and then
+   * fails at the boundary, which is the worst way for a thing to fail.
+   *
+   * So the invitation goes down the one channel that is already live and
+   * already shared: presence. You put the key here, she sees it within the
+   * second, and opens the same round. Ephemeral, never persisted, and gone the
+   * moment either of you leaves.
+   * ---------------------------------------------------------------------------
+   */
+  racing?: string
 }
 
 // ---------------------------------------------------------------------------

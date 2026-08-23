@@ -2230,6 +2230,97 @@ canvas {
 }
 
 /*
+  The ember you are carrying.
+
+  A line of light, not a box: no border, no track behind it, nothing rectangular
+  — it is the same rule the rest of the garden is built on. What you see is the
+  lit part, growing from the left, and when it is full it brightens and breathes
+  because at that point it is asking to be spent.
+
+  `transform-origin` on the left and a `scaleX` written per frame by the Stage,
+  so filling it never costs a layout.
+*/
+.rally-ember {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  translate: -50% 0;
+  bottom: max(1.15rem, calc(env(safe-area-inset-bottom) + 0.7rem));
+  width: min(15rem, 46vw);
+  height: 2px;
+  overflow: visible;
+  /* The unlit part: barely there, so the bar has a length before it has a value. */
+  background: linear-gradient(
+    90deg,
+    rgba(255, 214, 160, 0.13),
+    rgba(255, 214, 160, 0.05)
+  );
+}
+
+.rally-ember i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #ff7a26, #ffc46a);
+  box-shadow: 0 0 6px rgba(255, 138, 60, 0.55);
+}
+
+.rally-ember i.full {
+  background: linear-gradient(90deg, #ffb04a, #fff0c8);
+  box-shadow: 0 0 12px rgba(255, 190, 110, 0.9);
+  animation: ember-ready 1.1s ease-in-out infinite;
+}
+
+@keyframes ember-ready {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/*
+  The road, held still.
+
+  Over the whole screen and *opaque enough to stop it*, for the same reason the
+  arrival gate is: the pointer controls live on a transparent sheet underneath,
+  and a see-through panel over them would let a thumb aimed at "back to it"
+  steer the car. The world stays visible behind it — the car is exactly where
+  you left it, which is the point of a pause — but nothing below is reachable.
+*/
+.rally-paused {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  text-align: center;
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(9, 7, 6, 0.72),
+    rgba(9, 7, 6, 0.93) 70%
+  );
+  animation: reader-in 0.28s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.rally-paused .inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.rally-paused h1 {
+  margin: 0.1rem 0 0.7rem;
+}
+
+/*
   Said once, while the lamps are still coming up, and then gone.
 
   This is the only instruction anywhere in the race, and it has a job: the
@@ -2420,7 +2511,131 @@ canvas {
   the small rotation both come from the letter and its position (see pebble()
   in WordDuel.tsx), so each stone has its own shape and keeps it.
 */
+/*
+  The clock in a time challenge.
+
+  The only number this game has ever put on the screen, and it earns it: a race
+  against five minutes without a visible five minutes is just a duel you feel
+  anxious during. Set as plain text on the dark, like everything else here —
+  no box, no ring, no progress arc.
+
+  It goes warm under the last minute. Not red and not flashing: this is a game
+  between two people who like each other, and an alarm would be the wrong
+  feeling entirely.
+*/
+.race-clock {
+  margin: 0 0 0.15rem;
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(242, 239, 230, 0.62);
+  text-shadow: var(--lift);
+}
+
+.race-clock.close {
+  color: #ffb884;
+}
+
+/*
+  The way in that is dark most of the time.
+
+  Disabled unless you are both here, and it says so rather than simply going
+  grey — a control that cannot be pressed and will not say why is the most
+  annoying thing an interface can do.
+*/
+.game-live {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  line-height: 1.25;
+}
+
+.game-live small {
+  font-family: var(--sans);
+  font-size: 0.54rem;
+  letter-spacing: 0.09em;
+  opacity: 0.55;
+}
+
+.game-live:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/*
+  A letter landing on a stone.
+
+  Two things at once, and they are the same two things the sound is made of:
+  a *knock* — the pebble takes the hit and settles, over in a tenth of a
+  second — and a few *chips* thrown off the edge. Neither is decoration for its
+  own sake. Typing into this game had no weight at all: letters simply appeared,
+  which for a board made of rocks is the one thing that gives it away.
+
+  Small on purpose. This fires five times a word and every word of every guess,
+  so anything that took longer than about a fifth of a second, or moved the
+  stone more than a hair, would be exhausting by the second row.
+*/
+.stone.struck {
+  animation: stone-knock 0.19s cubic-bezier(0.3, 1.5, 0.5, 1) 1;
+}
+
+@keyframes stone-knock {
+  0% {
+    transform: scale(0.86) translateY(-2px);
+  }
+  55% {
+    transform: scale(1.05) translateY(1px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.chips {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.chips i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  border-radius: 40% 60% 55% 45%;
+  background: rgba(236, 226, 205, 0.85);
+  /* Thrown along its own angle, so six of them read as a burst rather than
+     as a ring. The distance is barely past the edge of the stone. */
+  animation: chip-off 0.34s ease-out 1 forwards;
+  transform: rotate(var(--a)) translateX(0);
+  opacity: 0;
+}
+
+@keyframes chip-off {
+  0% {
+    transform: rotate(var(--a)) translateX(2px) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: rotate(var(--a)) translateX(clamp(11px, 4vw, 17px)) scale(0.4);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stone.struck {
+    animation: none;
+  }
+  .chips {
+    display: none;
+  }
+}
+
 .stone {
+  position: relative;
   width: clamp(2.1rem, 11vw, 3.1rem);
   height: clamp(2.1rem, 11vw, 3.1rem);
   display: grid;

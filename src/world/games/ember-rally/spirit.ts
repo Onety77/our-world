@@ -183,7 +183,38 @@ function think(track: Track, car: CarState, brain: Brain, dt: number): CarInput 
     }
   }
 
-  return { steer, brake: brake ? 1 : 0, handbrake, boost }
+  /*
+    --- the right foot ------------------------------------------------------
+
+    The car has a throttle now, so the spirit has to use one. It is not simply
+    "on unless braking": that would drive every corner at full power and be
+    exactly the flat-out car this round was spent getting rid of.
+
+    Three states, which is what a driver actually has. Hard on the brakes.
+    Coasting, for the moment between releasing them and picking the throttle up
+    again — this is where a real driver lets the car rotate, and it is why the
+    ghost's line looks like somebody thinking. And back on the power, fed in
+    rather than switched on, so that the exit of a corner is a thing that
+    happens over a second instead of instantly.
+  */
+  let throttle = 0
+  if (!brake) {
+    const corner = Math.abs(scan.curv)
+    // How fast it could go here if it were already settled.
+    const here = Math.sqrt(bravery / Math.max(0.004, corner))
+    if (v < here * 0.94) {
+      // Feed it in with the corner opening rather than stamping on it.
+      throttle = Math.min(1, 0.35 + (here - v) / 6)
+    } else {
+      // At the limit for this radius: hold it there, do not add to it.
+      throttle = 0.25
+    }
+  }
+  // Off the power entirely for a beat after the brakes come off, which is the
+  // rotation. Without it the ghost drives every corner like a train.
+  if (brain.brakeHold > 0.02 && !brake) throttle = 0
+
+  return { steer, throttle, brake: brake ? 1 : 0, handbrake, boost }
 }
 
 /**

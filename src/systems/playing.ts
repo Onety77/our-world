@@ -25,13 +25,26 @@ interface PlayingState {
    * that she never agreed to play.
    */
   solo: boolean
+  /**
+   * A live round the two of you are in at the same time, by key.
+   *
+   * Null for everything asynchronous, which is nearly everything. When it is
+   * set, this *is* the round key — not the date — and the game is told it is
+   * playing a `race` so it can put a clock on the wall. How the two of you
+   * come to be holding the same key is `Presence.racing`; see the note there.
+   */
+  race: string | null
   open(gameId: string, solo?: boolean): void
+  /** Open a live round. Both of you must call this with the same key. */
+  openRace(gameId: string, race: string): void
   close(): void
 }
 
 export const usePlaying = create<PlayingState>((set) => ({
   gameId: null,
   solo: false,
-  open: (gameId, solo = false) => set({ gameId, solo }),
-  close: () => set({ gameId: null, solo: false }),
+  race: null,
+  open: (gameId, solo = false) => set({ gameId, solo, race: null }),
+  openRace: (gameId, race) => set({ gameId, solo: false, race }),
+  close: () => set({ gameId: null, solo: false, race: null }),
 }))

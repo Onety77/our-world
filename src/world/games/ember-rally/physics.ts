@@ -68,7 +68,11 @@ import {
   SAMPLE_SLIDE,
   type RallyRun,
 } from './model'
-import { roadAt, type RoadAt, type Track } from './track'
+import { roadAt, vergeWidth, type RoadAt, type Track } from './track'
+
+// Re-exported because it lived here first and half the racer imports it from
+// here. It belongs to the road — see the note beside it in track.ts.
+export { vergeWidth }
 
 // --- the machine -----------------------------------------------------------
 
@@ -83,7 +87,7 @@ const WHEELBASE = FRONT + REAR
 /** Half the distance between the wheels on one axle, metres. */
 const TRACK_HALF = 0.78
 /** Height of the centre of mass, metres. Drives every load transfer. */
-const CG_HEIGHT = 0.42
+const CG_HEIGHT = 0.38
 const G = 9.81
 
 export const WHEEL_RADIUS = 0.34
@@ -126,20 +130,76 @@ export const AXLE_HALF_TRACK = TRACK_HALF
 
 // --- the tyres -------------------------------------------------------------
 
-/** How much grip the stone has. Generous — this is a garden, not a simulator. */
-const GRIP = 1.46
+/**
+ * How much grip the stone has. Generous — this is a garden, not a simulator.
+ *
+ * Raised when load sensitivity went in, and the two numbers belong together.
+ * A tyre whose peak goes as `Fz^0.8` gives up perhaps a fifth of its grip once
+ * the weight is leaning on the outside pair of a cornering car, so the *stated*
+ * coefficient has to be higher than the one the car actually achieves. What
+ * matters is the measured number: `npm run rally` reports what it holds round
+ * a constant corner, and that should be a little over 1.1 g. Change this and
+ * read that, never the other way round.
+ *
+ * It also sets the steering ratio — see `maxSteer`, which derives how much
+ * lock to offer from how much the tyres can use.
+ */
+const GRIP = 1.78
 /**
  * Where the tyre gives up.
  *
  * These are the arguments to a `tanh`, so the peak sits at roughly `1/k`: a
- * lateral stiffness of 9.5 means the front tyre is at its limit around ten
- * degrees of slip, which is about right for something road-legal on stone.
- * A hyperbolic tangent rather than a real Pacejka curve because it saturates
- * *smoothly and forever* — a curve that falls away past its peak is more
- * truthful and turns every small mistake into a spin.
+ * stiffness of 9 means that tyre is at its limit around eleven degrees of
+ * slip, which is about right for something road-legal on stone. A hyperbolic
+ * tangent rather than a real Pacejka curve because it saturates *smoothly and
+ * forever* — a curve that falls away past its peak is more truthful and turns
+ * every small mistake into a spin.
+ *
+ * ---------------------------------------------------------------------------
+ * **The rear is stiffer than the front, and that is what keeps the car alive.**
+ *
+ * A car's stability is decided by its understeer gradient,
+ * `K = W_f/C_f − W_r/C_r`. Positive means understeer, and an understeering car
+ * is *self-correcting*: disturb it and it converges. Negative means oversteer,
+ * and an oversteering car has a critical speed above which it is divergently
+ * unstable — push it and it leaves.
+ *
+ * The four-wheel rewrite gave both axles one shared stiffness. With force
+ * linear in load that makes `K` exactly **zero** — neutral steer, balanced on
+ * the knife edge, stable in theory and in practice diverging the moment
+ * anything is asked of it. The bicycle model it replaced had 82,000 front
+ * against 94,000 rear precisely to avoid this, and the split was lost in
+ * translation. Everything that was afterwards bolted on to stop the car
+ * spinning — the steering autopilot, the throttle cut at six degrees of slip,
+ * the sixteen-degree leash — was treating a symptom of this line.
+ *
+ * `npm run rally` measures the gradient that comes out. Keep it positive.
+ * ---------------------------------------------------------------------------
  */
-const STIFF_LAT = 9.5
+const STIFF_FRONT = 8.6
+const STIFF_REAR = 11.3
 const STIFF_LONG = 13
+
+/**
+ * Tyre load sensitivity: the exponent that is not 1.
+ *
+ * A tyre's peak force is **not** proportional to the load on it. Real rubber
+ * goes as roughly `Fz^0.8`, because the friction coefficient falls as the tyre
+ * is pressed harder — so a pair of tyres carrying 3 kN and 1 kN generate
+ * meaningfully *less* between them than two carrying 2 kN each.
+ *
+ * Without this, load transfer is free. The model was linear in load, which
+ * meant an axle's total grip did not depend on how the weight was split across
+ * it — so `rollFront` below, documented as "the one knob that decides whether
+ * a car understeers or oversteers", in fact decided nothing at all, and
+ * cornering had no cost until the tyre saturated.
+ *
+ * With it: leaning on the outside tyre costs real grip, the limit arrives
+ * progressively instead of as a cliff, and the roll balance becomes a knob
+ * that works.
+ */
+const LOAD_SENSITIVITY = 0.2
+const NOMINAL_LOAD = (960 * 9.81) / 4
 /**
  * Relaxation length, metres.
  *
@@ -176,7 +236,24 @@ const LIFT_FRONT = 0.42
  * limiter does, which is what makes a straight feel long.
  */
 const GEARS = [3.15, 2.25, 1.72, 1.36, 1.08]
+/** One reverse, deliberately low. It is for getting out of trouble, not racing. */
+const REVERSE_RATIO = 3.4
 const FINAL = 4.1
+/**
+ * Newton-metres of engine braking at the crank, off the throttle.
+ *
+ * Multiplied by the gear, so it is strong in first and gentle in fifth —
+ * exactly as it is in a real car, and the reason lifting off in a low gear
+ * settles the nose into a corner.
+ */
+const ENGINE_BRAKE = 66
+/**
+ * Seconds for weight to actually arrive where the accelerations say it is.
+ *
+ * The suspension, as one number. See the note in `integrate` — without it,
+ * lifting off mid-corner unloads the rear in a single step and the car snaps.
+ */
+const LOAD_LAG = 0.26
 const DRIVE_LOSS = 0.92
 const IDLE_RPM = 1100
 const LIMIT_RPM = 7200
@@ -250,26 +327,78 @@ const CATCH = 0.34
 export const TOP_SPEED = 46
 /** Nothing may exceed this, boost included. */
 const SPEED_CEILING = 58
+/** How fast it will go backwards. Slow: reverse is for getting unstuck. */
+const REVERSE_LIMIT = 7
+
+// --- the drift -------------------------------------------------------------
+
 /**
- * The car never quite stops.
+ * How far the car hangs out at full lock, radians. About twenty-six degrees.
  *
- * A run is forty seconds long. Grinding to a halt against a wall and having to
- * pull away again in first is six seconds of nothing, so the engine always
- * keeps a crawl on. It is the one place the model is asked to be kind.
+ * Comfortably inside `MAX_SLIP`, so the model's own anti-spin never has an
+ * opinion about a deliberate drift — the two would fight, and the drift would
+ * lose in a way nobody could name.
  */
-const CRAWL = 1.2
+const DRIFT_ANGLE = 0.46
+/** Lock and speed needed to start one. */
+const DRIFT_ENTER_STEER = 0.25
+const DRIFT_ENTER_SPEED = 11
+/** Below this there is nothing to drift. */
+const DRIFT_EXIT_SPEED = 7
+/** Arrows this near centre count as going straight. */
+const DRIFT_HOLD_STEER = 0.2
+/** And this long of it lets the drift go. */
+const DRIFT_STRAIGHT_EXIT = 2
+/**
+ * How quickly the pose crosses from one side to the other.
+ *
+ * The single most important number for how a drift *feels*. Too slow and
+ * swapping sides through a chicane is impossible; too fast and the car snaps
+ * between poses like a switch and the weight disappears. About a third of a
+ * second to cross over.
+ */
+const DRIFT_SWAP = 3.4
+/** The most g the path may pull, and a ceiling on how fast it may rotate. */
+const DRIFT_MAX_G = 1.75
+const DRIFT_TURN = 1.3
+/** What hanging it right out costs, per second, at full angle. */
+const DRIFT_SCRUB = 0.2
+/** How fast the arcade model takes over, and hands back. */
+const DRIFT_BLEND_IN = 7
+const DRIFT_BLEND_OUT = 5
 
 /** Seconds of ember burn one tap buys, what it costs, and what it does. */
 export const BOOST_SECONDS = 1.6
-export const BOOST_COST = 0.3
+/**
+ * Seconds of drifting that fill the bar.
+ *
+ * About two good corners. Short enough that a boost is something you earn
+ * every lap rather than once a run, long enough that you cannot get one out
+ * of a flick.
+ */
+export const EMBER_SECONDS = 5
+/** Kept so nothing that imported it breaks; the bar is all-or-nothing now. */
+export const BOOST_COST = 1
 const BOOST_TORQUE = 1.62
 
 // --- state -----------------------------------------------------------------
 
+/**
+ * What is being asked of the car.
+ *
+ * `throttle` and `brake` are two pedals, and which way the car goes when you
+ * press them depends on whether it is in reverse — see `car.reversing`. Going
+ * forward, throttle drives and brake stops. Once it has come to a stand with
+ * the brake still held it selects reverse, and from then on the *brake* is the
+ * one making it go and the throttle is the one stopping it, which is how
+ * anybody who has ever driven a car expects a car to work.
+ */
 export interface CarInput {
   /** −1 hard left … +1 hard right. */
   steer: number
-  /** 0..1. Slows the car and moves its weight forward. */
+  /** 0..1. Forward — or backward, once the car is reversing. */
+  throttle: number
+  /** 0..1. Stops it, and held at a stand, selects reverse. */
   brake: number
   /** Held: locks the rear wheels. This is the drift. */
   handbrake: boolean
@@ -328,6 +457,12 @@ export interface CarState {
   shiftLeft: number
   /** 0..1, what the driver is asking of it. */
   throttle: number
+  /** 0..1, how hard the brake is actually being pressed. Lamps, sound, ghost. */
+  braking: number
+  /** Going backwards. The two pedals swap jobs — see `CarInput`. */
+  reversing: boolean
+  /** Seconds the pedal has been held at a stand, asking for the other way. */
+  shiftHold: number
 
   // --- what you have -------------------------------------------------------
   /** 0..1. Spent in measures of BOOST_COST. */
@@ -336,6 +471,16 @@ export interface CarState {
   boostLeft: number
   /** Seconds held sideways in the current drift, 0 when straight. */
   driftCharge: number
+
+  // --- the drift -----------------------------------------------------------
+  /** In the arcade drift, where the arrows steer the path. See `integrate`. */
+  drifting: boolean
+  /** 0..1, how far that model has taken over. Eased, so entry is not a snap. */
+  driftBlend: number
+  /** The angle it is hanging at, radians. Negative is hung out to the right. */
+  driftAngle: number
+  /** Seconds the arrows have been near centre while drifting. Two lets go. */
+  driftStraight: number
 
   // --- how it is sitting ---------------------------------------------------
   /** Radians. Positive leans the car to its right. */
@@ -360,8 +505,19 @@ export interface CarState {
   released: number
   /** Longitudinal acceleration, m/s². Kept for load transfer and the camera. */
   accel: number
-  /** Lateral acceleration, m/s². Same. */
+  /** Lateral acceleration of the body frame, m/s². */
   lateral: number
+  /** What the corner is pulling, m/s². Right positive. Roll and transfer. */
+  cornering: number
+  /**
+   * The same two accelerations as the *springs* have felt them — lagged.
+   *
+   * Load transfer is computed from these rather than from the instantaneous
+   * values, because weight travels through suspension and that takes time.
+   * See the note in `integrate`.
+   */
+  pitchLoad: number
+  rollLoad: number
   /** True while the model is holding the car out of a spin. */
   caught: boolean
 
@@ -408,9 +564,18 @@ export function createCar(track: Track): CarState {
     gear: 0,
     shiftLeft: 0,
     throttle: 0,
-    ember: 0.34,
+    braking: 0,
+    reversing: false,
+    shiftHold: 0,
+    // Empty at the flag. It is earned, so starting with a third of one given
+    // to you is the game answering a question nobody asked.
+    ember: 0,
     boostLeft: 0,
     driftCharge: 0,
+    drifting: false,
+    driftBlend: 0,
+    driftAngle: 0,
+    driftStraight: 0,
     roll: 0,
     pitch: 0,
     heave: 0,
@@ -422,6 +587,9 @@ export function createCar(track: Track): CarState {
     released: 0,
     accel: 0,
     lateral: 0,
+    cornering: 0,
+    pitchLoad: 0,
+    rollLoad: 0,
     caught: false,
     strikes: 0,
     driftMs: 0,
@@ -430,11 +598,6 @@ export function createCar(track: Track): CarState {
     road,
     struck: new Set(),
   }
-}
-
-/** Metres of loose ground either side of the stone, before the wall. */
-export function vergeWidth(room: number): number {
-  return 0.85 + room * 0.95
 }
 
 /** How far off the middle the rock actually is. */
@@ -484,9 +647,95 @@ export function scrubOf(car: CarState, rear: boolean): number {
 
 // --- one step ---------------------------------------------------------------
 
-/** How much lock the wheels get. Less at speed, or it is undriveable. */
+/** Full lock, standing still. About thirty-one degrees. */
+const MAX_LOCK = 0.55
+/**
+ * Slack past the limit, radians, and how far over the driver may go.
+ *
+ * `SLIP_MARGIN` is roughly the slip angle the front tyres run at their peak,
+ * so a driver holding maximum useful lock is *at* the limit rather than short
+ * of it. `OVERDRIVE` is how far past that they are allowed — enough to feel
+ * the front go light and to provoke the car deliberately, not enough to fling
+ * it sideways with one keystroke.
+ */
+const SLIP_MARGIN = 0.05
+const OVERDRIVE = 1.7
+
+/**
+ * How much lock the wheels get, derived rather than tabulated.
+ *
+ * ---------------------------------------------------------------------------
+ * **This was the whole problem.**
+ *
+ * A cornering car can only use so much steering: at the limit it is going
+ * round a radius of `v² / (μg)`, and the angle that asks for is `L/R` plus the
+ * slip the tyres are running. At 38 m/s that is about **2.4 degrees**. The
+ * table this replaces offered **ten** — four times more lock than the tyres
+ * could use at any speed above about 20 m/s.
+ *
+ * So one touch of an arrow key put the front tyres four times past their peak
+ * slip angle, instantly. They saturated, scrubbed, dragged the nose wide, and
+ * the car washed out to the outside of the corner. It reads as "the front
+ * tyres don't turn" and "it loses its balance and goes into the wall", and
+ * both complaints are the same line of code: **the steering was four times too
+ * direct**, so the only reachable states were "not turning" and "past the
+ * limit", with nothing in between to drive.
+ *
+ * Deriving it from the grip fixes it permanently. Change `GRIP` and the
+ * steering ratio follows, instead of a table quietly going out of date.
+ * ---------------------------------------------------------------------------
+ */
 function maxSteer(v: number): number {
-  return Math.max(0.12, 0.55 - v * 0.0076)
+  // Floored, or standing still asks for infinite lock.
+  const usable = (WHEELBASE * GRIP * G) / Math.max(30, v * v)
+  return Math.min(MAX_LOCK, (usable + SLIP_MARGIN) * OVERDRIVE)
+}
+
+/**
+ * In, or out, and how far through.
+ *
+ * The whole state machine, in one place, because "am I drifting" is asked by
+ * the physics, the sound, the smoke and the camera and they must never
+ * disagree about it.
+ *
+ * Getting in is a press of the handbrake with some lock on — the same gesture
+ * that would start a real one. Getting out is deliberately *not* the same as
+ * getting in: releasing the handbrake does nothing, because a drift you have
+ * to hold a button through is a drift you cannot steer with both hands.
+ */
+function driftMode(car: CarState, input: CarInput, dt: number, v: number) {
+  const lock = Math.abs(input.steer)
+
+  if (!car.drifting) {
+    if (input.handbrake && lock > DRIFT_ENTER_STEER && v > DRIFT_ENTER_SPEED) {
+      car.drifting = true
+      car.driftStraight = 0
+    }
+  } else if (input.boost) {
+    /*
+      The ember breaks it, and that is the good way out.
+
+      Cancelled on the *press*, whether or not there was any ember to spend —
+      the button means "straighten up and go", and a car that ignored it
+      because a meter was empty would be a car that had stopped listening.
+      Spending is handled further down and is a separate question.
+    */
+    car.drifting = false
+  } else if (v < DRIFT_EXIT_SPEED) {
+    car.drifting = false
+  } else if (lock < DRIFT_HOLD_STEER) {
+    car.driftStraight += dt
+    if (car.driftStraight > DRIFT_STRAIGHT_EXIT) car.drifting = false
+  } else {
+    car.driftStraight = 0
+  }
+
+  const rate = car.drifting ? DRIFT_BLEND_IN : DRIFT_BLEND_OUT
+  car.driftBlend += ((car.drifting ? 1 : 0) - car.driftBlend) * (1 - Math.exp(-rate * dt))
+  if (!car.drifting && car.driftBlend < 0.01) {
+    car.driftBlend = 0
+    car.driftAngle = 0
+  }
 }
 
 /** Where each wheel sits, relative to the centre of mass: along, then right. */
@@ -516,8 +765,26 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   // --- steering ------------------------------------------------------------
   // The wheels take a moment to get there. Without this the car changes
   // direction the instant a key goes down and feels weightless.
-  const wanted = Math.max(-1, Math.min(1, input.steer)) * maxSteer(v)
-  car.steerAngle += (wanted - car.steerAngle) * (1 - Math.exp(-8.6 * dt))
+  /*
+    The steering is the driver's, and nothing else touches it.
+
+    There used to be a stability assist here that steered *for* you whenever
+    your input was near centre — reading the car's heading, its lateral
+    velocity and its yaw rate, and adding up to half a lock of correction. It
+    existed because the car was unstable, and it made the car feel dead: every
+    small input you made was being blended with one the game was making, so
+    the front wheels never quite did what you asked. "The front tyres don't do
+    proper corners" is what that feels like from the outside.
+
+    It is gone. The car is stable now because the *tyres* make it stable — see
+    STIFF_FRONT — and because you can lift off. An assist that exists to hide
+    an unstable car is a sign the car needs fixing, not hiding.
+  */
+  const steerCommand = Math.max(-1, Math.min(1, input.steer))
+  const wanted = steerCommand * maxSteer(v)
+  // The rack itself. Quick, because the hand in `controls.ts` is already the
+  // slow part and two lags in series is a car that answers questions late.
+  car.steerAngle += (wanted - car.steerAngle) * (1 - Math.exp(-11.5 * dt))
 
   /*
     The hand on the wheel.
@@ -528,7 +795,9 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   */
   const beta = slipOf(car)
   car.caught = false
-  if (Math.abs(beta) > MAX_SLIP * 0.72) {
+  // Never during a deliberate drift: the hand and the drift would be pulling
+  // in opposite directions, and the player would feel only the argument.
+  if (car.driftBlend < 0.02 && Math.abs(beta) > MAX_SLIP * 0.72) {
     const over = (Math.abs(beta) - MAX_SLIP * 0.72) / (MAX_SLIP * 0.28)
     const correction = -Math.sign(beta) * Math.min(1, over) * maxSteer(v) * CATCH
     car.steerAngle += correction * (1 - Math.exp(-9 * dt))
@@ -551,15 +820,52 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   const staticRear = (weight * FRONT) / WHEELBASE
   const aeroBias = LIFT * v * v * (LIFT_FRONT - REAR / WHEELBASE)
 
-  const longTransfer = (MASS * car.accel * CG_HEIGHT) / WHEELBASE
-  const latTransfer = (MASS * car.lateral * CG_HEIGHT) / (TRACK_HALF * 2)
+  /*
+    --- weight takes time to move ------------------------------------------
+
+    Load transfer used to be computed straight from this instant's
+    acceleration, which says the car's whole mass arrives on the front tyres
+    the moment you lift. It does not. It travels through the springs, and that
+    takes a couple of tenths.
+
+    Leaving it instantaneous made the car *violent* in exactly the place this
+    game is played: lifting off mid-corner dumped the rear in one step, the
+    rear was already at its lateral limit, and the car snapped to forty-four
+    degrees of slip and spun. Measured, lifting turned the car nearly six times
+    harder than staying flat — so the two things you could do with a corner
+    were plough into the outside of it or spin, with nothing usable between.
+
+    A lag of about a fifth of a second is what a real car's springs give you,
+    and it is the difference between a car that rotates when you lift and one
+    that throws you off. It is also why trail-braking works at all: the weight
+    is still moving forward while you are turning in.
+  */
+  const settleRate = 1 - Math.exp(-(1 / LOAD_LAG) * dt)
+  car.pitchLoad += (car.accel - car.pitchLoad) * settleRate
+  /*
+    Cornering force, **not** the rate of change of sideways velocity.
+
+    `car.lateral` is `Fy/m − v·ω`, which is what the body-frame velocity is
+    doing — and in a *steady* corner that is very nearly zero, because the
+    tyres are providing exactly the centripetal acceleration and nothing is
+    left over. Feeding it to the load transfer meant that going round a long
+    bend at a full g transferred almost no weight: the car leaned for a moment
+    on turn-in and then stood back up while still cornering hard, the outside
+    tyres never took their share, and `rollFront` had nothing to distribute.
+
+    What a cornering car actually feels is `Fy/m`, and that is `car.cornering`.
+  */
+  car.rollLoad += (car.cornering - car.rollLoad) * settleRate
+
+  const longTransfer = (MASS * car.pitchLoad * CG_HEIGHT) / WHEELBASE
+  const latTransfer = (MASS * car.rollLoad * CG_HEIGHT) / (TRACK_HALF * 2)
 
   const axleFront = Math.max(0, staticFront + aeroBias - longTransfer)
   const axleRear = Math.max(0, staticRear - aeroBias + longTransfer)
   // Split front/rear by how stiff each end is in roll. A stiffer end takes
   // more of the transfer and therefore lets go first, which is the one knob
   // that decides whether a car understeers or oversteers.
-  const rollFront = 0.54
+  const rollFront = 0.62
   const loads = [
     Math.max(0, axleFront / 2 - latTransfer * rollFront),
     Math.max(0, axleFront / 2 + latTransfer * rollFront),
@@ -569,38 +875,76 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
 
   // --- the engine ----------------------------------------------------------
   /*
-    There is no throttle pedal, and there is a traction control.
+    Two pedals, and reverse.
 
-    The car drives itself forward — that is the decision that makes a
-    forty-second race playable one-handed on a phone — so "throttle" is only
-    ever on or off with the brake. Which leaves a problem the bicycle model
-    never had: a rear-drive car at full lock and full power *will* light the
-    back up and stay there, correctly and permanently, and the player holding
-    an arrow key has no foot to lift.
+    The car used to drive itself forward at full power, always, on the argument
+    that a forty-second race should be playable one-handed. It cost more than
+    it bought. A driver who cannot lift cannot slow down for a corner, so every
+    corner had to be survivable flat out — and the only way to arrange that was
+    to bolt assist after assist on top of the tyre model until the car was
+    being driven by the game rather than by anybody holding the keys.
 
-    So it lifts for them, past about sixteen degrees of slip, and only when the
-    handbrake is *not* down. Deliberate drifts are untouched; the accidental
-    ones that would otherwise run away gather themselves up. Every rally car
-    built this century has this and it is called the same thing.
+    Giving the throttle back removes the *reason* for all of that. You slow
+    down for the corner yourself, which is the thing racing is actually made
+    of, and the model underneath is allowed to behave.
   */
-  const sideways = Math.abs(beta)
-  car.throttle = input.brake > 0.05 ? 0 : 1
-  if (!input.handbrake && sideways > 0.28) {
-    car.throttle *= Math.max(0.45, 1 - (sideways - 0.28) * 1.7)
+  const goPedal = Math.max(0, Math.min(1, car.reversing ? input.brake : input.throttle))
+  const stopPedal = Math.max(0, Math.min(1, car.reversing ? input.throttle : input.brake))
+
+  /*
+    Selecting reverse, and coming out of it.
+
+    Held at a stand rather than pressed: a driver braking hard to a stop in a
+    hairpin has the brake buried, and a car that snapped into reverse the
+    instant it stopped moving would be unusable. A third of a second of
+    standing still with the pedal down is unmistakably a request.
+  */
+  const stopped = Math.abs(car.vs) < 0.7
+  const wantsOther = stopped && (car.reversing ? input.throttle > 0.4 : input.brake > 0.4)
+  if (wantsOther) {
+    car.shiftHold += dt
+    if (car.shiftHold > 0.32) {
+      car.reversing = !car.reversing
+      car.shiftHold = 0
+      car.gear = 0
+    }
+  } else {
+    car.shiftHold = 0
+  }
+
+  /*
+    A mild traction control, and an honest one.
+
+    It watches the rear wheels *spinning*, which is what traction control is,
+    rather than watching how sideways the car is, which is what the last one
+    did. Cutting the power because the car is at an angle takes the throttle
+    away in the middle of every corner — including the ones where feeding it in
+    is the whole point — and it is why ordinary cornering felt like being
+    switched off. A deliberate handbrake drift bypasses it entirely.
+  */
+  const rearSpin = Math.max(car.wheels[2].slipRatio, car.wheels[3].slipRatio)
+  car.throttle = goPedal
+  if (!input.handbrake && !car.drifting && rearSpin > 0.3) {
+    car.throttle *= Math.max(0.4, 1 - (rearSpin - 0.3) * 1.8)
   }
   if (car.shiftLeft > 0) car.shiftLeft = Math.max(0, car.shiftLeft - dt)
 
-  const ratio = GEARS[car.gear] * FINAL
+  const ratio = (car.reversing ? REVERSE_RATIO : GEARS[car.gear]) * FINAL
   // The clutch: below the point where the wheels can turn the engine over, the
   // engine idles and slips against them. That is what a standing start is.
   const drivenOmega = (car.wheels[2].omega + car.wheels[3].omega) / 2
-  car.engineOmega = Math.max(IDLE_OMEGA, Math.min(LIMIT_OMEGA * 1.02, drivenOmega * ratio))
+  // Absolute, because in reverse the wheels turn backwards and an engine does
+  // not know that. It only knows how fast it is being asked to spin.
+  car.engineOmega = Math.max(
+    IDLE_OMEGA,
+    Math.min(LIMIT_OMEGA * 1.02, Math.abs(drivenOmega) * ratio),
+  )
   car.revs = Math.max(
     0,
     Math.min(1.02, (car.engineOmega - IDLE_OMEGA) / (LIMIT_OMEGA - IDLE_OMEGA)),
   )
 
-  if (car.shiftLeft <= 0) {
+  if (car.shiftLeft <= 0 && !car.reversing) {
     if (car.gear < GEARS.length - 1 && car.revs > SHIFT_UP) {
       car.gear++
       car.shiftLeft = SHIFT_TIME
@@ -611,13 +955,27 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   }
 
   let crankTorque = 0
-  if (car.shiftLeft <= 0 && car.throttle > 0) {
+  if (car.shiftLeft <= 0 && car.throttle > 0.02) {
     crankTorque = PEAK_TORQUE * torqueCurve(car.revs) * car.throttle
-    if (car.boostLeft > 0) crankTorque *= BOOST_TORQUE
+    if (car.boostLeft > 0 && !car.reversing) crankTorque *= BOOST_TORQUE
     // The limiter, so the last gear is drag-limited rather than rev-limited.
     if (car.revs > 1) crankTorque = 0
+    if (car.reversing) crankTorque = Math.min(crankTorque, PEAK_TORQUE * 0.55)
+  } else if (Math.abs(drivenOmega) > 0.5) {
+    /*
+      Engine braking.
+
+      Lift off and the engine becomes a pump the wheels have to turn. This is
+      what makes releasing the key *mean* something: the car slows, harder in a
+      low gear than a high one, and eventually stops. Without it a lifted car
+      only has drag, which does nothing below about fifteen metres a second,
+      and coasting to a halt takes half a minute.
+    */
+    crankTorque = -ENGINE_BRAKE * (0.25 + car.revs) * Math.sign(drivenOmega)
   }
-  const axleTorque = crankTorque * ratio * DRIVE_LOSS
+  const direction = car.reversing ? -1 : 1
+  const axleTorque =
+    crankTorque * ratio * DRIVE_LOSS * (car.throttle > 0.02 ? direction : 1)
   /*
     An open differential, mostly.
 
@@ -630,12 +988,29 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   const diffLock = (car.wheels[3].omega - car.wheels[2].omega) * 26
 
   // --- the wheels ----------------------------------------------------------
-  const brakeDemand = Math.max(0, Math.min(1, input.brake))
+  const brakeDemand = stopPedal
+  car.braking = stopPedal
+  /*
+    A proportioning valve, which every road car has had for fifty years.
+
+    The rear brakes get only as much as the rear axle is still carrying. Under
+    braking the weight goes forward, so the rear goes light — and a rear brake
+    sized for a level car will lock it. A locked rear tyre has no lateral grip
+    at all, which in the middle of a corner is a spin, and this car did exactly
+    that: a moderate brake at 34 m/s put it to forty-four degrees of slip.
+
+    Scaling by how much load is actually back there is not a driving aid, it is
+    a piece of plumbing. It is also the difference between a brake you can
+    trail into a corner and one you can only use in a straight line.
+  */
+  const rearLeft = Math.max(0.25, Math.min(1, axleRear / Math.max(1, staticRear)))
+  const frontShare = BRAKE_TORQUE * BRAKE_BIAS
+  const rearShare = BRAKE_TORQUE * (1 - BRAKE_BIAS) * rearLeft
   const brakeTorque = [
-    (BRAKE_TORQUE * BRAKE_BIAS) / 2,
-    (BRAKE_TORQUE * BRAKE_BIAS) / 2,
-    (BRAKE_TORQUE * (1 - BRAKE_BIAS)) / 2,
-    (BRAKE_TORQUE * (1 - BRAKE_BIAS)) / 2,
+    frontShare / 2,
+    frontShare / 2,
+    rearShare / 2,
+    rearShare / 2,
   ]
 
   const cosD = Math.cos(delta)
@@ -684,9 +1059,40 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     wheel.slipAngle += (-targetAngle - wheel.slipAngle) * relaxRate
 
     // --- force -------------------------------------------------------------
-    const budget = Math.max(1, mu * wheel.load)
+    /*
+      The budget, with load sensitivity in it.
+
+      Peak force goes as roughly `Fz^0.8`, not `Fz` — so pressing a tyre harder
+      buys grip at a falling rate, and the pair on an axle are worth less the
+      more unevenly the weight sits across them. That is what makes leaning on
+      a car cost something, and it is what turns `rollFront` below from a
+      decorative constant into a balance knob.
+    */
+    const budget = Math.max(
+      1,
+      mu * wheel.load * Math.pow(Math.max(wheel.load, 60) / NOMINAL_LOAD, -LOAD_SENSITIVITY),
+    )
+    // Front and rear tyres are deliberately not the same. See STIFF_FRONT.
+    const stiffness = front ? STIFF_FRONT : STIFF_REAR
     let fx = budget * Math.tanh(STIFF_LONG * wheel.slipRatio)
-    let fy = budget * Math.tanh(STIFF_LAT * wheel.slipAngle)
+    /*
+      During a drift the tyres are not asked to corner, so they are not charged
+      for it either.
+
+      The arcade block below is what moves the car once you are drifting — the
+      pose and the path are both commanded. But the tyres still *see* the huge
+      slip angle that pose implies, and the friction circle then spends their
+      entire budget on a lateral force that is being overridden anyway. The
+      visible result was a car that could not put any power down mid-drift: it
+      would enter at thirty metres a second and come out at twelve, engine
+      screaming, because the rears had nothing left for drive.
+
+      `wheel.slipAngle` itself is left truthful — the tyre marks and the smoke
+      read it, and they should still know the tyre is sliding. Only the force
+      is relieved.
+    */
+    const cornering = wheel.slipAngle * (1 - car.driftBlend * 0.92)
+    let fy = budget * Math.tanh(stiffness * cornering)
 
     /*
       The friction circle.
@@ -757,6 +1163,22 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     moment += along * bodyY - across * bodyX
   }
 
+  /*
+    Opposite lock, for the look of it.
+
+    A drifting car's front wheels point roughly along the path, which from
+    behind is dramatic opposite lock — and it is the single clearest signal
+    that the car is sideways *on purpose* rather than by accident. Written on
+    top of the steering angle after the forces are done, so it changes nothing
+    about how the car behaves: the tyre model has already had its `delta`, and
+    `wheel.steer` from here on is only ever read by the renderer.
+  */
+  if (car.driftBlend > 0.01) {
+    const show = car.driftAngle * 0.9 * car.driftBlend + delta * (1 - car.driftBlend)
+    car.wheels[0].steer = show
+    car.wheels[1].steer = show
+  }
+
   // --- everything else acting on the body ----------------------------------
   let along = totalX
   along -= DRAG * v * Math.abs(car.vs) * (car.boostLeft > 0 ? 0.86 : 1)
@@ -768,16 +1190,124 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   const lateral = totalY / MASS - car.vs * car.yaw
   car.accel = accel
   car.lateral = lateral
+  // What the corner is actually pulling, in m/s². Roll and lateral load
+  // transfer both read this rather than the body-frame derivative above.
+  car.cornering = totalY / MASS
   car.vs += accel * dt
   car.vn += lateral * dt
   car.yaw += (moment / INERTIA) * dt
 
-  // Never reverse, never stop dead, never exceed the ceiling.
-  car.vs = Math.max(CRAWL, Math.min(SPEED_CEILING, car.vs))
+  /*
+    It is allowed to stop now, and to go backwards.
+
+    There used to be a floor under this — the car never dropped below walking
+    pace, because with no throttle a car that stopped could not start again and
+    six seconds of nothing in a forty-second race is a ruined run. With a
+    throttle that reasoning is gone, and a car that cannot be brought to a
+    stand cannot be reversed out of the rock it has just buried its nose in.
+  */
+  car.vs = Math.max(-REVERSE_LIMIT, Math.min(SPEED_CEILING, car.vs))
+  // Below a crawl with nothing asked of it, let it settle rather than creep.
+  if (Math.abs(car.vs) < 0.35 && car.throttle < 0.05) car.vs *= Math.exp(-6 * dt)
   // Yaw damping. A real car has aerodynamic and mechanical damping this model
   // does not; without a little of it the back end oscillates for ever.
   car.yaw *= Math.exp(-(0.9 + v * 0.03) * dt)
   car.yaw = Math.max(-MAX_YAW_RATE, Math.min(MAX_YAW_RATE, car.yaw))
+
+  /*
+    ==========================================================================
+    THE DRIFT
+    ==========================================================================
+
+    **This is a different control model, and it takes over.** Everything above
+    is a car; for as long as you are drifting, this is a *game*. That is a
+    deliberate choice and it is stated here rather than hidden, because it is
+    the one place in the racer where the simulation is switched off.
+
+    Why it has to be. Left to the tyres, pulling the handbrake in a corner does
+    what it does in life: the rear lets go, the car rotates, and it keeps
+    rotating in the direction it was sent until it hits something. Steering has
+    almost no authority once the back is gone, so the drift is not a thing you
+    *do*, it is a thing that happens to you — you press the button and then
+    watch. That is correct physics and it is no fun at all, and this is a
+    present for somebody who likes racing games.
+
+    So: while drifting, the arrows steer the **path**, not the wheels.
+
+      the key you hold      bends the line the car is travelling along
+      the same key          decides which way it hangs, and how far
+      the other key         swings it through and hangs it the other way
+
+    Which means one drift can carry you through a left and then a right without
+    ever hooking up — flick, flick — and staying in it is a thing you are doing
+    with your hands rather than a state you are waiting out.
+
+    Three ways out, and no others:
+
+      the ember     cancels it instantly and leaves you going fast. This is the
+                    one you want, and it is why the boost button is worth
+                    holding on to through a corner
+      going straight   two seconds with the arrows near centre and it lets go
+      running out of speed   below walking pace there is nothing to drift
+
+    It is built on `course = psi + beta` — where the car is *going* is where it
+    is pointing plus how far it is hung out. Commanding those two separately is
+    the whole trick: `turn` bends the course, `driftAngle` sets the pose, and
+    the car's own rotation is whatever is needed to keep both true.
+  */
+  driftMode(car, input, dt, v)
+  if (car.driftBlend > 0.001) {
+    const command = Math.max(-1, Math.min(1, input.steer))
+    const speed = Math.max(1, Math.hypot(car.vs, car.vn))
+
+    /*
+      How tightly the path bends.
+
+      Capped in *g* rather than in radians a second, so it means the same thing
+      at every speed: a flat ceiling would be a gentle curve at 20 m/s and a
+      pirouette at 45. Set a little above what the tyres can do, which is what
+      makes a drift genuinely quicker through a tight corner than gripping —
+      and paid for by the scrub below, which is what stops it being quicker
+      through everything.
+    */
+    const ceiling = Math.min(DRIFT_TURN, (DRIFT_MAX_G * G) / speed)
+    const turn = command * ceiling
+
+    /*
+      The angle it hangs at, following the same key that is steering it.
+
+      This is what makes swapping sides work: hold the other arrow and the
+      target crosses through zero to the far side, so the car swings through
+      straight and hangs out the other way without ever leaving the drift.
+    */
+    const want = -command * DRIFT_ANGLE * car.driftBlend
+    const was = car.driftAngle
+    car.driftAngle += (want - car.driftAngle) * (1 - Math.exp(-DRIFT_SWAP * dt))
+    const swing = (car.driftAngle - was) / Math.max(dt, 1e-5)
+
+    // Rebuild the velocity from the pose, and rotate the car by however much
+    // is needed for the *path* to turn at `turn` while the pose is changing.
+    const poseVs = speed * Math.cos(car.driftAngle)
+    const poseVn = speed * Math.sin(car.driftAngle)
+    car.vs += (poseVs - car.vs) * car.driftBlend
+    car.vn += (poseVn - car.vn) * car.driftBlend
+    car.yaw += (turn - swing - car.yaw) * car.driftBlend
+
+    // Sideways is not free. Squared, so a small angle costs almost nothing and
+    // hanging it right out bleeds speed the way it should.
+    const sideways = Math.abs(Math.sin(car.driftAngle))
+    car.vs *= 1 - DRIFT_SCRUB * sideways * sideways * dt * car.driftBlend
+
+    /*
+      What the body leans on.
+
+      Taken from the commanded corner rather than from the tyre forces, which
+      during a drift are enormous and pointing the wrong way — the car is being
+      moved by this block, not by them, so asking them how hard it is cornering
+      gives an answer about a car that is not the one on screen.
+    */
+    car.cornering += (turn * speed - car.cornering) * car.driftBlend
+  }
 
   /*
     And a firm hand at the very edge.
@@ -788,8 +1318,25 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     as the game taking the car off you.
   */
   const held = Math.max(3, Math.abs(car.vs))
-  const maxLateral = held * Math.tan(MAX_SLIP)
-  if (Math.abs(car.vn) > maxLateral) {
+  /*
+    One limit, not two.
+
+    There used to be a second, much tighter one — sixteen degrees — that
+    applied whenever the handbrake was *not* down. It was there because an
+    unstable car had to be leashed, and it made ordinary cornering feel like
+    driving into a rubber band: the car would rotate, hit the leash, and get
+    pulled straight again, which reads as the car losing its balance and then
+    being taken away from you.
+
+    The car is stable on its own now, so there is one limit and it is the wide
+    one. This is a backstop against a spin, not a handling parameter, and in
+    normal driving you should never reach it.
+  */
+  const slipLimit = MAX_SLIP
+  const maxLateral = held * Math.tan(slipLimit)
+  // The drift sets the angle deliberately and stays well inside MAX_SLIP, so
+  // this backstop has nothing to say about it — but it must not be *able* to.
+  if (car.driftBlend < 0.02 && Math.abs(car.vn) > maxLateral) {
     const target = Math.sign(car.vn) * maxLateral
     // The further past it goes the harder it is pulled back, so `MAX_SLIP` is
     // a limit the car actually reaches rather than a number in a comment. A
@@ -807,7 +1354,10 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     animation played over the top. They cost three lines and they are the
     difference between a car with mass and a box sliding along a groove.
   */
-  const wantRoll = Math.max(-0.16, Math.min(0.16, (car.lateral / G) * 0.115))
+  // Negated: the mesh faces +Z, so its +X side is the car's *left* — see the
+  // note on the mirror in `rig.ts`. Leaning into a right-hand corner therefore
+  // means lifting +X, which is a negative roll here.
+  const wantRoll = Math.max(-0.16, Math.min(0.16, (-car.cornering / G) * 0.115))
   const wantPitch = Math.max(-0.1, Math.min(0.075, (-car.accel / G) * 0.085))
   const wantHeave = Math.max(-0.05, Math.min(0.02, -(weight - MASS * G) / 160_000))
   car.roll += (wantRoll - car.roll) * (1 - Math.exp(-9 * dt))
@@ -893,7 +1443,17 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     // back out of the road frame
     car.vs = alongRoad * cos + acrossRoad * sin
     car.vn = -alongRoad * sin + acrossRoad * cos
-    car.vs = Math.max(CRAWL, car.vs)
+    /*
+      No floor here, and that matters more than it looks.
+
+      There used to be one — the car was never allowed to be going slower than
+      a walk, because with no throttle a car that stopped could never start
+      again. Reverse arrived and the floor became `max(0, vs)`, which is worse
+      than useless: it is *exactly* while scraping along the rock that you want
+      to back out, and clamping the speed to zero-or-positive was the one thing
+      preventing it. The scrubbing above is multiplicative and keeps its sign,
+      so nothing needs to be clamped at all.
+    */
   }
   car.touching = touching
 
@@ -907,7 +1467,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     car.struck.add(i)
     car.hitStone = true
     car.strikes++
-    car.vs = Math.max(CRAWL, car.vs * (1 - Math.min(0.42, 0.14 + stone.size * 0.22)))
+    car.vs = car.vs * (1 - Math.min(0.42, 0.14 + stone.size * 0.22))
     car.yaw += (car.n > stone.n ? 1 : -1) * stone.size * 0.9
     car.driftCharge = 0
   }
@@ -928,7 +1488,6 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   if (drifting) {
     car.driftCharge += dt
     car.driftMs += dt * 1000
-    car.ember = Math.min(1, car.ember + dt * Math.min(1, slip * 2.4) * 0.115)
   } else if (car.driftCharge > 0) {
     /*
       Letting go is the whole mechanic.
@@ -941,7 +1500,6 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     else if (car.driftCharge > 0.38) car.released = 1
     if (car.released > 0) {
       car.vs += 2.4 + car.released * 2.4
-      car.ember = Math.min(1, car.ember + 0.09 + car.released * 0.07)
       // Snap the slip out. This is why it feels like a launch rather than a
       // gradual recovery: the sideways energy becomes forward energy.
       car.vn *= 0.35
@@ -949,14 +1507,38 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     car.driftCharge = 0
   }
 
-  // Threading the rock fills it too — the "close" in "close to the wall".
-  const gap = wallAt(road) - Math.abs(car.n)
-  if (gap < 1.5 && car.hitWall === 0 && v > 20) {
-    car.ember = Math.min(1, car.ember + dt * (1.5 - gap) * 0.16)
+  /*
+    --- the ember, and where it comes from ---------------------------------
+
+    **Seconds spent drifting. Nothing else.**
+
+    It used to trickle in from three places at once — how sideways you were,
+    how close you were running to the rock, and a lump every time you let a
+    drift go — which between them meant the meter went up for reasons nobody
+    could name. You could not answer "how do I get more of that", and a reward
+    you cannot aim at is not a reward, it is weather.
+
+    One source, and it is the thing the game is about: hold a drift, the bar
+    fills. Roughly five seconds of drifting is a full one.
+
+    And it stops at full. It does not top up, it does not overflow, and it is
+    not spent in thirds — you fill it, you use it, and it starts again from
+    nothing. That is what makes the bar worth looking at: it is either filling,
+    or it is asking to be spent.
+  */
+  if (car.drifting) {
+    car.ember = Math.min(1, car.ember + dt / EMBER_SECONDS)
   }
 
-  if (input.boost && car.boostLeft <= 0 && car.ember >= BOOST_COST) {
-    car.ember -= BOOST_COST
+  /*
+    Spending it takes the lot.
+
+    Pressing the ember always cancels a drift — see `driftMode` — whether or
+    not there was anything to spend, because the button means "straighten up
+    and go". If the bar happened to be full, this is also the shove.
+  */
+  if (input.boost && car.boostLeft <= 0 && car.ember >= 1) {
+    car.ember = 0
     car.boostLeft = BOOST_SECONDS
   }
   if (car.boostLeft > 0) car.boostLeft = Math.max(0, car.boostLeft - dt)
@@ -1021,7 +1603,7 @@ export class Recorder {
       (Math.round(slip * SAMPLE_DRIFT) & SAMPLE_DRIFT) |
       (car.boostLeft > 0 ? SAMPLE_BOOST : 0) |
       (car.rough ? SAMPLE_ROUGH : 0) |
-      (car.throttle < 0.5 ? SAMPLE_BRAKE : 0) |
+      (car.braking > 0.35 ? SAMPLE_BRAKE : 0) |
       (wheelspinOf(car) > 0.3 ? SAMPLE_SLIDE : 0)
     this.path.push(
       Math.round(car.n * 1000),
@@ -1034,7 +1616,7 @@ export class Recorder {
   finish(car: CarState): RallyRun {
     this.push(car)
     return {
-      v: 3,
+      v: 4,
       timeMs: Math.round(car.elapsed * 1000),
       path: this.path.slice(),
       strikes: car.strikes,

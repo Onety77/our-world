@@ -17,6 +17,7 @@ import { localDateKey, useRound, useSettlement } from '@/world/games/useRound'
 export function Playing() {
   const gameId = usePlaying((s) => s.gameId)
   const solo = usePlaying((s) => s.solo)
+  const race = usePlaying((s) => s.race)
   const close = usePlaying((s) => s.close)
   if (!gameId) return null
   const game = GAMES.find((candidate) => candidate.id === gameId)
@@ -32,7 +33,7 @@ export function Playing() {
       </div>
     )
   }
-  return <Runner game={game} solo={solo} onClose={close} />
+  return <Runner game={game} solo={solo} race={race} onClose={close} />
 }
 
 /**
@@ -43,10 +44,12 @@ export function Playing() {
 function Runner({
   game,
   solo,
+  race,
   onClose,
 }: {
   game: GameDefinition<any, any>
   solo: boolean
+  race: string | null
   onClose: () => void
 }) {
   const gameId = game.id
@@ -79,9 +82,30 @@ function Runner({
     two of you are playing — and so a game you played by yourself on a Tuesday
     does not turn up in her Hollow as a round she is somehow already losing.
   */
-  const key = solo ? `solo:${today}` : today
+  /*
+    A live round brings its own key.
+
+    It has to: the two of you agreed on it a second ago through presence, and
+    it names a *moment* rather than a day. Everything else here is unchanged —
+    the round is opened, watched and settled by exactly the same machinery.
+  */
+  const key = race ? `race:${race}` : solo ? `solo:${today}` : today
 
   const handle = useRound(game, key)
+
+  /*
+    Take the invitation down on the way out.
+
+    `Presence.racing` is how she finds the round you are sitting in, and an
+    invitation that outlives the game is worse than none: her button would go
+    on saying "join him" and would drop her into a round you left ten minutes
+    ago. Cleared on unmount, which covers backing out, closing the game and
+    walking out of the Hollow alike.
+  */
+  useEffect(() => {
+    if (!race) return
+    return () => data.publishPresence({ racing: '' })
+  }, [race, data])
 
   const award = useCallback(
     async (amount: number, reason: string) => {
@@ -120,6 +144,7 @@ function Runner({
       <Component
         me={me}
         theirName={profiles[them].name}
+        variant={race ? 'race' : null}
         solo={solo}
         round={handle.round}
         setup={handle.setup}

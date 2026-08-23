@@ -55,6 +55,14 @@ export interface GameProps<Setup = unknown, MoveData = unknown> {
    * *against* anything clever: the garden has no opponent, only a word bag.
    */
   solo: boolean
+  /**
+   * Which flavour of round this is: `'race'`, or null for the ordinary one.
+   *
+   * A game may ignore it entirely — most will. Word Duel uses it to put a
+   * five-minute clock on a round the two of you opened at the same moment,
+   * which is a different game from the one you play a guess a day.
+   */
+  variant: 'race' | null
 
   /** The round as it stands, or null while it is still being opened. */
   round: Round | null

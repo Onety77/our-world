@@ -29,6 +29,14 @@
         "heading": { ".validate": "newData.isNumber()" },
         "lastSeen": { ".validate": "newData.isNumber()" },
 
+        "//racing": [
+          "The key of a live round this person is sitting in, so the other can",
+          "join the same one. See the note on Presence in src/data/types.ts —",
+          "an asynchronous round names itself from the date, a live one cannot,",
+          "so the invitation goes down the channel that is already live."
+        ],
+        "racing": { ".validate": "newData.isString() && newData.val().length <= 64" },
+
         "position": {
           "$axis": { ".validate": "newData.isNumber()" },
           ".validate": "newData.hasChildren(['0', '1', '2'])"

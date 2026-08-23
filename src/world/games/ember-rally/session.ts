@@ -40,8 +40,31 @@ export interface RaceSession {
   ghostName: string
   /** Both runs, for the two-car replay. */
   replay: { mine: RallyRun; theirs: RallyRun } | null
+  /**
+   * Stopped, mid-road, with the world still on screen behind it.
+   *
+   * Escape used to fall through to the garden's own key handling and take you
+   * all the way out to the meadow — abandoning the run, with no warning and no
+   * way back to it. A race you cannot put down is a race you can only play
+   * when nothing else is happening, which is not what this is for.
+   *
+   * Only the solo road can pause in any meaningful sense today, and that is
+   * fine: there is no live opponent to keep waiting. Her ghost is a recording
+   * and it stops when your clock does. When there is real-time racing this has
+   * to become "pause is yours alone, and only when you are alone".
+   */
+  paused: boolean
   /** Where the pointer controls listen. Set by the DOM half when it mounts. */
   surface: HTMLElement | null
+  /**
+   * The ember bar's fill, handed over by the DOM half.
+   *
+   * Written to directly, once a frame, by the Stage — never through React. A
+   * meter has to move at sixty frames a second, and React state at sixty
+   * frames a second is visible stutter. This is the same reason the music
+   * beam and the pointer's gaze are written straight to their nodes.
+   */
+  emberBar: HTMLElement | null
   /** Called once, with the run, when the car reaches the far fire. */
   onFinish: ((run: RallyRun) => void) | null
 
@@ -53,6 +76,9 @@ export interface RaceSession {
   }): void
   watch(input: { track: Track; replay: { mine: RallyRun; theirs: RallyRun } }): void
   setSurface(el: HTMLElement | null): void
+  setEmberBar(el: HTMLElement | null): void
+  pause(): void
+  resume(): void
   begin(): void
   finish(): void
   close(): void
@@ -65,12 +91,15 @@ export const useRace = create<RaceSession>((set) => ({
   ghost: null,
   ghostName: '',
   replay: null,
+  paused: false,
   surface: null,
+  emberBar: null,
   onFinish: null,
 
   open: ({ track, ghost, ghostName = '', onFinish }) =>
     set((s) => ({
       phase: 'ready',
+      paused: false,
       attempt: s.attempt + 1,
       track,
       ghost,
@@ -82,6 +111,7 @@ export const useRace = create<RaceSession>((set) => ({
   watch: ({ track, replay }) =>
     set((s) => ({
       phase: 'replay',
+      paused: false,
       attempt: s.attempt + 1,
       track,
       replay,
@@ -90,17 +120,22 @@ export const useRace = create<RaceSession>((set) => ({
     })),
 
   setSurface: (surface) => set({ surface }),
+  setEmberBar: (emberBar) => set({ emberBar }),
   begin: () => set({ phase: 'running' }),
+  pause: () => set({ paused: true }),
+  resume: () => set({ paused: false }),
   finish: () => set({ phase: 'finished' }),
 
   close: () =>
     set({
       phase: 'off',
+      paused: false,
       track: null,
       ghost: null,
       ghostName: '',
       replay: null,
       onFinish: null,
       surface: null,
+      emberBar: null,
     }),
 }))

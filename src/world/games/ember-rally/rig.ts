@@ -29,6 +29,31 @@ import { emptyRoad, roadAt, type Track } from './track'
 /** Everything `poseWheels` needs. The studio has no physics behind it. */
 export type Posture = Pick<CarState, 'wheels' | 'roll' | 'pitch' | 'heave'>
 
+/**
+ * Which drawn wheel is which physical one.
+ *
+ * ---------------------------------------------------------------------------
+ * **The mesh and the model number their wheels on opposite sides.**
+ *
+ * The car is modelled with its nose along +Z. In three.js's right-handed axes
+ * with +Y up, the right-hand side of something facing +Z is **−X** — which is
+ * also what `basisAt` says the road's right is (`rx = −cos(heading)`). So the
+ * mesh's `+X` half is the car's *left*, and `WHEEL_POSITIONS[0]`, sitting at
+ * −x, is the front **right**.
+ *
+ * The physics numbers them the other way: `WHEEL_AT[0]` is `[FRONT, −TRACK_HALF]`
+ * and its lateral axis is right-positive, so wheel 0 is the front **left**.
+ *
+ * Nothing about how the car *drives* depends on this — the tyre model never
+ * looks at the mesh. But everything drawn from a wheel index did, and all of
+ * it was coming out on the wrong side of the car: the spring that compressed
+ * under load, the disc that glowed under braking, and the puff of smoke off a
+ * locked tyre. Into a right-hand corner the left-hand wheels were doing the
+ * work on screen.
+ * ---------------------------------------------------------------------------
+ */
+export const MESH_FOR_WHEEL = [1, 0, 3, 2] as const
+
 // The shell, the wheel and the spring never change, so they are built once for
 // the life of the tab. Lazily, though — nobody who never opens the Hollow
 // should pay for a car they are not going to drive.
@@ -198,10 +223,30 @@ export function useCarRig(
 export function poseWheels(rig: CarRig, car: Posture) {
   for (let i = 0; i < 4; i++) {
     const wheel = car.wheels[i]
-    const hub = rig.hubs[i]
-    // Steering, and the suspension travel. The hub rides on the road, so the
-    // travel moves the wheel by only the small amount a bump would.
-    hub.rotation.y = wheel.steer * 1.12
+    // The mesh numbers its wheels on the other side. See `MESH_FOR_WHEEL`.
+    const hub = rig.hubs[MESH_FOR_WHEEL[i]]
+    /*
+      --- which way the front wheels point --------------------------------
+
+      **Negated, and it has to be.** The steering angle is *right positive*,
+      and the car is modelled facing +Z — where the right-hand side is −X. So
+      turning the wheel toward the car's right means a *negative* rotation
+      about Y.
+
+      Without this the front wheels pointed the wrong way: steer right and they
+      turned left. Nothing drove wrong, because the physics never reads this —
+      the car still went where you asked — but you were watching two wheels
+      argue with the corner they were taking, which is exactly as unsettling as
+      it sounds and made reversing near impossible to read.
+
+      The angle is also exaggerated. Now that the steering ratio is derived
+      from what the tyres can use, real lock at speed is two or three degrees:
+      correct, and invisible from behind the car. So the *drawn* angle is
+      nearly twice the real one, clamped to what still fits inside the arch. It
+      changes nothing about how the car drives.
+    */
+    hub.rotation.y = -Math.max(-0.62, Math.min(0.62, wheel.steer * 1.9))
+    // The hub rides on the road, so travel moves it only as a bump would.
     hub.position.y = WHEEL_RADIUS + wheel.travel * 0.35
 
     /*
@@ -212,17 +257,18 @@ export function poseWheels(rig: CarRig, car: Posture) {
       small angle and it does a lot: a car whose wheels stay bolt upright
       while the shell leans looks like a toy on a tilting board.
     */
-    rig.cambers[i].rotation.z = car.roll * 0.55 + wheel.travel * 0.4
+    rig.cambers[MESH_FOR_WHEEL[i]].rotation.z = car.roll * 0.55
 
     // And the rotation, straight off the wheel's own angular velocity — so a
     // locked wheel stops dead and a spinning one outruns the road.
-    rig.spinners[i].rotation.x = wheel.spin
+    rig.spinners[MESH_FOR_WHEEL[i]].rotation.x = wheel.spin
 
     // The spring covers whatever is left between the body and the wheel.
-    const [sx, , sz] = SPRING_POSITIONS[i]
+    const spring = rig.springs[MESH_FOR_WHEEL[i]]
+    const [sx, , sz] = SPRING_POSITIONS[MESH_FOR_WHEEL[i]]
     const lean = -car.roll * sx - car.pitch * sz
     const length = SPRING_SPAN + car.heave + lean - wheel.travel * 0.35
-    rig.springs[i].scale.y = Math.max(0.55, Math.min(1.5, length / SPRING_SPAN))
+    spring.scale.y = Math.max(0.55, Math.min(1.5, length / SPRING_SPAN))
   }
 }
 
@@ -234,7 +280,24 @@ export function poseWheels(rig: CarRig, car: Posture) {
  * recording says she was on the brakes hard enough to be sliding. It is a
  * guess, but it is a guess made from something she actually did.
  */
-export function poseGhostWheels(rig: CarRig, speed: number, drift: number, spinning: boolean, dt: number) {
+export function poseGhostWheels(
+  rig: CarRig,
+  speed: number,
+  drift: number,
+  yaw: number,
+  spinning: boolean,
+  dt: number,
+) {
+  /*
+    Her front wheels are opposite lock, because that is what a slide is.
+
+    Nothing wrote her steering down — four numbers a sample is the whole
+    budget — but the *direction* of her slide is in there, and a driver holding
+    a slide has the wheels turned into it. So the fronts point against her yaw,
+    scaled by how sideways she is. It used to be `-drift`, which is unsigned:
+    her wheels turned the same way whichever side she was hanging out.
+  */
+  const counter = Math.sign(yaw || 1) * drift * 0.45
   for (let i = 0; i < 4; i++) {
     const rear = i >= 2
     const rate = (rear && spinning ? speed * 1.7 : speed) / WHEEL_RADIUS
@@ -242,7 +305,8 @@ export function poseGhostWheels(rig: CarRig, speed: number, drift: number, spinn
     rig.spinners[i].rotation.x = rig.spin[i]
     rig.cambers[i].rotation.z = drift * 0.12
     rig.hubs[i].position.y = WHEEL_RADIUS
-    if (i < 2) rig.hubs[i].rotation.y = -drift * 0.4
+    // Same negation as `poseWheels`: right is negative about Y in this scene.
+    if (i < 2) rig.hubs[i].rotation.y = counter
   }
 }
 

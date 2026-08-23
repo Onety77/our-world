@@ -70,6 +70,14 @@ export interface AmbienceHandle {
    */
   nib(weight?: number, back?: boolean): void
   /**
+   * A stone set down on stone.
+   *
+   * For the word game, where every letter lands on a pebble. `weight` 0..1
+   * leans it from a small chip to a heavier one — the last letter of a word is
+   * worth a bit more than the first.
+   */
+  chip(weight?: number): void
+  /**
    * A car, and the road under it. Returns null if nothing has unlocked the
    * audio context yet — which cannot happen in practice, because you have to
    * press "start the engine" to get to a road at all.
@@ -644,6 +652,60 @@ export function createAmbience(): AmbienceHandle {
         body.start(now, Math.random() * (NOISE_SECONDS - 0.2), 0.09)
         body.stop(now + 0.1)
       }
+    },
+
+    /*
+      A pebble put down on a stone shelf.
+
+      Two parts, and both are needed. The *click* is the contact: a very short
+      bite of noise, bandpassed high where the sharpness lives, over in about a
+      hundredth of a second. Under it a *ring* — a triangle that drops a fifth
+      as it decays — which is the stone itself having a size. Click alone is a
+      keyboard; ring alone is a marimba; together they are two rocks touching.
+
+      Everything is jittered per strike, because five identical ticks in a row
+      stops being stone and becomes a mechanism.
+    */
+    chip(weight = 0.5) {
+      if (!ctx || !grain || !inkGain) return
+      const now = ctx.currentTime
+      const w = Math.max(0, Math.min(1, weight))
+
+      const click = ctx.createBufferSource()
+      click.buffer = grain
+      click.playbackRate.value = 2.1 + Math.random() * 1.2
+
+      const edge = ctx.createBiquadFilter()
+      edge.type = 'bandpass'
+      edge.frequency.value = 2400 + Math.random() * 2200
+      edge.Q.value = 1.1 + Math.random() * 1.4
+
+      const clickGain = ctx.createGain()
+      const peak = 0.055 + w * 0.045
+      clickGain.gain.setValueAtTime(0.0001, now)
+      clickGain.gain.exponentialRampToValueAtTime(peak, now + 0.003)
+      clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.016)
+
+      click.connect(edge).connect(clickGain).connect(inkGain)
+      click.start(now, Math.random() * (NOISE_SECONDS - 0.1), 0.05)
+      click.stop(now + 0.06)
+
+      // The stone's own small note. Low enough to feel like weight, short
+      // enough that a fast typist never hears two of them overlap into a chord.
+      const ring = ctx.createOscillator()
+      ring.type = 'triangle'
+      const base = 320 + Math.random() * 260 - w * 60
+      ring.frequency.setValueAtTime(base, now)
+      ring.frequency.exponentialRampToValueAtTime(base * 0.66, now + 0.09)
+
+      const ringGain = ctx.createGain()
+      ringGain.gain.setValueAtTime(0.0001, now)
+      ringGain.gain.exponentialRampToValueAtTime(0.03 + w * 0.025, now + 0.005)
+      ringGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1)
+
+      ring.connect(ringGain).connect(inkGain)
+      ring.start(now)
+      ring.stop(now + 0.12)
     },
 
     /**

@@ -14,6 +14,8 @@ export type Mark = 'lit' | 'near' | 'cold'
 
 let allowed: Set<string> | null = null
 let fair: string[] | null = null
+/** The everyday subset the game actually deals from. See `easy.ts`. */
+let easy: string[] | null = null
 
 /** Chop the packed string back into words. Five characters each, no gaps. */
 function unpack(packed: string): string[] {
@@ -26,9 +28,30 @@ function unpack(packed: string): string[] {
 
 export async function loadWords(): Promise<void> {
   if (allowed && fair) return
-  const [a, f] = await Promise.all([import('./allowed'), import('./fair')])
+  const [a, f, e] = await Promise.all([
+    import('./allowed'),
+    import('./fair'),
+    import('./easy'),
+  ])
   allowed = new Set(unpack(a.ALLOWED))
   fair = unpack(f.FAIR)
+
+  /*
+    The everyday pile, checked against the real answer set.
+
+    Filtered rather than trusted: `easy.ts` is a hand-written list and hand-
+    written lists have typos in them. Anything that is not exactly five letters
+    or is not in `FAIR` is dropped here, so a slip can only ever make the pile
+    slightly smaller — never deal a word the other player would be told is
+    "not in the book" when they typed it back.
+  */
+  const known = new Set(fair)
+  const picked = e.EASY.trim()
+    .split(/\s+/)
+    .filter((word) => word.length === LENGTH && known.has(word))
+  // If that ever collapses — a bad edit, a bad merge — fall back to the whole
+  // fair list rather than dealing the same six words forever.
+  easy = picked.length > 200 ? picked : fair
 }
 
 export function isWord(word: string): boolean {
@@ -44,8 +67,14 @@ export function wordsReady(): boolean {
  * than wait. Drawn from the fair list — common, no cruel plurals.
  */
 export function fromThePile(seed: number): string {
-  if (!fair || fair.length === 0) return 'stone'
-  return fair[Math.abs(seed) % fair.length]
+  const pile = easy ?? fair
+  if (!pile || pile.length === 0) return 'stone'
+  return pile[Math.abs(seed) % pile.length]
+}
+
+/** How many words the pile has in it. For the check script. */
+export function pileSize(): number {
+  return (easy ?? fair)?.length ?? 0
 }
 
 /**

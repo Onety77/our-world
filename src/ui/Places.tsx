@@ -30,6 +30,16 @@ export function Places() {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return
+      /*
+        Belt and braces with whatever is on top.
+
+        A game, a letter or a form owns the keyboard while it is up, and Escape
+        inside one of them means "close this", not "walk out of the place I am
+        standing in". Ember Rally stops its own Escape in the capture phase, but
+        the general rule belongs here: the same guard that keeps this component
+        from *drawing* over a game should keep it from acting on its keys.
+      */
+      if (takenOverNow()) return
       if (e.key === 'Escape' && entered) leave()
       if (!entered && e.key === 'Enter') enter()
       if (!entered && e.key === 'ArrowRight') next()

@@ -484,6 +484,25 @@ export function buildCarShell(): BufferGeometry {
   // A rib over the roof, front to back, where the panels are joined.
   slab(body, [0, 1.11, -0.1], [0.06, 0.045, 0.72], BRASS_DARK, DULL)
 
+  /*
+    Mirrors, on stalks off the screen pillars.
+
+    Small, and worth more than their size. A car seen from behind is a shape,
+    and shapes read by their outline — two things standing off the shoulders
+    break the silhouette at exactly the widest point and give the eye something
+    to measure the body against. They also catch a lantern a beat before the
+    rest of the car does, which is the sort of thing you notice without ever
+    noticing it.
+
+    The glass faces backwards rather than outwards, because that is where the
+    camera is and a mirror showing you its own back is a plastic lump.
+  */
+  for (const side of [-1, 1]) {
+    slab(body, [side * 0.58, 0.95, 0.43], [0.16, 0.024, 0.024], BRASS_DARK, DULL)
+    slab(body, [side * 0.68, 0.98, 0.41], [0.085, 0.1, 0.05], BRASS, POLISHED, 0.1)
+    slab(body, [side * 0.68, 0.98, 0.383], [0.07, 0.082, 0.01], GLASS, GLAZED, 0.1)
+  }
+
   // Bonnet straps, leather, with a buckle each.
   for (const z of [1.0, 1.34]) {
     slab(body, [0, 0.665, z], [1.44, 0.03, 0.095], LEATHER, WORN)

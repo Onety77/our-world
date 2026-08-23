@@ -42,10 +42,18 @@ type RaceKind = 'qualifying' | 'chase'
  * touchable announces itself. A screen with no controls drawn anywhere owes
  * you one sentence saying where they are, and then owes you nothing else.
  */
+/**
+ * The one sentence of instruction in the whole race.
+ *
+ * It has to be *true*, which it stopped being when the car got a throttle:
+ * it went on telling people that down was the slide and space was the ember,
+ * which are now the brake and the handbrake. A hint that is wrong is worse
+ * than none — it teaches the wrong thing once and is then gone.
+ */
 const CONTROLS =
   typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
-    ? 'drag to steer · hold to slide · tap to spend the ember'
-    : 'arrows to steer · down to slide · space to spend the ember'
+    ? 'left thumb steers · right thumb holds the throttle, pull down to brake and slide · tap for the ember'
+    : 'up to go · down to brake · arrows to steer · space to slide · alt for the ember'
 
 export default function EmberRally({
   theirName,
@@ -351,13 +359,112 @@ function Road({
   return (
     <div className="rally rally-running">
       <div ref={surface} className="rally-input" />
-      <button type="button" className="rally-leave" onClick={onLeave}>
-        leave the road
-      </button>
+      <EmberBar />
+      <Pause onLeave={onLeave} hasResult={Boolean(children)} />
       <p className="rally-hint" aria-hidden="true">
         {CONTROLS}
       </p>
       {children}
+    </div>
+  )
+}
+
+/**
+ * How much ember you are carrying.
+ *
+ * ---------------------------------------------------------------------------
+ * The racer's rule has always been that there is no interface — no clock, no
+ * speedometer, no map — and that how much boost you had was the three lamps on
+ * the back of your own car. That was a nice idea and it did not work, for one
+ * reason: **nothing said where the ember came from.** It filled from three
+ * different things at once, none of them named, and three lamps on a car
+ * forty metres a second away in the dark is not a gauge you can read while
+ * doing anything else.
+ *
+ * So there is one meter now, and it earns its place by making one rule
+ * legible: *seconds spent drifting*. The tail lamps stay — they still show the
+ * same value, and from directly behind they are the prettier version.
+ *
+ * It is a line of light rather than a box. No border, no track behind it, no
+ * rounded rectangle: an ember-coloured line that grows, and glows when it is
+ * full and asking to be spent.
+ * ---------------------------------------------------------------------------
+ */
+function EmberBar() {
+  const fill = useRef<HTMLElement>(null)
+  useEffect(() => {
+    useRace.getState().setEmberBar(fill.current)
+    return () => useRace.getState().setEmberBar(null)
+  }, [])
+  return (
+    <div className="rally-ember" aria-hidden="true">
+      <i ref={fill} />
+    </div>
+  )
+}
+
+/**
+ * Putting the road down for a minute.
+ *
+ * Escape used to fall through to the garden's own key handling and take you
+ * all the way out to the meadow, abandoning the run — no warning, no way back.
+ * Now it stops the world where it is and offers the two things you could
+ * possibly want, and "leaving" means back to the Hollow's own fire rather than
+ * out into the grass.
+ *
+ * The button in the corner is the same thing for a thumb. It used to say
+ * "leave the road" and do it immediately, which is a destructive action one
+ * mis-tap away from your only run of the day.
+ */
+function Pause({ onLeave, hasResult }: { onLeave(): void; hasResult: boolean }) {
+  const paused = useRace((s) => s.paused)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      // The result is already up and has its own way onward; pausing over the
+      // top of it would be pausing a car that has finished.
+      if (hasResult) return
+      event.preventDefault()
+      event.stopPropagation()
+      const race = useRace.getState()
+      if (race.paused) race.resume()
+      else race.pause()
+    }
+    // Captured, so it is handled before the garden's own Escape sees it.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [hasResult])
+
+  if (hasResult) return null
+
+  if (!paused) {
+    return (
+      <button
+        type="button"
+        className="rally-leave"
+        onClick={() => useRace.getState().pause()}
+      >
+        pause
+      </button>
+    )
+  }
+
+  return (
+    <div className="rally-paused">
+      <div className="inner">
+        <p className="rally-kicker">the road is holding still</p>
+        <h1>Paused</h1>
+        <div className="rally-actions">
+          <button type="button" onClick={() => useRace.getState().resume()}>
+            back to it
+          </button>
+          <button type="button" className="quiet" onClick={onLeave}>
+            leave the road
+          </button>
+        </div>
+        <p className="rally-note">escape, either way</p>
+      </div>
     </div>
   )
 }

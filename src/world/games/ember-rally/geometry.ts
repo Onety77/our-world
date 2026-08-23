@@ -23,7 +23,7 @@ import {
   Sphere,
   Vector3,
 } from 'three'
-import { vergeWidth } from './physics'
+import { vergeWidth } from './track'
 import { random, SAMPLE_MS, type RallyRun } from './model'
 import { emptyRoad, roadAt, type RoadAt, type Track } from './track'
 
@@ -286,6 +286,8 @@ function addTube(
   path: Vector3[],
   radiusAt: (t: number) => number,
   colorAt: (t: number) => Color,
+  /** How wet the surface is. Stone teeth are where the water comes through. */
+  wet = 0.22,
 ) {
   const SIDES = 6
   const base = mesh.count
@@ -315,7 +317,7 @@ function addTube(
         path[i].y + right.y * cx + up.y * cy,
         path[i].z + right.z * cx + up.z * cy,
         col,
-        0.22,
+        wet,
         0.5,
       )
     }
@@ -508,6 +510,52 @@ export function buildTunnel(track: Track): TunnelChunk[] {
       path,
       (t) => root.thickness * (arch ? 1 - Math.abs(t - 0.5) * 0.5 : 1 - t * 0.62),
       (t) => scratchColor.copy(ROOT_BARK).lerp(ROOT_TIP, t * 0.6 + hash3(root.seed, 0, 0) * 0.2),
+    )
+  }
+
+  /*
+    --- stone teeth ---------------------------------------------------------
+
+    Stalactites off the vault and stalagmites on the verge. Swept as tubes that
+    taper to a point, with a lean and a kink in them so no two are the same
+    spindle — a cave full of identical cones is a cave full of traffic cones.
+
+    The hanging ones are what the roof is *for*. A smooth vault at forty metres
+    a second is a dark ceiling and nothing more; a vault with teeth in it has
+    your own headlamps finding one, sweeping along it, and letting it go, over
+    and over, which is the whole sensation of being underground at speed.
+  */
+  const spine: Vector3[] = Array.from({ length: 6 }, () => new Vector3())
+  for (const spike of track.spikes) {
+    const mesh = meshes[chunkOf(spike.s)]
+    roadAt(track, spike.s, road)
+    basisAt(road, basis)
+
+    const lean = (hash3(spike.seed, 1, 3) - 0.5) * 0.55
+    const twist = hash3(spike.seed, 2, 9) * Math.PI * 2
+    for (let i = 0; i < spine.length; i++) {
+      const t = i / (spine.length - 1)
+      // A little sway, so it hangs like something that grew rather than a peg.
+      const wobble = Math.sin(twist + t * 2.6) * spike.thickness * 0.9
+      const n = spike.n + lean * t * spike.length + wobble
+      const y = spike.hanging
+        ? road.ceiling * 0.995 - t * spike.length
+        : t * spike.length
+      roadPoint(road, n, y, spine[i], basis)
+    }
+
+    addTube(
+      mesh,
+      spine,
+      // Fat at the root, a point at the tip — and never quite zero, because a
+      // tube of radius zero is a fan of degenerate triangles with no normals.
+      (t) => Math.max(0.012, spike.thickness * Math.pow(1 - t, 0.75)),
+      (t) =>
+        scratchColor
+          .copy(spike.hanging ? ROCK_HIGH : ROCK_LOW)
+          .lerp(ROCK_MID, t * 0.5 + hash3(spike.seed, 3, 1) * 0.3),
+      // Wet, and more so at the tip: this is where the water comes through.
+      road.wet * 0.5 + 0.25,
     )
   }
 

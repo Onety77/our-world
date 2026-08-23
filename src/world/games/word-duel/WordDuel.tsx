@@ -11,10 +11,32 @@
  * the answer, and the shape is the part that is actually fun to watch.
  *
  * Nothing here is square. Every letter sits on a stone, and stones either
- * catch the firelight or they don't.
+ * catch the firelight or they don't. Putting one down knocks it and throws a
+ * few chips off the edge, with a small stone-on-stone tick — see
+ * `ambience.chip`. Typing had no weight at all before that, which for a board
+ * made of rocks is the one thing that gave it away.
+ *
+ * ---------------------------------------------------------------------------
+ * **Three ways to play, and the third is the only live thing in the garden.**
+ *
+ *   vs her       you each choose a word for the other, a guess at a time,
+ *                across days. The default, because seven timezones apart it is
+ *                the one that actually gets used
+ *   one player   the bag deals, and nobody is pretending to be an opponent
+ *   time         *both of you, now.* The bag deals the same word to each of
+ *                you and you have five minutes. First one there wins; if
+ *                neither of you gets it you both lose, which is a better
+ *                ending than a draw because it is funnier
+ *
+ * The race is only offered while you are both online — see `TimeChallenge` in
+ * `ui/Threshold` for how two phones agree on which round they are in. Who won
+ * is read off the **server timestamps on the moves**, never off either device's
+ * clock, so both of you compute the same answer without having to agree.
+ * ---------------------------------------------------------------------------
  */
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { ambience } from '@/systems/ambience'
 import type { GameProps } from '../types'
 import type { ChoseWord, DuelMove, DuelSetup } from './index'
 import {
@@ -33,19 +55,36 @@ import {
 
 const ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm']
 
+/** How long a time challenge lasts. */
+const RACE_MS = 5 * 60 * 1000
+
 export default function WordDuel({
+  me,
   theirName,
   solo,
+  variant,
+  round,
   setup,
   mine,
   theirs,
   play,
   onLeave,
 }: GameProps<DuelSetup, DuelMove>) {
+  /*
+    The time challenge.
+
+    A different game played with the same board. Nobody chooses a word — the
+    bag does, and it deals the *same* one to both of you — and you have five
+    minutes to find it. First one there wins. If neither of you gets it, you
+    both lose, which is a better ending than a draw because it is funnier.
+  */
+  const race = variant === 'race'
   const [ready, setReady] = useState(wordsReady())
   const [typed, setTyped] = useState('')
   const [complaint, setComplaint] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  /** Which stone was just struck, and a counter so the same one can restart. */
+  const [strike, setStrike] = useState({ at: -1, n: 0 })
 
   useEffect(() => {
     if (ready) return
@@ -103,24 +142,82 @@ export default function WordDuel({
     has not left you one. The computer is not playing against you and this is
     careful not to pretend it is — it deals a word, and that is all.
   */
-  const soloTarget = solo ? (lockedTarget ?? pileWord) : null
 
-  const target = solo ? soloTarget : (lockedTarget ?? herWord)
-  const done = target !== null && finished(myGuesses, target)
+
+  /*
+    In a race the bag deals, exactly as it does on your own — the difference is
+    that it deals the same word to both of you, because the round id is the
+    same and the word comes from the round id.
+  */
+  const dealt = solo || race ? (lockedTarget ?? pileWord) : null
+  const target = solo || race ? dealt : (lockedTarget ?? herWord)
+
+  // ---- the clock -----------------------------------------------------------
+  /*
+    Ticked once a second, and only while a race is actually running.
+
+    The deadline comes off the *round's* `startedAt`, which is the server's
+    clock and therefore the same number on both phones. The countdown itself is
+    drawn from the local clock, so a few seconds of skew would show — but who
+    won is never decided from this. That is decided from the timestamps on the
+    moves themselves, which are also the server's. The clock on the wall is for
+    the player; the result is from the record.
+  */
+  const [now, setNow] = useState(() => Date.now())
+  const deadline = race && round ? round.startedAt + RACE_MS : 0
+  const left = deadline ? Math.max(0, deadline - now) : 0
+  const outOfTime = race && deadline > 0 && left <= 0
+
+  useEffect(() => {
+    if (!race || !deadline) return
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [race, deadline])
+
+  const done =
+    target !== null && (finished(myGuesses, target) || (race && outOfTime))
   const won = target !== null && solved(myGuesses, target)
 
-  // Her board is scored against the word *I* gave her, which I know.
-  const herDone = myWord !== null && finished(herGuesses, myWord)
-  const herWon = myWord !== null && solved(herGuesses, myWord)
+  /*
+    Her board.
+
+    In the ordinary duel she is solving the word *I* gave her, which I know, so
+    her shape can be scored here. In a race she is solving the same word I am.
+    Either way the letters are never shown — only the shape.
+  */
+  const herAnswer = race ? target : myWord
+  const herDone =
+    herAnswer !== null && (finished(herGuesses, herAnswer) || (race && outOfTime))
+  const herWon = herAnswer !== null && solved(herGuesses, herAnswer)
   const bothDone = done && herDone
+
+  /*
+    Who got there first, from the record rather than from the boards.
+
+    Both of you read the same moves with the same server timestamps on them, so
+    both devices reach the same answer without having to agree about anything.
+  */
+  const finishedAt = useMemo(() => {
+    if (!race || !round || !target) return { mine: null, theirs: null }
+    let ours: number | null = null
+    let hers: number | null = null
+    for (const move of round.moves) {
+      const data = move.data as DuelMove | undefined
+      if (!data || data.kind !== 'guess' || data.guess !== target) continue
+      if (move.by === me) ours ??= move.at
+      else hers ??= move.at
+    }
+    return { mine: ours, theirs: hers }
+  }, [race, round, target, me])
 
   const tray = useMemo(
     () => (target ? letterState(myGuesses, target) : {}),
     [myGuesses, target],
   )
 
-  const choosing = solo ? false : myWord === null
-  const waiting = solo ? soloTarget === null : !choosing && target === null
+  // Nobody chooses a word in a race, so there is no giving step at all.
+  const choosing = solo || race ? false : myWord === null
+  const waiting = solo || race ? dealt === null : !choosing && target === null
   const typing = choosing || (!waiting && !done)
 
   // ---- doing things --------------------------------------------------------
@@ -164,10 +261,27 @@ export default function WordDuel({
     )
   }, [typed, sending, choosing, target, myGuesses, send])
 
-  const type = useCallback((letter: string) => {
-    setComplaint(null)
-    setTyped((t) => (t.length >= LENGTH ? t : t + letter))
-  }, [])
+  /*
+    Putting a letter down.
+
+    `typed` is read here rather than in a `setState` updater, because the
+    strike and the sound are side effects and side effects must not go inside
+    an updater — React may run one more than once, and during render. The
+    counter is what makes the animation restart: same stone, same letter, but a
+    new `key`, so the chips are thrown again instead of the browser deciding
+    nothing has changed.
+  */
+  const type = useCallback(
+    (letter: string) => {
+      if (typed.length >= LENGTH) return
+      setComplaint(null)
+      setTyped(typed + letter)
+      setStrike((s) => ({ at: typed.length, n: s.n + 1 }))
+      // The last stone of a word lands a little heavier than the first.
+      ambience.chip(0.35 + (typed.length / (LENGTH - 1)) * 0.5)
+    },
+    [typed],
+  )
 
   const rub = useCallback(() => {
     setComplaint(null)
@@ -204,7 +318,9 @@ export default function WordDuel({
     )
   }
 
-  const note = headline({ choosing, waiting, done, won, target, theirName, solo })
+  const note = race
+    ? raceHeadline({ done, won, herWon, outOfTime, finishedAt, target, theirName })
+    : headline({ choosing, waiting, done, won, target, theirName, solo })
 
   return (
     <div className="game duel">
@@ -227,22 +343,37 @@ export default function WordDuel({
         screen. Empty, this collapses to no height and the boards centre in
         what is left, which is what was wanted.
       */}
-      <div className="game-head">{note && <p className="game-ask">{note}</p>}</div>
+      <div className="game-head">
+        {/*
+          The clock, and it is the only number this game has ever shown.
+
+          It earns its place because a time challenge without a visible clock is
+          just a duel you feel vaguely anxious during — the whole shape of the
+          thing is "how long have I got", and that is not a question the board
+          can answer. It goes urgent under the last minute and stops at zero.
+        */}
+        {race && !outOfTime && (
+          <p className={'race-clock' + (left < 60_000 ? ' close' : '')}>
+            {clockFace(left)}
+          </p>
+        )}
+        {note && <p className="game-ask">{note}</p>}
+      </div>
 
       <div className="duel-boards">
         {choosing ? (
           <div className="duel-choosing">
-            <Word letters={typed.padEnd(LENGTH, ' ').split('')} marks={null} />
+            <Word letters={typed.padEnd(LENGTH, ' ').split('')} marks={null} strike={strike} />
           </div>
         ) : (
           <>
-            <Board guesses={myGuesses} answer={target} typed={done ? '' : typed} />
+            <Board guesses={myGuesses} answer={target} typed={done ? '' : typed} strike={strike} />
             {/* There is no second board on your own. Showing an empty one
                 would be the game inventing an opponent it does not have. */}
             {!solo && (
               <TheirShape
                 guesses={herGuesses}
-                answer={myWord}
+                answer={herAnswer}
                 done={herDone}
                 won={herWon}
               />
@@ -254,12 +385,19 @@ export default function WordDuel({
       <div className="duel-foot">
         <p className="duel-say" role="status" aria-live="polite">
           {complaint ??
-            (bothDone
-              ? 'Yours was ' + (herWord ?? '').toUpperCase() +
-                '. Hers was ' + (myWord ?? '').toUpperCase() + '.'
-              : done
-                ? 'You are done. ' + theirName + ' is still going.'
-                : '')}
+            (race
+              ? /* The word is shared, so there are no two words to reveal — and
+                   the result line above has already said who got there. All
+                   that is left is the honest state of the other board. */
+                done && !herDone
+                ? theirName + ' is still looking.'
+                : ''
+              : bothDone
+                ? 'Yours was ' + (herWord ?? '').toUpperCase() +
+                  '. Hers was ' + (myWord ?? '').toUpperCase() + '.'
+                : done
+                  ? 'You are done. ' + theirName + ' is still going.'
+                  : '')}
         </p>
 
         {typing && (
@@ -365,21 +503,72 @@ function headline({
   return null
 }
 
+/**
+ * How a race ended, in one line.
+ *
+ * The only rule worth stating: **both of you can lose.** A draw would be the
+ * tidy outcome and it is the wrong one — five minutes of nobody getting it is
+ * funnier as a shared failure than as an honourable tie, and this is a game
+ * for two people who will be teasing each other about it afterwards.
+ */
+function raceHeadline({
+  done,
+  won,
+  herWon,
+  outOfTime,
+  finishedAt,
+  target,
+  theirName,
+}: {
+  done: boolean
+  won: boolean
+  herWon: boolean
+  outOfTime: boolean
+  finishedAt: { mine: number | null; theirs: number | null }
+  target: string | null
+  theirName: string
+}): string | null {
+  const answer = (target ?? '').toUpperCase()
+
+  // Somebody has it. Whoever's stamp is earlier took it.
+  if (finishedAt.mine !== null && finishedAt.theirs !== null) {
+    return finishedAt.mine <= finishedAt.theirs
+      ? 'You got there first.'
+      : theirName + ' got there first.'
+  }
+  if (won && !herWon) return outOfTime || done ? 'You got it. ' + theirName + ' did not.' : 'Got it — and she has not.'
+  if (herWon && !won) return theirName + ' got it. It was ' + answer + '.'
+
+  if (outOfTime) return 'Neither of you. It was ' + answer + '.'
+  if (done && !won) return 'Out of guesses. It was ' + answer + '.'
+  return null
+}
+
+/** Which stone was just put down, and how many have been put down since. */
+export interface Strike {
+  at: number
+  n: number
+}
+
 /** Your board: one row per guess, then the one you are laying out. */
 function Board({
   guesses,
   answer,
   typed,
+  strike,
 }: {
   guesses: string[]
   answer: string | null
   typed: string
+  strike: Strike
 }) {
   const lines: { letters: string[]; marks: Mark[] | null }[] = guesses.map((g) => ({
     letters: g.split(''),
     marks: answer ? score(g, answer) : null,
   }))
 
+  // Only the row being laid out can be struck; the ones already down are done.
+  const live = lines.length
   if (lines.length < TRIES) {
     lines.push({ letters: typed.padEnd(LENGTH, ' ').split(''), marks: null })
   }
@@ -390,17 +579,36 @@ function Board({
   return (
     <div className="board">
       {lines.slice(0, TRIES).map((line, i) => (
-        <Word key={i} letters={line.letters} marks={line.marks} />
+        <Word
+          key={i}
+          letters={line.letters}
+          marks={line.marks}
+          strike={i === live ? strike : null}
+        />
       ))}
     </div>
   )
 }
 
-function Word({ letters, marks }: { letters: string[]; marks: Mark[] | null }) {
+function Word({
+  letters,
+  marks,
+  strike,
+}: {
+  letters: string[]
+  marks: Mark[] | null
+  strike?: Strike | null
+}) {
   return (
     <div className="word">
       {letters.map((letter, i) => (
-        <Stone key={i} letter={letter} mark={marks?.[i] ?? null} index={i} />
+        <Stone
+          key={i}
+          letter={letter}
+          mark={marks?.[i] ?? null}
+          index={i}
+          struck={strike && strike.at === i ? strike.n : 0}
+        />
       ))}
     </div>
   )
@@ -410,19 +618,48 @@ function Stone({
   letter,
   mark,
   index,
+  struck,
 }: {
   letter: string
   mark: Mark | null
   index: number
+  struck: number
 }) {
   const shape = useMemo(() => pebble(letter + index), [letter, index])
   const blank = letter.trim() === ''
   return (
-    <span className={'stone stone-' + (mark ?? (blank ? 'empty' : 'held'))} style={shape}>
+    <span
+      className={
+        'stone stone-' + (mark ?? (blank ? 'empty' : 'held')) + (struck ? ' struck' : '')
+      }
+      style={shape}
+    >
       {letter.trim().toUpperCase()}
+      {/*
+        Chips off the stone.
+
+        Keyed on the strike counter so the same stone can be hit again and
+        again — React would otherwise see an identical element and leave the
+        finished animation exactly where it was, which after the first letter
+        is no animation at all. Remounting restarts it.
+
+        Six of them, thrown at fixed angles that are jittered per stone rather
+        than per strike, so a given pebble always breaks the same way. Pure
+        decoration: `aria-hidden`, and nothing below can be clicked through it.
+      */}
+      {struck > 0 && (
+        <b key={struck} className="chips" aria-hidden="true">
+          {CHIP_ANGLES.map((angle, i) => (
+            <i key={i} style={{ '--a': angle + 'deg' } as CSSProperties} />
+          ))}
+        </b>
+      )}
     </span>
   )
 }
+
+/** Where the chips go. Six is enough to read as a burst and cheap to draw. */
+const CHIP_ANGLES = [-118, -64, -22, 26, 68, 124]
 
 /**
  * The shape of one stone.
@@ -501,4 +738,12 @@ function TheirShape({
       </span>
     </div>
   )
+}
+
+/** 4:07 — minutes and seconds, always two digits of seconds. */
+function clockFace(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
 }

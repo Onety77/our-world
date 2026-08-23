@@ -74,6 +74,35 @@ export interface Puddle {
   radius: number
 }
 
+/**
+ * A stone tooth: hanging from the vault, or standing on the verge.
+ *
+ * Never on the driveable road and never low enough overhead to touch, so it
+ * has no physics at all. It is there because a cave without them is a swept
+ * tube, and because a headlamp finding one of them a second before you pass
+ * under it is most of what makes the roof feel like it is *there*.
+ */
+export interface Spike {
+  s: number
+  n: number
+  hanging: boolean
+  /** How far it reaches, metres. */
+  length: number
+  thickness: number
+  seed: number
+}
+
+/**
+ * Metres of loose ground either side of the stone, before the wall.
+ *
+ * A property of the *road*, so it lives with the road. It was in `physics.ts`
+ * for a long time, which meant `geometry.ts` — which only wants to know where
+ * to stop building rock — had to import the whole tyre model to find out.
+ */
+export function vergeWidth(room: number): number {
+  return 0.85 + room * 0.95
+}
+
 export interface Track {
   seed: number
   stage: StageId
@@ -118,6 +147,7 @@ export interface Track {
   lanterns: Lantern[]
   roots: Root[]
   boulders: Boulder[]
+  spikes: Spike[]
   puddles: Puddle[]
   /** Both fires: the one you leave and the one you come back to. */
   hearths: { s: number; n: number }[]
@@ -477,6 +507,7 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     lanterns: [],
     roots: [],
     boulders: [],
+    spikes: [],
     puddles: [],
     /*
       Off to one side of the chamber and a little way *ahead* of the start.
@@ -566,6 +597,54 @@ function dressTrack(track: Track, rng: () => number) {
       twist: rng() * Math.PI * 2,
       seed: Math.floor(rng() * 65536),
     })
+  }
+
+  /*
+    Stone teeth: hanging from the vault, standing on the verge.
+
+    The Rootway had roots and nothing else, so every metre of it was the same
+    smooth swept tube with some timber over the top. Spikes are what make a
+    cave read as *rock* — they break the silhouette of the ceiling, they catch
+    the headlamps one at a time as you pass under them, and standing on the
+    verge they give the edge of the road a ragged line instead of a hem.
+
+    None of them is solid: they are never on the driveable stone, and the ones
+    overhead hang well above the car. A thing you cannot see coming in a dark
+    tunnel is not difficulty, it is a dice roll — the same rule the boulders
+    below are placed by.
+  */
+  for (let s = 10; s < track.length - 14; s += 2.4 + rng() * 6.5) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    const half = track.width[i]
+    const verge = half + vergeWidth(track.room[i])
+    const hanging = rng() < 0.68
+    if (hanging) {
+      // Anywhere across the vault. Longest toward the walls, so the middle of
+      // the roof stays clear enough to read the road under it.
+      const n = (rng() * 2 - 1) * verge * 0.96
+      const middle = 1 - Math.min(1, Math.abs(n) / Math.max(0.5, verge))
+      track.spikes.push({
+        s,
+        n,
+        hanging: true,
+        length: (0.35 + rng() * 1.15) * (1 - middle * 0.45),
+        thickness: 0.09 + rng() * 0.22,
+        seed: Math.floor(rng() * 65536),
+      })
+    } else {
+      // Standing, and only ever out on the loose. The verge is where a car
+      // that has run wide ends up, and a stalagmite there is a reason not to.
+      const side = rng() < 0.5 ? -1 : 1
+      const n = side * (half + 0.25 + rng() * Math.max(0.3, verge - half - 0.35))
+      track.spikes.push({
+        s,
+        n,
+        hanging: false,
+        length: 0.3 + rng() * 0.9,
+        thickness: 0.1 + rng() * 0.24,
+        seed: Math.floor(rng() * 65536),
+      })
+    }
   }
 
   // Stone off the racing line. Never in front of you on the line itself — a
