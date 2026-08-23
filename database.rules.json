@@ -1,0 +1,41 @@
+{
+  "//": [
+    "Presence only. Nothing here is kept and nothing here matters tomorrow —",
+    "it is where the two of you are standing right now, written several times a",
+    "second and thrown away.",
+    "",
+    "Same rule as Firestore: two people, forever. Do not fill the addresses in by",
+    "hand — run `npm run rules`, which takes them from .env.local and writes",
+    "rules-out/database.rules.json ready to paste.",
+    "",
+    "You may only write your own light. Without that, either of you could drag",
+    "the other around the garden."
+  ],
+
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "presence": {
+      "$who": {
+        ".read": "auth != null && (auth.token.email.toLowerCase() === '__WARM_EMAIL__' || auth.token.email.toLowerCase() === '__COOL_EMAIL__')",
+
+        ".write": "auth != null && (($who === 'warm' && auth.token.email.toLowerCase() === '__WARM_EMAIL__') || ($who === 'cool' && auth.token.email.toLowerCase() === '__COOL_EMAIL__'))",
+
+        ".validate": "newData.hasChildren(['online', 'lastSeen'])",
+
+        "online": { ".validate": "newData.isBoolean()" },
+        "placeId": { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "heading": { ".validate": "newData.isNumber()" },
+        "lastSeen": { ".validate": "newData.isNumber()" },
+
+        "position": {
+          "$axis": { ".validate": "newData.isNumber()" },
+          ".validate": "newData.hasChildren(['0', '1', '2'])"
+        },
+
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

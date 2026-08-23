@@ -1,0 +1,263 @@
+rules_version = '2';
+
+/*
+  Who may touch what.
+
+  The Firebase web API key is public — it ships in the client bundle and always
+  will. This file is the actual security model, and it starts from "nobody, to
+  nothing" and opens exactly two doors.
+
+  The rule that matters: there are two people here forever. Both addresses are
+  written below, and anyone else who signs in — with a real, valid Firebase
+  account — reads and writes nothing at all.
+
+  Do not fill the two addresses in by hand. Run `npm run rules`, which takes
+  them from .env.local and writes rules-out/firestore.rules ready to paste.
+  One place to get it right instead of three, and the failure mode of getting
+  it wrong is silent: the rules just deny everything and the garden looks
+  broken for no visible reason.
+*/
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function warmEmail() { return '__WARM_EMAIL__'; }
+    function coolEmail() { return '__COOL_EMAIL__'; }
+
+    /**
+     * The address you signed in with, lowercased.
+     *
+     * Lowercased on both sides because nobody types their own address the same
+     * way twice, and a rule that quietly denies everything because of a capital
+     * letter is a very bad afternoon.
+     */
+    function email() {
+      return request.auth != null && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    /*
+      Deliberately not also checking `email_verified`. Both accounts are made by
+      hand in the console and neither will ever be through a verification flow,
+      so requiring it would lock the two of you out of your own garden — and
+      it buys nothing here, because the addresses are matched exactly anyway.
+    */
+    function isOneOfUs() {
+      return email() == warmEmail() || email() == coolEmail();
+    }
+
+    /** Which light the caller is. */
+    function me() {
+      return email() == warmEmail() ? 'warm' : 'cool';
+    }
+
+    // ---- the world ------------------------------------------------------
+    // Small and singular: the pot's currency and goal, the pollen, the moment
+    // you were first here together. Either of you may set a goal.
+    match /world/{id} {
+      allow read: if isOneOfUs();
+      allow write: if isOneOfUs();
+    }
+
+    // ---- profiles -------------------------------------------------------
+    // Both readable — the distance between you and her clock are both drawn
+    // from hers. Only ever writable by their owner: a name is the one thing
+    // nobody else gets to change.
+    match /profiles/{who} {
+      allow read: if isOneOfUs();
+      allow write: if isOneOfUs()
+        && who == me()
+        && (who == 'warm' || who == 'cool');
+    }
+
+    // ---- letters --------------------------------------------------------
+    // You may leave one, signed as yourself. Letters do not come down, and
+    // they are not edited after the fact — the only thing that may change on
+    // an existing letter is the moment the *other* person first read it.
+    match /letters/{id} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        && request.resource.data.body.size() <= 8000
+        && request.resource.data.placeId is string
+        && request.resource.data.position is list
+        && request.resource.data.position.size() == 3;
+
+      allow update: if isOneOfUs()
+        // only theirs, and only the first time
+        && resource.data.by != me()
+        && resource.data.readAt == null
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['readAt'])
+        && request.resource.data.readAt is number;
+
+      allow delete: if false;
+    }
+
+    // ---- the pot --------------------------------------------------------
+    // An honour-system ledger of money set aside in real life. Nothing here
+    // moves funds. Entries are written once and never touched again: a total
+    // that can be quietly edited afterwards is not a record of anything.
+    match /contributions/{id} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && request.resource.data.amount.minor is int
+        && request.resource.data.amount.currency is string
+        && request.resource.data.inPotCurrency.minor is int
+        && request.resource.data.rateUsed is number
+        && request.resource.data.rateUsed > 0
+        && request.resource.data.at is number;
+
+      allow update, delete: if false;
+    }
+
+    // ---- the living garden ----------------------------------------------
+    // Plants are planted once and then only ever watered — the three watering
+    // fields are the only thing an update may touch, so nobody can quietly
+    // move or re-species a plant. Either of you may water either's plant:
+    // that is the point of it.
+    match /plants/{id} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && (request.resource.data.species == 'flower'
+            || request.resource.data.species == 'tree')
+        && request.resource.data.position is list
+        && request.resource.data.position.size() == 3
+        && request.resource.data.growthDays == 0;
+
+      allow update: if isOneOfUs()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['growthDays', 'lastWateredDay', 'lastWateredAt'])
+        // growth only climbs, one day at a time, and never past full
+        && request.resource.data.growthDays >= resource.data.growthDays
+        && request.resource.data.growthDays <= resource.data.growthDays + 1
+        && request.resource.data.growthDays <= 20;
+
+      allow delete: if false;
+    }
+
+    // Furniture: placed once, kept forever. A world you can quietly un-decorate
+    // is a world where things you loved disappear without a conversation.
+    match /decor/{id} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && (request.resource.data.kind == 'lamp'
+            || request.resource.data.kind == 'bench'
+            || request.resource.data.kind == 'swing'
+            || request.resource.data.kind == 'carpet')
+        && request.resource.data.position is list
+        && request.resource.data.position.size() == 3;
+
+      allow update, delete: if false;
+    }
+
+    // ---- games ----------------------------------------------------------
+    /*
+      A round, and each move as its own document underneath it.
+
+      This shape exists for one rule. Several of these games turn on you both
+      answering without seeing each other first, and that is worth nothing if
+      it can be peeked at — so her move is not withheld by the app, it is
+      withheld by the server: you cannot read it until yours exists.
+
+      That is only expressible because the moves are separate documents. In one
+      shared document, "read the round" would mean reading her answer, and no
+      rule could prevent it.
+    */
+    /*
+      The Stars — what the two of you say to each other.
+
+      Speech, not objects. A message cannot be edited and cannot be deleted,
+      by anybody, including whoever wrote it: a conversation one person can
+      quietly rewrite afterwards is not a record of anything. If something
+      needs taking back, it gets taken back by saying so.
+
+      Nothing here is sealed the way a game's opening move is. Both of you may
+      read all of it at any time — that is what a conversation is.
+    */
+    /*
+      The music either of you has put in the garden.
+
+      Both of you may add and both may remove — unlike a letter or a message,
+      a track is not something somebody *said*, it is furniture, and furniture
+      you are stuck with because only the person who carried it in may move it
+      is furniture in the way.
+    */
+    match /tracks/{id} {
+      allow read: if isOneOfUs();
+      allow write: if isOneOfUs()
+        && (request.method == 'delete' || (
+          request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 300
+        ));
+    }
+
+    match /messages/{id} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        // Long enough for anything either of you would say in one breath;
+        // short enough that one paste cannot fill the database.
+        && request.resource.data.body.size() <= 4000
+        && request.resource.data.at is number;
+
+      allow update, delete: if false;
+    }
+
+    match /rounds/{roundId} {
+      allow read: if isOneOfUs();
+
+      // Opened once, by whoever gets there first, and never rewritten. Both of
+      // you may open the same round at the same moment; the loser's write is
+      // refused here rather than quietly changing the board mid-game.
+      allow create: if isOneOfUs()
+        && request.resource.data.gameId is string
+        && request.resource.data.startedAt is number;
+
+      allow update, delete: if false;
+
+      // Named "${who}-${seq}", which is what lets these rules say "your own,
+      // and never twice" without reading anything inside the document.
+      match /moves/{moveId} {
+        // The opening move is the only one anyone commits blind: both place a
+        // fleet, both choose at once. Hers stays unreadable until yours exists.
+        // Every later move is open, because a turn-based game where you cannot
+        // see her turn is not a game.
+        allow read: if isOneOfUs()
+          && (!moveId.matches('.*-0')
+              || moveId.matches(me() + '-.*')
+              || exists(/databases/$(database)/documents/rounds/$(roundId)/moves/$(me() + '-0')));
+
+        allow create: if isOneOfUs()
+          && moveId.matches(me() + '-[0-9]+')
+          && request.resource.data.by == me()
+          && request.resource.data.seq is int
+          && request.resource.data.seq >= 0
+          && request.resource.data.at is number;
+
+        allow update, delete: if false;
+      }
+    }
+
+    // ---- everything else ------------------------------------------------
+    // Plants, the daily question, and whatever comes next are not built yet.
+    // Until they are, they are closed rather than open-by-omission.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

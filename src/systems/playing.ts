@@ -1,0 +1,37 @@
+/**
+ * Which game is open, if any.
+ *
+ * Its own store, like the pot and the profile sheet. Opening a game is a
+ * different act from reading a letter and from putting money by, and one
+ * shared "something is open" flag is how three unrelated things end up
+ * entangled.
+ */
+
+import { create } from 'zustand'
+
+interface PlayingState {
+  /** The id of the game being played, or null. */
+  gameId: string | null
+  /**
+   * Playing on your own rather than against her.
+   *
+   * Seven timezones apart, most evenings only one of you is here — and a game
+   * you can only start when she is available is a game you mostly cannot
+   * start. Solo is not a lesser mode; it is the one that will get used on a
+   * Tuesday.
+   *
+   * A solo round is a *separate round* with its own id, never a shared one
+   * played alone. Sharing them would leave half-finished rounds in her Hollow
+   * that she never agreed to play.
+   */
+  solo: boolean
+  open(gameId: string, solo?: boolean): void
+  close(): void
+}
+
+export const usePlaying = create<PlayingState>((set) => ({
+  gameId: null,
+  solo: false,
+  open: (gameId, solo = false) => set({ gameId, solo }),
+  close: () => set({ gameId: null, solo: false }),
+}))

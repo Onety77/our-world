@@ -1,0 +1,832 @@
+<title>The Garden Between Us</title>
+
+<style>
+  /* ---- tokens: light (herbarium paper) ---- */
+  :root {
+    --paper:      #E9EDE6;
+    --paper-2:    #DFE5DB;
+    --ink:        #16241D;
+    --ink-soft:   #4A5B51;
+    --ink-faint:  #74857A;
+    --rule:       #C3CDBE;
+    --pollen:     #9C6B0E;   /* warm light — you */
+    --moon:       #4F5F92;   /* cool light — them */
+    --glow:       rgba(156,107,14,0.10);
+
+    --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", "Hoefler Text", Georgia, serif;
+    --font-label:   "Avenir Next", "Segoe UI", Roboto, system-ui, sans-serif;
+    --font-mono:    "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+
+    --measure: 34rem;
+    --step--1: 0.815rem;
+    --step-0:  1.0625rem;
+    --step-1:  1.3rem;
+    --step-2:  1.72rem;
+    --step-3:  2.3rem;
+    --step-4:  3.1rem;
+  }
+
+  /* ---- tokens: dark (night garden) ---- */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #0E1814;
+      --paper-2:   #16221C;
+      --ink:       #DDE6DA;
+      --ink-soft:  #93A497;
+      --ink-faint: #6B7C71;
+      --rule:      #2A3A31;
+      --pollen:    #E3A63B;
+      --moon:      #A3B4DC;
+      --glow:      rgba(227,166,59,0.12);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:     #0E1814;
+    --paper-2:   #16221C;
+    --ink:       #DDE6DA;
+    --ink-soft:  #93A497;
+    --ink-faint: #6B7C71;
+    --rule:      #2A3A31;
+    --pollen:    #E3A63B;
+    --moon:      #A3B4DC;
+    --glow:      rgba(227,166,59,0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: var(--step-0);
+    line-height: 1.68;
+    margin: 0;
+    padding: 0 1.4rem 8rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 58rem; margin: 0 auto; }
+
+  /* ---- masthead ---- */
+  .mast { padding: 5.5rem 0 3rem; border-bottom: 1px solid var(--rule); }
+  .mast .eyebrow {
+    font-family: var(--font-label);
+    font-size: var(--step--1);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1.4rem;
+  }
+  .mast h1 {
+    font-size: var(--step-4);
+    line-height: 1.02;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin: 0 0 1.4rem;
+    text-wrap: balance;
+    max-width: 16ch;
+  }
+  .mast .standfirst {
+    font-size: var(--step-1);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 42ch;
+    margin: 0;
+  }
+  .mast .lights { margin-top: 2.4rem; display: flex; gap: 1.6rem; flex-wrap: wrap; font-family: var(--font-label); font-size: var(--step--1); letter-spacing: 0.06em; color: var(--ink-faint); }
+  .mast .lights span { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; display: inline-block; }
+  .dot.a { background: var(--pollen); box-shadow: 0 0 0 4px var(--glow); }
+  .dot.b { background: var(--moon); }
+
+  /* ---- section grid: hanging label in the margin ---- */
+  section { padding: 3.6rem 0; border-bottom: 1px solid var(--rule); }
+  section:last-of-type { border-bottom: 0; }
+
+  .label {
+    font-family: var(--font-label);
+    font-size: var(--step--1);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1.2rem;
+    line-height: 1.4;
+  }
+  .body { max-width: var(--measure); }
+
+  @media (min-width: 60rem) {
+    section { display: grid; grid-template-columns: 11rem 1fr; gap: 0 3rem; align-items: start; }
+    /* pin both tracks explicitly — a section with two .body blocks around a
+       figure would otherwise auto-place the second one into the label column */
+    .label { grid-column: 1; margin: 0.55rem 0 0; text-align: right; }
+    .body  { grid-column: 2; }
+    .mast { display: grid; grid-template-columns: 11rem 1fr; gap: 3rem; }
+    .mast .eyebrow { text-align: right; margin: 0.9rem 0 0; }
+    .mast > div { grid-column: 2; }
+    .mast .eyebrow { grid-column: 1; grid-row: 1; }
+  }
+
+  h2 {
+    font-size: var(--step-2);
+    font-weight: 400;
+    line-height: 1.18;
+    letter-spacing: -0.015em;
+    margin: 0 0 1.1rem;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: var(--step-1);
+    font-weight: 400;
+    line-height: 1.28;
+    margin: 2.4rem 0 0.5rem;
+    text-wrap: balance;
+  }
+  h4 {
+    font-family: var(--font-label);
+    font-size: var(--step--1);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 2.2rem 0 0.7rem;
+  }
+  p { margin: 0 0 1.1rem; }
+  .body > p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  a { color: var(--pollen); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--pollen); outline-offset: 3px; border-radius: 2px; }
+
+  .lede { font-size: var(--step-1); line-height: 1.5; color: var(--ink-soft); margin-bottom: 1.6rem; }
+
+  /* ---- entries: flowing, no cards ---- */
+  .entries { margin: 1.6rem 0 0; }
+  .entry { padding: 1.15rem 0; border-top: 1px solid var(--rule); }
+  .entry:first-child { border-top: 0; padding-top: 0.4rem; }
+  .entry .name {
+    font-size: var(--step-0);
+    margin: 0 0 0.25rem;
+  }
+  .entry .name .tag {
+    font-family: var(--font-label);
+    font-size: 0.68rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    margin-left: 0.7rem;
+    vertical-align: 0.12em;
+    color: var(--ink-faint);
+  }
+  .entry .name .tag.live { color: var(--pollen); }
+  .entry .name .tag.apart { color: var(--moon); }
+  .entry p { margin: 0; color: var(--ink-soft); font-size: 0.97rem; line-height: 1.6; }
+
+  /* ---- phases: numbered, because they are a real sequence ---- */
+  .phase { display: grid; grid-template-columns: 2.6rem 1fr; gap: 1.1rem; padding: 1.3rem 0; border-top: 1px solid var(--rule); }
+  .phase:first-child { border-top: 0; }
+  .phase .n {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--pollen);
+    padding-top: 0.22rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .phase h3 { margin: 0 0 0.35rem; font-size: var(--step-0); }
+  .phase p { margin: 0 0 0.5rem; color: var(--ink-soft); font-size: 0.97rem; }
+  .phase .test { font-family: var(--font-label); font-size: 0.82rem; color: var(--ink-faint); letter-spacing: 0.01em; }
+  .phase .test b { color: var(--ink-soft); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.72rem; }
+
+  /* ---- figures ---- */
+  figure { margin: 2.4rem 0; }
+  .fig-scroll { overflow-x: auto; padding-bottom: 0.4rem; }
+  figure svg { display: block; width: 100%; min-width: 30rem; max-width: 100%; height: auto; color: var(--ink); }
+
+  /* SVG styling lives here, not in presentation attributes —
+     var() does not resolve inside SVG attributes in Chrome. */
+  figure svg text { font-family: var(--font-display); fill: currentColor; }
+  figure svg .t-label { font-family: var(--font-label); }
+  figure svg .t-mono  { font-family: var(--font-mono); }
+  figure svg .t-soft  { opacity: 0.62; }
+  figure svg .t-fade  { opacity: 0.55; }
+  figure svg .warm-fill   { fill: var(--pollen); }
+  figure svg .warm-stroke { stroke: var(--pollen); }
+  figure svg .cool-fill   { fill: var(--moon); }
+  figure svg .cool-halo   { fill: var(--moon); opacity: 0.2; }
+  figure svg .warm-halo   { fill: var(--pollen); opacity: 0.18; }
+  figcaption {
+    font-family: var(--font-label);
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--ink-faint);
+    margin-top: 0.9rem;
+    max-width: 46ch;
+  }
+
+  @media (min-width: 60rem) {
+    figure { grid-column: 1 / -1; margin: 2.6rem 0 0; }
+    .fig-wide { max-width: 46rem; }
+  }
+
+  /* ---- table ---- */
+  .table-scroll { overflow-x: auto; margin: 1.6rem 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 32rem; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 0.7rem 1rem 0.7rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-family: var(--font-label);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    border-bottom-color: var(--ink-faint);
+  }
+  td:first-child { font-family: var(--font-mono); font-size: 0.85rem; white-space: nowrap; padding-right: 1.6rem; color: var(--ink); }
+  td { color: var(--ink-soft); }
+
+  /* ---- code ---- */
+  pre {
+    background: var(--paper-2);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.65;
+    padding: 1.1rem 1.2rem;
+    overflow-x: auto;
+    margin: 1.4rem 0;
+    border-left: 2px solid var(--rule);
+  }
+  code { font-family: var(--font-mono); font-size: 0.88em; }
+  p code, li code, td code { background: var(--paper-2); padding: 0.08em 0.34em; }
+
+  ul { margin: 0 0 1.1rem; padding-left: 1.15rem; }
+  li { margin-bottom: 0.4rem; color: var(--ink-soft); }
+  li::marker { color: var(--ink-faint); }
+
+  .pull {
+    font-size: var(--step-1);
+    line-height: 1.42;
+    color: var(--ink);
+    border-left: 2px solid var(--pollen);
+    padding-left: 1.3rem;
+    margin: 2rem 0;
+    max-width: 34ch;
+  }
+
+  .note { font-size: 0.93rem; color: var(--ink-faint); line-height: 1.6; }
+
+  /* ---- one restrained flourish ---- */
+  .breathe { animation: breathe 5.5s ease-in-out infinite; transform-origin: center; }
+  @keyframes breathe { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+  .rise { animation: rise 0.7s cubic-bezier(0.2,0.7,0.3,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(0.7rem); } to { opacity: 1; transform: none; } }
+  .mast { animation-delay: 0s; }
+  section:nth-of-type(1) { animation-delay: 0.06s; }
+  section:nth-of-type(2) { animation-delay: 0.12s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .breathe { opacity: 0.9; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast rise">
+    <p class="eyebrow">Plan · Aug 2026</p>
+    <div>
+      <h1>The Garden Between Us</h1>
+      <p class="standfirst">A place two people go, from opposite ends of the world, to be somewhere together. Not an app with a nature theme — one continuous garden you drift through, where every feature is a location rather than a menu item.</p>
+      <p class="lights">
+        <span><i class="dot a"></i> warm light</span>
+        <span><i class="dot b"></i> cool light</span>
+        <span>two people, no accounts, no strangers</span>
+      </p>
+    </div>
+  </header>
+
+  <section class="rise">
+    <p class="label">The thesis</p>
+    <div class="body">
+      <h2>You can't plan a big world. You plan a small one with room to grow.</h2>
+      <p class="lede">Everything below is arranged so that the first version is <em>two places and one thing to do</em>, and it still feels like a world rather than a demo. Then you add a place at a time, forever.</p>
+      <p>The structural decision that makes this possible: there is no navigation. No tabs, no home screen, no back button. There is a garden, and things are in it. The music is in a grove. The letters are in a tree. The games are in a hollow. You get to them by going there.</p>
+      <p>This costs a little more up front and saves you enormously later, because "add a feature" and "add a place" become the same action. It's also the entire reason it will feel like somewhere instead of something.</p>
+      <div class="pull">Nothing in this world lives behind a rectangle.</div>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Figure 1<br>The garden</p>
+    <div class="body">
+      <h2>Seven places, one continuous walk</h2>
+      <p>The Clearing is where you arrive and where the paths meet. Everything else radiates from it, with a couple of rim paths so it reads as a garden rather than a wheel. You are never more than about twenty seconds of drifting from anywhere else.</p>
+    </div>
+
+    <figure class="fig-wide">
+      <div class="fig-scroll">
+        <svg viewBox="0 0 820 600" role="img" aria-label="Map of the garden: a central Clearing joined by winding paths to the Ridge, the Reading Tree, the Grove, the Pond, the Nursery, the Hollow and the Wellspring. The two players are shown as small lights, one in the Grove and one at the Pond, with a dashed line of sight running between them across the whole garden.">
+
+          <!-- paths between places -->
+          <g stroke="currentColor" stroke-width="1.1" fill="none" opacity="0.45">
+            <path d="M408 201 Q404 160 423 113"/>
+            <path d="M344 236 Q262 190 186 171"/>
+            <path d="M454 242 Q542 200 626 192"/>
+            <path d="M347 286 Q268 330 196 369"/>
+            <path d="M449 286 Q530 332 606 373"/>
+            <path d="M385 315 Q368 375 359 433"/>
+            <path d="M424 310 Q466 378 500 457"/>
+            <!-- rim paths, so it reads as a garden and not a wheel -->
+            <path d="M95 173 Q54 272 110 372"/>
+            <path d="M716 198 Q760 288 692 376"/>
+          </g>
+
+          <!-- line of sight between the two lights -->
+          <path class="warm-stroke" d="M672 200 Q400 470 154 414" fill="none"
+                stroke-width="1.3" stroke-dasharray="3 5" opacity="0.8"/>
+
+          <!-- places -->
+          <g fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.85">
+            <circle cx="398" cy="258" r="58"/>
+            <circle cx="430" cy="72"  r="42"/>
+            <circle cx="140" cy="152" r="50"/>
+            <circle cx="672" cy="178" r="48"/>
+            <circle cx="154" cy="392" r="48"/>
+            <circle cx="648" cy="396" r="48"/>
+            <circle cx="350" cy="474" r="42"/>
+            <circle cx="520" cy="496" r="48"/>
+          </g>
+
+          <g font-size="13.5" text-anchor="middle">
+            <text x="398" y="254">The Clearing</text>
+            <text x="430" y="77">The Ridge</text>
+            <text x="140" y="146">The Reading</text>
+            <text x="140" y="163">Tree</text>
+            <text x="672" y="172">The Grove</text>
+            <text x="154" y="386">The Pond</text>
+            <text x="648" y="401">The Nursery</text>
+            <text x="350" y="479">The Hollow</text>
+            <text x="520" y="501">The Wellspring</text>
+          </g>
+
+          <g class="t-label t-soft" font-size="10.5" text-anchor="middle">
+            <text x="398" y="276">arrival · presence</text>
+            <text x="430" y="18">stars · constellations</text>
+            <text x="140" y="226">letters · the archive</text>
+            <text x="672" y="250">music, in sync</text>
+            <text x="154" y="462">drawing · bottles</text>
+            <text x="648" y="466">seeds · growing</text>
+            <text x="350" y="540">games</text>
+            <text x="520" y="566">the pot · real money</text>
+          </g>
+
+          <!-- the two players, each standing in a place -->
+          <g class="breathe">
+            <circle class="warm-halo" cx="672" cy="200" r="11"/>
+            <circle class="warm-fill" cx="672" cy="200" r="4.5"/>
+          </g>
+          <g class="breathe">
+            <circle class="cool-halo" cx="154" cy="414" r="11"/>
+            <circle class="cool-fill" cx="154" cy="414" r="4.5"/>
+          </g>
+
+          <!-- legend, parked in empty canvas so it can never collide -->
+          <line class="warm-stroke" x1="48" y1="528" x2="86" y2="528"
+                stroke-width="1.3" stroke-dasharray="3 5" opacity="0.8"/>
+          <text class="t-label warm-fill" x="94" y="532" font-size="11">you can always see their light</text>
+        </svg>
+      </div>
+      <figcaption>Every capability is a location, so adding a feature and adding a place are the same job. The two lights are the players — wherever they stand, each can see the other's glow across the garden.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <p class="label">Presence</p>
+    <div class="body">
+      <h2>You are a light, not a character</h2>
+      <p>No avatars, no bodies, no walk cycles, no character customisation screen. Each of you is a soft drifting light — one warm, one cool. It is the right call three times over: it is beautiful, it is honest about what long distance actually feels like, and it costs almost nothing to build or to network.</p>
+      <p>What gets sent over the wire is a position, a facing direction, and a mood. That's it. When you're in the same place the two lights drift toward each other and slowly orbit. When you're apart, you can see the other's glow over the treeline and know exactly where they are.</p>
+
+      <h3>Two moons</h3>
+      <p>The sky always holds two lights — yours and theirs — each placed by that person's local time and nothing else. East at their midnight, overhead at their noon, west at their next midnight. Gold while it's their daytime, silver while it's their night. Look up and you know whether they're awake.</p>
+      <p>Right now you're both on West Africa time, so the two sit in the same patch of sky, a hand's width apart. In a month one of them slides seven hours east and they'll be at opposite ends of the arc. That drift is the single most honest thing in the whole garden, and it costs one line of arithmetic.</p>
+
+      <h3>Which means where you are is data, not a constant</h3>
+      <p>Each of you has a profile with a name, a city and an <strong>IANA timezone</strong> — <code>Africa/Lagos</code> now, <code>Asia/Shanghai</code> later. It's editable, it's stored, and it's the only input to where your light sits. Changing it in a month is a two-tap job, not a code change.</p>
+      <p>Everything about time is derived from that one string. No stored UTC offsets, no hand-rolled daylight-saving table — the browser already knows all of it, including the fact that Nigeria has never observed DST and China doesn't either. Getting this wrong is the classic way an app like this quietly breaks the week someone travels.</p>
+
+      <h3>Echoes</h3>
+      <p>The world keeps a faint trace of where the other person walked in the last day or so, fading as it ages. You arrive and can see that they were here, and where they lingered.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Design ethics</p>
+    <div class="body">
+      <h2>Magnetic, not manipulative</h2>
+      <p>You asked for addictive. I want to point at the fork in that road, because the two versions look identical in a spec and completely different six months in.</p>
+      <p>The manipulative version uses loss: streak counters, things that die if you neglect them, red badges, guilt. It works, and it will eventually make opening this feel like a chore you owe someone you love. That's a bad trade.</p>
+      <p>The magnetic version uses accumulation. The garden gets richer the more time you spend in it, and when you're away it simply goes quiet — colour drains a little, wind stills, fireflies sleep. Nothing dies. Nothing counts your absence. It wakes when you come back.</p>
+      <p><strong>The rule: dormancy, never death.</strong> The reason to return is that something good is waiting, never that something bad will happen.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">When you're<br>apart</p>
+    <div class="body">
+      <h2>The world holds what you leave in it</h2>
+      <p class="lede">You said it's a real mix — sometimes together, sometimes not. The asynchronous layer is the one people underbuild and it's the one that matters most for distance. It should be good enough that opening the world alone is worth doing.</p>
+
+      <div class="entries">
+        <div class="entry">
+          <p class="name">Letters <span class="tag apart">apart</span></p>
+          <p>Writing becomes an object. A folded note on the bench, a bottle in the pond, something carved into bark. Reading it means walking to it. Everything is kept permanently at the Reading Tree, which becomes the two of you, in order, over years.</p>
+        </div>
+        <div class="entry">
+          <p class="name">The question <span class="tag apart">apart</span></p>
+          <p>A prompt appears on a stone in the Clearing each day. You both answer it independently, and <em>neither answer unlocks until both are written.</em> Then both open at once and stay open forever. Cheapest thing on this list to build. Almost certainly the one you'll care about most.</p>
+        </div>
+        <div class="entry">
+          <p class="name">Seeds <span class="tag apart">apart</span></p>
+          <p>One of you plants, the other waters, and it grows over real days. A plant only reaches full growth if you both tend it, and a grown plant permanently changes the shape of the garden. This is the core returning loop, and it's built out of the thing itself rather than out of a counter.</p>
+        </div>
+        <div class="entry">
+          <p class="name">Constellations <span class="tag apart">apart</span></p>
+          <p>On the Ridge you each place stars. Over weeks they accumulate into a night sky that is specifically yours. Naming a finished constellation requires both of you to agree on the name.</p>
+        </div>
+        <div class="entry">
+          <p class="name">Gifts and riddles <span class="tag apart">apart</span></p>
+          <p>Leave an object somewhere odd for them to stumble on. Leave a riddle on a stone that only opens when answered.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">When you're<br>together</p>
+    <div class="body">
+      <h2>Games that use the garden, not a game screen</h2>
+      <p>The trap with "lots of minigames" is that they become a menu of flash games wearing a nature costume. The good ones here use the world itself as the board.</p>
+
+      <div class="entries">
+        <div class="entry">
+          <p class="name">Firefly <span class="tag live">live</span></p>
+          <p>Hide-and-seek across the entire garden. One of you hides a light anywhere; the other searches, and the wind rises as they get closer. The board is the world you already built, so it is nearly free to make and it will be the one you play most.</p>
+        </div>
+        <div class="entry">
+          <p class="name">Lily <span class="tag apart">apart</span></p>
+          <p>A territory game on a hex grid of lily pads on the Pond — a tiny ruleset with real depth, one move each whenever you pass through. Games run for days. This is your slow, permanent, always-in-progress game.</p>
+        </div>
+        <div class="entry">
+          <p class="name">The surface <span class="tag live">live</span></p>
+          <p>You both draw at once on the water or in the sand. Finished drawings are kept as plates in the archive.</p>
+        </div>
+        <div class="entry">
+          <p class="name">Petal catch <span class="tag live">live</span></p>
+          <p>Ninety seconds, co-operative, shared score, no losing. The filler game for when you have five minutes.</p>
+        </div>
+        <div class="entry">
+          <p class="name">The path <span class="tag live">live</span></p>
+          <p>Each of you sees half the information and has to describe it out loud to the other to get through. The best kind of game for two people who mostly want an excuse to talk.</p>
+        </div>
+      </div>
+
+      <p class="note" style="margin-top:1.8rem">Build these one at a time, after everything else works. Firefly first, because it proves the world is a game board. Then Lily, because it fills the days you don't overlap.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Pollen</p>
+    <div class="body">
+      <h2>One shared currency, spent on more world</h2>
+      <p>Two people forever means a leaderboard would be actively corrosive — you don't want a scoreboard between you and the person you're doing this with. So: <strong>one shared pool</strong>, never split, never compared.</p>
+      <p>Pollen is earned by being there, playing, answering the question, and tending what's growing. It's spent on making the garden bigger: new places, new plants, weather, times of day, new instruments in the Grove. The reward for playing is more world, which means the incentive loop and the roadmap are the same thing.</p>
+      <p>Small unlocks either of you can buy alone. Large ones — a whole new place — need both of you to put a hand on the stone. Deciding together <em>is</em> the ceremony.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">The Wellspring</p>
+    <div class="body">
+      <h2>Real money, in a place you can walk to</h2>
+      <p class="lede">A spring with a pool under it. The water level is what the two of you have actually put by. You don't read a number to know how you're doing — you look at how full it is, and you can see it from the path.</p>
+
+      <p>The important thing about this feature is what it <em>isn't</em>. It is a <strong>ledger, not a bank</strong>. Nobody's card is charged, no money moves, nothing touches a payment processor and nothing needs anyone's account details. You each set money aside in real life and record what you set aside. It's an honour system, which is exactly right for two people who trust each other, and I'd rather say that plainly once than have it discovered later.</p>
+
+      <h4>Money is kept as whole small units</h4>
+      <p>Every amount is stored as an integer count of kobo, fen or cents — never a decimal. Floating-point money is the oldest bug in software and it shows up as a pot that's three kobo off and slowly drifts. Formatting into <code>₦</code> or <code>¥</code> happens once, at the very edge, purely for display.</p>
+
+      <h4>Which matters more than usual, because you're about to be in two currencies</h4>
+      <p>Today you're both in naira. In a month one of you is earning and saving in yuan, and a pot that just adds the numbers together would be meaningless. So every contribution records three things: <strong>what you actually put aside</strong> in the currency you put it aside in, <strong>what that came to</strong> in the pot's currency, and <strong>the rate used</strong> at that moment.</p>
+      <p>The rate is typed in by whoever records it. I am not going to invent one, and I am not going to quietly pull a live rate and re-value your history every time the market moves — a pot that changed size overnight because of the FX market would be maddening. Storing the rate means the ledger reconciles forever. If you later want live rates, there's one seam to fill and nothing else changes.</p>
+
+      <h4>Goals, and the obvious one</h4>
+      <p>The pool fills toward a mark on the stones. The goal is whatever you set it to, with a label. I'll leave the label empty rather than assume — but the two of you are saving money while living two thousand kilometres apart and about to be much further, so I suspect it names itself.</p>
+
+      <h4>Spending is recorded the same way</h4>
+      <p>Eventually you take money out. That's a contribution with a minus sign and a required note, so the ledger always reconciles against real life instead of silently diverging from it the first time you actually use the money.</p>
+
+      <div class="pull">Pollen can never buy anything real. Money can never buy anything in the garden. The two never touch.</div>
+      <p>That separation is worth holding to. The moment saved money can be spent on unlocking a place, the garden starts quietly encouraging you to save — and a thing that nudges you about real money is a different, worse product than the one you asked for.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">On your phones</p>
+    <div class="body">
+      <h2>Notifications, and the catch nobody mentions</h2>
+      <p>Yes to notifications — a letter arriving, a plant needing water, their light coming on. They're most of what makes the asynchronous half work, because otherwise a letter sits unread until someone happens to open the garden.</p>
+      <p>The catch: <strong>on iPhone, web push only works once the site has been added to the home screen.</strong> Not "works worse" — does not work at all until then. Safari has required that since it shipped web push, and it catches every project that assumes the web behaves like an app here.</p>
+      <p>Two consequences, both fine, both better decided now than discovered in Phase 02:</p>
+      <ul>
+        <li>The garden ships as an installable app from the start — icon, name, opens without browser chrome. It's a small amount of work at the beginning and an annoying retrofit later.</li>
+        <li><strong>Adding it to the home screen becomes part of arriving</strong>, not a banner nagging you afterward. Which is the right shape anyway: this shouldn't live in a browser tab next to everything else.</li>
+      </ul>
+      <p>On Android, push works in the browser regardless — so if she's on Android this is simply free.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">She doesn&rsquo;t<br>know yet</p>
+    <div class="body">
+      <h2>The first time someone else arrives</h2>
+      <p>You told me she doesn't know about any of this. That turns first arrival from something that merely happens into the one moment in the project that only gets one take.</p>
+      <p>So it gets built rather than left to chance. The shape I'd hold to:</p>
+      <ul>
+        <li><strong>She should arrive somewhere already lived in.</strong> Not an empty tutorial. A letter is already at the Reading Tree. Something is already planted. Her light already has a colour and a place in the sky.</li>
+        <li><strong>The garden should be dormant until she gets there, then wake.</strong> The whole world is one shade quieter with only one light in it. Her arrival is what starts the wind. This costs almost nothing and it will land.</li>
+        <li><strong>Getting in has to be trivially easy on a phone.</strong> A link and a phrase, nothing to install first, nothing to sign up for, no account, no password. If the first thing she meets is a form, the moment is gone.</li>
+        <li><strong>It happens once and is never repeated.</strong> The flag lives in the data, so there's no way to accidentally show it again.</li>
+      </ul>
+      <p>Worth saying: this is the one part of the plan I'd want to know more from you about before building — not how it works, but what it should say.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Figure 2<br>The Grove</p>
+    <div class="body">
+      <h2>Listening to the same second of the same song</h2>
+      <p>You chose uploaded files, which is the right answer for this: perfect sync, no ads, no third-party account, no Premium requirement, and the songs are <em>yours</em> rather than a platform's. The cost is that you have to upload them and storage isn't free.</p>
+      <p>The mechanism is the one genuinely fiddly piece of engineering in the project, so here it is in full. Nobody streams audio to anybody. Both phones already have the file, and they share exactly one number.</p>
+    </div>
+
+    <figure class="fig-wide">
+      <div class="fig-scroll">
+        <svg viewBox="0 0 760 400" role="img" aria-label="Music sync: pressing play writes a server timestamp to Firebase Realtime Database, which pushes it to both phones; each phone computes its own playback position from that one number, while the audio file itself is downloaded separately from Firebase Storage.">
+          <defs>
+            <marker id="tip2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,1 9,5 0,9" fill="currentColor"/>
+            </marker>
+            <marker id="tip3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon class="warm-fill" points="0,1 9,5 0,9"/>
+            </marker>
+          </defs>
+
+          <!-- phones -->
+          <g fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="40" y="120" width="126" height="150" rx="14"/>
+            <rect x="594" y="120" width="126" height="150" rx="14"/>
+          </g>
+          <g font-size="14" text-anchor="middle">
+            <text x="103" y="152">Your phone</text>
+            <text x="657" y="152">Their phone</text>
+          </g>
+          <g class="t-mono t-soft" font-size="10.5" text-anchor="middle">
+            <text x="103" y="180">position =</text>
+            <text x="103" y="196">serverNow − startedAt</text>
+            <text x="657" y="180">position =</text>
+            <text x="657" y="196">serverNow − startedAt</text>
+          </g>
+          <g class="t-label warm-fill" font-size="10.5" text-anchor="middle">
+            <text x="103" y="238">▶ press play</text>
+          </g>
+          <g class="t-label t-fade" font-size="10.5" text-anchor="middle">
+            <text x="103" y="292">same second</text>
+            <text x="657" y="292">same second</text>
+          </g>
+
+          <!-- RTDB node -->
+          <g fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="286" y="40" width="188" height="92" rx="6"/>
+          </g>
+          <text x="380" y="66" font-size="14" text-anchor="middle">Realtime Database</text>
+          <g class="t-mono t-soft" font-size="10.5" text-anchor="middle">
+            <text x="380" y="88">trackId</text>
+            <text x="380" y="104">startedAt  ← server clock</text>
+            <text x="380" y="120">isPlaying</text>
+          </g>
+
+          <!-- Storage -->
+          <g fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="4 4">
+            <rect x="300" y="300" width="160" height="60" rx="6"/>
+          </g>
+          <text x="380" y="326" font-size="14" text-anchor="middle">Storage</text>
+          <text class="t-label t-soft" x="380" y="345" font-size="10.5" text-anchor="middle">the actual mp3</text>
+
+          <!-- write arrow -->
+          <g class="warm-stroke" stroke-width="1.4" fill="none" marker-end="url(#tip3)">
+            <path d="M168 214 Q250 210 288 130"/>
+          </g>
+          <text class="t-label warm-fill" x="254" y="248" font-size="11" text-anchor="middle">writes one timestamp</text>
+
+          <!-- push arrows -->
+          <g stroke="currentColor" stroke-width="1.4" fill="none" marker-end="url(#tip2)" opacity="0.85">
+            <path d="M296 122 Q220 130 168 158"/>
+            <path d="M464 122 Q540 130 592 158"/>
+          </g>
+          <text class="t-label t-soft" x="222" y="120" font-size="11" text-anchor="middle">pushes instantly</text>
+          <text class="t-label t-soft" x="538" y="120" font-size="11" text-anchor="middle">pushes instantly</text>
+
+          <!-- storage arrows -->
+          <g stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#tip2)" opacity="0.5" stroke-dasharray="4 4">
+            <path d="M298 330 Q200 330 152 278"/>
+            <path d="M462 330 Q560 330 608 278"/>
+          </g>
+          <text class="t-label t-fade" x="380" y="384" font-size="11" text-anchor="middle">downloaded once, cached — audio never passes between you</text>
+        </svg>
+      </div>
+      <figcaption>One shared number does all the work. Because both clients correct for their own clock drift using the database's server-time offset, they land within roughly 50ms of each other — far below what anyone can hear.</figcaption>
+    </figure>
+
+    <div class="body">
+      <h4>The part that will bite you</h4>
+      <p>Mobile browsers refuse to play audio until the user has tapped something. So the first play of a session always needs a real tap — you cannot have it start on arrival. Design it in rather than fighting it: arriving at the Grove asks you to touch the tree.</p>
+      <h4>The part that's free</h4>
+      <p>Once audio is running through Web Audio you get frequency data for nothing. Wire it to the wind, the grass and the light, and the entire garden breathes with whatever's playing. Do this — it's a few dozen lines and it's the single most impressive thing in the build.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Art direction</p>
+    <div class="body">
+      <h2>Imperfect on purpose</h2>
+      <p>You asked for no borders, no boring tiles, nothing too strict. Here's what that means concretely, so it doesn't quietly drift back into rectangles during the build.</p>
+
+      <h4>Rules</h4>
+      <ul>
+        <li>No panels, no cards, no borders anywhere. Text sits directly on the world with a soft glow behind it for legibility.</li>
+        <li>Nothing is ever perfectly still. Everything sways — at deliberately mismatched frequencies, so it never falls into mechanical unison.</li>
+        <li>Nothing snaps. The camera drifts, eases, and overshoots slightly.</li>
+        <li>No pure greens. Moss, sage, ochre, dust, deep teal in shadow, warm cream in light. Saturated green is what makes 3D nature look like a screensaver.</li>
+        <li>Grain, vignette, and a whisper of chromatic aberration over the whole frame. It's what separates "rendered" from "photographed".</li>
+      </ul>
+
+      <h4>Sound is half of it</h4>
+      <p>A continuous ambient bed — wind, water, insects, distant birds — that shifts between places and across the day. It is the cheapest atmosphere available and it's routinely left until last, at which point it never gets done. Do it in the first phase.</p>
+
+      <h4>Moving through it</h4>
+      <p>On a computer it's first-person: click once and the mouse is captured, after which it steers the view with nothing held down. <code>WASD</code> and the arrow keys all <em>translate</em> — forward, back, sideways. Nothing on the keyboard turns you. On a phone there is no pointer to capture, so it stays drag-to-look and tap-the-ground-to-walk.</p>
+      <p class="note">Two corrections, both from actually holding it. It started out look-only, on the theory that movement is miserable on a phone — half right: a joystick would have been, but not being able to <em>go</em> anywhere made the garden a photograph. Then walking arrived with the arrow keys turning you, which meant turning was split between the keyboard and the mouse and both felt vague. Turning belongs to the mouse alone.</p>
+      <p>A drag and a captured mouse turn <em>opposite</em> ways on purpose: a drag moves the world, the way a map does; a captured mouse moves your head. Each is right for its input and swapping them feels broken.</p>
+      <p>All of which means the ground and the meadow have to be endless — the same blades redrawn around wherever you stand — because widening a fixed patch only moves its edge further away rather than removing it.</p>
+
+      <h4>Keeping it fast on a phone</h4>
+      <ul>
+        <li>Grass and flowers as instanced meshes with the wind in the vertex shader — thousands of blades, one draw call.</li>
+        <li>Fog, tuned so it hides the draw distance instead of merely decorating.</li>
+        <li>Device pixel ratio clamped to 1.5; no real-time shadows beyond a single soft blob.</li>
+        <li>Grass density scales down automatically if the frame rate drops.</li>
+        <li>Test on the actual phone in week one, not week ten. This is the failure mode that kills 3D web projects.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Build</p>
+    <div class="body">
+      <h2>Stack, and what lives where</h2>
+      <p><strong>Vite + React + TypeScript</strong>, with <strong>React Three Fiber</strong> for the world — three.js expressed as React components, so the garden and the interface are the same codebase in the same language. No meta-framework; there's no server rendering to gain here and it would only get in the way of a canvas. Zustand for state, plain Web Audio for sound, Firebase Hosting to deploy.</p>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Where</th><th>What</th><th>Why there</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Realtime DB</td>
+              <td>Presence, positions, music playback state, live game state</td>
+              <td>Built for many tiny writes per second and gives you the server-clock offset the music sync depends on</td>
+            </tr>
+            <tr>
+              <td>Firestore</td>
+              <td>Letters, answers, pollen, plants, constellations, finished games</td>
+              <td>Queryable and durable — this is the part you'd be heartbroken to lose</td>
+            </tr>
+            <tr>
+              <td>Storage</td>
+              <td>Songs, photos, saved drawings</td>
+              <td>Files. Watch the bill here; it's the only line item that grows</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Signing in, for exactly two people</h4>
+      <p>No login screen. Anonymous auth on first open, then you claim a light — warm or cool — with a shared passphrase. The UID is remembered on the device. Security rules whitelist those two UIDs and nobody else, so the URL can be public and the garden still isn't.</p>
+
+      <h4>Runtime configuration</h4>
+      <p>Every environment-specific value is injected and <em>nothing</em> has a fallback. A missing key fails loudly at startup with the key named, rather than silently pointing at the wrong project.</p>
+      <pre><code>VITE_FB_API_KEY=
+VITE_FB_PROJECT_ID=
+VITE_FB_DATABASE_URL=
+VITE_FB_STORAGE_BUCKET=
+VITE_FB_APP_ID=
+VITE_LIGHT_A_PASSPHRASE=
+VITE_LIGHT_B_PASSPHRASE=</code></pre>
+
+      <h4>Room for addition, made structural</h4>
+      <p>You asked for room to add to every room, especially the games. Left as an intention that always decays — six months in there's a switch statement somewhere with nine cases and adding a tenth touches four files. So it's a rule the code enforces instead:</p>
+      <p><strong>Places and games are discovered from the filesystem.</strong> A game is a folder with an <code>index.ts</code> that exports its name, its blurb, whether it's live or turn-based, and its component. Drop the folder in; it appears in the Hollow, sorted into the right group. There is no list to join, nothing to import, nowhere to register.</p>
+      <p>Three things get checked at startup, loudly, naming the file: the folder name must match the id, ids must be unique, and a folder without a valid export is an error rather than a thing that quietly doesn't appear. The id check matters more than it looks — ids end up inside saved games, so a rename that drifts from its folder would orphan real data.</p>
+      <p>Same contract for places, which is what makes &ldquo;adding a feature&rdquo; and &ldquo;adding a place&rdquo; the same job in practice rather than just in the pitch.</p>
+
+      <h4>One thing I'd insist on</h4>
+      <p>Put every read and write behind a single typed data layer with two implementations: the real Firebase one, and a local one that runs entirely in memory with a fake second player you can puppet from a dev panel. The whole garden then develops offline, at full speed, with no network and no quota — and if any of this gets handed to another agent later, the seam is already drawn and labelled.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Order of work</p>
+    <div class="body">
+      <h2>Where to actually start</h2>
+      <p class="lede">Each phase is usable on its own. None of them is scaffolding you throw away. If you stopped after any one of them you'd still have something worth opening.</p>
+
+      <div class="phases">
+        <div class="phase">
+          <p class="n">00</p>
+          <div>
+            <h3>Ground <em>— built</em></h3>
+            <p>Vite, React Three Fiber, the Clearing. Grass with wind in it, flowers, a treeline with gaps toward every other place, fog, sky, both moons, a drifting camera, synthesised ambient wind, and the local data layer with a second light you can puppet. Every other place is on the horizon and says so honestly when you try to go there.</p>
+            <p class="test"><b>Done when</b> you open it and don't want to close it. If sitting in the Clearing isn't pleasant, nothing built on top will save it.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <p class="n">01</p>
+          <div>
+            <h3>Two lights</h3>
+            <p>Firebase wired in behind the same interface the local layer already implements. Presence, live positions, the passphrase claim, and the installable-app shell that iOS notifications will need later.</p>
+            <p class="test"><b>Done when</b> you're both in the Clearing at once and it genuinely feels like being somewhere together.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <p class="n">02</p>
+          <div>
+            <h3>Traces</h3>
+            <p>The Reading Tree, letters, the daily question, echoes, and ambient chat that appears in the air near your light rather than in a panel. Push notifications land here, because this is the first phase where something can arrive while you're not looking.</p>
+            <p class="test"><b>Done when</b> arriving alone is worth doing.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <p class="n">03</p>
+          <div>
+            <h3>The Wellspring</h3>
+            <p>The pot: contributions, two currencies with the rate recorded, a goal, and water that rises. Deliberately early — it's the least code of anything left and it starts being worth something the day it exists, unlike a game.</p>
+            <p class="test"><b>Done when</b> you can see, from across the garden, how close you are.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <p class="n">04</p>
+          <div>
+            <h3>The Grove</h3>
+            <p>Twenty-odd songs uploaded, synced playback, and the audio driving the wind and the light. At that number the storage is free and stays free.</p>
+            <p class="test"><b>Done when</b> one of you presses play and you're both inside the same song.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <p class="n">05</p>
+          <div>
+            <h3>Pollen and seeds</h3>
+            <p>The shared pool, the Nursery, planting and tending, and the first unlockable place — so the economy has something to buy the day it exists.</p>
+            <p class="test"><b>Done when</b> there's a reason to open it tomorrow that isn't obligation.</p>
+          </div>
+        </div>
+        <div class="phase">
+          <p class="n">06</p>
+          <div>
+            <h3>Games, from here on</h3>
+            <p>Firefly first — it proves the garden is a board. Then Lily, for the days you don't overlap. Then one whenever you feel like it, forever. The registry means each one is a folder and nothing else.</p>
+            <p class="test"><b>Done when</b> never. This is the part that doesn't end.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Still open</p>
+    <div class="body">
+      <h2>What I need from you next</h2>
+      <p>Phase 00 is built and running, so none of this is blocking. In rough order of when it starts to matter.</p>
+      <ul>
+        <li><strong>Go and stand in it, on your phone.</strong> Everything below is guesswork next to your actual reaction. It runs on your machine and it's reachable from your phone on the same wi-fi — the how is at the top of the readme.</li>
+        <li><strong>Your two names, and hers especially.</strong> Right now the profiles say &ldquo;Warm&rdquo; and &ldquo;Cool&rdquo;, which are placeholders and read like them.</li>
+        <li><strong>What the pot is for.</strong> The goal takes a label. It changes what the Wellspring feels like more than any amount of shading will.</li>
+        <li><strong>What she should find when she arrives.</strong> Not the mechanism — the words. That moment gets one take.</li>
+        <li><strong>Anything that's <em>yours</em>.</strong> An in-joke, a place you've both been, a song, a colour, a stupid name for something. The plan is a good garden. Those details are what make it yours instead of merely well made.</li>
+      </ul>
+      <p class="note" style="margin-top:1.6rem">One thing I'd flag rather than decide for you: the further this gets built before she sees it, the better the first arrival — and the longer you're building something for someone based entirely on your own read of what she'd like. I'd get through Phase 02 and then show her.</p>
+    </div>
+  </section>
+
+</div>
