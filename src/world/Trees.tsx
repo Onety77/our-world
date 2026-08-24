@@ -42,6 +42,17 @@ export interface TreesProps {
    * size and stops being great.
    */
   heights?: [number, number]
+  /**
+   * How many cards each crown is made of, as a fraction — see `leafDetail` in
+   * `world/tree`.
+   *
+   * A wood is the one place in the garden where this is worth turning down,
+   * and it is worth turning down a *long* way. Nothing here is nearer than
+   * thirty metres and most of it is past sixty with the fog through it; the
+   * cards grow to keep the crown's area, so what changes is the triangle count
+   * and not the tree. This alone was a third of everything the garden drew.
+   */
+  leafDetail?: number
 }
 
 export function Trees({
@@ -55,6 +66,7 @@ export function Trees({
   flatten = 0,
   gapWidth = 0.2,
   heights = [5.2, 11.4],
+  leafDetail = 1,
 }: TreesProps) {
   const openingKey = openings.map((o) => o.toFixed(3)).join(',')
   const centreKey = `${centre[0]},${centre[1]}`
@@ -87,13 +99,26 @@ export function Trees({
         height: range(rng, heights[0], heights[1]),
         species: speciesFor(rng),
         rng,
+        leafDetail,
       })
       woodItems.push(...parts.wood)
       leafItems.push(...parts.leaves)
       placed++
     }
 
-    const woodBase = new CylinderGeometry(0.7, 1, 1, 6, 1)
+    /*
+      Five sides, and no ends on it.
+
+      A wood is sixteen thousand of these. Six sides to five is invisible at
+      any range a treeline is ever seen from, and the caps are invisible at
+      *every* range: each limb is two overlapping segments and every segment
+      begins inside something wider than the tip it grows from, so the flat
+      discs at both ends of the tube have never once been on screen. Together
+      they are more than half the wood's triangles.
+
+      Not the great tree, and not the landmark. Those are stood under.
+    */
+    const woodBase = new CylinderGeometry(0.7, 1, 1, 5, 1, true)
     woodBase.translate(0, 0.5, 0) // foot at the origin, not the middle
     const leafBase = leafGeometry()
 
@@ -107,7 +132,17 @@ export function Trees({
     // openingKey and centreKey stand in for the arrays so a new array holding
     // the same numbers doesn't regrow the whole wood on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, count, centreKey, innerRadius, outerRadius, openingKey, gapWidth, heights])
+  }, [
+    seed,
+    count,
+    centreKey,
+    innerRadius,
+    outerRadius,
+    openingKey,
+    gapWidth,
+    heights,
+    leafDetail,
+  ])
 
   useEffect(
     () => () => {

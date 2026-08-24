@@ -23,7 +23,7 @@ import {
   Sphere,
   Vector3,
 } from 'three'
-import { vergeWidth } from './track'
+import { GATE_HEIGHT, vergeWidth } from './track'
 import { random, SAMPLE_MS, type RallyRun } from './model'
 import { emptyRoad, roadAt, type RoadAt, type Track } from './track'
 
@@ -130,6 +130,11 @@ class Mesh {
 
   quad(a: number, b: number, c: number, d: number) {
     this.index.push(a, b, c, a, c, d)
+  }
+
+  /** For the one place a ring closes onto a single point — see `capEnd`. */
+  tri(a: number, b: number, c: number) {
+    this.index.push(a, b, c)
   }
 
   build(): BufferGeometry {
@@ -379,6 +384,136 @@ function addBlob(
   }
 }
 
+/**
+ * Closing an end of the tunnel with rock.
+ *
+ * **The road used to stop mid-air.** The sweep laid its last cross-section and
+ * ended, which leaves a hole the exact shape of the tunnel's mouth — and since
+ * you are inside the mesh looking down it, what that reads as is a black
+ * rectangle hanging across the end of the road. It was the last thing you saw
+ * of every single race, because the car ran out of road on every single race
+ * (see `COAST` in `track`) and came to rest with its nose in it.
+ *
+ * So the sweep carries on for a few more rings with the section shrinking
+ * toward a point and travelling forward as it goes, and closes on an apex.
+ * That is an apse: a rounded end wall, made of the same profile as the tunnel
+ * and therefore lit, coloured and kneaded like the rest of it, rather than a
+ * flat disc glued over the hole. It costs six rings.
+ *
+ * Both ends get one. The near end is behind the camera for the whole race and
+ * would never have been noticed — but `?rally=car` orbits, the replay cuts to
+ * shots that look back up the road, and a hole is a hole.
+ */
+const CAP_RINGS = 5
+
+function capEnd(mesh: Mesh, track: Track, s: number, direction: 1 | -1) {
+  const road = emptyRoad()
+  const basis: RoadBasis = { ...scratchBasis }
+  const offset = new Float64Array(PROFILE)
+  const height = new Float64Array(PROFILE)
+  const point = new Vector3()
+
+  roadAt(track, s, road)
+  basisAt(road, basis)
+  crossSection(road, Math.round(s / RING), offset, height)
+
+  // Where the dome closes to, and how far into the rock it reaches. Tied to
+  // the section rather than fixed, so a low throat gets a shallow apse and the
+  // thirteen-metre hall at the end gets a real one.
+  const apexY = road.ceiling * 0.42
+  const depth = road.ceiling * 0.5 + road.width * 0.3
+
+  const push = (n: number, y: number, along: number) => {
+    roadPoint(road, n, y, point, basis)
+    point.x += basis.fx * along
+    point.y += basis.fy * along
+    point.z += basis.fz * along
+    return point
+  }
+
+  let previous = -1
+  for (let j = 0; j <= CAP_RINGS; j++) {
+    // Never reaches one: the apex closes the last of it, so no ring is ever
+    // a set of twenty-two vertices all at the same point.
+    const t = j / (CAP_RINGS + 1)
+    const shrink = Math.cos((t * Math.PI) / 2)
+    const along = Math.sin((t * Math.PI) / 2) * depth * direction
+    const base = mesh.count
+
+    for (let k = 0; k < PROFILE; k++) {
+      const at = push(offset[k] * shrink, apexY + (height[k] - apexY) * shrink, along)
+      const up = Math.min(1, (apexY + (height[k] - apexY) * shrink) / Math.max(1, road.ceiling))
+      scratchColor.copy(ROCK_LOW).lerp(ROCK_MID, Math.min(1, up * 1.8))
+      if (up > 0.5) scratchColor.lerp(ROCK_HIGH, (up - 0.5) * 1.6)
+      // Darker the deeper into the recess, so the wall has somewhere to be.
+      scratchColor.multiplyScalar((0.84 + hash3(j, k, 17) * 0.3) * (1 - t * 0.34))
+      mesh.vertex(at.x, at.y, at.z, scratchColor, road.wet * 0.7, 0.6)
+    }
+
+    if (previous >= 0) {
+      for (let k = 0; k < PROFILE; k++) {
+        const k2 = (k + 1) % PROFILE
+        // The far cap runs the way the road does and takes the tunnel's own
+        // winding; the near one is its mirror, so its faces have to be turned
+        // round or the whole apse is inside out and invisible.
+        if (direction > 0) mesh.quad(previous + k, previous + k2, base + k2, base + k)
+        else mesh.quad(base + k, base + k2, previous + k2, previous + k)
+      }
+    }
+    previous = base
+  }
+
+  const at = push(0, apexY, depth * direction)
+  const apex = mesh.count
+  scratchColor.copy(ROCK_LOW).multiplyScalar(0.6)
+  mesh.vertex(at.x, at.y, at.z, scratchColor, road.wet * 0.7, 0.6)
+  for (let k = 0; k < PROFILE; k++) {
+    const k2 = (k + 1) % PROFILE
+    if (direction > 0) mesh.tri(previous + k, previous + k2, apex)
+    else mesh.tri(previous + k2, previous + k, apex)
+  }
+}
+
+/**
+ * One of the two stones the finish runs between.
+ *
+ * A stack of boulders rather than a pillar, because a pillar is a made thing
+ * and nothing else down here is made — the lanterns sit on cairns, and this is
+ * the same idea built taller and given a fire. The lean comes off its own
+ * position, so the pair are not a matched set.
+ *
+ * The light is not built here: it goes into `track.lanterns` with `fire` set,
+ * which is what gets it drawn as a glow *and* picked up by the light window
+ * with no special case anywhere. See the gate block in `dressTrack`.
+ */
+function buildGate(mesh: Mesh, track: Track, stone: { s: number; n: number }) {
+  const road = emptyRoad()
+  const basis: RoadBasis = { ...scratchBasis }
+  const point = new Vector3()
+
+  roadAt(track, stone.s, road)
+  basisAt(road, basis)
+
+  const seed = Math.floor(Math.abs(stone.n) * 97 + stone.s)
+  const COURSES = 5
+  for (let i = 0; i < COURSES; i++) {
+    const t = i / (COURSES - 1)
+    const lean = Math.sin(t * 2.1 + seed * 0.7) * 0.13
+    roadPoint(road, stone.n + lean, GATE_HEIGHT * (0.12 + t * 0.83), point, basis)
+    addBlob(
+      mesh,
+      point,
+      0.6 - t * 0.24,
+      0.6 + t * 0.22,
+      seed * 7 + i,
+      // The top course is the one the fire sits in, and it is the paler stone
+      // every other lantern in the road stands on.
+      i === COURSES - 1 ? CAIRN : ROCK_MID,
+      road.wet * 0.4,
+    )
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 export interface TunnelChunk {
@@ -471,6 +606,15 @@ export function buildTunnel(track: Track): TunnelChunk[] {
         }
       }
     }
+  }
+
+  // --- and both ends are rock ----------------------------------------------
+  capEnd(meshes[0], track, 0, -1)
+  capEnd(meshes[chunkCount - 1], track, (rings - 1) * RING, 1)
+
+  // --- the finish, as two standing stones ----------------------------------
+  for (const stone of track.gate) {
+    buildGate(meshes[chunkOf(stone.s)], track, stone)
   }
 
   // --- roots ---------------------------------------------------------------

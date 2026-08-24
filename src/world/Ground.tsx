@@ -21,9 +21,24 @@ import type { SkyPalette } from '@/systems/palette'
 import { TERRAIN_GLSL } from './terrainShader'
 import { sunDirection } from './water'
 
-/** Big enough that its edge is always far inside the fog. */
-const SIZE = 620
-const SEGMENTS = 200
+/**
+ * Big enough that its edge is always far inside the fog, and not one metre
+ * bigger.
+ *
+ * It used to be six hundred and twenty metres across at two hundred segments —
+ * eighty thousand triangles, and *half of them* were beyond the point where
+ * the fog has finished and every pixel is the same flat grey. The furthest the
+ * fog ever reaches is a hundred and sixty metres, and the ground fogs out at
+ * one-point-four of that: two hundred and twenty-four. So the plane is sized
+ * to clear that with room, at the same vertex spacing it always had, and it
+ * costs a little over half what it did. Nothing about it looks different,
+ * because nothing that changed was ever visible.
+ *
+ * Every vertex here evaluates the height function five times — once for the
+ * height and four for the slope — so this is a real saving twice over.
+ */
+const SIZE = 480
+const SEGMENTS = 152
 const STEP = SIZE / SEGMENTS
 
 const VERT = /* glsl */ `
@@ -123,7 +138,10 @@ const FRAG = /* glsl */ `
     // when the ground is viewed at a shallow angle, which is nearly always.
     float turf = sin(vWorld.x * 0.44) * sin(vWorld.y * 0.53)
                + sin(vWorld.x * 0.21 + 2.0) * sin(vWorld.y * 0.27 - 1.0) * 0.7;
-    float detailFade = 1.0 - smoothstep(20.0, 90.0, vDepth);
+    // Carried further out than it used to be. The real blades now reach eighty
+    // metres rather than twenty-six, so the turf pattern has to hold the ground
+    // past *that* before it hands over to flat colour and fog.
+    float detailFade = 1.0 - smoothstep(30.0, 145.0, vDepth);
     float colourFade = 1.0 - smoothstep(60.0, 220.0, vDepth);
     vec3 turfColor = mix(col, uGrass, 0.55);
     col = mix(col, turfColor, (0.45 + turf * 0.4 * detailFade) * colourFade);

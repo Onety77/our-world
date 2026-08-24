@@ -21,6 +21,26 @@
  *                      come closer to the edges of the frame
  *   the road tilts     roll from the banking and from lateral load
  *   the rock hits      shake, from the surface, from stones and from the wall
+ *   **the camera has mass**  see `surge` — it falls behind under power and
+ *                      closes up under braking, and it never stops trembling
+ *                      at speed
+ *
+ * ---------------------------------------------------------------------------
+ * **The camera is where most of the felt weight of a car actually lives.**
+ *
+ * This one had none, and it was the loudest thing wrong with the racer: it sat
+ * at exactly `car.s - back` with `back` a function of nothing but speed, so it
+ * accelerated *precisely* as hard as the car did, always, and the gap between
+ * you and the thing you are driving never changed by a centimetre. A rigid
+ * gap is the single strongest possible signal that there is no mass involved —
+ * it is how you would film a model on a stick. Nothing about the tyre model or
+ * the load transfer can be felt through a lens bolted to the car.
+ *
+ * So the camera lags. Bury the throttle and the car pulls away from it; get on
+ * the brakes and it comes back at you. It is a metre and a half either way at
+ * most, it is not physics, and it does more for "this thing weighs a tonne"
+ * than any number in `physics.ts`.
+ * ---------------------------------------------------------------------------
  */
 
 import type { PerspectiveCamera } from 'three'
@@ -73,6 +93,10 @@ export class ChaseCamera {
   private fov = FOV_STILL
   private shake = 0
   private orbit = 0
+  /** Lagged longitudinal g. Positive under power, negative on the brakes. */
+  private surge = 0
+  /** Seconds, for the rumble. Not the race clock — this may not be reset. */
+  private hum = 0
   private readonly here = new Vector3()
   private readonly target = new Vector3()
   private readonly road: RoadAt = emptyRoad()
@@ -139,15 +163,44 @@ export class ChaseCamera {
     const wantLateral = car.n * 0.72 - slip * 2.1
     this.lateral += (wantLateral - this.lateral) * ease(4.6)
 
+    /*
+      The gap breathes with what the car is doing to you.
+
+      `car.accel` is real longitudinal acceleration in metres per second
+      squared, straight out of the tyre model, so this is not an animation
+      about the car — it is the car. Lagged, because a camera operator's arms
+      are not instant either, and it is the *lag* that reads as mass: the car
+      leaves before the camera notices, and arrives back before it can get out
+      of the way.
+
+      Clamped to a metre and a half. Beyond that it stops being weight and
+      starts being a zoom effect, and in a tunnel this tight it would put the
+      lens through the rock behind you.
+    */
+    this.surge += (car.accel / 9.81 - this.surge) * ease(3.6)
+    const lag = Math.max(-1.5, Math.min(1.5, this.surge * 1.7))
+
     // Far enough back to see the whole car and the road under it. Closer than
     // this and the bonnet is the frame; further and the tunnel stops being
     // tight around you, which is the entire feeling down here.
     const phone = portraitAmount(camera.aspect)
     const wantBack =
-      (7.6 + fast * 2.2 + (car.boostLeft > 0 ? 1 : 0)) * (1 - phone * 0.38) * (1 + settle * 0.5)
-    const wantLift = (2.55 - fast * 0.5) * (1 - phone * 0.2) * (1 + settle * 0.75)
-    this.back += (wantBack - this.back) * ease(2.4)
-    this.lift += (wantLift - this.lift) * ease(3)
+      (7.6 + fast * 2.2 + (car.boostLeft > 0 ? 1 : 0)) * (1 - phone * 0.38) * (1 + settle * 0.5) +
+      lag
+    // And it settles a little on the springs with the car: down as the nose
+    // comes up under power, up as the car dives onto its brakes.
+    const wantLift =
+      (2.55 - fast * 0.5) * (1 - phone * 0.2) * (1 + settle * 0.75) - lag * 0.16
+    /*
+      Quick enough to follow, slow enough to be behind.
+
+      These used to be the only smoothing in the shot and they were tuned to
+      hide the band boundaries in the road. Now they are carrying the surge as
+      well, so they have to keep up with it — eased any softer and the lag
+      above is smoothed into nothing before it reaches the frame.
+    */
+    this.back += (wantBack - this.back) * ease(5.5)
+    this.lift += (wantLift - this.lift) * ease(4.5)
 
     // --- where it sits -------------------------------------------------------
     const behind = Math.max(0, car.s - this.back * (0.4 + engagement * 0.6))
@@ -176,10 +229,21 @@ export class ChaseCamera {
       camera.position.lerp(this.here, ease(18))
     }
 
-    // --- roll ----------------------------------------------------------------
-    const lateralLoad = Math.max(-1, Math.min(1, car.yaw * v * 0.055))
-    const wantRoll = -this.road.bank * 0.55 - lateralLoad * 0.055
-    this.roll += (wantRoll - this.roll) * ease(4)
+    /*
+      --- roll ----------------------------------------------------------------
+
+      Off the real lateral acceleration rather than off `yaw * v`. The two agree
+      in a settled corner — that is what a steady corner *is* — but `yaw * v`
+      lags through the interesting part, the turn-in, where the load has
+      arrived and the car has not yet started rotating. `car.cornering` is the
+      number the tyres are actually working against, so the lens leans when the
+      car is loaded up rather than a beat after.
+
+      More of it than there was, and slower to arrive. Both make it heavier: a
+      lens that tips instantly is weightless however far it goes.
+    */
+    const wantRoll = -this.road.bank * 0.55 - (car.cornering / 9.81) * 0.055
+    this.roll += (wantRoll - this.roll) * ease(2.8)
 
     // --- shake ---------------------------------------------------------------
     // Loose ground rumbles continuously; everything else is a hit that decays.
@@ -189,6 +253,28 @@ export class ChaseCamera {
 
     camera.lookAt(this.target)
     camera.rotateZ(this.roll)
+
+    /*
+      And at speed it never stops moving.
+
+      The frame used to be glass-smooth at forty metres a second, which is the
+      other half of why the car felt like it was being carried rather than
+      driven — nothing on a road made of stone is ever that still. Three sines
+      at rates with no common multiple rather than noise, because random jitter
+      per frame reads as a fault in the camera and a beat reads as a machine
+      working. It goes as the square of speed, so it is nothing at all until
+      you are genuinely quick.
+    */
+    this.hum += dt
+    const rumble =
+      fast *
+      fast *
+      (Math.sin(this.hum * 37) * 0.5 +
+        Math.sin(this.hum * 23.3 + 1.1) * 0.32 +
+        Math.sin(this.hum * 61.7 + 2.4) * 0.18)
+    camera.position.y += rumble * 0.014
+    camera.rotateZ(rumble * 0.0045)
+
     if (amount > 0.0004) {
       camera.position.x += (Math.random() - 0.5) * amount
       camera.position.y += (Math.random() - 0.5) * amount * 0.7

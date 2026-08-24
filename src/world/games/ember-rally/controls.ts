@@ -6,7 +6,7 @@
  *     ↓ / S               brake — and, held at a stand, reverse
  *     A / D, or ← / →     steer
  *     space               handbrake. This is the drift
- *     alt                 spend a measure of ember
+ *     shift, or E         spend a measure of ember. Alt and AltGr also work
  *
  *   a thumb
  *     left half, dragged sideways   steer
@@ -52,6 +52,34 @@ export interface RallyControls {
   readonly engaged: boolean
   detach(): void
 }
+
+/**
+ * What spends a measure of ember.
+ *
+ * Four keys for one action, which is three more than a control usually
+ * deserves. The reason is that the single key it used to have — alt — is the
+ * worst one on the board to have picked, and it took somebody being unable to
+ * use the ember at all to notice:
+ *
+ * **On a great many keyboards the right-hand alt is AltGr**, and a browser
+ * reports that as `AltGraph`, not as `Alt`. It never matched, so on those
+ * keyboards the ember key did not exist — and since nothing on screen says
+ * anything except "alt for the ember", there was no way to find that out. The
+ * bar filled up and the button did nothing.
+ *
+ * **And a bare alt belongs to the operating system.** On Windows it reaches
+ * for the menu bar; the handler prevents that, but a control that has to fight
+ * the window manager for every press is a control that will keep going wrong on
+ * machines nobody here has.
+ *
+ * `shift` is the one to teach. Every driving game ever made puts a boost
+ * there, nothing else wants it, and there is one under *each* hand — which
+ * matters, because this is played on the arrows by some people and on WASD by
+ * others and those two grips leave different hands free. `e` is for ember and
+ * is the easy reach from WASD. Alt and AltGr stay, because somebody has
+ * already learned them.
+ */
+const BOOST_KEYS = new Set(['shift', 'e', 'alt', 'altgraph'])
 
 /** Full lock, as a fraction of the screen's width. */
 const LOCK_TRAVEL = 0.27
@@ -115,6 +143,12 @@ export function attachControls(surface: HTMLElement): RallyControls {
   let keyBoost = false
 
   const onKeyDown = (event: KeyboardEvent) => {
+    // Somebody typing is not somebody driving. Nothing in the race has a text
+    // field in it today, but W and E are letters and this window listener
+    // outlives any one screen.
+    const focused = document.activeElement
+    if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
+
     const key = event.key.toLowerCase()
     if (!KEYS.has(key)) return
     /*
@@ -128,7 +162,7 @@ export function attachControls(surface: HTMLElement): RallyControls {
     event.preventDefault()
     engaged = true
     // Edge-triggered: holding it is one measure of ember, not all of it.
-    if (key === 'alt' && !held.has(key)) keyBoost = true
+    if (BOOST_KEYS.has(key) && !held.has(key)) keyBoost = true
     held.add(key)
   }
   const onKeyUp = (event: KeyboardEvent) => held.delete(event.key.toLowerCase())
@@ -327,5 +361,5 @@ const KEYS = new Set([
   'w',
   ' ',
   'spacebar',
-  'alt',
+  ...BOOST_KEYS,
 ])

@@ -53,7 +53,7 @@ type RaceKind = 'qualifying' | 'chase'
 const CONTROLS =
   typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
     ? 'left thumb steers · right thumb holds the throttle, pull down to brake and slide · tap for the ember'
-    : 'up to go · down to brake · arrows to steer · space to slide · alt for the ember'
+    : 'up to go · down to brake · arrows to steer · space to slide · shift for the ember'
 
 export default function EmberRally({
   theirName,
@@ -386,8 +386,16 @@ function Road({
  * same value, and from directly behind they are the prettier version.
  *
  * It is a line of light rather than a box. No border, no track behind it, no
- * rounded rectangle: an ember-coloured line that grows, and glows when it is
- * full and asking to be spent.
+ * rounded rectangle: an ember-coloured line that grows.
+ *
+ * **And it runs both ways now.** It used to be a permission slip — full or
+ * useless, and pressing it spent the lot for a fixed one and a half seconds.
+ * Any amount is spendable, a full bar burns for nearly five seconds, and the
+ * bar *drains as it burns*, because it is not a gauge showing the boost, it is
+ * the boost. Which makes it ambiguous on its own — a bar at a third could be
+ * half spent or half earned — so it says which: `.full` breathes when there is
+ * a whole one waiting, `.burning` goes white and stops breathing while it is
+ * going down. See `BOOST_SECONDS` in `physics.ts`.
  * ---------------------------------------------------------------------------
  */
 function EmberBar() {

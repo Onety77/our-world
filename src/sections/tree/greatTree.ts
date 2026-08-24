@@ -56,17 +56,43 @@ export const greatTree = growTree({
   density: GREAT_TREE.density,
 })
 
+/** The meadow's height at the tree's foot. Everything hangs relative to this. */
+const FOOT = groundHeight(MEADOW_X, MEADOW_Z)
+
 /**
- * Where the nth thought hangs.
+ * How high above the meadow a paper ends up, in metres.
+ *
+ * **This is a height, not a length of thread, and that is the whole idea.**
+ *
+ * The crown of this tree begins about seven metres up and is two thousand
+ * leaves thick. A fixed length of thread therefore puts a paper wherever its
+ * branch happens to be — which for most branches is *inside* the crown, and
+ * that is exactly where every thought either of you had ever written used to
+ * be. You could not see them and you could not tap them.
+ *
+ * Given a height instead, a paper tied to a high limb gets a long thread and
+ * one tied to a low limb gets a short one, and all of them come out down here
+ * in the clear air under the tree — above head height, below the leaves,
+ * across the middle of the frame the place is composed around. It is also
+ * what makes them read as a curtain: a dozen threads of a dozen lengths.
+ *
+ * The band is a metre and a half deep so they do not line up on a shelf.
+ */
+const HANGS_AT = { low: 3.4, high: 5.0 }
+/** No paper hangs closer to its branch than this, however low the branch is. */
+const SHORTEST = 0.85
+
+/**
+ * Where the nth thought's thread is tied.
  *
  * The branches are walked in a stride that is coprime with how many there are,
  * so consecutive thoughts land on opposite sides of the crown instead of
  * filling one branch at a time — and once every branch has one, the next lap
- * hangs slightly lower on each so they never occupy the same point.
+ * ties slightly lower on each so they never occupy the same point.
  */
 export function hangSpot(index: number): [number, number, number] {
   const points = greatTree.hangs
-  if (points.length === 0) return [MEADOW_X, 6, MEADOW_Z]
+  if (points.length === 0) return [MEADOW_X, FOOT + 8, MEADOW_Z]
 
   const stride = 7
   const [x, y, z] = points[(index * stride) % points.length]
@@ -77,4 +103,19 @@ export function hangSpot(index: number): [number, number, number] {
     y - lap * 0.42,
     z + (((index + 1) % 3) - 1) * 0.16,
   ]
+}
+
+/**
+ * How much thread the nth thought hangs on.
+ *
+ * Whatever reaches from its knot down to its share of the band. Golden-ratio
+ * stepped through the band rather than random, so consecutive thoughts never
+ * land at the same height as each other and the set fills it evenly however
+ * many there are.
+ */
+export function hangDrop(index: number): number {
+  const knotY = hangSpot(index)[1]
+  const t = (index * 0.6180339887) % 1
+  const want = FOOT + HANGS_AT.low + t * (HANGS_AT.high - HANGS_AT.low)
+  return Math.max(SHORTEST, knotY - want)
 }

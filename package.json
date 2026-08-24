@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "rules": "node scripts/rules.mjs",
-    "rally": "npx --yes tsx scripts/rally-check.ts"
+    "rally": "npx --yes tsx scripts/rally-check.ts",
+    "tris": "npx --yes tsx scripts/tri-count.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

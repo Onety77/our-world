@@ -105,6 +105,23 @@ const RIDE =
   new URLSearchParams(location.search).get('rally') === 'ride'
 
 /**
+ * `?from=<metres>` stands the car that far up the road before the flag drops.
+ *
+ * For looking at *part* of the tunnel. The road is fourteen hundred metres
+ * long and the software renderer the screenshots run on takes seconds a frame,
+ * so reviewing the last forty metres of it by driving there is not a plan —
+ * the same reason `?rally=studio&at=` exists rather than waiting for a
+ * turntable to come round to the angle you wanted. Pairs with `?rally=ride`:
+ * the spirit picks the car up from wherever it has been put down.
+ */
+const FROM = (() => {
+  if (typeof location === 'undefined') return 0
+  const asked = new URLSearchParams(location.search).get('from')
+  const metres = asked === null ? 0 : Number(asked)
+  return Number.isFinite(metres) ? Math.max(0, metres) : 0
+})()
+
+/**
  * `?shot=1` also publishes what the car is doing to `window.__rally`.
  *
  * `scripts/rally-check.ts` can drive the physics headless, which answers every
@@ -297,9 +314,30 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
         renderOrder={3}
       />
 
-      {hearths.map((at, i) => (
-        <Fire key={i} position={at} height={2.3} width={1.25} intensity={0} night={0} />
-      ))}
+      {/*
+        The one you come back to is bigger than the one you left.
+
+        Not decoration: it is what the last hundred metres of road are aimed
+        at, it is six metres in front of where the car comes to rest, and the
+        result of the run is read over the top of it. The one at the start is
+        seen for a second and a half over your shoulder at forty metres a
+        second. `intensity` is zero on both because nothing in this world is
+        lit by scene lights — the rock takes its firelight from the lantern
+        window instead, and these two are in it.
+      */}
+      {hearths.map((at, i) => {
+        const arriving = i === hearths.length - 1
+        return (
+          <Fire
+            key={i}
+            position={at}
+            height={arriving ? 3.3 : 2.3}
+            width={arriving ? 1.8 : 1.25}
+            intensity={0}
+            night={0}
+          />
+        )
+      })}
 
       {trailGeometry ? (
         <mesh
@@ -445,6 +483,7 @@ class Driving {
   private dripDue = 0
   /** Whether the meter is currently drawn as full. Toggled, not set. */
   private barFull = false
+  private barBurning = false
   private gritDue = 0
   private smokeDue = 0
   /**
@@ -477,6 +516,7 @@ class Driving {
 
   constructor(private readonly track: Track) {
     this.car = createCar(track)
+    if (FROM > 0) this.car.s = Math.min(track.length - 2, FROM)
     this.autopilot = RIDE ? spiritDriver(track, track.seed ^ 0x1234) : null
   }
 
@@ -503,6 +543,7 @@ class Driving {
   private restart(attempt: number) {
     this.attempt = attempt
     Object.assign(this.car, createCar(this.track))
+    if (FROM > 0) this.car.s = Math.min(this.track.length - 2, FROM)
     this.recorder = new Recorder()
     this.countdown = COUNTDOWN
     this.clock = 0
@@ -596,15 +637,30 @@ class Driving {
         an arcade game.
       */
       /*
-        A gentle brake, deliberately under the threshold that selects reverse.
+        The brake comes off as the car slows, and it has to do both jobs.
 
-        The car can stop now, and holding a heavy brake at a stand for a third
-        of a second is the request for reverse — so a car coasting in to the
-        fire with the brake buried would come to rest, select reverse, and
-        quietly drive itself back up the tunnel while the result was on screen.
+        It was a flat three tenths, chosen to stay under the threshold that
+        selects reverse — holding a heavy brake at a stand for a third of a
+        second is the request for reverse, and a car that coasted in with the
+        pedal buried would come to rest, select reverse, and quietly drive
+        itself back up the tunnel while the result was on screen. That was the
+        right worry and the wrong answer: three tenths does not stop a car from
+        forty metres a second inside any hall anybody would want to build, so
+        every run ended against the end of the road instead.
+
+        Tapered, it is a firm brake while there is speed to lose and almost
+        nothing by the time the car is walking — under four and a half metres a
+        second it is already below the reverse threshold, so the gearbox is
+        never asked. Which is also simply what a driver does.
       */
       const centring = Math.max(-1, Math.min(1, (-car.n * 0.25 - car.psi * 1.6)))
-      this.input = { steer: centring, throttle: 0, brake: 0.3, handbrake: false, boost: false }
+      this.input = {
+        steer: centring,
+        throttle: 0,
+        brake: Math.min(0.55, Math.max(0.16, speedOf(car) * 0.05)),
+        handbrake: false,
+        boost: false,
+      }
       advanceCar(track, car, this.input, delta)
     }
 
@@ -628,6 +684,16 @@ class Driving {
         handbrake: this.input.handbrake,
         drifting: car.drifting,
         ember: car.ember,
+        /*
+          Seconds of boost left, so "did the ember key work" is a question a
+          script can answer.
+
+          The bar filling was already visible and the *spend* was not, which is
+          exactly the gap the AltGr bug hid in: from outside, a key that never
+          reached the game and a key that reached it while the meter was empty
+          look identical.
+        */
+        boostLeft: car.boostLeft,
         driftAngle: car.driftAngle,
         touching: car.touching,
         strikes: car.strikes,
@@ -676,6 +742,20 @@ class Driving {
       if (full !== this.barFull) {
         this.barFull = full
         bar.classList.toggle('full', full)
+      }
+      /*
+        And it says which way it is going.
+
+        The bar fills and drains through the same numbers now, so on its own it
+        is ambiguous — a bar at a third could be one you have half spent or one
+        you are half way to earning, and those want opposite decisions. Burning
+        turns it white-hot and stops the breathing, because it is no longer
+        asking to be spent: it is being spent.
+      */
+      const burning = car.boostLeft > 0
+      if (burning !== this.barBurning) {
+        this.barBurning = burning
+        bar.classList.toggle('burning', burning)
       }
     }
     args.materials.mine.uniforms.uBrake.value = car.braking

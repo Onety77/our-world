@@ -456,6 +456,181 @@ the river.**
   to return hers until yours exists. `firestore.rules` is a template —
   `npm run rules` fills addresses from `.env.local` into `rules-out/`.
 
+- **A meadow of one blade size cannot reach the treeline, and the attempt is
+  what made the garden slow.** One instanced disc of grass has to choose: thin
+  enough to cover the middle distance and you see the ground between the
+  blades, dense enough to be turf and the budget runs out at twenty-six metres.
+  It ran out at twenty-six metres, which drew a hard line across the garden
+  with real grass in front of it and painted ground behind — everything past it
+  was a lawn, and that is what the whole place was being judged on. `world/Grass`
+  is **two layers** off one budget now: turf underfoot at thirty blades a square
+  metre out to about eighteen, and *tussocks* — twice as tall, two and a half
+  times as wide, at barely one a square metre — out to eighty. At forty metres a
+  blade is a third of a pixel and a clump is four, so the far layer draws the
+  clumps: it is what can actually be seen at that range, and it covers nine
+  times the area for a fifth of the triangles. Two things make it a meadow
+  rather than a field of spikes — the tussock's blades must be a *tight* clump
+  (`clump`, and the first cut scattered them nearly two metres apart, which is
+  seven separate blades standing a stride apart), and it needs fewer segments
+  per blade, because a blade at seventy metres does not bend through an arc
+  anybody can see.
+- **Count the triangles before optimising anything. `npm run tris`.** The
+  renderer says the garden is 1.7 million a frame, which is a number nobody can
+  act on. Broken down, **sixty per cent of it was the treeline**: a hundred and
+  fifty trees at *seven hundred leaf cards each*, standing seventy metres off
+  with the fog already half way through them, where one leaf is three pixels
+  across. `leafDetail` in `world/tree` takes a third of the cards and grows each
+  one by one over the square root, so the leaf *area* — and therefore the crown
+  and its silhouette — comes out exactly where it was. That is why it is a
+  detail setting and not simply fewer leaves; fewer leaves is a balder tree and
+  this is not. The wood's limbs went to five sides and lost their end caps at
+  the same time, which is invisible (every segment begins inside something
+  wider than the tip it grows from, so the caps have never once been on screen)
+  and halves what the wood costs again. With the ground plane cut to the size
+  the fog actually reaches, the frame went from 1.68 million triangles to 0.97
+  — and the meadow now reaches three times further than it did.
+- **A letter is given a height to hang at, not a length of thread.** The papers
+  in the Tree of Thoughts hung a metre or so under whichever branch they were
+  tied to, which is what a letter in a tree does — and since the crown of that
+  tree begins seven metres up and is two thousand leaves thick, it meant every
+  thought either of you had ever written was somewhere inside the foliage. You
+  could not see them from the ground, you could not count them, and aiming a
+  thumb at one was aiming at leaves. The one thing in the place you are meant to
+  reach for was the one thing you could not find. `hangDrop` in
+  `sections/tree/greatTree` gives each thought a height in the clear air under
+  the crown and the thread is whatever reaches: six metres from a high limb, one
+  from a low one. That difference is what makes them read as a curtain rather
+  than as a shelf. **And the tap target has to move with the paper** — it was
+  aimed at the knot, several metres above the thing being pointed at, so
+  `paperCentre` is now the single answer to where a sheet is.
+- **A hairline needs a floor in screen space.** The thread was two and a half
+  centimetres of world, which at the twenty-seven metres the tree is read from
+  is two thirds of one pixel: it flickered in and out as the tree moved and
+  mostly was not there. Work out what a pixel is worth in metres at this depth
+  (`projectionMatrix[1][1]` is `1/tan(fov/2)`, so it falls straight out) and
+  never draw it thinner than about one and a half of them. The same trick a map
+  draws a road with, and for the same reason. Anything else in this world that
+  is genuinely thin — a wire, a crack, a rope — wants it too.
+- **A clamp is not a wall.** Ember Rally ended with `if (car.s >= track.length)
+  car.s = track.length`, and a car with its position pinned still has all of its
+  speed. Every single run therefore ended the same way: fifty-eight metres of
+  coast was less than half what the car needed to stop, so it arrived at the
+  last ring of the tunnel doing thirty and *sat there* while the brake bled off
+  against nothing — with its nose in the open end of the mesh. The sweep had no
+  end cap, so what you looked at while your result came up was a black
+  rectangle. Three separate things had to be true for that to be one bug, and
+  all three are worth keeping: the road is long enough to stop in (measure it —
+  `scripts/rally-check` drives the roll-in), the mesh is *closed* (`capEnd`
+  carries the sweep on for six rings, shrinking toward a point, so the end is a
+  rock apse lit and coloured like the rest of the tunnel rather than a disc
+  glued over a hole), and the physics has a back wall that stops the car the
+  same way the sides do — impact once, on the step contact begins.
+- **An ending is a shape, and it has to be lit.** Closing the hole was the bug
+  fix; it was not an ending. What the road ends in now is *composed*: a throat
+  where the vault comes down, so the hall opens all at once rather than
+  gradually; the finish line as two standing stones with fire on them that you
+  go **between**; an avenue of braziers down both walls — the only evenly spaced
+  lights on the whole road, because everywhere else a lantern is information
+  about a corner and here there is nothing left to say; and at the end of it,
+  on the centreline against the back wall, the fire you set off from. The car
+  comes to rest six metres short of it. Half the work was the light: a hall lit
+  only at ankle height is a lit floor under a black lid, so every other station
+  is up the wall.
+- **The door has to be a place.** `ui/Arrival` is the first thing either of you
+  ever sees and it was a vertical gradient with a warm smudge low down and
+  forty-six dots on it. Every part of that was the right *idea* — night above,
+  her dawn below, which is what the Stars is built on — and none of it read,
+  because a wash of colour is not somewhere you are standing however carefully
+  it is graded. What fixed it was depth, in four layers and no canvas: a
+  **horizon** (two ridges and a generated wood along the near one — one
+  silhouette is the whole difference between a background and a landscape), the
+  dawn moved to sit *behind* the hills where a sun would be, three sheets of
+  cloud lit from underneath and crossing over two minutes, and a star field with
+  half a dozen real stars in it. The colours are lifted straight out of
+  `systems/palette` — `#070d16` is the garden's own zenith at midnight — so the
+  door is a view of this world rather than a title card in front of it.
+- **A control bound to one key is bound to one keyboard.** The ember could not
+  be spent, and the reason was not in the game: it was on `alt`, and on a great
+  many keyboards the right-hand alt is **AltGr**, which a browser reports as
+  `AltGraph` and not as `Alt`. It never matched. Nothing on screen said
+  anything except "alt for the ember", so the bar filled up and the button did
+  nothing and there was no way to find out why. A bare alt is also the
+  operating system's — on Windows it reaches for the menu bar, and a control
+  that has to fight the window manager for every press will keep going wrong on
+  machines nobody here has. `BOOST_KEYS` in `games/ember-rally/controls` is a
+  *set* now — shift, E, alt and AltGr — and the hint teaches shift, because
+  there is one under each hand and this game is played on the arrows by some
+  people and on WASD by others. **Bind the second key when you bind the first.**
+- **An idle that does not move is the worst sound a synthesised engine makes.**
+  Standing still, `revs` and `throttle` are both exactly zero, so the racer's
+  note came out at exactly 34 Hz, at exactly one gain, with exactly one
+  modulation depth at exactly 17 Hz, held for as long as you sat there. Nothing
+  makes that noise. It is a test tone, and a test tone is not boring after ten
+  seconds — it is *irritating*, which is a much worse failure than dull. Two
+  things fixed it, and neither is the note. **It hunts**: three slow wobbles at
+  rates with no common multiple, moving the pitch, the level and the firing
+  depth, so the pattern never comes round twice. And **an idle is mechanical,
+  not tonal** — what you hear from outside a car at rest is the top end, so the
+  body of the note drops by two thirds and a layer of jittered ticks carries it
+  instead, at about eight a second rather than the honest thirteen, because at
+  thirteen they run together into the burr this was trying to escape. In a cave
+  each one comes back off the rock, so sitting on the line has a room in it.
+  Measured rather than guessed: the steady top-end floor is **5.6 dB** lower and
+  a tick now stands **9.3 dB** out of it where the old buzz managed 4.4 — the
+  top end went from a wash to events. All of it is scaled by `idleness` and
+  gone the instant there is throttle or revs, so the car being *driven* is
+  untouched.
+- **A meter you are not allowed to spend is worse than no meter.** The ember
+  bar was all-or-nothing: it had to read full, pressing it spent the lot, and
+  what came back was a flat one and a half seconds however much you were
+  carrying. Both halves are the same mistake — they make the bar *a button that
+  is sometimes available* rather than something you own. Carrying three
+  quarters of a bar and being refused all of it is the worst state a resource
+  can put a player in; and if a full bar and a nearly-full one buy exactly the
+  same thing, there is never a reason to wait, which is the opposite of what a
+  meter is for. It is a tank now: any amount is spendable, a full one burns for
+  `BOOST_SECONDS`, and **the bar drains as it burns** because it *is* the boost
+  rather than a gauge attached to one. Going into a drift stops the burn and
+  keeps the remainder, so half-spending it into a corner is a decision. One
+  consequence worth stating: a value that both fills and drains is ambiguous at
+  rest, so the line has to say which way it is going — `.burning` goes white
+  and stops breathing.
+- **Weight is not in the physics. It is in the camera and in the overshoot.**
+  The car had four wheels, load transfer with a fifth-of-a-second lag, a real
+  understeer gradient and a friction circle, and it still felt like a cardboard
+  box — because none of that can be *seen*. Two things were hiding it, and
+  neither is a force:
+
+  **The camera had no mass.** It sat at `car.s - back` with `back` a function
+  of speed alone, so it accelerated precisely as hard as the car did, always,
+  and the gap between you and the thing you are driving never changed by a
+  centimetre. A rigid gap is the strongest possible signal that nothing weighs
+  anything — it is how you film a model on a stick. `surge` in
+  `games/ember-rally/camera` lags the real longitudinal g and moves the camera
+  a metre and a half: the car pulls away under power and comes back at you
+  under braking. It is worth more than any number in `physics.ts`.
+
+  **The body was on a lag, not on springs.** `value += (target - value) * rate`
+  creeps to its target, arrives and stops; it can *never* go past. So however
+  hard you turned in, the shell tipped over smoothly and sat there. A real body
+  is second order — it leans over, goes a little beyond where it will settle,
+  and comes back — and that overshoot is the whole cue that there is a mass up
+  there being thrown about. `BODY_ROLL` and friends are stated as a frequency
+  and a damping ratio, because those are the two things that mean something:
+  about one and a half hertz is a car, four is a go-kart, and a ζ under one is
+  what lets it overshoot at all.
+
+  Two smaller ones in the same family: the road is keyed off **distance**, not
+  time, so bumps live at a place — the frequency rises with speed for free and
+  the front axle hits them before the rear does; and the camera never stops
+  trembling above about half speed, because nothing on stone is ever that
+  still.
+
+  **All of it is visual.** Roll, pitch, heave and travel are read by `rig.ts`
+  and by nothing else, so `npm run rally` prints lap times identical to the
+  digit before and after. That is the check: if a "feel" change moves a lap
+  time, it was not a feel change.
+
 ## How to verify (do not skip)
 
 Dev server `npx vite --port 5291 --strictPort`. Drive the real app with
@@ -494,6 +669,11 @@ Node — and the renderer is far too slow here to watch the answer. Without it
 the only available check was "no exception was thrown", which is not a check.
 It found a real bug within a minute of existing: the car could not reverse
 while scraping the rock, which is exactly when you want to.
+
+Nor does counting the cost: `npm run tris` prints what each part of the garden
+spends in triangles, which is the only useful form of "is it slow". The renderer
+will tell you the frame is a million and a half; it will not tell you that
+sixty per cent of that is leaves on trees nobody can see.
 
 Physics does not need a browser at all: `npm run rally` drives the car headless
 and prints acceleration, top speed, cornering grip, what the handbrake does and
@@ -567,6 +747,22 @@ handling changed.
       you are both here, your own when you are not — see `systems/listening`
 - [x] **The Hollow is a row of games**, with a way in for two and a way in for
       one. Solo rounds have their own ids and never appear in her Hollow
+- [x] **The meadow reaches the treeline, and the garden got faster doing it.**
+      Grass in two layers off one budget — turf underfoot, tussocks out to
+      eighty metres — so the bald mid-field is gone; `leafDetail` on the
+      treeline and a ground plane sized to the fog it actually reaches. The
+      frame went from 1.68 million triangles to 0.97 while the grass tripled
+      its range. `npm run tris` says where the rest of it goes
+- [x] **The way in is a place.** Horizon, wood, cloud and a real star field,
+      with her dawn coming up behind the hills in the world's own colours
+- [x] **The thoughts hang where you can see them.** Long threads from the real
+      branches down into the clear air under the crown, a thread with a floor
+      in screen space so it never dissolves, and the tap target moved onto the
+      paper rather than the knot
+- [x] **The Rootway ends somewhere.** A throat, a hall, a finish between two
+      lit stones, an avenue of braziers and the fire on the centreline against
+      a closed rock wall — plus the three separate bugs that made every run
+      finish parked in a hole in the mesh
 - [ ] Visual polish and full desktop/mobile screenshot sweep of both modes
 - [ ] Delete the dead world: Figure, People, cloth, gait, body, benchSpots,
       Benches, Placed, CameraRig walking, places/*, navigation, Catalogue,

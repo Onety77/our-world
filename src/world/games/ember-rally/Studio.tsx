@@ -85,6 +85,9 @@ function blankWheel() {
     slipRatio: 0,
     used: 0,
     travel: 0,
+    // The turntable eases its own travel rather than running the car's spring,
+    // so this is only here to satisfy the shape.
+    travelVel: 0,
     heat: 0,
   }
 }

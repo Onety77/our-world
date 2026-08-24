@@ -60,11 +60,27 @@ so the meter went up for reasons nobody could name, and a reward you cannot aim
 at is not a reward, it is weather.
 
 Now there is one source and one line of light that fills with it: **seconds
-spent drifting**, about five for a full one. It stops at full, and spending it
-takes the lot — so the bar is only ever doing one of two things, filling or
-asking to be used. Which makes the loop the game is actually about: drift to
-fill it, then spend it, which also cancels the drift and fires you out of the
-corner.
+spent drifting**, six and a half for a full one. Which makes the loop the game
+is actually about: drift to fill it, then spend it — and spending it also
+cancels the drift, so the same press that fires you out of the corner is the
+one that straightens the car up.
+
+**The bar is a tank, not a token.** It was all-or-nothing for a long time: it
+had to read full, pressing it spent everything, and what you got back was a
+flat one and a half seconds however much you were carrying. Both halves were
+wrong the same way — they made the bar a button that is sometimes available
+rather than something you own. Carrying three quarters of a bar and not being
+allowed to touch any of it is the worst state a resource can put a player in,
+and a fixed burn means a full bar and a nearly-full one are worth the same, so
+there is never a reason to wait.
+
+So: press it with anything in the bar and it burns what is there. A quarter is
+about a second of shove out of a hairpin; a full one is nearly five down a
+straight. The bar drains in front of you while it burns, because it *is* the
+boost rather than a gauge showing it — and going into a drift stops the burn
+and **keeps whatever is left**, so flicking into a corner half way through is a
+decision rather than a mistake. The line goes white while it is being spent, so
+a bar at a third is never ambiguous about which way it is heading.
 
 ## The car
 
@@ -200,6 +216,43 @@ itself against it:
 | **roots** | the Rootway is named for them. Through the vault, down a wall, low overhead in the tight sections |
 | **lanterns** | a sliding window of ten, warm fire or cold fungus. The only *placed* light on the road |
 
+### How it ends
+
+Both ends of the tunnel are **closed with rock**. `capEnd` in `geometry.ts`
+carries the sweep on for six more rings with the cross-section shrinking toward
+a point and travelling forward as it goes, so the road finishes in an apse —
+lit, coloured and kneaded like the rest of the tunnel, rather than a disc glued
+over a hole. It used to simply stop, which leaves an opening the exact shape of
+the tunnel's mouth, and since you are *inside* the mesh looking down it what
+that read as was a black rectangle across the end of the road.
+
+You saw it on every run, because the car reached it on every run: the coast
+after the flag was fifty-eight metres and the roll-in needs well over a
+hundred, `car.s` was clamped rather than stopped, and a clamped car keeps all
+of its speed. So it arrived at the last ring at thirty metres a second and sat
+there with its nose in the hole while the brake bled off against nothing and
+the result came up. Three bugs, one symptom. All three are fixed: `COAST` is
+measured against what the car actually does, `END_WALL` is a back wall the
+physics stops against the same way it stops against the sides, and the brake
+during the roll-in tapers with speed — firm while there is speed to lose, below
+the reverse-select threshold by the time the car is walking.
+
+What is there instead is **composed as an arrival**, and it is the one place on
+the road where the lighting rule above is deliberately relaxed:
+
+- a **throat** — the tightest section on the whole road, twenty-four metres of
+  it, so the hall opens all at once instead of gradually;
+- the **line**, as two standing stones with fire on top, one either side, in
+  the mouth of the hall. You go *between* them. No flag, no banner, no line
+  painted on the rock — none of those are things that exist in a cave;
+- an **avenue** of braziers down both walls, evenly spaced and alternating
+  ground level and head height. Even spacing is allowed here and nowhere else:
+  everywhere else a lantern says which way a corner goes, and here there is
+  nothing left to say about the road;
+- and the **fire**, on the centreline against the back wall, bigger than the
+  one you left. The car comes to rest six metres short of it. The road is a
+  loop through the rock under the garden, so it is the same fire.
+
 The tyre marks are deliberately not a decal system — no render targets, no
 texture the road is drawn into, nothing kept between runs. A ring buffer of
 flat quads, the same shape as `particles.ts`. They are short-lived, so the road
@@ -214,6 +267,12 @@ with no tunnel at all, doing everything it can do — steering, braking, leaning
 on its springs, discs coming up cherry — and `&at=13.5` pins that to one moment
 so a given view is repeatable. All three exist because "drive until you can see
 it" is not a check anybody can repeat.
+
+`?from=<metres>` stands the car that far up the road before the flag drops, and
+pairs with `?rally=ride` — the spirit picks it up from wherever it is put down.
+The road is fifteen hundred metres long and the software renderer that
+screenshots run on takes seconds a frame, so looking at the *end* of it by
+driving there is not a plan. Same argument as `&at=` on the turntable.
 
 `?shot=1` publishes what the car is doing to `window.__rally` once a frame —
 including `drawnSteer`, the angle the *rendered* front wheels make with the

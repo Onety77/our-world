@@ -1,12 +1,39 @@
 /**
- * The meadow. Tens of thousands of blades in a single draw call, and it never
- * runs out however far you walk.
+ * The meadow. Tens of thousands of blades in two draw calls, and it never
+ * runs out however far you look.
  *
- * Every blade is the same four-segment strip. Instance attributes give each one
+ * Every blade is the same tapering strip. Instance attributes give each one
  * a position *within a tile*, plus its own height, twist and wind phase; the
  * vertex shader wraps that tile to whichever copy of it is nearest the camera,
  * roots the blade at the terrain height, and bends it. So the field follows you
- * for free — walking never costs another instance, and there is no edge to find.
+ * for free — moving never costs another instance, and there is no edge to find.
+ *
+ * ---------------------------------------------------------------------------
+ * **It is two layers, and that is the whole design.**
+ *
+ * One layer of one size cannot do this job. Spread thin enough to reach the
+ * treeline and you can see the ground between the blades; kept dense enough to
+ * look like turf and the budget runs out at twenty-six metres — which is what
+ * used to happen, and it put a hard line across the garden with real grass in
+ * front of it and painted ground behind. Everything past that line was a lawn.
+ *
+ * So the budget is split. **Underfoot**: short blades at thirty a square
+ * metre, out to about eighteen metres, which is turf. **Beyond that**:
+ * tussocks — twice as tall, three times as wide, at barely one a square metre
+ * — out to seventy-odd. At forty metres a single blade is a third of a pixel
+ * and a *clump* is four, so the far layer is drawn as the clumps: it is what
+ * you can actually see at that range, and it costs a twentieth of what
+ * covering the same ground with turf would.
+ *
+ * The far layer starts at the camera rather than at the edge of the near one.
+ * A ring that begins where another ends needs the two densities to agree
+ * across the join and they never quite do — and tussocks standing *through*
+ * the near turf is what a meadow looks like anyway.
+ *
+ * It also came out cheaper than the single dense disc it replaced, because a
+ * tussock at seventy metres does not need four segments to bend through. See
+ * `segments` below.
+ * ---------------------------------------------------------------------------
  */
 
 import { useEffect, useMemo, useRef } from 'react'
@@ -23,32 +50,117 @@ import {
 } from 'three'
 import type { SkyPalette } from '@/systems/palette'
 import { makeRng, seedFrom } from '@/systems/rng'
-import { meadowRadiusFor } from '@/systems/terrain'
 import { TERRAIN_GLSL, TILE_GLSL } from './terrainShader'
 
-const SEGMENTS = 4
+/**
+ * One layer of the meadow.
+ *
+ * `share` divides the blade budget; `density` then decides how far that share
+ * reaches, rather than the other way round — spreading a fixed count over a
+ * bigger disc thins it until the ground shows through, so the count buys
+ * radius at a density chosen for the look and never dilutes it.
+ */
+interface Layer {
+  seed: string
+  /** Fraction of the blade budget this layer gets. */
+  share: number
+  /** Blades per square metre. */
+  density: number
+  /**
+   * Segments per blade.
+   *
+   * Four is what a blade needs to bend through a smooth arc a couple of metres
+   * from your eye. It is twice what one needs at fifty, where the whole blade
+   * is a few pixels tall and the arc is two of them — and the far layer is
+   * over twenty thousand blades, so this alone is eighty thousand triangles.
+   */
+  segments: number
+  /** Multiplies the blade height and width the generator picks. */
+  tall: number
+  wide: number
+  /** How many blades grow around one tuft centre. */
+  perTuft: number
+  /**
+   * How far a tuft's blades scatter from its centre, as a multiplier.
+   *
+   * The one number that decides whether the far layer reads as *tussocks* or
+   * as spikes. Scaled with the blade width it comes out at nearly two metres,
+   * which is not a clump — it is seven separate blades standing a stride
+   * apart, and that is exactly what the first cut looked like from thirty
+   * metres. A tussock is a handful of blades out of one root.
+   */
+  clump: number
+  /** Metres over which the layer fades in from the camera. 0 for none. */
+  from: number
+}
+
+const LAYERS: Layer[] = [
+  {
+    seed: 'meadow',
+    share: 0.55,
+    density: 30,
+    segments: 4,
+    tall: 1,
+    wide: 1,
+    perTuft: 11,
+    clump: 1,
+    from: 0,
+  },
+  {
+    /*
+      Tussocks.
+
+      Bigger tufts of fewer, larger blades. Seven to a clump rather than
+      eleven, because at this size eleven is a bush; and the clumps sit further
+      apart, so what carries across the middle distance is the *scatter* of
+      them over the rolling ground rather than an even pile.
+    */
+    seed: 'meadow:far',
+    share: 0.45,
+    density: 1.3,
+    segments: 2,
+    tall: 2.0,
+    wide: 2.6,
+    perTuft: 9,
+    clump: 0.2,
+    /*
+      Nothing this big directly under the lens.
+
+      The garden's eye is four and a half metres up and a metre-and-a-half
+      tussock rooted straight below it fills a third of the frame with one
+      blade. Fading them in over the first several metres costs nothing — the
+      near layer owns that ground — and keeps the bottom of the picture turf.
+    */
+    from: 9,
+  },
+]
+
+/** How far a layer reaches, for its share of the budget at its density. */
+function radiusFor(count: number, layer: Layer): number {
+  return Math.max(9, Math.sqrt((count * layer.share) / (Math.PI * layer.density)))
+}
 
 /** One blade: a strip that tapers to a near-point, origin at the root. */
-function bladeArrays() {
+function bladeArrays(segments: number) {
   const positions: number[] = []
   const uvs: number[] = []
   const indices: number[] = []
 
-  for (let i = 0; i <= SEGMENTS; i++) {
-    const v = i / SEGMENTS
+  for (let i = 0; i <= segments; i++) {
+    const v = i / segments
     const halfWidth = 0.5 * Math.pow(1 - v, 0.75)
     positions.push(-halfWidth, v, 0, halfWidth, v, 0)
     uvs.push(0, v, 1, v)
   }
-  for (let i = 0; i < SEGMENTS; i++) {
+  for (let i = 0; i < segments; i++) {
     const a = i * 2
     indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3)
   }
   return { positions, uvs, indices }
 }
 
-function buildGeometry(count: number, tile: number): InstancedBufferGeometry {
-  const { positions, uvs, indices } = bladeArrays()
+function buildGeometry(count: number, tile: number, layer: Layer): InstancedBufferGeometry {
+  const { positions, uvs, indices } = bladeArrays(layer.segments)
   const geo = new InstancedBufferGeometry()
   geo.setAttribute('position', new Float32BufferAttribute(positions, 3))
   geo.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
@@ -59,33 +171,32 @@ function buildGeometry(count: number, tile: number): InstancedBufferGeometry {
   const rot = new Float32Array(count)
   const phase = new Float32Array(count)
   const tint = new Float32Array(count)
-  const rng = makeRng(seedFrom('meadow'))
+  const rng = makeRng(seedFrom(layer.seed))
 
   // Grass grows in tufts. Scattering every blade independently gives an even
   // sprinkle that reads as artificial; snapping them to a lattice (the obvious
   // fix) is worse, because a lattice puts visible aisles through the field that
   // line up whenever you look down one. So: pick tuft centres at random inside
   // the tile, then grow a handful of blades around each.
-  const BLADES_PER_TUFT = 11
-  const tufts = Math.max(1, Math.ceil(count / BLADES_PER_TUFT))
+  const tufts = Math.max(1, Math.ceil(count / layer.perTuft))
   let i = 0
 
   for (let t = 0; t < tufts && i < count; t++) {
     // uniform across the tile — the shader turns this into a disc around you
     const tx = rng() * tile
     const tz = rng() * tile
-    const spread = 0.22 + rng() * 0.55
+    const spread = (0.22 + rng() * 0.55) * layer.wide * layer.clump
     const vigour = 0.72 + rng() * 0.5
 
-    const inThisTuft = Math.min(count - i, 5 + ((rng() * (BLADES_PER_TUFT * 1.6)) | 0))
+    const inThisTuft = Math.min(count - i, 3 + ((rng() * (layer.perTuft * 1.6)) | 0))
 
     for (let b = 0; b < inThisTuft; b++, i++) {
       // gaussian-ish jitter: two uniforms averaged clusters toward the middle
       pos[i * 2] = tx + (rng() + rng() - 1) * spread
       pos[i * 2 + 1] = tz + (rng() + rng() - 1) * spread
 
-      scale[i * 2] = (0.22 + rng() * 0.4) * vigour
-      scale[i * 2 + 1] = 0.028 + rng() * 0.038
+      scale[i * 2] = (0.22 + rng() * 0.4) * vigour * layer.tall
+      scale[i * 2 + 1] = (0.028 + rng() * 0.038) * layer.wide
 
       rot[i] = rng() * Math.PI
       phase[i] = rng() * Math.PI * 2
@@ -120,6 +231,8 @@ const VERT = /* glsl */ `
   uniform float uTile;
   uniform float uFadeStart;
   uniform float uFadeEnd;
+  /** Metres over which the layer comes in from the camera. See Layer.from. */
+  uniform float uFadeIn;
 
   varying float vH;
   varying float vTint;
@@ -131,10 +244,13 @@ const VERT = /* glsl */ `
     vTint = iTint;
 
     vec2 world = tileAround(iPos, uCentre, uTile);
+    float away = distance(world, uCentre);
 
     // Fade to nothing at the rim rather than stopping at a line — a hard edge
     // is what would give away that the meadow is a disc following you around.
-    float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, distance(world, uCentre));
+    float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, away);
+    // and, for the tussocks, up from nothing over the first few metres
+    fade *= uFadeIn > 0.0 ? smoothstep(uFadeIn * 0.3, uFadeIn, away) : 1.0;
     // nothing grows in the river
     float height = iScale.x * fade * dryLand(world);
 
@@ -208,11 +324,21 @@ const FRAG = /* glsl */ `
   }
 `
 
-export function Grass({ count, palette }: { count: number; palette: SkyPalette }) {
-  const radius = meadowRadiusFor(count)
+/** One layer of the meadow: its own instances, its own reach, one draw call. */
+function Blades({
+  count,
+  layer,
+  palette,
+}: {
+  count: number
+  layer: Layer
+  palette: SkyPalette
+}) {
+  const radius = radiusFor(count, layer)
   const tile = radius * 2
+  const blades = Math.max(1, Math.round(count * layer.share))
 
-  const geometry = useMemo(() => buildGeometry(count, tile), [count, tile])
+  const geometry = useMemo(() => buildGeometry(blades, tile, layer), [blades, tile, layer])
 
   const material = useMemo(
     () =>
@@ -227,6 +353,7 @@ export function Grass({ count, palette }: { count: number; palette: SkyPalette }
           uTile: { value: tile },
           uFadeStart: { value: radius * 0.72 },
           uFadeEnd: { value: radius * 0.98 },
+          uFadeIn: { value: layer.from },
           uBase: { value: new Color('#485139') },
           uTip: { value: new Color('#a7ab72') },
           uFogColor: { value: new Color('#c3cebe') },
@@ -236,7 +363,7 @@ export function Grass({ count, palette }: { count: number; palette: SkyPalette }
           uSun: { value: 1 },
         },
       }),
-    [tile, radius],
+    [tile, radius, layer],
   )
 
   useEffect(() => () => geometry.dispose(), [geometry])
@@ -262,4 +389,21 @@ export function Grass({ count, palette }: { count: number; palette: SkyPalette }
   })
 
   return <mesh geometry={geometry} material={material} frustumCulled={false} />
+}
+
+/**
+ * The meadow, both layers.
+ *
+ * Callers pass one blade budget and get turf underfoot and tussocks to the
+ * treeline; how that budget is divided is this file's business and nowhere
+ * else's, which is the only reason the split could be changed at all.
+ */
+export function Grass({ count, palette }: { count: number; palette: SkyPalette }) {
+  return (
+    <>
+      {LAYERS.map((layer) => (
+        <Blades key={layer.seed} count={count} layer={layer} palette={palette} />
+      ))}
+    </>
+  )
 }

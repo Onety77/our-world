@@ -36,11 +36,30 @@ import { Grass } from '@/world/Grass'
 import { Flowers } from '@/world/Flowers'
 import { Trees } from '@/world/Trees'
 import { TreeOfLetters } from '@/world/TreeOfLetters'
-import { Letters } from '@/world/Letters'
+import { Letters, paperCentre, type Hung } from '@/world/Letters'
 import { useData } from '@/data/provider'
+import type { Letter } from '@/data/types'
 import { MEADOW_X, MEADOW_Z, thoughtSpot } from './layout'
-import { greatTree, hangSpot } from './greatTree'
+import { greatTree, hangDrop, hangSpot } from './greatTree'
 import { useSections } from '@/systems/sections'
+
+/**
+ * One thought as the tree hangs it: a knot on a branch, and the length of
+ * thread that brings the paper down under the crown.
+ *
+ * In one place because two things need to agree about it — the mesh that draws
+ * the sheet and the sphere you tap to open it — and they disagreed for a long
+ * time, which is most of why nobody could open a thought from the air.
+ */
+function hungFrom(letter: Letter, index: number): Hung {
+  return {
+    id: letter.id,
+    by: letter.by,
+    readAt: letter.readAt,
+    knot: hangSpot(index),
+    drop: hangDrop(index),
+  }
+}
 
 /**
  * A thought's flower.
@@ -228,7 +247,15 @@ function Blooms() {
         const [x, y, z] = thoughtSpot(i)
         // aimed at the head of the plant, which is where the eye goes
         consider(thought.id, [x, y + 0.72, z], 0.7)
-        consider(thought.id, hangSpot(i), 0.55)
+        /*
+          And at the sheet — which is *not* where the thread is tied.
+
+          The knot is up on a branch and the paper is several metres under it;
+          aiming at the knot, which is what this did, meant the target for a
+          thought was a patch of leaves a long way above the thing you were
+          pointing at. `paperCentre` is the one answer to where the sheet is.
+        */
+        consider(thought.id, paperCentre(hungFrom(thought, i)), 0.72)
       })
       if (best) open((best as { id: string }).id)
     }
@@ -247,7 +274,7 @@ function Blooms() {
  * leaves. Hers, unopened, carries a glow — so from the far side of the meadow
  * you can tell whether she has been.
  *
- * The paper's position comes from `hangSpot` rather than from what was stored
+ * Where a paper hangs comes from the tree rather than from what was stored
  * with the letter: a letter's stored position is where its flower grew, on the
  * ground, and it must stay that way — the flower is the record. The paper is a
  * second view of the same thought, in the air.
@@ -262,11 +289,11 @@ function Hanging() {
       letters
         .filter((l) => l.placeId === 'tree')
         .sort((a, b) => a.at - b.at)
-        .map((letter, i) => ({ ...letter, position: hangSpot(i) })),
+        .map((letter, i) => hungFrom(letter, i)),
     [letters],
   )
 
-  return <Letters letters={hung} me={me} palette={palette} />
+  return <Letters hung={hung} me={me} palette={palette} />
 }
 
 export default function Tree() {
@@ -289,6 +316,9 @@ export default function Tree() {
         outerRadius={62}
         gapWidth={1.5}
         flatten={0.35}
+        /* Thirty metres off at the closest, behind the thing the place is
+           named for. Half the cards, the same crown — see `leafDetail`. */
+        leafDetail={0.5}
       />
 
       {/* The y here is an offset *above* the ground, not an absolute height —

@@ -94,6 +94,25 @@ export interface TreeOptions {
    * is the oldest thing in the garden.
    */
   density?: number
+  /**
+   * How many cards the crown is made of, as a fraction — and the level of
+   * detail that actually matters.
+   *
+   * The leaves are the tree. A wood of a hundred and fifty was drawing seven
+   * hundred cards *each* — a hundred and six thousand quads, sixty per cent of
+   * everything in the garden — for trees standing seventy metres off with the
+   * fog already half way through them. At that range one leaf is three pixels
+   * across, so the crown is not being read leaf by leaf; it is a mass with a
+   * silhouette, and a third as many cards makes exactly the same mass.
+   *
+   * The cards grow to compensate — by one over the square root, so the leaf
+   * *area* comes out where it was and the crown does not go thin. That is the
+   * whole trick, and it is why this is a detail setting rather than simply
+   * fewer leaves: fewer leaves is a balder tree, and this is not.
+   *
+   * 1 is every leaf. Leave it alone for anything you stand under.
+   */
+  leafDetail?: number
 }
 
 export interface TreeParts {
@@ -284,6 +303,7 @@ export function growTree({
   girth = 1,
   leafiness = 1,
   density = 1,
+  leafDetail = 1,
 }: TreeOptions): TreeParts {
   const shape = SHAPE[species]
   const wood: FormInstance[] = []
@@ -363,8 +383,14 @@ export function growTree({
     const size =
       Math.max(height * 0.021, length * range(rng, 0.42, 0.62)) *
       shape.leaf *
-      leafiness
-    const many = Math.max(6, Math.round(range(rng, 12, 20) * Math.min(density, 1.7)))
+      leafiness *
+      // Fewer cards, each bigger by one over the root, so the crown keeps its
+      // area and its silhouette. See `leafDetail`.
+      (1 / Math.sqrt(leafDetail))
+    const many = Math.max(
+      4,
+      Math.round(range(rng, 12, 20) * Math.min(density, 1.7) * leafDetail),
+    )
 
     for (let i = 0; i < many; i++) {
       // Golden angle round the limb, so successive leaves never stack into a

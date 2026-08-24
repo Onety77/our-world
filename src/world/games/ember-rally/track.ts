@@ -151,6 +151,18 @@ export interface Track {
   puddles: Puddle[]
   /** Both fires: the one you leave and the one you come back to. */
   hearths: { s: number; n: number }[]
+  /**
+   * The two standing stones the finish line runs between.
+   *
+   * There is no flag, no banner and no line painted on the rock — none of
+   * those are things that exist in a cave, and the design law is that anything
+   * rectangular has to become a real object or not be there. So the line is
+   * two stones with fire on top of them, one either side of the road, in the
+   * mouth of the last hall. You see them from a long way back because they are
+   * the only pair of lights on the road that are level with each other, and
+   * you go *between* them, which is what makes crossing a line an event.
+   */
+  gate: { s: number; n: number }[]
 }
 
 // ---------------------------------------------------------------------------
@@ -280,8 +292,38 @@ const LIBRARY: Entry[] = [
 
 /** Roughly how long the whole road should be, metres. */
 const TARGET = 1520
-/** Metres of road after the finish, for rolling to a stop by the fire. */
-const COAST = 58
+/**
+ * Metres of road after the finish, for rolling to a stop by the fire.
+ *
+ * **It was fifty-eight, and a car needs more than twice that.** The roll-in
+ * comes off the flag at up to forty metres a second under a light brake, and
+ * measured — `scripts/rally-check` drives it — that is between fifty and
+ * seventy-five metres before it is stopped, plus whatever it carries out of
+ * the last corner. Fifty-eight meant *every single run* ran out of road: the
+ * car reached the end of the tunnel still travelling, had its position pinned
+ * there by a clamp, and spent the last four seconds of the race parked in the
+ * open end of the mesh looking out into nothing. That empty black rectangle
+ * was the last thing anybody saw of the Rootway.
+ */
+const COAST = 110
+/**
+ * Metres of road at the far end that no car may reach.
+ *
+ * There is rock there now — the tunnel is closed with an apse rather than
+ * stopping mid-air (see `capEnd` in `geometry`), and this is where that rock
+ * is, so the physics and the mesh agree about it. The fire stands just in
+ * front of it.
+ */
+export const END_WALL = 14
+/**
+ * How tall a gate stone stands, in metres.
+ *
+ * High enough that its fire is above the car's roof and stays in frame as you
+ * go between them, low enough that neither of them is what the hall is about.
+ * Shared with the geometry, which builds the stone this tall and then puts the
+ * light on top of it.
+ */
+export const GATE_HEIGHT = 2.5
 /** Where the car stands before the flag — see `Track.start`. */
 const START = 18
 
@@ -389,9 +431,29 @@ function bandsFor(seed: number): Band[] {
     sinceChamber = entry.name === 'chamber' ? 0 : sinceChamber + 1
   }
 
-  // The fire at the far end, opening out of whatever the road was doing.
-  bands.push(band({ length: 30, width: 5.4, ceiling: 7.4, room: 0.55, curv: 0 }))
-  bands.push(band({ length: 74, width: 7.4, ceiling: 12, room: 1, curv: 0 }))
+  /*
+    --- the arrival ---------------------------------------------------------
+
+    Three bands, and they are three because the ending is a *shape* rather than
+    a length of road that happens to stop.
+
+    **The throat.** The road pinches and the vault comes down for twenty-odd
+    metres, so what you are in for the last few seconds of the race is the
+    tightest thing on the whole road. This is here entirely so that the next
+    band lands.
+
+    **The hall.** It opens all at once — half as wide again, thirteen metres to
+    the roof — and the finish stands in the mouth of it between two lit
+    stones. Coming out of a throat into a room is the whole trick; a chamber
+    that the road merely widens into is a chamber nobody notices.
+
+    **The back.** It closes down again to the wall the fire is against, so the
+    hall reads as a room with an end rather than as a road that got wider. The
+    rock across it is built by `capEnd` in `geometry`.
+  */
+  bands.push(band({ length: 24, width: 4.4, ceiling: 5.4, room: 0.2, curv: 0, wet: 0.25 }))
+  bands.push(band({ length: 96, width: 7.6, ceiling: 13, room: 1, curv: 0 }))
+  bands.push(band({ length: 20, width: 5.2, ceiling: 8, room: 0.45, curv: 0 }))
 
   return bands
 }
@@ -519,8 +581,20 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     */
     hearths: [
       { s: START + 8, n: -4.6 },
-      { s: (count - 1) * STEP - 30, n: 4.4 },
+      /*
+        And the one you come back to, dead ahead on the centreline.
+
+        It used to sit four and a half metres off to the right, thirty short of
+        the end — which meant the road you rolled down at the end of a race
+        pointed at a hole in the mesh and the fire went past your shoulder.
+        Against the back wall and on the middle of the road it is the thing the
+        last hundred metres are aimed at, and the car comes to rest six metres
+        short of it with the result over the top. The road is a loop through
+        the rock under the garden and this is the same fire you left.
+      */
+      { s: (count - 1) * STEP - 8, n: 0 },
     ],
+    gate: [],
   }
 
   dressTrack(track, random(seed ^ 0x9c31d7))
@@ -647,10 +721,17 @@ function dressTrack(track: Track, rng: () => number) {
     }
   }
 
-  // Stone off the racing line. Never in front of you on the line itself — a
-  // rock you cannot see coming in a dark tunnel is not difficulty, it is a
-  // dice roll — but close enough to it that the fast way through is narrow.
-  for (let s = 90; s < track.length - 90; s += 16 + rng() * 34) {
+  /*
+    Stone off the racing line. Never in front of you on the line itself — a
+    rock you cannot see coming in a dark tunnel is not difficulty, it is a
+    dice roll — but close enough to it that the fast way through is narrow.
+
+    And none of it past the flag. Everything after the finish is the roll-in,
+    where the car is steering itself and you are reading a result over the top
+    of it; a boulder collected there is a bang nobody caused and nobody can
+    avoid.
+  */
+  for (let s = 90; s < track.finishAt - 40; s += 16 + rng() * 34) {
     const i = Math.min(count - 1, Math.round(s / STEP))
     const half = track.width[i]
     const side = rng() < 0.5 ? -1 : 1
@@ -684,6 +765,103 @@ function dressTrack(track: Track, rng: () => number) {
       fire: true,
     })
   }
+
+  /*
+    The line, as two stones with fire on them.
+
+    Placed just inside the rock rather than out on the verge: the hall is nine
+    metres to the wall and stones set against it would be scenery, while stones
+    a stride outside the driveable road are a gate you go *through*. They stand
+    where the road is at its widest, so the pair of them frame the whole mouth
+    of the hall.
+
+    They go into the lantern list like the hearths do, so the light window
+    picks them up with no special case — which is what makes the last corner
+    before the flag light up warm from ahead rather than from the walls.
+  */
+  {
+    const i = Math.min(count - 1, Math.round(track.finishAt / STEP))
+    const half = track.width[i]
+    const out = half + Math.max(0.9, vergeWidth(track.room[i]) * 0.45)
+    for (const side of [-1, 1]) {
+      track.gate.push({ s: track.finishAt, n: side * out })
+      track.lanterns.push({
+        s: track.finishAt,
+        n: side * out,
+        // On top of the stone, which `buildGate` raises to the same height.
+        y: GATE_HEIGHT + 0.24,
+        size: 1.9,
+        warm: 1,
+        fire: true,
+      })
+    }
+  }
+
+  /*
+    And the hall itself is lit, which is most of what makes it an arrival.
+
+    The road is a dark tunnel with lights placed one at a time to tell you
+    where the corners are. Closing it with rock fixed the hole at the end but
+    left the last hundred metres exactly as dark as the rest — you crossed a
+    line between two fires and then rolled for six seconds through a black room
+    toward a dot. A room you cannot see is not a room.
+
+    So the hall gets an avenue: fires down both verges, evenly spaced and
+    level with each other, all the way to the hearth. Even spacing is the point
+    and it is the only place on the whole road where it is allowed. Everywhere
+    else the lanterns are *information* — they sit on the outside of a bend and
+    stop at the apex, and a regular row would be a lie about the road. Here
+    there is nothing left to say about the road, and two straight rows of fire
+    running to a hearth say the one thing there is: you are back.
+  */
+  {
+    let s = track.finishAt + 9
+    let station = 0
+    while (s < track.length - END_WALL + 2) {
+      const i = Math.min(count - 1, Math.round(s / STEP))
+      const out = track.width[i] + vergeWidth(track.room[i]) * 0.36
+      /*
+        Every other station is up the wall rather than on the ground.
+
+        A hall lit only from ankle height is a lit floor under a black lid,
+        which is what the first cut of this was: you could see the road and the
+        cairns beside it and nothing at all of the room they were in. Lifting
+        half of them to head height and above puts light on the walls and the
+        underside of the vault, and thirteen metres of ceiling is the whole
+        reason the hall is worth arriving in.
+      */
+      const high = station % 2 === 1
+      for (const side of [-1, 1]) {
+        track.lanterns.push({
+          s,
+          n: side * (high ? out + 0.5 : out),
+          y: high ? 2.9 : 0.34,
+          // Big. These are braziers lighting a room, not markers saying which
+          // way a corner goes, and the two want an order of magnitude between
+          // them or the arrival is as dark as the road that led to it.
+          size: 1.55 + rng() * 0.3,
+          warm: 1,
+        })
+      }
+      s += 10.5
+      station++
+    }
+
+    // Two higher ones either side of the hearth, so the rock the hall ends
+    // against is lit from in front of it and reads as a wall rather than as
+    // the place the light stopped.
+    const i = Math.min(count - 1, Math.round((track.length - 10) / STEP))
+    for (const side of [-1, 1]) {
+      track.lanterns.push({
+        s: track.length - 10,
+        n: side * (track.width[i] + 0.7),
+        y: 3.1,
+        size: 1.5,
+        warm: 1,
+      })
+    }
+  }
+
   track.lanterns.sort((a, b) => a.s - b.s)
 
   // Water off the seeps, pooling where the stone is wet.

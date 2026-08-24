@@ -68,7 +68,7 @@ import {
   SAMPLE_SLIDE,
   type RallyRun,
 } from './model'
-import { roadAt, vergeWidth, type RoadAt, type Track } from './track'
+import { END_WALL, roadAt, vergeWidth, type RoadAt, type Track } from './track'
 
 // Re-exported because it lived here first and half the racer imports it from
 // here. It belongs to the road — see the note beside it in track.ts.
@@ -367,19 +367,78 @@ const DRIFT_SCRUB = 0.2
 const DRIFT_BLEND_IN = 7
 const DRIFT_BLEND_OUT = 5
 
-/** Seconds of ember burn one tap buys, what it costs, and what it does. */
-export const BOOST_SECONDS = 1.6
 /**
- * Seconds of drifting that fill the bar.
+ * How long a *full* bar of ember burns for, in seconds.
  *
- * About two good corners. Short enough that a boost is something you earn
- * every lap rather than once a run, long enough that you cannot get one out
- * of a flick.
+ * ---------------------------------------------------------------------------
+ * **The bar is a tank, not a token.**
+ *
+ * It used to be all-or-nothing: the meter had to read full, pressing it spent
+ * the lot, and what you got back was a fixed one and a half seconds however
+ * much or little you had. Both halves of that were wrong in the same way —
+ * they made the bar a *button that is sometimes available* rather than
+ * something you own and manage.
+ *
+ * Owning three quarters of a bar and not being allowed to use any of it is the
+ * worst state a resource can put a player in: you are carrying it, you can see
+ * it, and the game will not let you spend it. And a fixed burn means a full bar
+ * and a nearly-full bar are worth exactly the same, so there is no reason to
+ * ever wait — which is the opposite of what a meter is for.
+ *
+ * So: **press it with anything in the bar and it burns what is there.** A
+ * quarter of a bar is a second of shove out of a hairpin; a full one is nearly
+ * five seconds down a straight. The bar drains while it burns, in front of
+ * you, because it *is* the boost — and a drift stops the burn and keeps
+ * whatever is left, so flicking into a corner mid-boost is a decision rather
+ * than a mistake.
+ * ---------------------------------------------------------------------------
  */
-export const EMBER_SECONDS = 5
-/** Kept so nothing that imported it breaks; the bar is all-or-nothing now. */
+export const BOOST_SECONDS = 4.6
+/**
+ * Seconds of drifting that fill the bar from empty.
+ *
+ * Longer than it was, because the bar buys three times as much as it used to
+ * and every fraction of it is now spendable. One second of holding a slide is
+ * about seven tenths of a second of boost, which is the exchange rate the
+ * whole game turns on: drifting is not a thing you do *instead* of going fast,
+ * it is how you buy going fast.
+ */
+export const EMBER_SECONDS = 6.5
+/** Kept so nothing that imported it breaks; any amount is spendable now. */
 export const BOOST_COST = 1
+/**
+ * The least that is worth spending.
+ *
+ * Not a minimum you have to reach — a floor under "the bar is empty", so that
+ * a press with nothing in it is not a boost of two hundredths of a second.
+ */
+const BOOST_FLOOR = 0.04
 const BOOST_TORQUE = 1.62
+
+/**
+ * The shell on its springs, as frequency and damping.
+ *
+ * Stated in hertz and in a damping ratio rather than as two tuning numbers,
+ * because those are the two things that mean something: **the frequency is how
+ * heavy it looks** — a body that answers at four hertz is a go-kart and one
+ * that answers at one is a barge — and **the damping ratio is how much it
+ * overshoots**, which is the cue that there is a mass up there at all. Under
+ * 1.0 it goes past and comes back; at 1.0 and above it never does, and that is
+ * exactly what a first-order lag was doing here before.
+ *
+ * A real car's sprung mass sits between one and two hertz. Pitch is a little
+ * quicker than roll because a car is longer than it is wide, and the wheels
+ * are quicker and looser than either because unsprung mass is a twentieth of
+ * the weight and barely damped by comparison.
+ */
+function spring(hz: number, zeta: number): { k: number; c: number } {
+  const omega = 2 * Math.PI * hz
+  return { k: omega * omega, c: 2 * zeta * omega }
+}
+const BODY_ROLL = spring(1.35, 0.55)
+const BODY_PITCH = spring(1.6, 0.6)
+const BODY_HEAVE = spring(1.5, 0.55)
+const WHEEL_SPRING = spring(2.4, 0.45)
 
 // --- state -----------------------------------------------------------------
 
@@ -424,6 +483,8 @@ export interface Wheel {
   used: number
   /** Metres the suspension is compressed past its resting point. */
   travel: number
+  /** And how fast it is moving. A spring needs a velocity — see BODY_ROLL. */
+  travelVel: number
   /** 0..1. How hot the disc is, which is what makes it glow. */
   heat: number
 }
@@ -489,6 +550,16 @@ export interface CarState {
   pitch: number
   /** Metres the whole body has dropped on its springs. */
   heave: number
+  /**
+   * And how fast each of those is moving.
+   *
+   * The shell is on springs rather than on a lag, which needs a velocity to be
+   * a spring at all — see BODY_ROLL. Purely how the car is *drawn*: nothing
+   * that decides where it goes has ever read any of these six numbers.
+   */
+  rollVel: number
+  pitchVel: number
+  heaveVel: number
 
   // --- what just happened, cleared every step ------------------------------
   /** 0..1 severity of rock contact, continuous while scraping. */
@@ -544,6 +615,7 @@ function makeWheel(): Wheel {
     slipRatio: 0,
     used: 0,
     travel: 0,
+    travelVel: 0,
     heat: 0,
   }
 }
@@ -579,6 +651,9 @@ export function createCar(track: Track): CarState {
     roll: 0,
     pitch: 0,
     heave: 0,
+    rollVel: 0,
+    pitchVel: 0,
+    heaveVel: 0,
     hitWall: 0,
     slam: 0,
     touching: false,
@@ -710,6 +785,17 @@ function driftMode(car: CarState, input: CarInput, dt: number, v: number) {
     if (input.handbrake && lock > DRIFT_ENTER_STEER && v > DRIFT_ENTER_SPEED) {
       car.drifting = true
       car.driftStraight = 0
+      /*
+        And a drift stops a boost.
+
+        The two are opposite ideas — one is a shove in the direction the car is
+        pointing, the other is deliberately not pointing that way — and a car
+        doing both at once is a car doing neither well. Only `boostLeft` is
+        cleared: `ember` keeps whatever the burn had left it at, so going into
+        a corner half way through a boost banks the rest instead of throwing it
+        away. That is what makes spending it a decision.
+      */
+      car.boostLeft = 0
     }
   } else if (input.boost) {
     /*
@@ -1351,26 +1437,90 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   // --- how it is sitting ---------------------------------------------------
   /*
     Roll, pitch and heave read straight off the forces rather than being an
-    animation played over the top. They cost three lines and they are the
+    animation played over the top. They cost a few lines and they are the
     difference between a car with mass and a box sliding along a groove.
+
+    ---------------------------------------------------------------------------
+    **The body is a spring, not a lag, and that is where the weight is.**
+
+    These were first-order lags: `value += (target - value) * rate`. A lag
+    creeps toward its target, arrives, and stops — it can never go past. So
+    however hard you turned in, the shell tipped over smoothly and sat there,
+    and the car read as *light*: a box on a groove, moved by a number rather
+    than thrown by its own mass. That is the "it feels like a cardboard box"
+    complaint, and no amount of grip in the tyre model fixes it, because it is
+    not a grip problem — nothing about how the car *drove* was wrong.
+
+    A body on springs is second order. Turn in and it leans over, goes a little
+    *past* where it is going to settle, and comes back; lift and it rocks
+    forward and rebounds. That overshoot is the entire cue. It is what tells
+    you there is something up there with mass in it, being moved around by
+    forces, rather than an attitude being set.
+
+    So: a damped spring per axis, at about one and a half hertz — a real car's
+    body frequency — under-damped enough (ζ ≈ 0.55) that it visibly overshoots
+    once. The wheels get their own, stiffer and looser, because unsprung mass
+    moves faster and settles less tidily than the shell does.
+
+    **None of this touches how the car drives.** Roll, pitch, heave and travel
+    are read by `rig.ts` and by nothing else — no force, no load and no tyre
+    has ever asked what they are. The handling is exactly what it was.
+    ---------------------------------------------------------------------------
   */
   // Negated: the mesh faces +Z, so its +X side is the car's *left* — see the
   // note on the mirror in `rig.ts`. Leaning into a right-hand corner therefore
   // means lifting +X, which is a negative roll here.
-  const wantRoll = Math.max(-0.16, Math.min(0.16, (-car.cornering / G) * 0.115))
-  const wantPitch = Math.max(-0.1, Math.min(0.075, (-car.accel / G) * 0.085))
-  const wantHeave = Math.max(-0.05, Math.min(0.02, -(weight - MASS * G) / 160_000))
-  car.roll += (wantRoll - car.roll) * (1 - Math.exp(-9 * dt))
-  car.pitch += (wantPitch - car.pitch) * (1 - Math.exp(-8 * dt))
-  car.heave += (wantHeave - car.heave) * (1 - Math.exp(-7 * dt))
+  /*
+    And the road is not flat, because it is stone.
+
+    Keyed off `car.s` — *distance*, not time — so these are bumps that live at
+    a place on the road rather than a vibration the car carries around with it.
+    Everything good follows from that one choice: the frequency you feel rises
+    with speed for free, the same bump hits the front wheels and then the rear
+    ones, and crawling over it does nothing at all.
+
+    Tiny numbers, and they do not stay tiny: the body underneath is a spring at
+    about one and a half hertz, so a road that happens to feed it near that
+    rate is amplified, which is precisely what makes a real car feel like a
+    heavy thing being worked rather than a shape being moved. Visual only —
+    the tyre loads never see it, so the car drives over a glass-smooth road and
+    looks like it is driving over rock.
+  */
+  const surface = (at: number) =>
+    Math.sin(at * 2.7) * 0.4 + Math.sin(at * 6.1 + 1.3) * 0.25 + Math.sin(at * 13.9 + 0.4) * 0.12
+  const bumpiness = Math.min(1, v / 12) * (car.rough ? 2.4 : 1)
+
+  const wantRoll = Math.max(-0.185, Math.min(0.185, (-car.cornering / G) * 0.14))
+  const wantPitch = Math.max(-0.13, Math.min(0.1, (-car.accel / G) * 0.11))
+  const wantHeave =
+    Math.max(-0.07, Math.min(0.03, -(weight - MASS * G) / 125_000)) +
+    surface(car.s) * 0.004 * bumpiness
+
+  car.rollVel += (BODY_ROLL.k * (wantRoll - car.roll) - BODY_ROLL.c * car.rollVel) * dt
+  car.roll += car.rollVel * dt
+  car.pitchVel += (BODY_PITCH.k * (wantPitch - car.pitch) - BODY_PITCH.c * car.pitchVel) * dt
+  car.pitch += car.pitchVel * dt
+  car.heaveVel += (BODY_HEAVE.k * (wantHeave - car.heave) - BODY_HEAVE.c * car.heaveVel) * dt
+  car.heave += car.heaveVel * dt
 
   // Per-wheel travel, off the load each is carrying. Same reasoning: it agrees
   // with the physics because it *is* the physics.
   const restLoad = (MASS * G) / 4
   for (let i = 0; i < 4; i++) {
     const wheel = car.wheels[i]
-    const want = Math.max(-0.09, Math.min(0.1, (wheel.load - restLoad) / 42_000))
-    wheel.travel += (want - wheel.travel) * (1 - Math.exp(-11 * dt))
+    /*
+      Each corner meets the road at its own place, and that is the whole point
+      of doing it per wheel: the front axle hits a bump about two metres before
+      the rear one does, so the car pitches over it instead of moving up and
+      down as a slab. The half-track offset does the same across the car.
+    */
+    const at = car.s + (i < 2 ? FRONT : -REAR) + (i % 2 === 0 ? 0 : 0.37)
+    const want =
+      Math.max(-0.11, Math.min(0.12, (wheel.load - restLoad) / 34_000)) +
+      surface(at) * 0.011 * bumpiness
+    wheel.travelVel +=
+      (WHEEL_SPRING.k * (want - wheel.travel) - WHEEL_SPRING.c * wheel.travelVel) * dt
+    wheel.travel += wheel.travelVel * dt
   }
 
   // --- into the road's frame ----------------------------------------------
@@ -1519,33 +1669,67 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     you cannot aim at is not a reward, it is weather.
 
     One source, and it is the thing the game is about: hold a drift, the bar
-    fills. Roughly five seconds of drifting is a full one.
-
-    And it stops at full. It does not top up, it does not overflow, and it is
-    not spent in thirds — you fill it, you use it, and it starts again from
-    nothing. That is what makes the bar worth looking at: it is either filling,
-    or it is asking to be spent.
+    fills. Six and a half seconds of drifting is a full one — but you have
+    never had to wait for a full one since it became spendable in any amount,
+    and the whole point of the meter is that it now runs continuously: filling
+    through the corner, draining down the straight after it.
   */
   if (car.drifting) {
     car.ember = Math.min(1, car.ember + dt / EMBER_SECONDS)
   }
 
   /*
-    Spending it takes the lot.
+    Spending it burns what is in the bar, and the bar drains as it burns.
 
-    Pressing the ember always cancels a drift — see `driftMode` — whether or
+    `boostLeft` is the seconds remaining and `ember` is that same number drawn
+    as a bar, which is why they are mirrored rather than being two independent
+    facts that can disagree: what you are watching go down *is* the boost. It
+    is also why a drift can stop the burn without stealing the remainder — see
+    `driftMode`, which only zeroes `boostLeft`, leaving `ember` at whatever the
+    last mirror put there.
+
+    Pressing the ember always cancels a drift — again `driftMode` — whether or
     not there was anything to spend, because the button means "straighten up
-    and go". If the bar happened to be full, this is also the shove.
+    and go".
   */
-  if (input.boost && car.boostLeft <= 0 && car.ember >= 1) {
-    car.ember = 0
-    car.boostLeft = BOOST_SECONDS
+  if (input.boost && car.boostLeft <= 0 && car.ember > BOOST_FLOOR) {
+    car.boostLeft = car.ember * BOOST_SECONDS
   }
-  if (car.boostLeft > 0) car.boostLeft = Math.max(0, car.boostLeft - dt)
+  if (car.boostLeft > 0) {
+    car.boostLeft = Math.max(0, car.boostLeft - dt)
+    car.ember = car.boostLeft / BOOST_SECONDS
+  }
 
   car.elapsed += dt
   if (!car.finished && car.s >= track.finishAt) car.finished = true
-  if (car.s >= track.length) car.s = track.length
+
+  /*
+    --- the end of the road is rock ----------------------------------------
+
+    This used to be `if (car.s >= track.length) car.s = track.length`, and a
+    clamp is not a wall. The car kept every metre a second of its speed with
+    its position pinned, so what actually happened at the end of every run was
+    that the car arrived at the last ring of the tunnel still doing thirty and
+    sat there, nose in the open end of the mesh, while the brake bled the speed
+    off against nothing. Since the mesh had no end cap, the thing you were
+    looking at while the result came up was a black rectangle.
+
+    There is a back wall in the hall now, and this is it. Treated the same way
+    as the rock at the sides of the road: the impact fires once, on the step
+    contact begins, and scraping is per second — a contact force is per second
+    and an impact is not.
+
+    No strike is charged for it. Strikes are stones you hit while racing; the
+    roll-in is the car steering itself and the player reading a result, and
+    marking their run down for something they did not do is worse than not
+    noticing.
+  */
+  const backWall = track.length - END_WALL
+  if (car.s > backWall) {
+    if (car.vs > 4 && !car.touching) car.slam = Math.max(car.slam, Math.min(1, car.vs / 30))
+    car.s = backWall
+    if (car.vs > 0) car.vs = 0
+  }
 }
 
 /**

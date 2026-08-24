@@ -83,6 +83,9 @@ export function GardenHub() {
         innerRadius={HUB_WOOD.inner}
         outerRadius={HUB_WOOD.outer}
         gapWidth={HUB_OPENING.width}
+        /* Seventy-four metres away at the very nearest, and the fog is
+           finished with them by a hundred and fifty. See `leafDetail`. */
+        leafDetail={0.34}
       />
       <Rocks
         palette={palette}

@@ -263,12 +263,24 @@ export function poseWheels(rig: CarRig, car: Posture) {
     // locked wheel stops dead and a spinning one outruns the road.
     rig.spinners[MESH_FOR_WHEEL[i]].rotation.x = wheel.spin
 
-    // The spring covers whatever is left between the body and the wheel.
+    /*
+      The spring covers whatever is left between the body and the wheel.
+
+      The lean is scaled back rather than taken at face value, and it has to
+      be. Roll and pitch are sized to *read* from twenty metres behind the car
+      — nine or ten degrees of body roll, which is more than a real rally car
+      does — and seventy centimetres out from the middle that comes to nearly
+      thirty centimetres of movement at a corner, against a coilover that is
+      thirty-five long. Taken literally the spring spends every hard corner
+      pinned against its own stops, which looks exactly like a spring that has
+      stopped working. Suspension has about ten centimetres of travel; this is
+      the number that says so.
+    */
     const spring = rig.springs[MESH_FOR_WHEEL[i]]
     const [sx, , sz] = SPRING_POSITIONS[MESH_FOR_WHEEL[i]]
-    const lean = -car.roll * sx - car.pitch * sz
+    const lean = (-car.roll * sx - car.pitch * sz) * 0.4
     const length = SPRING_SPAN + car.heave + lean - wheel.travel * 0.35
-    spring.scale.y = Math.max(0.55, Math.min(1.5, length / SPRING_SPAN))
+    spring.scale.y = Math.max(0.5, Math.min(1.7, length / SPRING_SPAN))
   }
 }
 

@@ -214,7 +214,9 @@ export function createEngineVoice(
   const mixB = ctx.createGain()
   mixB.gain.value = 0.42
   const mixC = ctx.createGain()
-  mixC.gain.value = 0.5
+  // The voice is created at rest. Start without a 17 Hz square wave pushing
+  // the speaker cone; `set` restores its driven level as the car wakes up.
+  mixC.gain.value = 0.05
   const mixD = ctx.createGain()
   mixD.gain.value = 0.16
 
@@ -232,7 +234,9 @@ export function createEngineVoice(
   const firing = ctx.createOscillator()
   firing.type = 'sawtooth'
   const firingDepth = ctx.createGain()
-  firingDepth.gain.value = 0.35
+  // Start inside the safe idle range. `set` opens this with the revs; the old
+  // driven value made the first half-second the harshest one.
+  firingDepth.gain.value = 0.0035
   firing.connect(firingDepth).connect(engineGain.gain)
 
   // --- the exhaust -----------------------------------------------------------
@@ -413,9 +417,45 @@ export function createEngineVoice(
       const throttle = Math.max(0, Math.min(1, state.throttle))
       const cut = Math.max(0, Math.min(1, state.shifting))
 
+      /*
+        --- standing still ------------------------------------------------
+
+        **An idle that does not move is the worst sound in the game.**
+
+        What was here was arithmetic: at rest, `revs` is zero and `throttle` is
+        zero, so the fundamental was exactly 34 Hz, the gain was exactly 0.06
+        and the firing modulation was exactly 0.42 deep at exactly 17 Hz — a
+        perfectly steady low tone with a perfectly steady chop on it, held for
+        as long as you sat there. Nothing in nature does that. It is a test
+        tone, and after ten seconds it is a headache.
+
+        Two things make a car sitting there sound like a car sitting there:
+
+        **It hunts.** A real idle wanders by a few tens of rpm — the mixture is
+        never quite right, the load is never quite constant, and the whole
+        thing breathes. Three slow wobbles at rates with no common multiple, so
+        the pattern never comes round twice.
+
+        **It is restrained.** A stationary car must not spend speaker travel on
+        sub-bass or sharp synthetic ticks. The octave-down oscillator and the
+        exhaust are pulled back, and the firing pulse is kept inside the tonal
+        body's gain instead of being allowed to invert it.
+
+        All of it is scaled by `idleness`, which is one only when the car is
+        genuinely sitting there and gone the moment there is throttle or revs.
+        The sound of the car being *driven* is untouched.
+      */
+      const idleness = (1 - Math.min(1, revs / 0.2)) * (1 - Math.min(1, throttle * 3))
+      const hunt =
+        Math.sin(now * 1.07) * 0.5 +
+        Math.sin(now * 0.41 + 1.3) * 0.34 +
+        Math.sin(now * 2.29 + 0.7) * 0.16
+
       // --- the note ----------------------------------------------------------
       const fundamental =
-        (IDLE_HZ + (LIMIT_HZ - IDLE_HZ) * revs) * (state.boost ? 1.04 : 1)
+        (IDLE_HZ + (LIMIT_HZ - IDLE_HZ) * revs) *
+        (1 + hunt * 0.045 * idleness) *
+        (state.boost ? 1.04 : 1)
 
       /*
         The limiter.
@@ -434,11 +474,24 @@ export function createEngineVoice(
       oscD.frequency.setTargetAtTime(fundamental * 1.5, now, 0.04)
       firing.frequency.setTargetAtTime(fundamental * 0.5, now, 0.05)
       // The putter is a low-revs thing. At the top of a gear it would be a
-      // tremolo, and no engine has one.
-      firingDepth.gain.setTargetAtTime(0.42 - revs * 0.3, now, 0.15)
+      // tremolo, and no engine has one. This oscillator is connected directly
+      // to an AudioParam, so its value is an absolute gain — 0.42 here used to
+      // overwhelm the 0.02 idle body, invert it every cycle, and make laptop
+      // speakers crack at 17 Hz. At rest it is deliberately small and bounded.
+      const drivenPutter = 0.42 - revs * 0.3
+      const idlePutter = 0.0035 + hunt * 0.001
+      firingDepth.gain.setTargetAtTime(
+        drivenPutter * (1 - idleness) + idlePutter * idleness,
+        now,
+        0.12,
+      )
+
+      // The octave-down square is useful weight on power. At idle it is a
+      // 17 Hz cone excursion, not a note, so leave only a trace of it.
+      mixC.gain.setTargetAtTime(0.5 - idleness * 0.45, now, 0.16)
 
       bark.frequency.setTargetAtTime(fundamental * 2.1, now, 0.05)
-      barkGain.gain.setTargetAtTime(0.22 + throttle * 0.5, now, 0.1)
+      barkGain.gain.setTargetAtTime(0.22 - idleness * 0.17 + throttle * 0.5, now, 0.1)
 
       tone.frequency.setTargetAtTime(
         340 + revs * 1150 + throttle * 900 + (state.boost ? 800 : 0),
@@ -453,13 +506,25 @@ export function createEngineVoice(
         drops out for exactly as long as the torque does. It is the single
         clearest thing in the whole soundscape and it costs one multiply.
       */
-      const power = (0.06 + throttle * 0.075) * (1 - cut * 0.88) * bounce
+      /*
+        And the body of the note gets out of the way at idle.
+
+        Quiet enough to sit beneath the cave, with just enough slow movement
+        that it never becomes a test tone.
+      */
+      const body = 0.06 - idleness * (0.042 - hunt * 0.002)
+      const power = (body + throttle * 0.075) * (1 - cut * 0.88) * bounce
       engineGain.gain.setTargetAtTime(power, now, 0.02)
 
-      exhaust.frequency.setTargetAtTime(fundamental * 0.5, now, 0.04)
+      // Half the firing fundamental is useful boom while moving, but at idle
+      // it is subsonic. Raise it to the fundamental and almost remove its gain.
+      exhaust.frequency.setTargetAtTime(fundamental * (0.5 + idleness * 0.5), now, 0.04)
       exhaustShape.frequency.setTargetAtTime(140 + revs * 220, now, 0.08)
       exhaustGain.gain.setTargetAtTime(
-        (0.03 + throttle * 0.05 + (state.boost ? 0.03 : 0)) * (1 - cut * 0.9),
+        (0.03 - idleness * (0.026 - hunt * 0.002) +
+          throttle * 0.05 +
+          (state.boost ? 0.03 : 0)) *
+          (1 - cut * 0.9),
         now,
         0.04,
       )
