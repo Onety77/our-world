@@ -96,8 +96,13 @@ function useShownWorld(): { entered: boolean; section: number } {
  *
  * The cave has rock overhead and the star plain has its own night dome —
  * drawing the daylight sky in either would put a sun through the ceiling.
+ *
+ * The Glasshouse is open air despite being a building: half its roof is gone,
+ * the sky through the broken panes is most of what lights it, and the wood it
+ * stands in is visible down the whole length of the aisle. A conservatory with
+ * no sky above it would be a corridor.
  */
-const OPEN_AIR = new Set(['tree', 'river'])
+const OPEN_AIR = new Set(['tree', 'river', 'glasshouse'])
 
 function Scene({ hourOverride }: { hourOverride: number | null }) {
   const profiles = useWorldSlice((s) => s.profiles)

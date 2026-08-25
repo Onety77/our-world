@@ -1,5 +1,5 @@
 /**
- * The garden — the shared meadow the four places stand in.
+ * The garden — the shared meadow the five places stand in.
  *
  * This is the home, not a menu of the sections. Each place is a real object
  * out on the grass with its own weather, water and light, and the camera
@@ -22,6 +22,7 @@ import { TreeLandmark } from './hub/landmarks/Tree'
 import { RiverLandmark } from './hub/landmarks/River'
 import { HollowLandmark } from './hub/landmarks/Hollow'
 import { StarsLandmark } from './hub/landmarks/Stars'
+import { GlasshouseLandmark } from './hub/landmarks/Glasshouse'
 import { Grass } from './Grass'
 import { Flowers } from './Flowers'
 import { Trees } from './Trees'
@@ -54,7 +55,19 @@ function LivingLandmark({ index, children }: { index: number; children: React.Re
   return <group ref={group}>{children}</group>
 }
 
-const LANDMARKS = [TreeLandmark, RiverLandmark, HollowLandmark, StarsLandmark]
+/*
+  Positional, and it must stay in step with the order of SECTIONS.
+
+  Appending is safe; inserting is not. See the note in world/hub/layout — the
+  index of a place is load-bearing in three files.
+*/
+const LANDMARKS = [
+  TreeLandmark,
+  RiverLandmark,
+  HollowLandmark,
+  StarsLandmark,
+  GlasshouseLandmark,
+]
 
 export function GardenHub() {
   const { palette, grassCount, flowerCount } = useSceneEnv()
@@ -78,7 +91,7 @@ export function GardenHub() {
         palette={palette}
         openings={[HUB_OPENING.at]}
         seed="garden-hub:wood"
-        count={150}
+        count={170}
         centre={HUB_ORIGIN}
         innerRadius={HUB_WOOD.inner}
         outerRadius={HUB_WOOD.outer}

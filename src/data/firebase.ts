@@ -44,6 +44,21 @@ import {
   updateDoc,
   type Firestore,
 } from 'firebase/firestore'
+/*
+  The third store, and the only one that holds bytes.
+
+  Firestore documents are capped at a megabyte and are the wrong shape for
+  binary anyway; Storage is a bucket with its own rules file. It is imported
+  here and nowhere else, which is the point of the seam — nothing above this
+  folder knows the Glasshouse is backed by a bucket rather than by IndexedDB.
+*/
+import {
+  getDownloadURL,
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  type FirebaseStorage,
+} from 'firebase/storage'
 import {
   get as rtdbGet,
   getDatabase,
@@ -64,6 +79,7 @@ import {
   type Decor,
   type DataLayer,
   type Letter,
+  type Memory,
   type Message,
   type Money,
   type Move,
@@ -93,6 +109,7 @@ const CONTRIBUTIONS = 'contributions'
 /** One document per round; one document per move underneath it. See below. */
 const TRACKS = 'tracks'
 const MESSAGES = 'messages'
+const MEMORIES = 'memories'
 const ROUNDS = 'rounds'
 const PLANTS = 'plants'
 const DECOR = 'decor'
@@ -269,6 +286,7 @@ export interface FirebaseHandles {
   auth: Auth
   db: Firestore
   rtdb: Database
+  store: FirebaseStorage
 }
 
 let handles: FirebaseHandles | null = null
@@ -282,6 +300,7 @@ export function firebase(): FirebaseHandles {
     auth: getAuth(app),
     db: getFirestore(app),
     rtdb: getDatabase(app),
+    store: getStorage(app),
   }
   return handles
 }
@@ -310,11 +329,19 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
   // declaration, and the compiler won't carry a narrowing into one of those.
   const me: UserId = light
 
-  const { db, rtdb } = firebase()
+  const { db, rtdb, store } = firebase()
 
   let state = emptyWorld()
   const listeners = new Set<(s: WorldState) => void>()
   const unsubscribes: (() => void)[] = []
+
+  /**
+   * Download URLs, by storage path, for as long as the tab is open.
+   *
+   * The promise is cached rather than the string, so two panes coming into
+   * range in the same frame share one round trip instead of racing.
+   */
+  const pictures = new Map<string, Promise<string>>()
 
   /**
    * The server's clock minus this device's. Phones are routinely a minute out,
@@ -508,21 +535,24 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
           return
         }
         const lastSeen = num(d.lastSeen, 0)
+        const them: Presence = {
+          id,
+          // Both conditions: onDisconnect usually clears this, but a phone
+          // that dies outright leaves the last position behind forever.
+          online: d.online === true && now() - lastSeen < PRESENCE_STALE,
+          placeId: str(d.placeId, 'clearing'),
+          position: vec3(d.position),
+          heading: num(d.heading, 0),
+          lastSeen,
+        }
+        // Absent rather than present-and-empty, so `if (them.racing)` reads the
+        // same here as it does against the mock. See the note in `flush`.
+        if (typeof d.racing === 'string' && d.racing !== '') them.racing = d.racing
+        if (typeof d.looking === 'string' && d.looking !== '') them.looking = d.looking
+
         commitPresence({
           ...state,
-          presence: {
-            ...state.presence,
-            [id]: {
-              id,
-              // Both conditions: onDisconnect usually clears this, but a phone
-              // that dies outright leaves the last position behind forever.
-              online: d.online === true && now() - lastSeen < PRESENCE_STALE,
-              placeId: str(d.placeId, 'clearing'),
-              position: vec3(d.position),
-              heading: num(d.heading, 0),
-              lastSeen,
-            },
-          },
+          presence: { ...state.presence, [id]: them },
         })
       }),
     )
@@ -553,11 +583,36 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     if (!hasPending && !force) return
     hasPending = false
     lastSent = Date.now()
+    const here = state.presence[me]
+    /*
+      The two live invitations.
+
+      **Neither of these was being sent.** `racing` has been declared on
+      Presence, documented, and validated in database.rules.json since the day
+      live rounds were built — and this function, the only thing that ever
+      writes presence, never included it. So "roll together" worked perfectly
+      against the mock, where presence is a local object, and would have
+      silently done nothing at all the first time the two of you tried it for
+      real. Nothing pointed at it because the real layer has never been run.
+
+      `looking` is the Glasshouse's version — the memory you have open — and it
+      is added here at the same time so that the next person to add a live
+      field has a shape to copy rather than a gap to fall into.
+
+      RTDB rejects `undefined` outright, so an absent one is left out of the
+      object entirely rather than written as null. `null` would be a value that
+      passes `.validate` on a string field and then reads back as "".
+    */
+    const racing = pending.racing ?? here.racing
+    const looking = pending.looking ?? here.looking
+
     const body = {
       online: true,
-      placeId: pending.placeId ?? state.presence[me].placeId,
-      position: pending.position ?? state.presence[me].position,
-      heading: pending.heading ?? state.presence[me].heading,
+      placeId: pending.placeId ?? here.placeId,
+      position: pending.position ?? here.position,
+      heading: pending.heading ?? here.heading,
+      ...(racing ? { racing } : {}),
+      ...(looking ? { looking } : {}),
       lastSeen: rtdbTimestamp(),
     }
     // Fire and forget. A dropped presence write is not worth a retry — another
@@ -773,6 +828,142 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         },
         { merge: true },
       )
+    },
+
+    // ---- the Glasshouse ----------------------------------------------------
+
+    /*
+      Every memory, oldest first — and no limit, deliberately.
+
+      The Stars is limited because it is speech and there will be tens of
+      thousands of lines of it. This is not: a memory is a deliberate act with
+      a picture attached, so there will be hundreds over years, and each
+      document is a few hundred bytes of which most is the sixteen-pixel
+      preview. Pulling all of them is one small read and it is what lets the
+      whole building be drawn — every pane in its right colour — before a
+      single photograph has been fetched.
+
+      Ordered ascending by the server, because a memory's place in the
+      Glasshouse is its index in this list and that place is permanent.
+    */
+    watchMemories(listener) {
+      return onSnapshot(query(collection(db, MEMORIES), orderBy('at', 'asc')), (snap) => {
+        const memories = snap.docs
+          .map((d) => {
+            const raw = d.data() as Record<string, unknown>
+            const path = str(raw.path, '')
+            // A memory with no picture behind it is not a memory; it is a
+            // half-written document from an upload that died. Dropped here so
+            // nothing above ever has to render a pane that cannot exist.
+            if (path === '') return null
+
+            const memory: Memory = {
+              id: d.id,
+              by: userId(raw.by),
+              at: num(raw.at, 0),
+              width: Math.max(1, num(raw.width, 1)),
+              height: Math.max(1, num(raw.height, 1)),
+              tint: str(raw.tint, '#4a4a4a'),
+              blur: str(raw.blur, ''),
+              path,
+            }
+            if (typeof raw.when === 'string' && raw.when !== '') memory.when = raw.when
+            if (typeof raw.why === 'string' && raw.why !== '') memory.why = raw.why
+
+            const theirs = raw.theirs as Record<string, unknown> | undefined
+            if (theirs && typeof theirs.body === 'string' && theirs.body !== '') {
+              memory.theirs = {
+                by: userId(theirs.by),
+                body: theirs.body,
+                at: num(theirs.at, 0),
+              }
+            }
+            return memory
+          })
+          .filter((m): m is Memory => m !== null)
+        listener(memories)
+      })
+    },
+
+    /*
+      The picture goes up first, and the document second.
+
+      That order is the whole of the failure story. A document written first
+      and an upload that then fails — a tunnel, a full bucket, a closed tab —
+      leaves a permanent pane in the building with nothing behind it, and
+      nobody would ever know which memory it had been. This way a failed
+      upload leaves an orphaned file, which is invisible, costs a fraction of a
+      penny, and can be swept up later. Bytes are the cheap thing to lose.
+    */
+    async hangMemory(input) {
+      const id = newId()
+      const path = `memories/${id}.jpg`
+
+      await uploadBytes(storageRef(store, path), input.display, {
+        contentType: 'image/jpeg',
+        /*
+          A year, immutable. Every one of these is written once and never
+          changed — the path has a fresh id in it — so there is no version of
+          this that can go stale, and the two of you scrolling back through
+          years of the Glasshouse should be paying for that bandwidth about
+          once.
+        */
+        cacheControl: 'private, max-age=31536000, immutable',
+      })
+
+      const at = now()
+      const memory: Memory = {
+        id,
+        by: me,
+        at,
+        width: input.width,
+        height: input.height,
+        tint: input.tint,
+        blur: input.blur,
+        path,
+        ...(input.when?.trim() ? { when: input.when.trim() } : {}),
+        ...(input.why?.trim() ? { why: input.why.trim() } : {}),
+      }
+
+      // `at` goes up as the server's number rather than serverTimestamp(),
+      // because the order of these decides where each pane stands in the
+      // building and a pending timestamp reads back as null on the writing
+      // device — which would put your own new memory momentarily at the
+      // beginning of time, at the far end of the Glasshouse.
+      const { id: _id, ...body } = memory
+      await setDoc(doc(db, MEMORIES, id), body)
+      return memory
+    },
+
+    async sayWhatIRemember(id, body) {
+      const text = body.trim()
+      await updateDoc(
+        doc(db, MEMORIES, id),
+        text === ''
+          ? { theirs: deleteField() }
+          : { theirs: { by: me, body: text, at: now() } },
+      )
+    },
+
+    /*
+      A download URL, cached for as long as the tab is open.
+
+      `getDownloadURL` is a round trip to Storage, and a pane coming back into
+      range asks for its picture again every time. The URL it returns carries a
+      token and does not expire, so caching it costs nothing and saves a
+      request per pane per approach.
+    */
+    pictureUrl(memory) {
+      const had = pictures.get(memory.path)
+      if (had) return had
+      const asking = getDownloadURL(storageRef(store, memory.path)).catch((error) => {
+        // Not cached, so a picture that failed once because the phone was in a
+        // tunnel is asked for again the next time its pane comes near.
+        pictures.delete(memory.path)
+        throw error
+      })
+      pictures.set(memory.path, asking)
+      return asking
     },
 
     // ---- the Stars ---------------------------------------------------------

@@ -5990,3 +5990,433 @@ canvas {
 .keep-case {
   text-transform: none;
 }
+
+/* ---------------------------------------------------------------------------
+   The Glasshouse.
+
+   Two screens, and both of them are a photograph with words under it on the
+   world. No card, no border, no panel — the one rectangle on screen is the
+   picture itself, which is content and not chrome, and everything around it
+   sits directly on the building the way every other word in this garden sits
+   directly on the landscape.
+--------------------------------------------------------------------------- */
+
+.glass-threshold button {
+  font-family: var(--serif);
+  font-size: clamp(1.15rem, 3.4vw, 1.5rem);
+}
+
+/* ---- leaving one ---- */
+
+.leaving,
+.opened {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  padding: max(1.4rem, env(safe-area-inset-top)) 1.4rem max(1.4rem, env(safe-area-inset-bottom));
+  /*
+    A wash rather than a scrim.
+
+    The Glasshouse is still rendering behind this and is meant to be — the
+    brief asked for the building to stay visible around the edges of an open
+    memory. A flat black veil would turn it into a modal over a screenshot.
+    This is dark at the corners and clear in the middle, so the place is still
+    there and the picture is still the brightest thing in it.
+  */
+  background: radial-gradient(
+    ellipse 90% 80% at 50% 48%,
+    rgba(6, 8, 10, 0.42),
+    rgba(4, 6, 8, 0.88) 100%
+  );
+  animation: drift-in 0.4s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.leaving-picture,
+.opened-picture,
+.opened-blur {
+  /*
+    Never cropped, and never stretched.
+
+    `object-fit: contain` against the real aspect ratio out of the document, so
+    a panorama and a phone portrait are both whole. This is the one rule about
+    a photograph that cannot bend: a picture cropped to fit a layout is a
+    different picture.
+  */
+  object-fit: contain;
+  max-width: min(100%, 54rem);
+  max-height: 56vh;
+  border-radius: 1px;
+}
+
+.leaving-picture {
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+.leaving-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  width: min(28rem, 100%);
+}
+
+.leaving-lines label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.leaving-lines span {
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+}
+
+/*
+  A ruled line, not a box.
+
+  The same shape the rest of the garden is written into — the composer in the
+  Stars, the amount at the Wellspring. A bordered input here would be the first
+  form in the world.
+*/
+.leaving-lines input {
+  width: 100%;
+  padding: 0.34rem 0;
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.22);
+  text-shadow: var(--lift);
+}
+
+.leaving-lines input::placeholder {
+  color: rgba(242, 239, 230, 0.26);
+}
+
+.leaving-lines input:focus {
+  outline: none;
+  border-bottom-color: rgba(255, 200, 130, 0.55);
+}
+
+.leaving-ways,
+.opened-ways {
+  display: flex;
+  align-items: baseline;
+  gap: 1.6rem;
+}
+
+.leaving-go {
+  font-family: var(--serif);
+  font-size: 1.22rem;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0.4rem 0;
+  cursor: pointer;
+  text-shadow: var(--lift);
+  border-bottom: 1px solid rgba(242, 239, 230, 0.3);
+  transition: border-color 0.3s ease;
+}
+
+.leaving-go:hover:not(:disabled),
+.leaving-go:focus-visible:not(:disabled) {
+  border-bottom-color: rgba(255, 200, 130, 0.7);
+  outline: none;
+}
+
+.leaving-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.leaving-waiting {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-dim);
+  text-shadow: var(--lift);
+}
+
+/* ---- looking at one ---- */
+
+/*
+  The room takes the colour of the photograph.
+
+  `--memory-tint` is set on the element from the memory's own average colour,
+  so the wash behind the picture and the glow at the edges read off one value.
+  A sunset comes out amber and a night picture cools the whole screen — which
+  is the brief asking for the world to respond to the image, done in one custom
+  property rather than in five places that drift apart.
+*/
+.opened {
+  background:
+    radial-gradient(
+      ellipse 70% 60% at 50% 45%,
+      color-mix(in srgb, var(--memory-tint) 26%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(ellipse 90% 80% at 50% 48%, rgba(6, 8, 10, 0.4), rgba(4, 6, 8, 0.9) 100%);
+}
+
+/*
+  The pane, and its back.
+
+  A real turn rather than a cross-fade, because the whole idea is that the
+  other one's line is on the *other side of the glass* — and something that
+  dissolves is two pictures, while something that turns is one object.
+*/
+.opened-glass {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.72s cubic-bezier(0.34, 0.9, 0.28, 1);
+  display: grid;
+  place-items: center;
+  width: min(100%, 54rem);
+}
+
+.opened-glass.turned {
+  transform: rotateY(180deg);
+}
+
+.opened-front,
+.opened-back {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  display: grid;
+  place-items: center;
+  width: 100%;
+}
+
+.opened-back {
+  transform: rotateY(180deg);
+  min-height: 12rem;
+  gap: 0.9rem;
+  padding: 1.4rem 1rem;
+}
+
+.opened-front {
+  position: relative;
+}
+
+/*
+  The sixteen-pixel version, underneath, blurred up.
+
+  Always in the document, because it arrived with the memory and costs nothing
+  — so the instant a picture is opened there is something in the right colours
+  at the right shape, and the photograph fades in on top of it. If the
+  photograph never comes, this is what stays, which is honest: it *is* the
+  picture, at the only resolution we have.
+*/
+.opened-blur {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: blur(28px);
+  transform: scale(1.06);
+  opacity: 0.9;
+}
+
+.opened-picture {
+  position: relative;
+  width: 100%;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.6);
+}
+
+.opened-picture.here {
+  opacity: 1;
+}
+
+.opened-said {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  text-align: center;
+  max-width: min(34rem, 100%);
+}
+
+.opened-when {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+}
+
+.opened-why {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(1.02rem, 3vw, 1.24rem);
+  line-height: 1.42;
+  color: var(--ink);
+  text-shadow: var(--lift);
+  text-wrap: pretty;
+}
+
+/*
+  Both of you, at once.
+
+  Only ever while it is true — `looking` on Presence is cleared the moment
+  either of you leaves the picture. It says the fact and nothing else: no
+  avatar, no "seen at", no count.
+*/
+.opened-both {
+  margin: 0.3rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 214, 150, 0.85);
+  text-shadow: 0 0 14px rgba(255, 170, 90, 0.4), var(--lift);
+  animation: glass-together 3.4s ease-in-out infinite;
+}
+
+@keyframes glass-together {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* One light from each end of the glass. The same thing NEAR_FRAG draws on the
+   pane out in the building, so the two views agree. */
+.opened.together .opened-picture {
+  box-shadow:
+    0 20px 70px rgba(0, 0, 0, 0.6),
+    -3px 0 22px rgba(240, 169, 75, 0.5),
+    3px 0 22px rgba(159, 182, 232, 0.5);
+}
+
+.opened-remembers {
+  margin: 0;
+  max-width: 26rem;
+  font-family: var(--serif);
+  font-size: clamp(1.1rem, 3.4vw, 1.4rem);
+  line-height: 1.5;
+  text-align: center;
+  text-shadow: var(--lift);
+  color: var(--ink);
+}
+
+/* Whose hand it is, in the two colours everything else here uses. */
+.opened-remembers.warm {
+  color: #ffdcab;
+}
+
+.opened-remembers.cool {
+  color: #c3d6ff;
+}
+
+.opened-remembers.waiting {
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
+.opened-say {
+  font-family: var(--serif);
+  font-size: 1.18rem;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.28);
+  padding: 0.4rem 0;
+  cursor: pointer;
+  text-shadow: var(--lift);
+}
+
+.opened-writing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  width: min(26rem, 100%);
+}
+
+.opened-writing textarea {
+  width: 100%;
+  resize: none;
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.22);
+  padding: 0.3rem 0;
+  text-shadow: var(--lift);
+}
+
+.opened-writing textarea:focus {
+  outline: none;
+  border-bottom-color: rgba(255, 200, 130, 0.55);
+}
+
+.opened-writing textarea::placeholder {
+  color: rgba(242, 239, 230, 0.26);
+}
+
+/* ---- a phone ---- */
+
+@media (max-width: 34rem) {
+  .leaving,
+  .opened {
+    gap: 0.85rem;
+    justify-content: flex-start;
+    padding-top: max(3.2rem, calc(env(safe-area-inset-top) + 2.8rem));
+    /*
+      Scrollable, because a portrait photograph plus two lines plus two ways
+      out does not fit in 844 points and the alternative is cropping one of
+      them. The picture keeps its own height cap, so it can never push the
+      words off the bottom on its own.
+    */
+    overflow-y: auto;
+  }
+
+  .leaving-picture,
+  .opened-picture,
+  .opened-blur {
+    max-height: 42vh;
+  }
+
+  .leaving-ways,
+  .opened-ways {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+  }
+}
+
+/*
+  The one thing this place must always be able to say.
+
+  A photograph that will not load is not a spinner and not a broken-image
+  glyph: the colours are still there and are still true, and what is missing is
+  the picture. Said in words, over the blur, because this is the only data in
+  the garden that cannot be regenerated and pretending otherwise is the one
+  dishonesty it cannot afford.
+*/
+.opened-lost {
+  margin: 0 0 0.2rem;
+  max-width: 30rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.94rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  text-shadow: var(--lift);
+}

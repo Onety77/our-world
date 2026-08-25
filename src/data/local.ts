@@ -26,9 +26,11 @@ import type {
   UserId,
   WorldState,
   Message,
+  Memory,
   Track,
   Listening,
 } from './types'
+import { forgetPictures, pictureFromStore, putPicture } from './pictures'
 import { newId } from './ids'
 import { GROWN_DAYS, USER_IDS } from './types'
 import { localDateKey } from '@/systems/time'
@@ -213,6 +215,27 @@ function loadListening(): Listening {
     return quiet
   }
 }
+/**
+ * Memory *documents* — never the pictures.
+ *
+ * The picture for each of these lives in IndexedDB under `memory.path`; see
+ * data/pictures.ts for why it cannot live here. What is in this key is a few
+ * hundred bytes per memory, of which most is the sixteen-pixel preview, and
+ * that is deliberate: it means the whole Glasshouse can be drawn from
+ * localStorage alone with nothing decoded and nothing fetched.
+ */
+const MEMORIES_KEY = 'garden:memories:v1'
+
+function loadMemories(): Memory[] {
+  if (typeof localStorage === 'undefined') return []
+  try {
+    const raw = JSON.parse(localStorage.getItem(MEMORIES_KEY) ?? 'null')
+    return Array.isArray(raw) ? (raw as Memory[]) : []
+  } catch {
+    return []
+  }
+}
+
 const ROUNDS_KEY = 'garden:rounds:v1'
 
 /**
@@ -370,6 +393,22 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
   function tellMessageWatchers() {
     for (const w of messageWatchers) w.listener(messages.slice(-w.limit))
+  }
+
+  let memories = loadMemories()
+  const memoryWatchers = new Set<(m: Memory[]) => void>()
+
+  function saveMemories() {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(MEMORIES_KEY, JSON.stringify(memories))
+    } catch {
+      /* storage full; see data/pictures.ts — the pictures are not in here */
+    }
+  }
+
+  function tellMemoryWatchers() {
+    for (const w of memoryWatchers) w(memories)
   }
 
   function saveRounds() {
@@ -623,6 +662,69 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       for (const w of listeningWatchers) w(listening)
     },
 
+    // ---- the Glasshouse ----------------------------------------------------
+
+    watchMemories(listener) {
+      memoryWatchers.add(listener)
+      listener(memories)
+      return () => {
+        memoryWatchers.delete(listener)
+      }
+    },
+
+    async hangMemory(input) {
+      const id = newId()
+      /*
+        The path is made here and stored on the document, rather than being
+        derived from the id when it is needed. It costs one string and it means
+        the two layers can lay their pictures out however suits them — a bucket
+        wants folders, IndexedDB wants a flat key — without anything above the
+        seam knowing or caring which.
+      */
+      const path = `memories/${id}.jpg`
+      // The picture first. If this throws, nothing is written, and the failure
+      // is a memory that was never hung rather than a pane with a hole in it.
+      await putPicture(path, input.display)
+
+      const memory: Memory = {
+        id,
+        by: me,
+        at: Date.now(),
+        width: input.width,
+        height: input.height,
+        tint: input.tint,
+        blur: input.blur,
+        path,
+        ...(input.when?.trim() ? { when: input.when.trim() } : {}),
+        ...(input.why?.trim() ? { why: input.why.trim() } : {}),
+      }
+      memories = [...memories, memory]
+      saveMemories()
+      tellMemoryWatchers()
+      return memory
+    },
+
+    async sayWhatIRemember(id, body) {
+      const text = body.trim()
+      memories = memories.map((m) => {
+        if (m.id !== id) return m
+        // Only on hers. Enforced at the seam and not only in the interface,
+        // because the seam is the part both layers share and the rules mirror.
+        if (m.by === me) return m
+        if (text === '') {
+          const { theirs: _gone, ...rest } = m
+          return rest
+        }
+        return { ...m, theirs: { by: me, body: text, at: Date.now() } }
+      })
+      saveMemories()
+      tellMemoryWatchers()
+    },
+
+    pictureUrl(memory) {
+      return pictureFromStore(memory.path)
+    },
+
     // ---- the Stars ---------------------------------------------------------
 
     watchMessages(listener, limit = 500) {
@@ -693,6 +795,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         localStorage.removeItem(STORAGE_KEY)
         localStorage.removeItem(ROUNDS_KEY)
         localStorage.removeItem(MESSAGES_KEY)
+        localStorage.removeItem(MEMORIES_KEY)
         localStorage.removeItem(LISTENING_KEY)
         localStorage.removeItem(TRACKS_KEY)
       } catch {
@@ -702,6 +805,13 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       for (const id of roundWatchers.keys()) tellWatchers(id)
       messages = []
       tellMessageWatchers()
+      memories = []
+      tellMemoryWatchers()
+      // The pictures are in IndexedDB, not localStorage, so clearing the keys
+      // above would otherwise leave every photograph on the device with
+      // nothing pointing at it. Fire and forget: "start again" must not wait
+      // on a database, and a failure here leaks bytes rather than data.
+      void forgetPictures()
       tracks = seedTracks()
       for (const w of trackWatchers) w(tracks)
       listening = loadListening()

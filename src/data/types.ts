@@ -68,6 +68,20 @@ export interface Presence {
    * ---------------------------------------------------------------------------
    */
   racing?: string
+
+  /**
+   * The id of the memory this person has open in the Glasshouse.
+   *
+   * Down the same live channel and for a related reason: there is no way to
+   * *derive* that the two of you are looking at the same photograph, so it has
+   * to be said. When both of these match, the pane takes a warm edge and a
+   * cool one and the colour in it strengthens — which is the whole of "we are
+   * both here, in front of this", with no avatar and no "seen by" line.
+   *
+   * Ephemeral like the rest of presence. Cleared on leaving the picture, and
+   * gone by itself when the phone goes into a tunnel.
+   */
+  looking?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +159,90 @@ export interface Letter {
   position: [number, number, number]
   at: number
   readAt: number | null
+}
+
+// ---------------------------------------------------------------------------
+// Memories
+// ---------------------------------------------------------------------------
+
+/**
+ * One picture, kept in the Glasshouse.
+ *
+ * ---------------------------------------------------------------------------
+ * **The first thing in this world that cannot be made again.**
+ *
+ * Everything else here regenerates: a road, a board, a sheet of categories and
+ * the sky itself are all functions of a seed, and losing them costs a rerun.
+ * A photograph is not. That single fact decides most of what follows —
+ * `tint` and `blur` are kept *in the document* rather than derived from the
+ * file, so a pane can be drawn honestly while the picture is still coming down
+ * the wire or when it never arrives at all; `width` and `height` are stored
+ * rather than measured, so the glass is cut to the right shape before anything
+ * has been decoded and nothing is ever cropped to fit; and the original stays
+ * exactly as it was handed over.
+ * ---------------------------------------------------------------------------
+ */
+export interface Memory {
+  id: string
+  /** Who hung it. Decides which of the two lights seals the pane. */
+  by: UserId
+  /** epoch ms it was hung. Not when the photograph was taken. */
+  at: number
+
+  /**
+   * When the moment itself was, in their own words — "the night before you
+   * left", "some June".
+   *
+   * Free text and never parsed. A date picker would insist on a precision
+   * nobody has about the things worth keeping, and would turn the two lines
+   * this asks for into a form.
+   */
+  when?: string
+  /** Why it stays. One line, and optional: some pictures say it themselves. */
+  why?: string
+
+  /**
+   * What the *other* one remembers of it. At most one, and only from the
+   * person who did not hang it — the seam has no way to say otherwise and the
+   * rules refuse it if it tries.
+   *
+   * This is the whole of what a second person may add. Not a like, not a
+   * thread: one person leaves the moment and the other leaves what it was
+   * from where they were standing.
+   */
+  theirs?: { by: UserId; body: string; at: number }
+
+  /** Pixels of the display copy. The pane is cut to this, never to a guess. */
+  width: number
+  height: number
+
+  /**
+   * The average colour of the picture, '#rrggbb'.
+   *
+   * What a pane *is* until it is close enough to be worth loading. Most of the
+   * Glasshouse is only ever this: a wall of coloured glass, one colour per
+   * memory, costing one instanced quad each and no network at all.
+   */
+  tint: string
+
+  /**
+   * A few hundred bytes of the picture, as a data URI — sixteen pixels or so,
+   * stretched.
+   *
+   * In the document rather than in storage, deliberately: it means a pane has
+   * something *true* to show the instant the garden knows the memory exists,
+   * with no second round trip, and it makes the brief's "the glass clears and
+   * the image appears" the literal behaviour of a progressive load rather than
+   * an animation pretending to be one.
+   */
+  blur: string
+
+  /**
+   * Where the display copy lives. Opaque above the seam — a storage path in
+   * the real layer, an IndexedDB key in the mock — and never a URL, because a
+   * URL from a private bucket expires and a stored one would rot.
+   */
+  path: string
 }
 
 // ---------------------------------------------------------------------------
@@ -520,6 +618,59 @@ export interface DataLayer {
    * garden can honestly make about it.
    */
   markMessagesRead(): Promise<void>
+
+  // ---- the Glasshouse ------------------------------------------------------
+
+  /**
+   * Watch every memory, oldest first.
+   *
+   * Oldest first because a memory's place in the Glasshouse is its index in
+   * this list, and that place is permanent — the same law the letters follow.
+   * Sorting newest-first here would move every pane in the building every time
+   * one was hung.
+   *
+   * Separate from `subscribe` for the usual reason, and one more: this is
+   * documents only. No picture crosses this listener, so a Glasshouse with
+   * five hundred memories in it costs about the same to watch as an empty one.
+   */
+  watchMemories(listener: (memories: Memory[]) => void): () => void
+
+  /**
+   * Hang one.
+   *
+   * The picture arrives already prepared — downscaled, turned the right way
+   * up, stripped of where it was taken, and measured. That work is identical
+   * whichever layer is live and it is all done in the browser, so it happens
+   * *above* the seam in `systems/picture` and both implementations receive the
+   * same finished thing. See the note there about what is thrown away.
+   */
+  hangMemory(input: {
+    display: Blob
+    width: number
+    height: number
+    tint: string
+    blur: string
+    when?: string
+    why?: string
+  }): Promise<Memory>
+
+  /**
+   * Say what you remember of one she hung.
+   *
+   * Yours only, and only on hers — the same shape as hearting a message. An
+   * empty body takes it back off rather than storing a blank.
+   */
+  sayWhatIRemember(id: string, body: string): Promise<void>
+
+  /**
+   * Something a browser can put in an `<img>`.
+   *
+   * Asynchronous because in the real layer this is a signed download and in
+   * the mock it is a read out of IndexedDB, and callers must not care which.
+   * Rejects rather than resolving to a placeholder: a picture that quietly
+   * becomes a grey square is the failure this world is least willing to have.
+   */
+  pictureUrl(memory: Memory): Promise<string>
 
   // ---- the music -----------------------------------------------------------
 

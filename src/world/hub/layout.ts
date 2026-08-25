@@ -1,5 +1,5 @@
 /**
- * Where the garden's four places stand.
+ * Where the garden's five places stand.
  *
  * Two things decide this, and both were learned the hard way.
  *
@@ -41,11 +41,16 @@ export const HUB_ORIGIN: [number, number] = [110, 0]
  * landmarks are. The camera sits back from whichever place is selected, and at
  * the two ends of the row that puts it up to forty-five metres out from the
  * centre — so a ring starting at forty-two put the viewer inside the treeline
- * with a canopy filling the entire frame. Sixty-two leaves seventeen metres of
- * clearance at the worst of the four — which since the places were spread
- * further apart is the Tree, fifty-six metres out from the middle.
+ * with a canopy filling the entire frame.
+ *
+ * **Widened once, for the fifth place.** Five landmarks with the gaps the note
+ * below insists on span a hundred and twelve metres rather than eighty-eight,
+ * which puts the camera at the far ends about sixty-one metres out. Eighty
+ * keeps the same nineteen metres of clearance the four had. The alternative
+ * was tightening the gaps, and the whole point of the note below is that
+ * tightening them is what crowds the neighbours into the frame.
  */
-export const HUB_WOOD = { inner: 74, outer: 124 }
+export const HUB_WOOD = { inner: 80, outer: 130 }
 
 /**
  * Where the treeline opens, in radians, and how wide.
@@ -68,7 +73,7 @@ export interface Anchor {
 }
 
 /**
- * The four places, in the order they are swiped through, as offsets from the
+ * The five places, in the order they are swiped through, as offsets from the
  * hub origin. Gaps vary between twenty-one and twenty-four metres and each
  * sits a few metres fore or aft of the line.
  *
@@ -79,10 +84,19 @@ export interface Anchor {
  * step back and look up at the tree, and walk in and look down at the water.
  */
 const PLACES: { at: [number, number]; stand: number; aim: number }[] = [
-  { at: [-44, 2.5], stand: 33, aim: 7.0 }, // the great tree — tall, so stand off
-  { at: [-15, -7], stand: 20, aim: 1.1 }, // the stream — low and wide, so close in
-  { at: [15, 4], stand: 26, aim: 2.8 }, // the cave mouth
-  { at: [44, -3.5], stand: 23, aim: 2.6 }, // the cairn and its two lights
+  { at: [-56, 2.5], stand: 33, aim: 7.0 }, // the great tree — tall, so stand off
+  { at: [-28, -7], stand: 20, aim: 1.1 }, // the stream — low and wide, so close in
+  { at: [-1, 4], stand: 26, aim: 2.8 }, // the cave mouth
+  { at: [27, -3.5], stand: 23, aim: 2.6 }, // the cairn and its two lights
+  /*
+    The Glasshouse — long, low and lying along the row rather than facing it.
+
+    Appended, never inserted. Everything below indexes this array positionally
+    and `HUB_STREAM` is measured off entry 1, so slotting a fifth place into
+    the middle would move the Wellspring's water away from the Wellspring
+    without a single test noticing.
+  */
+  { at: [56, 5], stand: 25, aim: 2.6 },
 ]
 
 export const ANCHORS: readonly Anchor[] = PLACES.map(({ at: [dx, dz], stand, aim }) => {

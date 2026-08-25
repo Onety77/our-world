@@ -1,0 +1,85 @@
+rules_version = '2';
+
+/*
+  The bucket. Photographs, and nothing else, ever.
+
+  This is the third rules file and the first one that guards *bytes*. Same law
+  as the other two: two people, forever, matched by address, and everybody else
+  reads and writes nothing at all — including anybody who signs in with a real,
+  valid Firebase account.
+
+  Do not fill the two addresses in by hand. Run `npm run rules`, which takes
+  them from .env.local and writes rules-out/storage.rules ready to paste. One
+  place to get it right instead of four, and the failure mode of getting it
+  wrong is silent: uploads just fail and the Glasshouse looks broken for no
+  visible reason.
+
+  ---------------------------------------------------------------------------
+  A note on what "private" means here, because it is the one place in this
+  garden where it is not obvious.
+
+  A Storage download URL carries a long unguessable token, and anybody holding
+  that URL can fetch the file without signing in. That is how the image ends up
+  in an `<img>` at all. So the honest statement is: the *bucket* is private and
+  only the two of you can list it, upload to it, or ask for a URL — but a URL,
+  once handed out, is a key. Nothing in the app ever puts one in an address
+  bar, a link, or anything that leaves the device.
+  ---------------------------------------------------------------------------
+*/
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function warmEmail() { return '__WARM_EMAIL__'; }
+    function coolEmail() { return '__COOL_EMAIL__'; }
+
+    /** Lowercased on both sides — see the note in firestore.rules. */
+    function email() {
+      return request.auth != null && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function isOneOfUs() {
+      return email() == warmEmail() || email() == coolEmail();
+    }
+
+    match /memories/{file} {
+      allow read: if isOneOfUs();
+
+      /*
+        Create only. An existing object cannot be overwritten, because every
+        upload goes to a path with a fresh id in it and nothing in this world
+        edits a photograph. `resource == null` is what makes that a rule rather
+        than a habit — with it, a bug that reused a path fails loudly instead of
+        quietly replacing a memory with a different one.
+      */
+      allow create: if isOneOfUs()
+        && resource == null
+        && request.resource.contentType == 'image/jpeg'
+        /*
+          Eight megabytes. The client re-encodes everything to at most sixteen
+          hundred pixels of JPEG before it gets here, which lands around two
+          hundred kilobytes — so this is not a limit anybody will meet. It is
+          here so that a bug in the preparation step, or a client that has been
+          tampered with, cannot fill the bucket.
+        */
+        && request.resource.size < 8 * 1024 * 1024;
+
+      /*
+        Never. Same reasoning as the delete rule on the documents: this is the
+        only data in the garden that cannot be made again, and a delete rule is
+        a way to lose a photograph forever at three in the morning.
+
+        Sweeping up files whose upload succeeded and whose document then failed
+        is a console job, done deliberately, by a person.
+      */
+      allow update, delete: if false;
+    }
+
+    /* Everything outside /memories, to everybody, forever. */
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

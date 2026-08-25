@@ -23,11 +23,13 @@ import { watchForTrouble } from '@/systems/trouble'
 import { PotForm } from '@/ui/Pot'
 import { ProfileSheet } from '@/ui/Profile'
 import { LetterReader, Writing } from '@/ui/Letters'
+import { Glasshouse } from '@/ui/Glasshouse'
 import { DevPanel } from '@/ui/DevPanel'
 import { Threshold } from '@/ui/Threshold'
 import { usePlaying } from '@/systems/playing'
 import { useArrival } from '@/systems/arrival'
 import { useTakenOver } from '@/systems/attention'
+import { useMemories } from '@/systems/memories'
 
 /**
  * `?hour=18.6` pins the clock, `?section=river` opens straight into a place,
@@ -174,6 +176,23 @@ function Garden() {
   // One voice for the whole garden, module-level — the composer's pen writes
   // into the same graph. See systems/ambience.
   useEffect(() => () => ambience.stop(), [])
+
+  /*
+    Every memory, watched for the whole session.
+
+    Here rather than inside the Glasshouse, because the Glasshouse is not the
+    only thing that needs them: its landmark out in the garden is built from
+    the real list — how much of the building exists, and what colour its glass
+    is, *is* the memory count and their tints — so it has to be known before
+    you have ever gone in. One listener, because two would be two live reads of
+    the same collection.
+
+    Documents only. No photograph crosses this.
+  */
+  useEffect(
+    () => data.watchMemories((all) => useMemories.getState().setAll(all)),
+    [data],
+  )
   useEffect(() => {
     ambience.setWind(wind)
   }, [wind])
@@ -233,6 +252,7 @@ function Garden() {
       <Writing />
       <PotForm />
       <ProfileSheet />
+      <Glasshouse />
       <Playing />
       <Talking />
       {/*

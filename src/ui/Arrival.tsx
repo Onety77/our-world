@@ -263,9 +263,10 @@ export function Arrival({ name }: { name: string }) {
         <p className="arrival-who">for {name}</p>
         <h1>The Garden Between Us</h1>
         <p className="arrival-what">
-          Four places, and the two of you. A tree that keeps what you think, a
+          Five places, and the two of you. A tree that keeps what you think, a
           river that runs on what you have put by, a fire with something to
-          play, and a sky wide enough to talk across.
+          play, a sky wide enough to talk across, and a glasshouse built out of
+          every picture worth keeping.
         </p>
         <button type="button" ref={way} onClick={open}>
           come in

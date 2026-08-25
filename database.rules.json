@@ -37,6 +37,14 @@
         ],
         "racing": { ".validate": "newData.isString() && newData.val().length <= 64" },
 
+        "//looking": [
+          "The id of the memory this person has open in the Glasshouse. Same",
+          "channel and same reason as racing: there is no way to derive that",
+          "you are both in front of the same photograph, so it has to be said.",
+          "When the two match, the pane takes a warm edge and a cool one."
+        ],
+        "looking": { ".validate": "newData.isString() && newData.val().length <= 64" },
+
         "position": {
           "$axis": { ".validate": "newData.isNumber()" },
           ".validate": "newData.hasChildren(['0', '1', '2'])"

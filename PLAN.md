@@ -37,7 +37,7 @@ Browsing chooses a place; entering uses it.
 ## The sections
 
 Each is a distinct environment. Same sky and time of day across all of them, so
-it reads as one world seen in four places.
+it reads as one world seen in five places.
 
 | Section | The place | The activity |
 |---|---|---|
@@ -45,6 +45,7 @@ it reads as one world seen in four places.
 | **The Wellspring** | a **river** between stone banks, mist, reeds | money the two of you have really set aside. **The more saved, the fuller and faster the river runs.** Never labelled "saved" — it is *ours*. |
 | **The Hollow** | a **cave**, firelit, embers climbing, rock that shifts in the light | games. Word Duel, Ember Rally and Scattergories live here. The room drifting slightly is deliberate and liked — keep it. |
 | **The Stars** | a dark plain under an enormous sky, two lights, **one horizon glowing with her dawn** | **chat, and it is built.** Every message is a light: the newest hangs low over her dawn, older ones climb and recede into the star field until they are indistinguishable from stars. Scroll or drag to walk back through it. Answer any line and the quote sits above your reply; put a heart on one and **its light in the sky burns bigger, warmer and steadier for good**. The split horizon is the point: when it's night here it's morning there. |
+| **The Glasshouse** | an old **iron conservatory** in the meadow, milky glazing with holes in it, vines through the roof | **photographs.** Every picture either of you keeps becomes a pane of coloured glass in the wall, and the building is literally made of them: the ironwork is always whole and the glass is only where a memory has been hung. Walk the aisle and the light each photograph throws lies in coloured pools across the floor. One picture, one line — and the other one may add exactly one thing, on the *back* of the glass. |
 
 More sections slot in later by adding one folder.
 
@@ -851,6 +852,73 @@ the river.**
   `offsetHeight` is layout and ignores transforms, so it can be read while the
   sky is moving. **Anything that positions text by a number of pixels per item
   is wrong the moment the item wraps.**
+- **A vertex shader that swaps or negates an axis has reversed the winding of
+  everything it draws.** The Glasshouse lays its pools of light flat by mapping
+  the quad's own y onto world z, and that remap turns every triangle the other
+  way round — so at `FrontSide` all of them were back faces and every one was
+  culled. Nothing errored and nothing warned: the floor was simply bare, and it
+  stayed bare at eight times the intended brightness with depth testing
+  switched off, which is how long it took to stop blaming the blend mode. The
+  empty frame and the near panes flip z by the wall they are on and had the
+  same fault on one side of the aisle each, invisibly. **When a custom shader
+  draws nothing at all, check `side` before checking anything else.**
+- **An instance's scale means nothing the base geometry does not already have.**
+  The Glasshouse's dwarf wall was emitted with the wall *glazing*, which is
+  instanced off a `PlaneGeometry` — and a plane has no depth, so the wall's
+  z-scale did nothing and a hundred metres of low stone came out as a row of
+  fence posts standing across the aisle. It went in the batch built off a box
+  instead. Anything with three dimensions has to be in a three-dimensional
+  batch, and `buildInstanced` cannot tell you that.
+- **Measure the thing before compensating for it.** On a phone the near panes
+  looked wrong, and the theory was that a corridor under three metres wide seen
+  through a *vertical* field of view put them outside the frame — so a standoff
+  was added to make you stand a few metres short of the pane you are at. It made
+  it worse. `?shot=1` publishes the focus pane's projected rectangle, and
+  sweeping the standoff against it settled the question in one run: the pane was
+  whole on screen at *every* value, and every metre of standoff cost a third of
+  its size. The compensation was for a problem that did not exist. The real
+  fault was elsewhere and also measurable — `SlideCamera` stands about eleven
+  metres further back on a narrow screen, so with only two bays of ironwork past
+  the newest memory the camera was *outside the building*, looking in at the end
+  of it.
+- **The first data in this world that cannot be made again.** Everything else
+  regenerates from a seed: a road, a board, a sheet of categories, the sky.
+  A photograph does not, and that single fact decides most of the Glasshouse.
+  The tint and the sixteen-pixel preview live *in the document* rather than
+  being derived from the file, so a pane can be drawn honestly while the picture
+  is still coming or when it never arrives at all; the dimensions are stored
+  rather than measured, so the glass is cut before anything is decoded; the
+  upload happens *before* the document is written, because a failed upload
+  leaves an orphaned file (invisible, a fraction of a penny) while a failed
+  document leaves a permanent pane in the building with nothing behind it; and
+  neither `firestore.rules` nor `storage.rules` has a delete rule, because a
+  delete rule is a way to lose a photograph forever at three in the morning.
+  When it *is* missing, the open view says so in words — a soft glowing
+  rectangle where a photograph should be reads as a bug rather than as a state.
+- **Nothing is uploaded as it came off the camera.** A phone photograph carries
+  where it was taken to about five metres, along with the device, the lens and
+  the second. `systems/picture` redraws every image through a canvas and
+  re-encodes it, which drops every metadata block there is — and that is the
+  reason the redraw happens *even when the picture is already small enough*,
+  not a side effect being relied on by accident. The one field that must survive
+  is the orientation flag, and it survives by being applied rather than kept.
+  The format that will actually turn up is **HEIC**, which iOS Safari decodes
+  and desktop Chrome does not; it is named in the failure, because "could not
+  load image" would send somebody hunting for a corrupt file that is fine.
+- **`racing` was declared, documented, rule-validated and never sent.** Live
+  rounds have worked perfectly against the mock — where presence is a local
+  object — since the day they were built, and `flush()` in `data/firebase`, the
+  only thing that ever writes presence, simply never included the field. The
+  first real "roll together" would have done nothing at all, silently, and
+  nothing in the codebase pointed at it because the real layer has never been
+  run. Fixed alongside the Glasshouse's `looking`, which is the same shape.
+  **A field on an interface is not a feature; the two ends of the wire are.**
+- **A crash in the state that is guaranteed to happen.** The Glasshouse's
+  landmark picks which memories get glass in the preview, and clamped an empty
+  list to index 0 — returning a memory that does not exist and reading `.width`
+  off undefined. That is the *garden*, on the very first run, before either of
+  you has left anything: the one state every visitor sees and the one nothing
+  else exercises. Empty is not "one, at index zero".
 - **A billboard needs a falloff, and a lattice needs a jitter.** The Stars had
   both bugs at once and both read as rendering faults. The dome lit a whole
   hash *cell* per star, so every star was a seven-pixel grey square; and the
@@ -905,6 +973,15 @@ Always shoot desktop **and** 390×844, at more than one hour of day. The corner
 bug above is exactly what skipping the phone hides: it was in every place and
 every game, and every screenshot that would have shown it had been taken at
 1280 wide.
+
+**Screenshots are for judging, not for measuring.** Where a composition depends
+on numbers — a field of view, a wall three metres away, a screen twice as tall
+as it is wide — publish the numbers and read them. The Glasshouse puts the
+focus pane's projected rectangle on `window.__glass` under `?shot=1`, and that
+is what proved a whole afternoon's theory wrong in one run: the panes had never
+been cut off at the frame edge, they were simply small. `__glassOpen(id)` and
+`__glassWalk(m)` are there for the same reason `?rally=ride` is — driving a
+raycast at a quad on a moving wall tests the raycast, not the rule under test.
 
 **Anything the app writes every frame cannot be posed from the console.** The
 hourglass is written straight to the node's style each tick, so setting
@@ -1055,6 +1132,17 @@ handling changed.
       with no dictionary anywhere. Sealed by giving each round its own round
       document, so every sheet is a seq 0 and `firestore.rules` did not change.
       Three ways in — *roll for her*, on your own, roll together
+- [x] **The Glasshouse, the fifth place.** An iron conservatory built out of
+      every picture the two of you keep: one instanced quad per memory in its
+      own average colour for the whole building, the real photograph for the
+      five you are standing among, and the opened one as untouched DOM over the
+      top. Coloured pools of its light lying across the floor, a dwarf wall and
+      milky glazing with holes in it, vines thickening toward the old end. One
+      picture, one line, and one line back from the other one — on the back of
+      the glass. Plus the storage seam: on-device orientation, downscale and
+      metadata stripping, the tint and a sixteen-pixel preview kept in the
+      document, `storage.rules`, and the memories collection in
+      `firestore.rules`
 - [ ] Visual polish and full desktop/mobile screenshot sweep of both modes
 - [ ] Delete the dead world: Figure, People, cloth, gait, body, benchSpots,
       Benches, Placed, CameraRig walking, places/*, navigation, Catalogue,
@@ -1064,11 +1152,16 @@ handling changed.
 ## After that
 
 1. **Go live** — owner does the console steps in `FIREBASE.md`, then a real
-   two-device test. The Stars now has a `messages` collection, so its rule
-   block has to go up with the rest.
+   two-device test. The Stars has a `messages` collection and the Glasshouse a
+   `memories` one, so both rule blocks go up with the rest.
+   **And Storage now has to be turned on**, which it never did before: the
+   Glasshouse is the first thing here that stores bytes. `npm run rules` writes
+   `rules-out/storage.rules` alongside the other two; it goes into
+   Storage → Rules, and nothing uploads until it does.
 2. **Real music files.** Everything is built and `Track.url` is null — the
    list, the transport and the sync all run on the clock without it, so the day
-   files are uploaded it simply makes sound. Storage rules get written then.
+   files are uploaded it simply makes sound. They will want their own block in
+   `storage.rules`, which now exists and currently allows exactly one path.
 3. **More games** on the round/moves model: Ultimate Tic-Tac-Toe, Hidden Fleet,
    Dots & Boxes. One folder each; the registry auto-loads them, and the
    Hollow's row picks them up with no changes.
@@ -1076,6 +1169,21 @@ handling changed.
 
 ## Known debts
 
+- **The Glasshouse has never touched a real bucket.** `storage.rules` is
+  written and `npm run rules` fills and emits it, but Storage has not been
+  turned on in the console and there is no emulator here — so the whole real
+  path (the upload, the download URL, and the rules themselves) is unexercised.
+  The mock keeps its pictures in IndexedDB and every flow above the seam has
+  been driven end to end against it, which is the most that can be checked from
+  here. Same standing as the hearts rule.
+- **Two things from the Glasshouse brief are not built.** The *year wheel* — a
+  brass dial on a plinth that moves you to 2024, 2025, 2026 — is a good idea,
+  and the brief itself says it is for when there are hundreds; with a few dozen
+  memories the aisle is the whole navigation and a wheel would be furniture in
+  a place that has none. And *the reflection shifting with device motion*,
+  which needs the orientation permission prompt on iOS and would be the first
+  thing in this garden that asks for one. Both want their own decision rather
+  than arriving as a side effect.
 - **Two things from the Scattergories brief are not built, deliberately.**
   *Progress sparks in the live round* — seeing how many lines she has filled
   while you both write — needs a per-round presence field that both of you

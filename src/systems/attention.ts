@@ -24,6 +24,7 @@ import { useReading } from './reading'
 import { usePot } from './pot'
 import { useProfileSheet } from './profileSheet'
 import { useArrival } from './arrival'
+import { useMemories } from './memories'
 
 /**
  * True while anything is filling the screen.
@@ -50,7 +51,10 @@ export function useTakenOver(): boolean {
   const composing = useReading((s) => s.composing)
   const pot = usePot((s) => s.open)
   const profile = useProfileSheet((s) => s.open)
-  return shut || playing || reading || composing || pot || profile
+  // A photograph filling the screen, or the picker and the two lines on the
+  // way to hanging one. Both are things you are *in*.
+  const memory = useMemories((s) => s.openId !== null || s.hanging)
+  return shut || playing || reading || composing || pot || profile || memory
 }
 
 /**
@@ -68,6 +72,8 @@ export function takenOverNow(): boolean {
     useReading.getState().openLetterId !== null ||
     useReading.getState().composing ||
     usePot.getState().open ||
-    useProfileSheet.getState().open
+    useProfileSheet.getState().open ||
+    useMemories.getState().openId !== null ||
+    useMemories.getState().hanging
   )
 }

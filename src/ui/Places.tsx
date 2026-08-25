@@ -92,7 +92,7 @@ export function Places() {
     <>
       <div className={entered ? 'garden-name hidden' : 'garden-name'}>
         <span>The Garden Between Us</span>
-        <small>four places, one world</small>
+        <small>five places, one world</small>
       </div>
 
       <div

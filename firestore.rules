@@ -243,6 +243,92 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /*
+      The Glasshouse.
+
+      A memory is a photograph plus at most two short lines, and the picture
+      itself is not in here — it is in the bucket, under `storage.rules`. What
+      this document holds is where the pane stands, what colour it is, and the
+      sixteen-pixel preview that lets the whole building be drawn before a
+      single photograph has been fetched.
+
+      **Written once, by one person, and then almost immutable.** The one thing
+      the other one may ever add is `theirs` — what they remember of it — and
+      the rule below is the enforcement of "one person leaves the moment, the
+      other leaves what it meant from where they stood". Not a like. Not a
+      thread. One line, from the one who did not hang it.
+    */
+    match /memories/{id} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && request.resource.data.at is number
+        // The picture has to exist before the document does — the layer
+        // uploads first for exactly this reason. An empty path would be a
+        // permanent pane in the building with nothing behind it.
+        && request.resource.data.path is string
+        && request.resource.data.path.size() > 0
+        && request.resource.data.path.size() <= 200
+        // The pane is cut to these. A missing or silly size would either
+        // divide by zero or hang a photograph a kilometre wide.
+        && request.resource.data.width is number
+        && request.resource.data.width > 0
+        && request.resource.data.height is number
+        && request.resource.data.height > 0
+        && request.resource.data.tint is string
+        && request.resource.data.tint.size() <= 9
+        // Sixteen pixels of JPEG in a data URI. Four kilobytes is generous for
+        // that and still nowhere near being a way to store a real picture in
+        // Firestore, which is what this bound is actually for.
+        && request.resource.data.blur is string
+        && request.resource.data.blur.size() <= 4000
+        && request.resource.data.get('when', '').size() <= 200
+        && request.resource.data.get('why', '').size() <= 600;
+
+      /*
+        Only `theirs`, only from the other one, and only ever about themselves.
+
+        `affectedKeys().hasOnly(['theirs'])` is what makes the rest of the
+        document a record rather than a convention — the picture, its colours,
+        its size and the line the person who hung it wrote cannot be touched by
+        anybody, including them.
+
+        `resource.data.by != me()` is the half that matters: without it either
+        of you could answer your own memory, which is not what this field is
+        and would read, forever, as somebody talking to themselves.
+
+        Taking it back is a delete of the same key and arrives as the same
+        affected key, so it needs no rule of its own.
+      */
+      allow update: if isOneOfUs()
+        && resource.data.by != me()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['theirs'])
+        && (
+          !request.resource.data.keys().hasAny(['theirs'])
+          || (
+            request.resource.data.theirs.by == me()
+            && request.resource.data.theirs.body is string
+            && request.resource.data.theirs.body.size() > 0
+            && request.resource.data.theirs.body.size() <= 600
+            && request.resource.data.theirs.at is number
+          )
+        );
+
+      /*
+        Nothing is ever taken down.
+
+        The rest of the garden works this way — letters do not come down,
+        flowers are never removed — and it matters more here than anywhere
+        else, because this is the one collection whose contents cannot be made
+        again. A delete rule is a way to lose a photograph forever at three in
+        the morning, and there is no version of this world that needs one.
+      */
+      allow delete: if false;
+    }
+
     match /rounds/{roundId} {
       allow read: if isOneOfUs();
 

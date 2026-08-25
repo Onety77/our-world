@@ -56,7 +56,7 @@ if (warm === cool) {
 
 mkdirSync(OUT, { recursive: true })
 
-for (const name of ['firestore.rules', 'database.rules.json']) {
+for (const name of ['firestore.rules', 'database.rules.json', 'storage.rules']) {
   const filled = readFileSync(join(root, name), 'utf8')
     .replaceAll('__WARM_EMAIL__', warm)
     .replaceAll('__COOL_EMAIL__', cool)
@@ -71,6 +71,7 @@ console.log(`
 
   Paste rules-out/firestore.rules      into  Firestore Database → Rules
   Paste rules-out/database.rules.json  into  Realtime Database → Rules
+  Paste rules-out/storage.rules        into  Storage → Rules
 
   Publish each one. Nothing reads them until you do.
 `)

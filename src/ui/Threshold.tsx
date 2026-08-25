@@ -15,6 +15,7 @@ import { useSections } from '@/systems/sections'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
 import { useTakenOver } from '@/systems/attention'
+import { useMemories } from '@/systems/memories'
 import { usePlaying } from '@/systems/playing'
 import { GAMES } from '@/world/games/registry'
 import { useStandings, type Turn } from '@/world/games/useRound'
@@ -391,6 +392,46 @@ function alongTheRow(el: HTMLElement, go: (by: 1 | -1) => void): () => void {
   }
 }
 
+/**
+ * The Glasshouse's way in.
+ *
+ * One line and one invitation, the same shape as the Tree's and the
+ * Wellspring's — because this is the same kind of place as those: somewhere
+ * you leave one thing, and the building keeps it.
+ *
+ * The count is here and nowhere else. "Eleven panes" is the only number in the
+ * whole section and it is worth saying, because the size of what the two of
+ * you have built is the point of the place; nothing else about a memory is
+ * counted, rated or totalled anywhere.
+ */
+function TheGlasshouse() {
+  const start = useMemories((s) => s.setHanging)
+  const count = useMemories((s) => s.all.length)
+  const loaded = useMemories((s) => s.loaded)
+
+  return (
+    <div className="threshold glass-threshold">
+      <span className="threshold-whisper">
+        {/*
+          Honest about the difference between empty and not-answered-yet. A
+          first visit should read as an invitation; the same words shown to
+          somebody with two years in here and a slow connection would be a lie.
+        */}
+        {!loaded
+          ? 'one picture, one line'
+          : count === 0
+            ? 'nothing in the glass yet — the first one builds the first pane'
+            : count === 1
+              ? 'one pane, so far'
+              : `${count} panes, so far`}
+      </span>
+      <button type="button" onClick={() => start(true)}>
+        leave a memory here
+      </button>
+    </div>
+  )
+}
+
 export function Threshold() {
   const index = useSections((s) => s.index)
   const entered = useSections((s) => s.entered)
@@ -421,6 +462,8 @@ export function Threshold() {
   }
 
   if (id === 'hollow') return <TheHollow />
+
+  if (id === 'glasshouse') return <TheGlasshouse />
 
   /*
     The Stars has no threshold any more.

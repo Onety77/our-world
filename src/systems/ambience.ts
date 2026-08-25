@@ -50,7 +50,7 @@ const NOISE_SECONDS = 4
  * the only view with real weather in it. The rest are the insides of the four
  * places, by section id.
  */
-export type Place = 'garden' | 'tree' | 'river' | 'hollow' | 'stars'
+export type Place = 'garden' | 'tree' | 'river' | 'hollow' | 'stars' | 'glasshouse'
 
 export interface AmbienceHandle {
   start(): Promise<void>
@@ -114,14 +114,30 @@ export interface AmbienceHandle {
  * that layer's own level rather than absolute gains — so a layer can be
  * retuned once and stay balanced everywhere it appears.
  */
+/*
+  A row per layer, and a column per place. Every place must appear in every
+  row: a missing cell is `undefined`, which multiplies through to NaN and
+  reaches an AudioParam as a non-finite value — which throws, once, and takes
+  the whole ambient bed down with it. Adding a place means adding a column
+  here, and nothing else in this file.
+
+  **The Glasshouse is built entirely out of layers that already existed**, which
+  is worth saying because the brief asked for "wind, distant birds, glass
+  resonance and occasional water drops" and it sounds like four new
+  synthesisers. It is not: it is the garden's wind heard from inside, the wood
+  through the broken roof, the room tone of somewhere with walls, a little of
+  the river for the wet floor, and the Stars' rare tones — which are struck
+  glass already, and were only ever called shimmer because that is where they
+  were first used.
+*/
 const MIX: Record<string, Record<Place, number>> = {
-  //         garden  tree  river  hollow  stars
-  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0.05, stars: 0.42 },
-  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0.1 },
-  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0 },
-  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 1,    stars: 0 },
-  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 1,    stars: 0.3 },
-  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1 },
+  //         garden  tree  river  hollow  stars  glasshouse
+  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0.05, stars: 0.42, glasshouse: 0.55 },
+  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0.1,  glasshouse: 0.72 },
+  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    glasshouse: 0.12 },
+  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 1,    stars: 0,    glasshouse: 0 },
+  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 1,    stars: 0.3,  glasshouse: 0.78 },
+  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    glasshouse: 0.5 },
 }
 
 /** How often the loose events fire, per second, at full strength. */
