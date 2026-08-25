@@ -47,6 +47,16 @@ const VERT = /* glsl */ `
   /** Position in the conversation, newest 0, counting into the past. */
   attribute float iAge;
   attribute float iSeed;
+  /**
+   * How many hearts are on it: 0, 1, or 2.
+   *
+   * The reason a heart is worth having in this world at all. Everywhere else a
+   * reaction is a little grey number under a message; here it changes the
+   * *sky* — the light for that thing burns bigger, steadier and warmer, and it
+   * goes on doing it for as long as the conversation exists. Walk back through
+   * a year of it and the nights that mattered are the bright ones.
+   */
+  attribute float iHeart;
 
   uniform float uWalk;
   uniform float uTime;
@@ -56,9 +66,16 @@ const VERT = /* glsl */ `
   varying vec3 vColor;
   varying vec2 vUv;
   varying float vNear;
+  varying float vHeart;
 
   void main() {
-    vColor = iColor;
+    /*
+      A hearted light is pulled toward ember, and one with two hearts on it
+      further still. Not *replaced* by it — whose message it was is still the
+      first thing the colour says, and a heart must never take that away.
+    */
+    vColor = mix(iColor, vec3(1.0, 0.62, 0.34), clamp(iHeart, 0.0, 2.0) * 0.28);
+    vHeart = iHeart;
     vUv = uv;
 
     /*
@@ -81,15 +98,16 @@ const VERT = /* glsl */ `
     vNear = 1.0 - clamp(abs(age) / 9.0, 0.0, 1.0);
 
     // a slow breath, out of step between one light and the next
-    float breath = 1.0 + sin(uTime * 0.8 + iSeed * 6.28) * 0.09;
+    float breath = 1.0 + sin(uTime * (0.8 - iHeart * 0.16) + iSeed * 6.28) * 0.09;
 
     // billboarded, so a light is a light from wherever you are standing
     vec3 right = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
     vec3 up    = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
     // Older lights are further off and would shrink to nothing on perspective
     // alone; growing them with age keeps the far end of the conversation as a
-    // field of stars rather than as dust.
-    float size = breath * (1.0 + max(0.0, age) * 0.06);
+    // field of stars rather than as dust. A hearted one is bigger again, and
+    // breathes more slowly: a steadier light.
+    float size = breath * (1.0 + max(0.0, age) * 0.06) * (1.0 + iHeart * 0.24);
     vec3 offset = (right * position.x + up * position.y) * size;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(at + offset, 1.0);
@@ -104,6 +122,7 @@ const FRAG = /* glsl */ `
   varying vec3 vColor;
   varying vec2 vUv;
   varying float vNear;
+  varying float vHeart;
 
   void main() {
     float d = length(vUv - 0.5) * 2.0;
@@ -118,7 +137,9 @@ const FRAG = /* glsl */ `
     // The ones you are reading burn a little brighter than the ones you are not.
     glow *= 0.42 + vNear * 0.58;
 
-    vec3 col = vColor * glow * (1.0 + uUnread * 0.25);
+    // A heart is worth about a third again in brightness, on top of the size
+    // and the colour it has already been given.
+    vec3 col = vColor * glow * (1.0 + uUnread * 0.25 + vHeart * 0.34);
 
     gl_FragColor = vec4(col, glow);
     #include <tonemapping_fragment>
@@ -143,6 +164,7 @@ export function Conversation() {
     const color = new Float32Array(n * 3)
     const age = new Float32Array(n)
     const seed = new Float32Array(n)
+    const heart = new Float32Array(n)
     const c = new Color()
 
     const newest = messages.length - 1
@@ -158,12 +180,15 @@ export function Conversation() {
       color.set([c.r, c.g, c.b], i * 3)
       age[i] = own
       seed[i] = s
+      heart[i] =
+        (m.hearts?.warm === undefined ? 0 : 1) + (m.hearts?.cool === undefined ? 0 : 1)
     })
 
     geo.setAttribute('iOffset', new InstancedBufferAttribute(offset, 3))
     geo.setAttribute('iColor', new InstancedBufferAttribute(color, 3))
     geo.setAttribute('iAge', new InstancedBufferAttribute(age, 1))
     geo.setAttribute('iSeed', new InstancedBufferAttribute(seed, 1))
+    geo.setAttribute('iHeart', new InstancedBufferAttribute(heart, 1))
     geo.instanceCount = shown.length
     base.dispose()
     return geo

@@ -31,6 +31,14 @@ import { useArrival } from './arrival'
  * Each of these is a thing you are *in*, not a thing you can see past: a game
  * being played, a thought being read or written, money being put by, your own
  * profile open. Anything added later that covers the world belongs here.
+ *
+ * **The corner conversation is deliberately not on this list.** It was, for
+ * about a day, and it was the wrong fix for a real problem: it had been put in
+ * the bottom left, on top of the name of the place and the way into it, and
+ * making the place card *disappear* is not how you resolve two things wanting
+ * one corner — you move one of them. It lives with the music now. Typing into
+ * it is safe without any of this, because `ui/Places` already ignores keys
+ * while a text field has focus and ignores taps aimed at a control.
  */
 export function useTakenOver(): boolean {
   // The way in counts. It covers the whole world, and the world's gestures are

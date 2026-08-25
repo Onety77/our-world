@@ -43,8 +43,8 @@ it reads as one world seen in four places.
 |---|---|---|
 | **The Tree of Thoughts** | a great tree in a bright meadow, wind, dappled light | write a thought → **one flower grows**. Over months the ground fills with flowers, each one a thought you can open and read. |
 | **The Wellspring** | a **river** between stone banks, mist, reeds | money the two of you have really set aside. **The more saved, the fuller and faster the river runs.** Never labelled "saved" — it is *ours*. |
-| **The Hollow** | a **cave**, firelit, embers climbing, rock that shifts in the light | games. Word Duel and Ember Rally live here. The room drifting slightly is deliberate and liked — keep it. |
-| **The Stars** | a dark plain under an enormous sky, two lights, **one horizon glowing with her dawn** | **chat, and it is built.** Every message is a light: the newest hangs low over her dawn, older ones climb and recede into the star field until they are indistinguishable from stars. Scroll or drag to walk back through it. The split horizon is the point: when it's night here it's morning there. |
+| **The Hollow** | a **cave**, firelit, embers climbing, rock that shifts in the light | games. Word Duel, Ember Rally and Scattergories live here. The room drifting slightly is deliberate and liked — keep it. |
+| **The Stars** | a dark plain under an enormous sky, two lights, **one horizon glowing with her dawn** | **chat, and it is built.** Every message is a light: the newest hangs low over her dawn, older ones climb and recede into the star field until they are indistinguishable from stars. Scroll or drag to walk back through it. Answer any line and the quote sits above your reply; put a heart on one and **its light in the sky burns bigger, warmer and steadier for good**. The split horizon is the point: when it's night here it's morning there. |
 
 More sections slot in later by adding one folder.
 
@@ -53,6 +53,24 @@ place and that is the wrong shape: music is not somewhere you go, it is
 something playing while you are somewhere else. A section would have meant
 leaving the Tree to change a song and no music at all while writing one. It
 lives folded in the bottom-right corner instead, everywhere — see `ui/Player`.
+
+**And the conversation is folded into the *same* corner, for the same reason.**
+The Stars is where a conversation lives and it should stay that way — but
+answering her should not require leaving what you are doing, browsing to it and
+entering it, because seven timezones apart the answer to that is "later", every
+time. `ui/Whisper` is the last four things said and one line to write on, and
+it stays up during a game. It is deliberately too small to read a year of: if
+you want the conversation, the sky is still the place.
+
+It shares the Player's corner rather than taking the opposite one, and **that
+is not a detail.** It was put in the bottom left first, where the name of the
+place and the way into it already live, and the collision was "solved" by
+making the place card disappear — which is not resolving it, it is hiding the
+evidence. **Every corner of this world is spoken for**: bottom left is the
+place and its threshold, top left is the way back out, top right is the two of
+you and your clocks, bottom centre is the row of marks. When something new
+needs somewhere to live, it joins an existing corner or it does not exist. See
+`.corner`.
 
 ### Movement
 
@@ -131,17 +149,36 @@ the river.**
   done. Swipe must feel native there.
 - **Two people, forever.** No leaderboards, no per-person scores. Nothing may
   make being far apart feel worse.
-- **"No interface" has exactly two exceptions, and both had to earn it.** The
-  rule stands everywhere else. Ember Rally now has an **ember bar**, because
+- **"No interface" has exactly three exceptions, and each had to earn it.** The
+  rule stands everywhere else. Ember Rally has an **ember bar**, because
   the three lamps on the back of the car could show *how much* you had but
   nothing could show *where it came from* — a reward you cannot aim at is not a
   reward, it is weather. It fills from one thing only: seconds spent drifting.
   Word Duel's time challenge has a **clock**, because a race against five
   minutes without a visible five minutes is just a duel you feel anxious
-  during. Both are drawn as light or as plain text on the dark — no box, no
-  border, no progress ring — and neither exists outside the mode that needs it.
+  during. And the racer has a **speedometer**, which is the newest and took the
+  longest to justify: the wind, the field of view opening, the walls closing in
+  and the gearbox climbing all say how fast you are going *while you are
+  looking at the road*, which is better than a number — but every one of them
+  is **relative**. They say faster and slower. Not one of them can say *this is
+  as fast as it goes*, and without that the car reads as having no maximum,
+  which is not a cosmetic problem: if you cannot tell you are at the top, you
+  cannot tell whether the corner ahead is one you will make. All three are
+  drawn as light or as plain text on the dark — no box, no border, no dial, no
+  progress ring — and none exists outside the mode that needs it.
+  **Scattergories asked for a fourth and did not get one.** Three minutes needs
+  a clock and twelve lines need a progress count, and neither is an exception:
+  a game played at a table has *a die you roll and a glass you turn*, so it has
+  those, and they say the same two things as objects. The glass is better than
+  a clock at the only job that matters — roughly how long is left, without
+  reading a number every four seconds — and the twelve notches beat a bar,
+  because a bar says "eight of twelve" and notches say *which* eight, which is
+  what you want with forty seconds to go. When a rule looks like it needs an
+  exception, look for the object first.
 - **Honest states.** Never say "waiting for her" when the truth is "the server
-  won't say". Never fake a rate, a time, a total.
+  won't say". Never fake a rate, a time, a total. The notification toggle says
+  *"while the garden is open"* because that is all a web page can do; a switch
+  that implies more fails silently, at night, for somebody who was waiting.
 - **Everything touchable announces itself.** The recurring historical failure
   was building things nobody could find.
 
@@ -630,6 +667,227 @@ the river.**
   and by nothing else, so `npm run rally` prints lap times identical to the
   digit before and after. That is the check: if a "feel" change moves a lap
   time, it was not a feel change.
+- **A terminal velocity you never reach reads as no top speed at all.** Drag
+  goes as the square of speed, so a car whose limit is a long way off spends
+  the *whole* straight still accelerating — you hold the throttle and the
+  number keeps climbing, and you arrive at the corner carrying a speed you
+  never chose. "It feels like it doesn't have a maximum" is exactly what that
+  is, and no amount of grip in the tyre model is the fix. `DRAG` in
+  `games/ember-rally/physics` is where a top speed actually lives; more than
+  twice what it was brings the car from a hundred and sixty-seven kilometres an
+  hour to a hundred and thirty-one **and** — the part that matters — makes it
+  get there in the first third of a straight and sit on it. The spirit's lap
+  times barely moved and it hits the walls less, which is the whole argument in
+  one measurement: the road did not get slower, the car got controllable.
+  `TOP_SPEED` is not a limit, it is *what the car does* — half the game
+  normalises against it, so measure it and write the answer down.
+- **A backstop you can feel is not a backstop.** `SPEED_CEILING` sits well
+  above what the car reaches on the ember, because a velocity clamp that gets
+  met is a wall — and the moment a player can feel it, drag has stopped being
+  the thing that decides a straight. If the boost is running into it, the boost
+  is wrong, not the ceiling.
+- **A test harness that hangs is worse than one that fails.** `rally-check` had
+  nine bare `while (speedOf(car) < 42)` spin-up loops, which are fine right up
+  until the day the top speed is lowered past one of them — and then the check
+  does not report anything, it just never returns: no output, no error, and no
+  clue which of the nine it is sitting in. `windUpTo` gives up after a bounded
+  number of steps and throws with the number it actually reached. Any loop in a
+  harness that waits for the thing under test to do something needs the same.
+- **A meter you are not allowed to spend is worse than no meter, and a fixed
+  payout makes the meter pointless.** Covered under the ember above; the same
+  shape will turn up again the next time anything in this garden accumulates.
+- **Talking is not somewhere you go.** This is the *Grove* argument, and it
+  applies to the conversation for exactly the reason it applied to music. Seven
+  timezones apart, the moments you are both awake are a sliver — so if the only
+  way to answer her is to leave what you are doing, browse to the Stars and
+  enter it, then the answer is "later", every time. `ui/Whisper` folds the last
+  four things said and one line to write on into the bottom-left corner of
+  every screen, mirroring the Player in the bottom-right. It is deliberately
+  *small*: enough to answer with, not enough to read a year of, because a
+  bigger one would make the Stars pointless. And it stays up during a game,
+  which is the entire point — she says something while you are three guesses
+  into a word duel, and a chat that hides exactly when you are busy is a chat
+  you cannot use.
+- **An overlay that owns a corner has to say so.** The corner conversation does
+  not fill the screen, so it looked like it did not belong in
+  `systems/attention` — but the bottom left is *also* where the name of the
+  place and the way into it live, and two of those in one corner is neither of
+  them. It is also the only overlay you type into while the world is still
+  browsable: without registering, the arrow keys in "how are you" walk you from
+  the Tree to the Stars while you write it.
+- **The message is the control.** The first cut of replying and hearting put a
+  heart and the words "answer this" under *every* line, which is how you would
+  build it if you had never used a chat: two controls per message, permanently,
+  in a place whose entire design is words hanging in a sky with nothing else in
+  them — and a conversation of forty messages had eighty buttons in it. Every
+  chat anybody actually uses solves this the same way, and it is worth knowing
+  why it works: there is nothing to draw, nothing to lay out, nothing to hide on
+  a small screen, and no decision about which line gets the buttons.
+  **Right-click** for a two-item menu, **double-click or double-tap** for a
+  heart, **swipe a line left** to answer it. The two touch gestures are what a
+  phone has instead of a right button and they are the two everybody already
+  knows, so nothing has to be discovered by reading a label. What stays visible
+  is *state* — a heart that has been left — and never a control. See `ui/Said`.
+- **The swipe writes `translate`, not `transform`.** The Stars writes a
+  transform into every line every frame; a transform from a gesture would be
+  gone by the next tick. This is the same rule as the drift-in animation and
+  the same reason.
+- **A menu takes its key in the capture phase.** Escape in the Stars means
+  "leave the place" to `ui/Places`, so dismissing a two-item menu also walked
+  you out of the conversation and into the meadow — exactly the bug Ember
+  Rally's pause had, fixed the same way. A key belongs to the topmost thing
+  that wants it.
+- **A shell must not name another game's mechanic — including the ordinary
+  one.** `live` fixed the live round; `invite` fixes the async one, which is
+  the one that will actually get used. "vs {her name}" is true of a duel and
+  says nothing about what pressing it *does*: Word Duel leaves her a word to
+  come back to, the racer puts a line down the Rootway for her to chase, and
+  those are the things somebody is choosing between.
+- **A reaction should change the world, not count.** A heart on a message
+  everywhere else is a small grey number underneath it. Here it changes the
+  *sky*: the light for that message burns bigger, warmer, brighter and breathes
+  more slowly, and goes on doing it for as long as the conversation exists — so
+  walking back through a year of it, the nights that mattered are the bright
+  ones. It is pulled toward ember rather than replaced by it, because whose
+  message it was is still the first thing the colour has to say. One heart each
+  and no picker: there are two people here forever, so a reaction is a yes or
+  it is nothing, and six alternatives would be six ways of saying something
+  weaker than the one they replaced.
+- **A quote is an id, never a copy.** A reply stores the id of what it answers
+  and resolves it against the same list it is drawn from, so a quote can never
+  show words that are not in the conversation, and a conversation that runs for
+  years never accumulates two versions of anything. The message may be older
+  than the loaded window, and then there is nothing to quote — which the reply
+  *says*, rather than rendering blank and looking broken.
+- **Games were being chosen from a paragraph.** The Hollow listed each one as a
+  title, two lines and three words in small capitals, which is a settings
+  screen: nothing about it looked like a thing you play, and with two games in
+  the row there was no way to tell them apart at a glance because both were a
+  block of text in the same face at the same size in the same place. Each game
+  now draws itself — `Emblem` on `GameDefinition` — out of *its own parts*, not
+  a screenshot and not an icon: Word Duel is five stones with a word half
+  worked out on them because its board is stones, and the Rootway is two pairs
+  of headlamps in the dark because that is the whole picture of the race. Both
+  are gradients, so they are sharp at any size and cannot go stale. And the
+  shell stopped naming other people's mechanics: `live` on the definition is
+  what a game calls its own live round, because "time challenge" was Word
+  Duel's clock and the racer inherited a label for a clock it does not have.
+- **Three layers of grass, not two, and the mistake was instructive.** Turf out
+  to eighteen metres and tussocks beyond it left a *gap in kind* — a continuous
+  surface next to a scatter of separate clumps at one a square metre, with
+  nothing in between — so the middle distance, which is where the horizon and
+  the landmarks are, came out as polka dots on bare ground. Reaching further
+  had cost evenness, which is the wrong trade: an even field that stops is
+  better than a patchy one that does not. What closes it is a layer whose
+  *density* steps down rather than one that changes character, and it came out
+  cheaper than the two it replaced.
+- **A round document is a seal, so a blind round is four of them.** The rules
+  withhold the *opening* move of a round — seq 0 — until yours exists, and
+  everything after it is open, because a turn-based game where you cannot see
+  her turn is not a game. Scattergories is the opposite shape: all four sheets
+  have to be blind, or whoever plays second reads the first list and writes
+  around it, which is not a harder round, it is a much worse game. Four sheets
+  at seq 0..3 would leave three of the four readable. So each round of a match
+  is *its own round document* — `scattergories:2026-08-24` and then `-r2`,
+  `-r3`, `-r4` — and every sheet is the seq 0 of one of them. The existing seal
+  covers all four and `firestore.rules` was not touched. When a game needs a
+  guarantee the rules do not offer, check whether it needs a different *shape*
+  before it needs a different rule.
+- **Duplicate cancellation is the game, so it cannot be a dictionary.** Two
+  people, forever, and no leaderboard: what makes a Scattergories answer good
+  here is not that a word list allows it, it is that *she did not also think of
+  it*. So there is no dictionary and nothing is ever rejected for not being a
+  word — `rules.same()` decides only whether two answers are the same answer,
+  by case, punctuation, leading articles and a plural fold, and everything else
+  is settled by the two of you with `Strike`. A dictionary would have added a
+  way to be told no by a computer, which this world does not have anywhere
+  else.
+- **`clip-path` cuts the outline off too.** The hourglass bowls are tapered
+  with `clip-path`, and their `inset 0 0 0 1px` ring follows the element's
+  *box* — so the clip removed both diagonals and the empty bowl had no sides at
+  all, which is why a full glass read as an orange funnel with a stem.
+  `drop-shadow` traces the alpha shape instead. Any time a clipped element
+  needs an edge, the shadow has to be an outer one.
+- **`.glass i` (0,1,1) beats `.glass-thread` (0,1,0).** A tag in the selector
+  outranks a bare class, so `left: 0; right: 0` on the shared rule won over
+  `left: 50%` on the specific one and the falling sand was drawn hanging off
+  the left edge of the glass. The third time this exact trap has been hit here
+  — `.threshold > button` over `.to-waiting`, `.waiting` colliding with
+  `.whisper-fold.waiting` — so: **a shared rule that positions its children
+  must be scoped as tightly as the rules that override it**, or measure the
+  child's box and see, because it renders without error and looks like an
+  animation glitch.
+- **The corner was anchored to something that hides.** On a phone the music and
+  the conversation dock at `top: 7.2rem`, measured off the two of you and the
+  clocks — but `ui/Overlay` hides that block both when the screen is taken and
+  when you are inside a place, and the corner did not know about either. It
+  had been hanging in mid-air in every place and over the middle of the board
+  in every game since the day it was written, and nothing caught it because
+  every screenshot of it had been taken at 1280 wide. `.corner.clear` puts it
+  on the top edge when the top is free and `.only` when the way back out has
+  gone too. **Any fixed offset measured off another element's height is a bug
+  waiting for that element to be conditional** — and the phone is where it
+  shows.
+- **A countdown is not per-frame motion, even though it looks like one.** The
+  hourglass counted down on `requestAnimationFrame` and set React state every
+  frame, which re-rendered twelve inputs, twelve notches and the whole sheet
+  sixty times a second — on the one screen in the game where somebody is
+  typing. It bought nothing: the sand crosses the glass in three minutes, so a
+  frame of it is a fifth of a pixel, and the only other reader shows whole
+  seconds. The frame loop stays, because that is what keeps the arithmetic
+  honest across a stall; the *publishing* is throttled to the second it
+  displays. **Ask what the smallest visible change is before deciding how often
+  to say something changed** — measured with a MutationObserver on the clock:
+  360 updates in six seconds became 6.
+- **A spacing constant is a resolution assumption.** Every line in the Stars was
+  lifted by `age * 74` — about one line of serif and a timestamp, which is true
+  on a laptop, where almost everything either of you says fits on one line, and
+  false on a phone, where the column is 78% of 390px and the same sentence
+  takes three. Two people's messages printed straight through each other on the
+  primary surface. `ladder()` in `ui/Talking` measures the laid-out lines and
+  spaces them centre to centre — centres, because the per-frame `scale()` is
+  about each element's own middle and so cannot move them — and a
+  `ResizeObserver` re-measures when the phone turns or a font lands late.
+  `offsetHeight` is layout and ignores transforms, so it can be read while the
+  sky is moving. **Anything that positions text by a number of pixels per item
+  is wrong the moment the item wraps.**
+- **A billboard needs a falloff, and a lattice needs a jitter.** The Stars had
+  both bugs at once and both read as rendering faults. The dome lit a whole
+  hash *cell* per star, so every star was a seven-pixel grey square; and the
+  motes were seeded by `(i * 2654435761) % 1000`, a linear congruence with no
+  mixing, so ninety of them came out as two or three neat diagonal lines
+  drifting across the sky. A star sits at its own point inside its cell and
+  falls off from there; a mote is a radial speck and is seeded by a hash. Look
+  at any full-screen render of a particle field before believing it is a field.
+- **The Hollow could not answer the question it exists to answer.** The note at
+  the top of `Round` has said it from the beginning: in an asynchronous game
+  the good feeling is not winning, it is *opening the Hollow and seeing that
+  she has been*. But finding that out meant opening each game, waiting for its
+  round to load, and reading whatever briefing it happened to show — one game
+  at a time. With two games that is tedious; with the five the plan is heading
+  for it is the reason nobody would check. **What is waiting** is one line per
+  game, all of them at once, set apart under the row behind a hairline —
+  because it is not a game and must not read as one, and a card in the row
+  would be a thing you cannot play sitting between two you can.
+- **Every state a challenge list shows has to be one you are allowed to know**,
+  and that is the whole design of it. Her opening move is sealed until yours
+  exists, so before you have played, "has she been?" genuinely has no answer on
+  your device — `watchRound` reports an empty move list, which is correct and
+  is **not** the same as "she has not played". Hence the four states in
+  `useStandings`, and hence their wording: *your move* is used where you have
+  not played, because it is true whether or not she has; *waiting for her* only
+  once your own move has lifted the seal; *she has been* only when both are
+  actually there. Verified by seeding a round where she has played and you have
+  not — the list says "your move", and cannot say anything else.
+- **Looking must not create.** `useStandings` deliberately does not call
+  `openRound`, which `useRound` does. Otherwise every glance at the list would
+  write a round document for a game nobody played, and "nothing opened today"
+  would become a state that could never be seen twice.
+- **The way in carries the answer.** The point of the feature is not having to
+  open anything, so the label says *"1 for you"* or *"she has been"* underneath
+  itself and the list is only for finding out *which*. That means the watchers
+  belong to the Hollow rather than to the rows — which is also why there is one
+  hook for all the games instead of one per game.
 
 ## How to verify (do not skip)
 
@@ -643,7 +901,17 @@ road can be looked at end to end the same way every time, and
 `?rally=studio&at=6` puts the car on a turntable with no tunnel at all. Most
 of the garden runs ~30fps under SwiftShader; eased motion therefore takes
 ~10× longer than it will in reality — wait 10–15s before judging a transition.
-Always shoot desktop **and** 390×844, at more than one hour of day.
+Always shoot desktop **and** 390×844, at more than one hour of day. The corner
+bug above is exactly what skipping the phone hides: it was in every place and
+every game, and every screenshot that would have shown it had been taken at
+1280 wide.
+
+**Anything the app writes every frame cannot be posed from the console.** The
+hourglass is written straight to the node's style each tick, so setting
+`style.transform` to look at it half-drained is overwritten before the shutter
+opens — and a `setInterval` fighting it only races. Inject a stylesheet rule
+with `!important` instead: it beats an inline non-important style, and it holds
+still. Same for the ember bar and the speedometer.
 
 **Two things about screenshotting the cave, learned the hard way.**
 
@@ -763,6 +1031,30 @@ handling changed.
       lit stones, an avenue of braziers and the fire on the centreline against
       a closed rock wall — plus the three separate bugs that made every run
       finish parked in a hole in the mesh
+- [x] **The Rootway has a top speed you can feel**, and a speedometer that
+      says what it is — the third and last exception to "no interface". Plus a
+      restart in the pause menu, and each game naming its own live round
+      instead of inheriting Word Duel's clock
+- [x] **The Hollow's games are chosen from objects, not paragraphs.** Each game
+      draws its own emblem out of its own parts — `Emblem` on GameDefinition
+- [x] **The Stars, upgraded.** Reply to any line with the quote above it, a
+      heart that changes the light in the sky rather than counting, a tone for
+      something sent and something arriving, real system notifications with an
+      honest setting, and the two rendering faults in the sky itself — square
+      stars and motes in diagonal lines — found and fixed
+- [x] **The conversation reaches everywhere**, folded into the bottom-left
+      corner opposite the music
+- [x] **What is waiting.** One line per game, all at once, set apart under the
+      Hollow's row — the first thing in the garden that can answer "has she
+      been?" without opening anything. Read-only, and every state in it is one
+      the seal actually permits
+- [x] **Scattergories, the third game.** One letter, twelve categories, three
+      minutes, four rounds. A tumbling die and a running glass instead of a
+      clock and a bar; 206 categories in nine groups and the real twenty-sided
+      die's faces; duplicate cancellation, alliteration bonus and challenges,
+      with no dictionary anywhere. Sealed by giving each round its own round
+      document, so every sheet is a seq 0 and `firestore.rules` did not change.
+      Three ways in — *roll for her*, on your own, roll together
 - [ ] Visual polish and full desktop/mobile screenshot sweep of both modes
 - [ ] Delete the dead world: Figure, People, cloth, gait, body, benchSpots,
       Benches, Placed, CameraRig walking, places/*, navigation, Catalogue,
@@ -784,6 +1076,17 @@ handling changed.
 
 ## Known debts
 
+- **Two things from the Scattergories brief are not built, deliberately.**
+  *Progress sparks in the live round* — seeing how many lines she has filled
+  while you both write — needs a per-round presence field that both of you
+  write to during play, which is a `firestore.rules` change and a second write
+  path, and it would be the first thing in the world that leaks *something*
+  about her answers before the reveal. It wants its own decision, not a
+  side-effect of building the game. And *the explanation round-trip* — she
+  writes why her answer fits, and only then do you decide — needs a challenge
+  to survive a device going away and come back, which is a third move kind and
+  a state machine across two sessions. What is built is the honest half: a
+  challenge is one long press, she sees it, and it counts for that round only.
 - `FIREBASE.md` has a garbled commented-out table row (a stray user edit).
 - Word list ships ~86KB lazy-loaded — keep it out of the main bundle.
 - `dist/` may be stale; never judge by build output.

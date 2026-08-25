@@ -10,7 +10,8 @@
     "typecheck": "tsc -b --noEmit",
     "rules": "node scripts/rules.mjs",
     "rally": "npx --yes tsx scripts/rally-check.ts",
-    "tris": "npx --yes tsx scripts/tri-count.ts"
+    "tris": "npx --yes tsx scripts/tri-count.ts",
+    "scatter": "npx --yes tsx scripts/scatter-check.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

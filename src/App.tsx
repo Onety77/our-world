@@ -14,6 +14,8 @@ import { Places } from '@/ui/Places'
 import { Veil } from '@/ui/Veil'
 import { Playing } from '@/ui/Playing'
 import { Talking } from '@/ui/Talking'
+import { Whisper } from '@/ui/Whisper'
+import { SaidMenu } from '@/ui/Said'
 import { Trouble } from '@/ui/Trouble'
 import { Arrival } from '@/ui/Arrival'
 import { Player } from '@/ui/Player'
@@ -25,6 +27,7 @@ import { DevPanel } from '@/ui/DevPanel'
 import { Threshold } from '@/ui/Threshold'
 import { usePlaying } from '@/systems/playing'
 import { useArrival } from '@/systems/arrival'
+import { useTakenOver } from '@/systems/attention'
 
 /**
  * `?hour=18.6` pins the clock, `?section=river` opens straight into a place,
@@ -72,6 +75,23 @@ function Garden() {
   const data = useData()
   const me = data.me
   const profiles = useWorldSlice((s) => s.profiles)
+
+  /*
+    The corner needs to know whether the top right is free.
+
+    On a phone it docks *under* the two of you and the clocks — but `ui/Overlay`
+    hides that block both when something takes the screen and when you are
+    inside a place, and the corner did not know about either. So in a game, and
+    in the Hollow, it was hanging in mid-air over the middle of the board with
+    nothing above it. Same condition as the Overlay's own, deliberately: if one
+    changes, the other has to. See `.corner.clear` in styles.css.
+  */
+  const takenOver = useTakenOver()
+  const inside = useSections((s) => s.entered)
+  // `only` as well when the screen is taken: `ui/Places` hides the way back
+  // out too, so there is nothing left in the top *left* either and the corner
+  // can sit on the very edge.
+  const corner = takenOver ? 'corner clear only' : inside ? 'corner clear' : 'corner'
 
   const [hourOverride, setHourOverride] = useState<number | null>(startHour)
 
@@ -215,7 +235,22 @@ function Garden() {
       <ProfileSheet />
       <Playing />
       <Talking />
-      <Player />
+      {/*
+        The two things that follow you everywhere, in one column.
+
+        Music and the conversation are the same kind of thing — neither is
+        somewhere you *go* — so they share a corner rather than taking one
+        each. They have to: every other corner of this world is spoken for.
+        The bottom left is the name of the place you are looking at and the way
+        into it, the top left is the way back out, and the top right is the two
+        of you and the clocks. See `.corner` in styles.css.
+      */}
+      <div className={corner}>
+        <Whisper />
+        <Player />
+      </div>
+      {/* One menu for whichever message was right-clicked — see ui/Said. */}
+      <SaidMenu />
       <Trouble />
       {/* Over everything, until it is opened. Last so it is last in the
           stacking order as well as in the file. */}

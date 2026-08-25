@@ -17,6 +17,7 @@ import { usePot } from '@/systems/pot'
 import { useTakenOver } from '@/systems/attention'
 import { usePlaying } from '@/systems/playing'
 import { GAMES } from '@/world/games/registry'
+import { useStandings, type Turn } from '@/world/games/useRound'
 
 /**
  * What there is to play, one at a time.
@@ -53,7 +54,15 @@ import { GAMES } from '@/world/games/registry'
  * no agreement, and settles in one frame.
  * ---------------------------------------------------------------------------
  */
-function TimeChallenge({ game, them }: { game: string; them: string }) {
+function LiveWayIn({
+  game,
+  them,
+  live,
+}: {
+  game: string
+  them: string
+  live: { name: string; tip: string }
+}) {
   const data = useData()
   const me = data.me
   const other = otherUser(me)
@@ -88,16 +97,119 @@ function TimeChallenge({ game, them }: { game: string; them: string }) {
       className="quiet game-live"
       onClick={start}
       disabled={!bothHere}
-      title={
-        bothHere
-          ? 'Five minutes each, same word'
-          : them + ' is not here right now'
-      }
+      title={bothHere ? live.tip : them + ' is not here right now'}
     >
-      {waiting ? `join ${them}` : 'time challenge'}
+      {waiting ? `join ${them}` : live.name}
       {!bothHere && <small>only when you are both here</small>}
     </button>
   )
+}
+
+
+/**
+ * What is waiting, across every game at once.
+ *
+ * ---------------------------------------------------------------------------
+ * **The Hollow could not answer the one question it exists to answer.**
+ *
+ * The note on `Round` says it plainly: in an asynchronous game the good
+ * feeling is not winning, it is opening the Hollow and seeing that she has
+ * been. But finding that out meant opening each game, waiting for its round,
+ * and reading whatever briefing it happened to show — one game at a time. With
+ * two games that is tedious. With the five the plan is heading for it is the
+ * reason nobody checks.
+ *
+ * So: one line per game, all of them at once, and a way straight in.
+ *
+ * **Every state here is one you are allowed to know**, which is the whole
+ * design constraint and the reason the wording is careful. Her opening move is
+ * sealed until yours exists, so before you have played, "has she been?" has no
+ * answer on your device — and "your move" is true whether or not she has, which
+ * is why that is what it says. Nothing on this screen ever claims something
+ * about her that the rules have not actually told us. See `useStanding`.
+ * ---------------------------------------------------------------------------
+ */
+function Waiting({
+  name,
+  turn,
+  them,
+  onPlay,
+}: {
+  name: string
+  turn: Turn
+  them: string
+  onPlay(): void
+}) {
+  return (
+    <button type="button" className={`standing standing-${turn}`} onClick={onPlay}>
+      <span className="standing-game">{name}</span>
+      <span className="standing-state">{WORDS[turn](them)}</span>
+    </button>
+  )
+}
+
+/**
+ * What each state is called, in the second person.
+ *
+ * Not a lookup for its own sake — these four strings are the whole honesty
+ * surface of the feature and they belong somewhere they can be read together
+ * and checked against `useStanding`.
+ */
+const WORDS: Record<Turn, (them: string) => string> = {
+  nothing: () => 'nothing opened today',
+  yours: () => 'your move',
+  hers: (them) => `waiting for ${them}`,
+  both: (them) => `${them} has been`,
+}
+
+function Challenges({
+  turns,
+  them,
+  onPlay,
+  onBack,
+}: {
+  turns: Record<string, Turn>
+  them: string
+  onPlay(id: string): void
+  onBack(): void
+}) {
+  return (
+    <div className="challenges">
+      <span className="threshold-whisper">where everything stands, today</span>
+      <div className="challenges-list">
+        {GAMES.map((game) => (
+          <Waiting
+            key={game.id}
+            name={game.name}
+            turn={turns[game.id] ?? 'nothing'}
+            them={them}
+            onPlay={() => onPlay(game.id)}
+          />
+        ))}
+      </div>
+      <button type="button" className="challenges-back" onClick={onBack}>
+        back to the games
+      </button>
+    </div>
+  )
+}
+
+/**
+ * What the way in says when there is something to say.
+ *
+ * The point of the whole feature is that you should not have to open anything
+ * to find out — so the label itself carries the answer, and opening the list is
+ * only for *which* game. Priority is what you can act on: anything of yours
+ * outranks the news that she has been, because one is a thing to do and the
+ * other is a thing to enjoy.
+ */
+function summary(turns: Record<string, Turn>, them: string): string {
+  const all = Object.values(turns)
+  const yours = all.filter((t) => t === 'yours').length
+  if (yours > 0) return `${yours} for you`
+  if (all.includes('both')) return `${them} has been`
+  if (all.includes('hers')) return `waiting for ${them}`
+  return 'nothing yet'
 }
 
 function TheHollow() {
@@ -105,6 +217,22 @@ function TheHollow() {
   const me = useData().me
   const profiles = useWorldSlice((s) => s.profiles)
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
+
+  /**
+   * The row of games, or what is waiting across all of them.
+   *
+   * Two views of the same place rather than a card in the row: a challenges
+   * *card* would be a game you cannot play, sitting between two you can, and
+   * the marks underneath would count it as a fourth thing to swipe to.
+   */
+  const [showing, setShowing] = useState<'games' | 'waiting'>('games')
+
+  /*
+    Watched from here rather than from the rows, so the way in can say what is
+    waiting before you have opened it. Read-only: looking must never open a
+    round. See `useStandings`.
+  */
+  const turns = useStandings(GAMES)
 
   // One past the end is the "more coming" card, which is always there.
   const [at, setAt] = useState(0)
@@ -132,6 +260,19 @@ function TheHollow() {
 
   const game = GAMES[at]
 
+  if (showing === 'waiting') {
+    return (
+      <div className="threshold hollow-threshold">
+        <Challenges
+          turns={turns}
+          them={them.name}
+          onPlay={(id) => play(id, false)}
+          onBack={() => setShowing('games')}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="threshold hollow-threshold" ref={track}>
       <span className="threshold-whisper">something to play, whenever you are here</span>
@@ -139,30 +280,57 @@ function TheHollow() {
       <div className="game-row" style={{ '--at': at } as React.CSSProperties}>
         {GAMES.map((g) => (
           <div className="game-card" key={g.id} aria-hidden={g.id !== game?.id}>
+            {g.Emblem ? <g.Emblem /> : null}
             <strong>{g.name}</strong>
-            <small>{g.blurb}</small>
             <span className="game-length">{g.duration}</span>
+            <small>{g.blurb}</small>
           </div>
         ))}
         <div className="game-card" aria-hidden={game !== undefined}>
+          {/* Five stones with nothing on them. The row's own language for
+              "there is a place for this and it is empty". */}
+          <span className="emblem emblem-stones waiting" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
           <strong>more, in time</strong>
+          <span className="game-length">not yet</span>
           <small>
             Ultimate noughts and crosses, hidden fleet, dots and boxes. One
             folder each — the fire has room.
           </small>
-          <span className="game-length">not yet</span>
         </div>
       </div>
 
       {game ? (
         <div className="game-ways">
-          <button type="button" onClick={() => play(game.id, false)}>
-            vs {them.name}
+          {/*
+            The one you will actually press, set like the rest of the garden's
+            invitations — a serif verb, not a word in small capitals. The other
+            two are alternatives to it and are quieter, which is what a row of
+            three identical labels could never say.
+          */}
+          <button
+            type="button"
+            className="game-go"
+            onClick={() => play(game.id, false)}
+            title={game.invite?.tip}
+          >
+            {game.invite
+              ? game.invite.name.replace('{them}', them.name)
+              : `play with ${them.name}`}
           </button>
-          <button type="button" className="quiet" onClick={() => play(game.id, true)}>
-            one player
-          </button>
-          <TimeChallenge game={game.id} them={them.name} />
+          <div className="game-else">
+            <button type="button" className="quiet" onClick={() => play(game.id, true)}>
+              on your own
+            </button>
+            {game.live ? (
+              <LiveWayIn game={game.id} them={them.name} live={game.live} />
+            ) : null}
+          </div>
         </div>
       ) : (
         <p className="game-soon">nothing to open here yet</p>
@@ -179,6 +347,19 @@ function TheHollow() {
           />
         ))}
       </div>
+
+      {/*
+        Set apart, under the marks and below a rule.
+
+        It is not one of the games and must not read as one: the row above is
+        things you play, this is a report on all of them. The hairline is the
+        only divider in the whole interface, and it earns it here — without it
+        this is a fourth item in a list of three.
+      */}
+      <button type="button" className="to-waiting" onClick={() => setShowing('waiting')}>
+        what is waiting
+        <span className="to-waiting-now">{summary(turns, them.name)}</span>
+      </button>
     </div>
   )
 }

@@ -45,12 +45,30 @@ window of ten lanterns. Everything that draws includes the same block from
 `materials.ts`, so nothing can disagree with anything else about what "lit"
 means.
 
-**There is almost no interface.** No clock, no speedometer, no map. Whether you
-are ahead is whether you can see her. Where the corner goes is where the
-lanterns are, and where the car wants to be is where the tyre marks already
-are.
+**There is almost no interface.** No clock and no map. Whether you are ahead is
+whether you can see her. Where the corner goes is where the lanterns are, and
+where the car wants to be is where the tyre marks already are.
 
-**The one exception is the ember bar, and it had to earn it.** The three lamps
+**There are two exceptions now, and both had to earn it.**
+
+**The speedometer**, top right, is the newer one and took the longest to
+justify. Everything else the racer tells you about speed is *relative* — the
+wind rising, the field of view opening, the walls closing on the edges of the
+frame, the gearbox climbing — and all four are better than a number, because
+you read them while looking at the road. But not one of them can say **this is
+as fast as it goes**. Without that the car reads as having no maximum, which is
+not cosmetic: if you cannot tell you are at the top, you cannot tell whether the
+corner ahead is one you are going to make.
+
+Where it sits was decided by the thumbs and not by convention. Racing games put
+it bottom right; bottom right here is the *pedal*, so on a phone it would spend
+the whole race under a thumb, and both bottom corners are hands. The top of the
+frame is receding tunnel roof — dark, empty, and on a phone the camera aims
+high so there is more of it. No dial, no needle, no bezel: the number in the
+garden's own serif, over a line of light that fills toward the top speed, which
+is the same vocabulary the ember bar uses at the other end of the screen.
+
+**The ember bar**, and it had to earn it too. The three lamps
 on the back of the car show how much you are carrying and they are still there
 — from directly behind, which is where you spend the whole race, they are the
 prettier version. What they could never show is *where it comes from*. The
@@ -81,6 +99,31 @@ boost rather than a gauge showing it — and going into a drift stops the burn
 and **keeps whatever is left**, so flicking into a corner half way through is a
 decision rather than a mistake. The line goes white while it is being spent, so
 a bar at a third is never ambiguous about which way it is heading.
+
+## How fast it goes
+
+**131 km/h flat out, 143 on the ember, and both are reached and held.** That
+matters more than the numbers. It used to run to 167 and nearly 200 — down a
+tunnel between four and seven metres wide — and the worse half of that was not
+the speed but the *shape*: drag rises with the square of velocity, so a
+terminal velocity that far away is one the car spends the entire straight
+creeping toward and never arrives at. It reads as a car with no maximum at all.
+You hold the throttle, the number keeps going up, and you arrive at the corner
+carrying a speed you never chose.
+
+`DRAG` in `physics.ts` is where a top speed actually lives, and more than twice
+it fixes both: slower, and — the part that matters — *there* by the first third
+of a straight. The fire-spirit's lap times barely moved and it hits the walls
+less often, which is the whole argument in one measurement: the road did not get
+slower, the car got controllable.
+
+`TOP_SPEED` is not a limit. It is what the car does, and half the game
+normalises against it — how far the camera stands off, how wide the lens opens,
+how loud the wind is, how full the meter reads. Measure it with `npm run rally`
+after touching drag, gearing or torque and write the answer there.
+`SPEED_CEILING` is a backstop well above anything reachable, because a clamp
+you can feel is a wall, and the moment a player feels it drag has stopped being
+the thing that decides a straight.
 
 ## The car
 
@@ -267,6 +310,11 @@ with no tunnel at all, doing everything it can do — steering, braking, leaning
 on its springs, discs coming up cherry — and `&at=13.5` pins that to one moment
 so a given view is repeatable. All three exist because "drive until you can see
 it" is not a check anybody can repeat.
+
+Pausing offers three things and not two: carry on, **from the top**, or leave.
+It used to offer the first and the last, which quietly made "I got that corner
+wrong and want another go" into leave, read the briefing, press start, sit
+through the countdown — and it turns out that is most of what pausing is for.
 
 `?from=<metres>` stands the car that far up the road before the flag drops, and
 pairs with `?rally=ride` — the spirit picks it up from wherever it is put down.

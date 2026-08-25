@@ -21,17 +21,66 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
+import type { Message, UserId } from '@/data/types'
 import { useSections } from '@/systems/sections'
 import { SECTIONS } from '@/sections/registry'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { gaze } from '@/systems/pointerLook'
 import { useTakenOver } from '@/systems/attention'
-import { toNewest, useTalking, walk } from '@/systems/talking'
+import { heartedBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
+import { useSaidGestures } from './Said'
+import { shouldTell, tell } from '@/systems/notify'
 
 /** How many messages carry legible words at once, above and below the head. */
 const ABOVE = 7
 const BELOW = 2
+
+/** Sky between the bottom of one line and the top of the next, in pixels. */
+const AIR = 30
+
+/**
+ * How far above the newest message each message hangs, measured.
+ *
+ * ---------------------------------------------------------------------------
+ * **This was a constant, and a constant cannot be right.** Every line was
+ * pushed up by `age * 74`, which is about the height of one line of serif and
+ * a timestamp — true on a laptop, where almost everything she says fits on one
+ * line, and false on a phone, where the column is 78% of 390px and the same
+ * sentence takes three. The result was two people's messages printed through
+ * each other on the primary surface, and it never showed up because every
+ * screenshot of the Stars had been taken at 1280 wide.
+ *
+ * So the spacing is measured from the laid-out lines instead — centre to
+ * centre, so the per-frame `scale()` (which is about each element's own
+ * middle) cannot move anything. `offsetHeight` is layout and ignores the
+ * transforms, so this can be read while the sky is moving.
+ * ---------------------------------------------------------------------------
+ */
+function ladder(root: HTMLElement): number[] {
+  const kids = root.children
+  const n = kids.length
+  const tall = new Array<number>(n)
+  for (let i = 0; i < n; i++) tall[i] = (kids[i] as HTMLElement).offsetHeight
+
+  // Age 0 is the newest, which is the *last* child, and it is the origin.
+  const up = new Array<number>(n)
+  up[0] = 0
+  for (let a = 1; a < n; a++) {
+    up[a] = up[a - 1] + (tall[n - a] + tall[n - 1 - a]) / 2 + AIR
+  }
+  return up
+}
+
+/** The ladder read at a fractional age, because the walk eases between rungs. */
+function rung(up: number[], age: number): number {
+  if (up.length === 0) return age * (AIR + 44)
+  const last = up.length - 1
+  if (age <= 0) return up[0] + age * (up.length > 1 ? up[1] - up[0] : AIR + 44)
+  if (age >= last) return up[last] + (age - last) * (last > 0 ? up[last] - up[last - 1] : AIR + 44)
+  const low = Math.floor(age)
+  return up[low] + (up[low + 1] - up[low]) * (age - low)
+}
 
 function spoken(at: number): string {
   const d = new Date(at)
@@ -73,6 +122,71 @@ function useInTheStars(): boolean {
   return entered && !takenOver && SECTIONS[index]?.id === 'stars'
 }
 
+/**
+ * One line in the sky.
+ *
+ * Its own component so the gesture handlers have somewhere to live — see
+ * `ui/Said`. There is nothing drawn on it that you could press: the paragraph
+ * *is* the control, and what is visible is only ever what has happened to it.
+ */
+function Said({
+  message,
+  age,
+  mine,
+  answering,
+  when,
+  me,
+}: {
+  message: Message
+  age: number
+  mine: boolean
+  answering: Message | null
+  when: string | null
+  me: UserId
+}) {
+  const gestures = useSaidGestures(message)
+  const yours = heartedBy(message, me)
+  const hers = heartedBy(message, me === 'warm' ? 'cool' : 'warm')
+
+  return (
+    <p
+      data-age={age}
+      data-by={mine ? 'me' : 'them'}
+      className={`said ${mine ? 'mine' : 'hers'}`}
+      {...gestures}
+    >
+      {/*
+        What it answers, above it.
+
+        The words rather than a marker, because a reply that says "in reply to"
+        and nothing else is asking you to go and find the thing — and the whole
+        reason to quote is that the thing may be a long way up the sky by now.
+        Truncated by CSS, not here: the full text stays in the document for
+        anything reading it aloud.
+      */}
+      {message.replyTo &&
+        (answering ? (
+          <span className="said-answering">{answering.body}</span>
+        ) : (
+          <span className="said-answering gone">something said a long time ago</span>
+        ))}
+
+      <span className="said-body">{message.body}</span>
+
+      {/* State, not controls. A heart that is on is a fact about the message
+          now, in the colour of whoever left it. */}
+      {(yours || hers) && (
+        <span className="said-hearts" aria-label="hearted">
+          {yours && <i className="mine" aria-hidden="true">♥</i>}
+          {hers && <i className="hers" aria-hidden="true">♥</i>}
+        </span>
+      )}
+
+      {when && <span className="said-when">{when}</span>}
+    </p>
+  )
+}
+
 export function Talking() {
   const here = useInTheStars()
   const data = useData()
@@ -82,6 +196,8 @@ export function Talking() {
   const composing = useTalking((s) => s.composing)
   const startWriting = useTalking((s) => s.startWriting)
   const stopWriting = useTalking((s) => s.stopWriting)
+  const replyTo = useTalking((s) => s.replyTo)
+  const answer = useTalking((s) => s.answer)
   const profiles = useWorldSlice((s) => s.profiles)
   const lastReadAt = useWorldSlice((s) => s.lastReadAt)
 
@@ -105,6 +221,31 @@ export function Talking() {
   useEffect(() => {
     if (here) toNewest()
   }, [here])
+
+  /*
+    Something arriving makes a sound, and sometimes a notification.
+
+    Keyed off the newest message's *id* rather than the count, because the
+    count also moves when an old message is hearted and re-sent down the
+    snapshot — and a heart on something from last week is not a new message.
+
+    The ref starts at whatever is already there rather than at null, so opening
+    the garden to a conversation with forty things in it does not announce the
+    fortieth as though it had just been said. There is exactly one moment this
+    should fire: while you are here, and something lands.
+  */
+  const heard = useRef<string | null>(null)
+  useEffect(() => {
+    const newest = messages.at(-1)
+    if (!newest) return
+    const first = heard.current === null
+    if (heard.current === newest.id) return
+    heard.current = newest.id
+    if (first || newest.by === me) return
+
+    ambience.said(false)
+    if (shouldTell(here)) tell(them.name, newest.body)
+  }, [messages, me, here, them.name])
 
   // --- walking back ---------------------------------------------------------
   const column = useRef<HTMLDivElement>(null)
@@ -162,11 +303,27 @@ export function Talking() {
   useEffect(() => {
     if (!here) return
     let raf = 0
+    // Measured once a layout, not once a frame: reading `offsetHeight` sixty
+    // times a second for every line is a forced reflow per line per frame.
+    let up: number[] = []
+    const remeasure = () => {
+      if (column.current) up = ladder(column.current)
+    }
+    remeasure()
+    // A rotated phone, a font that arrived late, or a quote that wrapped
+    // differently all change the rungs; the observer catches all three.
+    const watch = new ResizeObserver(remeasure)
+    if (column.current) {
+      watch.observe(column.current)
+      for (const kid of column.current.children) watch.observe(kid)
+    }
+
     const tick = () => {
       raf = requestAnimationFrame(tick)
       const root = column.current
       if (!root) return
 
+      const head = rung(up, walk.at)
       const lines = root.children
       for (let i = 0; i < lines.length; i++) {
         const el = lines[i] as HTMLElement
@@ -188,8 +345,10 @@ export function Talking() {
         const lean = Math.min(44, window.innerWidth * 0.055)
         const side = el.dataset.by === 'me' ? lean : -lean
 
-        // Above the head is the past, below it is the newest few.
-        const lift = -age * 74
+        // Above the head is the past, below it is the newest few. The distance
+        // is the measured one, so a three-line message takes three lines of
+        // sky and the one above it starts where it ends.
+        const lift = -(rung(up, own) - head)
         const shrink = Math.max(0.42, 1 - Math.max(0, age) * 0.055)
         const fade =
           age < -0.9
@@ -210,7 +369,10 @@ export function Talking() {
       }
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      watch.disconnect()
+    }
   }, [here, messages])
 
   // --- writing --------------------------------------------------------------
@@ -261,12 +423,15 @@ export function Talking() {
   async function say() {
     const text = draft.trim()
     if (text === '') return
-    const sent = await attempt('that didn’t send', () => data.sendMessage(text))
+    const sent = await attempt('that didn’t send', () =>
+      data.sendMessage(text, replyTo ?? undefined),
+    )
     // Only let go of the words once they are actually somewhere.
     if (!sent) return
     setDraft('')
     stopWriting()
     toNewest()
+    ambience.said(true)
   }
 
   const lines = useMemo(() => {
@@ -276,9 +441,17 @@ export function Talking() {
         m,
         age: newest - i,
         stamped: marksTime(m.at, i > 0 ? messages[i - 1].at : null),
+        // Resolved against the same list it is drawn from, so a quote can
+        // never show words that are not in this conversation.
+        answering: messageById(messages, m.replyTo ?? null),
       }))
       .filter(({ age }) => age <= ABOVE + 40 && age >= -BELOW)
   }, [messages])
+
+  const answeringNow = useMemo(
+    () => messageById(messages, replyTo),
+    [messages, replyTo],
+  )
 
   /** Hers, said since the last time you were here. */
   const unread = useMemo(
@@ -291,16 +464,16 @@ export function Talking() {
   return (
     <div className="talking">
       <div className="sky-column" ref={column}>
-        {lines.map(({ m, age, stamped }) => (
-          <p
+        {lines.map(({ m, age, stamped, answering }) => (
+          <Said
             key={m.id}
-            data-age={age}
-            data-by={m.by === me ? 'me' : 'them'}
-            className={`said ${m.by === me ? 'mine' : 'hers'}`}
-          >
-            <span className="said-body">{m.body}</span>
-            {stamped && <span className="said-when">{spoken(m.at)}</span>}
-          </p>
+            message={m}
+            age={age}
+            mine={m.by === me}
+            answering={answering}
+            when={stamped ? spoken(m.at) : null}
+            me={me}
+          />
         ))}
       </div>
 
@@ -313,6 +486,28 @@ export function Talking() {
 
       {composing ? (
         <div className="saying">
+          {/*
+            What you are answering, over the field you are answering it in.
+
+            Without this the reply target is invisible the moment the composer
+            opens — you press "answer this" on a line eight messages up, the
+            column scrolls to the newest, and there is nothing on screen saying
+            which one you picked. A quote you cannot see is a quote you have to
+            remember, and this is a place for saying things at two in the
+            morning.
+          */}
+          {answeringNow && (
+            <p className="saying-answering">
+              <span className="saying-quote">{answeringNow.body}</span>
+              <button
+                type="button"
+                className="saying-drop"
+                onClick={() => answer(null)}
+              >
+                not that one
+              </button>
+            </p>
+          )}
           <textarea
             ref={field}
             className="saying-field ink"

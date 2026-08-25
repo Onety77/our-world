@@ -23,21 +23,60 @@ interface TalkingState {
   loading: boolean
   /** The composer is open. */
   composing: boolean
+  /**
+   * The message being answered, or null.
+   *
+   * Shared by both composers on purpose. The Stars and the corner are two
+   * views of one conversation, so picking a line to answer in one of them and
+   * then typing in the other is a perfectly reasonable thing to do, and there
+   * is no version of "which reply target is this composer's" that is worth the
+   * confusion of having two.
+   */
+  replyTo: string | null
+  /** The conversation folded into the corner is open. */
+  whispering: boolean
 
   setMessages(messages: Message[]): void
   startWriting(): void
   stopWriting(): void
+  answer(id: string | null): void
+  whisper(open: boolean): void
 }
 
 export const useTalking = create<TalkingState>((set) => ({
   messages: [],
   loading: true,
   composing: false,
+  replyTo: null,
+  whispering: false,
 
   setMessages: (messages) => set({ messages, loading: false }),
   startWriting: () => set({ composing: true }),
-  stopWriting: () => set({ composing: false }),
+  // Closing the composer drops the reply with it. A quote left standing after
+  // you changed your mind about answering is the next thing you say landing
+  // under a line you had forgotten you picked.
+  stopWriting: () => set({ composing: false, replyTo: null }),
+  answer: (replyTo) => set({ replyTo }),
+  whisper: (whispering) => set({ whispering }),
 }))
+
+/**
+ * The message an id names, or null.
+ *
+ * Null is a real answer and not a failure: the conversation is loaded in a
+ * window of the most recent few hundred, so a reply to something said last
+ * spring points at a message that is not in memory. The quote says so rather
+ * than showing nothing and looking broken.
+ */
+export function messageById(messages: Message[], id: string | null): Message | null {
+  if (!id) return null
+  return messages.find((m) => m.id === id) ?? null
+}
+
+/** Whether you have put a heart on it. */
+export function heartedBy(message: Message, who: UserId): boolean {
+  return typeof message.hearts?.[who] === 'number'
+}
 
 /**
  * How far back through the conversation you have walked, in messages.

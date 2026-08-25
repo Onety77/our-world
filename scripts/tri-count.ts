@@ -28,8 +28,9 @@ const BUDGET = Math.round(65_000 * 0.86) // high tier, in the garden
 // worse coupling than two numbers that have to be changed together — but they
 // DO have to be changed together, so change them together.
 const LAYERS = [
-  { name: 'grass, underfoot', share: 0.55, segments: 4 },
-  { name: 'grass, tussocks', share: 0.45, segments: 2 },
+  { name: 'grass, turf', share: 0.4, segments: 4 },
+  { name: 'grass, field', share: 0.34, segments: 2 },
+  { name: 'grass, tussocks', share: 0.26, segments: 2 },
 ]
 for (const layer of LAYERS) {
   const blades = Math.round(BUDGET * layer.share)

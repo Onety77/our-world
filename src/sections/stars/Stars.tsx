@@ -9,8 +9,9 @@
  * Two lights hang over the plain, one warm, one cool. They drift toward each
  * other and never quite meet, which is the honest shape of the thing.
  *
- * No messaging yet — this is the room, built first, on purpose. The chat goes
- * in here later and will have somewhere to live that already feels like
+ * The conversation lives here now — see `Conversation` for the lights and
+ * `ui/Talking` for the words. The room was built first, on purpose, so that
+ * when the talking arrived it had somewhere to be that already felt like
  * somewhere.
  */
 
@@ -70,13 +71,69 @@ const DOME_FRAG = /* glsl */ `
     float band = pow(clamp(1.0 - abs(vDir.y) * 3.2, 0.0, 1.0), 2.0);
     col = mix(col, uDawn, band * pow(side, 2.5) * uDawnStrength);
 
-    // stars, thicker away from her dawn
-    vec3 cell = floor(vDir * 190.0);
+    /*
+      Stars, and they have to be *round*.
+
+      This lit the whole of a cell. Flooring the direction times 190 gives a
+      lattice about a third of a degree across, which on a laptop is seven
+      pixels wide — so every star in the sky was a seven-pixel grey **square**,
+      and a dozen of them were plainly visible as squares in any screenshot of
+      the place the whole section is named after.
+
+      Three things fix it and none of them costs anything. The star sits at its
+      own random point *inside* its cell rather than filling it, so the field
+      is a scatter and not a grid. It falls off with distance from that point,
+      so it is a disc with a soft edge. And it is given a size of its own, so
+      the sky has a few bright ones and a great many faint — an even field of
+      identical dots is a texture, and the difference between the two is
+      whether it reads as depth.
+    */
+    /*
+      The galaxy, first, because the stars are laid *into* it.
+
+      A broad soft band across the sky on a diagonal. It does two things and
+      the second is the one that matters: it adds a faint wash of its own, and
+      it lowers the threshold for a star inside it, so the field is genuinely
+      denser along the band rather than being an even sprinkle with a smudge
+      painted over it. That difference is most of why a real sky reads as deep.
+    */
+    float across = abs(dot(vDir, normalize(vec3(0.42, 0.55, -0.72))));
+    float milk = pow(clamp(1.0 - across * 2.5, 0.0, 1.0), 2.2);
+    float washed = 1.0 - band * pow(side, 2.0) * uDawnStrength;
+    col += vec3(0.15, 0.18, 0.30) * milk * 0.34 * washed;
+
+    vec3 grid = vDir * 190.0;
+    vec3 cell = floor(grid);
     float star = hash(cell);
-    if (star > 0.9975) {
-      float twinkle = 0.65 + 0.35 * sin(uTime * 1.6 + star * 400.0);
+    // Denser along the band. Thinner where her dawn is washing them out.
+    float cut = 0.9928 - milk * 0.006;
+    if (star > cut) {
+      // Where in its cell this one sits.
+      vec3 at = vec3(hash(cell + 11.3), hash(cell + 23.7), hash(cell + 37.1));
+      float d = length(grid - cell - at);
+      // How big it is, from the same hash — most small, a few not.
+      float bright = (star - cut) / (1.0 - cut);
+      float size = 0.26 + bright * bright * 0.5;
+      float point = 1.0 - smoothstep(0.0, size, d);
+
+      float twinkle = 0.62 + 0.38 * sin(uTime * 1.6 + star * 400.0);
       float dim = 1.0 - band * pow(side, 2.0) * uDawnStrength * 0.9;
-      col += vec3(0.9, 0.94, 1.0) * (star - 0.9975) * 380.0 * twinkle * dim;
+      /*
+        And they are not all one colour.
+
+        A real field runs from cold blue-white to a warm ember, and two or
+        three noticeably warm ones in a sky of pale blue is most of what stops
+        it looking printed.
+      */
+      vec3 tint = mix(
+        vec3(0.72, 0.82, 1.0),
+        vec3(1.0, 0.86, 0.66),
+        hash(cell + 51.9)
+      );
+      // A tight core inside a softer disc, which is what stops a big star
+      // reading as a blob and a small one as a single hard pixel.
+      float glow = point * point * 0.7 + point * 0.45;
+      col += tint * glow * (0.5 + bright * 1.15) * twinkle * dim;
     }
 
     gl_FragColor = vec4(col, 1.0);
@@ -283,11 +340,28 @@ function Motes() {
     geo.setAttribute('position', base.attributes.position)
     geo.setAttribute('uv', base.attributes.uv)
     if (base.index) geo.setIndex(base.index)
+    /*
+      Three numbers each, and they have to be *uncorrelated*.
+
+      This was `(i * 2654435761) % 1000 / 1000` and two more like it, which is
+      a linear congruence with no mixing in it at all: consecutive motes land a
+      fixed stride apart in every axis at once, so ninety of them come out as
+      two or three neat diagonal lines drifting across the sky. It was plainly
+      visible in every screenshot of the place and read as a rendering fault,
+      which — near enough — it was.
+
+      A hash, not a stride. The sine trick is the same one the dome's stars use
+      and it is enough for ninety specks.
+    */
     const seed = new Float32Array(MOTES * 3)
+    const scatter = (n: number) => {
+      const x = Math.sin(n * 127.1 + 311.7) * 43758.5453
+      return x - Math.floor(x)
+    }
     for (let i = 0; i < MOTES; i++) {
-      seed[i * 3] = ((i * 2654435761) % 1000) / 1000
-      seed[i * 3 + 1] = ((i * 40503) % 1000) / 1000
-      seed[i * 3 + 2] = ((i * 22695477) % 1000) / 1000
+      seed[i * 3] = scatter(i + 1)
+      seed[i * 3 + 1] = scatter(i * 3.7 + 19.4)
+      seed[i * 3 + 2] = scatter(i * 8.3 + 71.2)
     }
     geo.setAttribute('iSeed', new InstancedBufferAttribute(seed, 3))
     geo.instanceCount = MOTES
@@ -307,6 +381,7 @@ function Motes() {
           attribute vec3 iSeed;
           uniform float uTime;
           varying float vFade;
+          varying vec2 vUv;
           void main() {
             float drift = uTime * (0.05 + iSeed.z * 0.06);
             vec3 at = vec3(
@@ -315,17 +390,33 @@ function Motes() {
               (iSeed.z - 0.5) * 22.0 - 4.0
             );
             vFade = 0.3 + 0.7 * (0.5 + 0.5 * sin(uTime * 0.6 + iSeed.x * 12.0));
+            vUv = uv;
             vec3 right = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
             vec3 up    = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
-            vec3 local = right * position.x + up * position.y;
+            // No two the same size, or ninety identical specks read as a
+            // pattern however well they are scattered.
+            float size = 0.55 + iSeed.y * 0.9;
+            vec3 local = (right * position.x + up * position.y) * size;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(local + at, 1.0);
           }
         `,
         fragmentShader: /* glsl */ `
           precision mediump float;
           varying float vFade;
+          varying vec2 vUv;
           void main() {
-            gl_FragColor = vec4(vec3(0.75, 0.8, 0.95), vFade * 0.28);
+            /*
+              A speck, not a *square*.
+
+              This was a flat fill across the whole quad, which is exactly what
+              it looked like: ninety small grey rectangles hanging in the sky
+              of the place the section is named after. A billboard needs a
+              falloff or it is a billboard.
+            */
+            float d = length(vUv - 0.5) * 2.0;
+            float speck = pow(1.0 - smoothstep(0.0, 1.0, d), 2.4);
+            if (speck < 0.01) discard;
+            gl_FragColor = vec4(vec3(0.75, 0.8, 0.95), speck * vFade * 0.4);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }

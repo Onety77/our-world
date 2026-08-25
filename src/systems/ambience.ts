@@ -78,6 +78,20 @@ export interface AmbienceHandle {
    */
   chip(weight?: number): void
   /**
+   * A message leaving, or one arriving.
+   *
+   * Two notes and nothing else — a small rising interval for something you
+   * sent and a falling one for something she said, so the two are told apart
+   * with the screen off and without either of them being a *chime*. A chat
+   * notification tone is the single most application-like sound there is, and
+   * this world does not have applications in it: what is wanted is the sound a
+   * light makes going up.
+   *
+   * Deliberately quieter than a keystroke. It fires when the garden is not
+   * being looked at as often as when it is.
+   */
+  said(mine: boolean): void
+  /**
    * A car, and the road under it. Returns null if nothing has unlocked the
    * audio context yet — which cannot happen in practice, because you have to
    * press "start the engine" to get to a road at all.
@@ -666,6 +680,42 @@ export function createAmbience(): AmbienceHandle {
       Everything is jittered per strike, because five identical ticks in a row
       stops being stone and becomes a mechanism.
     */
+    said(mine: boolean) {
+      if (!ctx || !inkGain) return
+      const now = ctx.currentTime
+
+      /*
+        A fifth, and which way it leans is the whole message.
+
+        Up for yours going away, down for hers arriving — the same relationship
+        a question and an answer have. Sine rather than triangle so there is no
+        edge on it at all: this can go off while you are reading, and anything
+        with harmonics in it would be a notification.
+      */
+      const [from, to] = mine ? [523.25, 783.99] : [659.25, 440]
+      for (const [i, hz] of [from, to].entries()) {
+        const at = now + i * 0.085
+        const voice = ctx.createOscillator()
+        voice.type = 'sine'
+        voice.frequency.setValueAtTime(hz, at)
+
+        const level = ctx.createGain()
+        level.gain.setValueAtTime(0.0001, at)
+        level.gain.exponentialRampToValueAtTime(0.03 - i * 0.006, at + 0.02)
+        level.gain.exponentialRampToValueAtTime(0.0001, at + 0.42)
+
+        // A breath of air under it, so it sits in the same room as everything
+        // else rather than on top of the mix.
+        const soften = ctx.createBiquadFilter()
+        soften.type = 'lowpass'
+        soften.frequency.value = 2600
+
+        voice.connect(soften).connect(level).connect(inkGain)
+        voice.start(at)
+        voice.stop(at + 0.46)
+      }
+    },
+
     chip(weight = 0.5) {
       if (!ctx || !grain || !inkGain) return
       const now = ctx.currentTime

@@ -152,6 +152,7 @@ export default function EmberRally({
         ghostName={ghostName}
         onFinish={(run) => keep.current(run)}
         onLeave={backToFire}
+        onRestart={() => start(kind)}
       >
         {lastRun ? (
           <RunOver
@@ -327,6 +328,7 @@ function Road({
   ghostName,
   onFinish,
   onLeave,
+  onRestart,
   children,
 }: {
   attempt: number
@@ -335,6 +337,7 @@ function Road({
   ghostName: string
   onFinish(run: RallyRun): void
   onLeave(): void
+  onRestart(): void
   children?: React.ReactNode
 }) {
   const surface = useRef<HTMLDivElement>(null)
@@ -360,7 +363,8 @@ function Road({
     <div className="rally rally-running">
       <div ref={surface} className="rally-input" />
       <EmberBar />
-      <Pause onLeave={onLeave} hasResult={Boolean(children)} />
+      <Speed />
+      <Pause onLeave={onLeave} onRestart={onRestart} hasResult={Boolean(children)} />
       <p className="rally-hint" aria-hidden="true">
         {CONTROLS}
       </p>
@@ -412,6 +416,66 @@ function EmberBar() {
 }
 
 /**
+ * How fast you are going.
+ *
+ * ---------------------------------------------------------------------------
+ * **The third exception to "no interface", and it had to earn it like the
+ * other two.**
+ *
+ * The racer deliberately had no speedometer for a long time and the argument
+ * was good: the wind, the field of view opening, the walls closing in and the
+ * engine climbing through its gears all say how fast you are going, and they
+ * say it *while you are looking at the road* rather than at a corner of the
+ * screen. A number would be the arcade thing.
+ *
+ * What that argument missed is that all four of those cues are **relative**.
+ * They tell you faster and slower. Not one of them tells you *this is as fast
+ * as it goes* — and without that the car reads as having no maximum, which is
+ * a real problem and not a cosmetic one: if you cannot tell you are at the top,
+ * you cannot tell whether the corner ahead is one you are going to make. The
+ * number is the only cue that is absolute.
+ *
+ * **Where it goes was decided by the thumbs, not by convention.** Racing games
+ * put this bottom-right, and bottom-right is the single worst place here: on a
+ * phone the right half of the screen *is* the pedal, so the number would spend
+ * the whole race under a thumb. Both bottom corners are hands. The top of the
+ * frame is receding tunnel roof — dark, empty, and on a phone the camera is
+ * already aimed high so there is more of it. So: top right, opposite the pause
+ * at top left, balancing the ember bar at bottom centre.
+ *
+ * **And it is drawn in the garden's language, not a car's.** No dial, no
+ * needle, no bezel — a dial is a rounded rectangle with a pointer in it and
+ * the design law has no room for one. What is there is the number itself, in
+ * the same serif everything else is set in, over a hairline that fills toward
+ * the top speed. The hairline is the *same* vocabulary as the ember bar: a
+ * line of light, no track, no border. Two lines, two corners, two things worth
+ * knowing.
+ *
+ * Tabular figures, or the number jitters as the digits change width and the
+ * one thing on screen that should be still is dancing.
+ * ---------------------------------------------------------------------------
+ */
+function Speed() {
+  const value = useRef<HTMLElement>(null)
+  const line = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const nodes =
+      value.current && line.current
+        ? { value: value.current, line: line.current }
+        : null
+    useRace.getState().setSpeedo(nodes)
+    return () => useRace.getState().setSpeedo(null)
+  }, [])
+  return (
+    <div className="rally-speed" aria-hidden="true">
+      <b ref={value}>0</b>
+      <span className="rally-speed-unit">km/h</span>
+      <i ref={line} />
+    </div>
+  )
+}
+
+/**
  * Putting the road down for a minute.
  *
  * Escape used to fall through to the garden's own key handling and take you
@@ -423,8 +487,24 @@ function EmberBar() {
  * The button in the corner is the same thing for a thumb. It used to say
  * "leave the road" and do it immediately, which is a destructive action one
  * mis-tap away from your only run of the day.
+ *
+ * **Three ways out, and starting again is one of them.** It offered exactly
+ * two — carry on, or give up and walk back to the fire — which quietly made
+ * "I got that corner wrong and want another go" into a four-step manoeuvre:
+ * leave the road, read the briefing, press start, sit through the countdown.
+ * It turns out that is most of what pausing is *for*. A run you have already
+ * decided against is not worth finishing, and the game should not make you
+ * finish it.
  */
-function Pause({ onLeave, hasResult }: { onLeave(): void; hasResult: boolean }) {
+function Pause({
+  onLeave,
+  onRestart,
+  hasResult,
+}: {
+  onLeave(): void
+  onRestart(): void
+  hasResult: boolean
+}) {
   const paused = useRace((s) => s.paused)
 
   useEffect(() => {
@@ -467,11 +547,28 @@ function Pause({ onLeave, hasResult }: { onLeave(): void; hasResult: boolean }) 
           <button type="button" onClick={() => useRace.getState().resume()}>
             back to it
           </button>
+          {/*
+            Resumed first, then restarted.
+
+            The pause flag lives in the session and the road reads it every
+            frame; a new attempt that began while the world was still held
+            would come up stopped, with a countdown that never counts.
+          */}
+          <button
+            type="button"
+            className="quiet"
+            onClick={() => {
+              useRace.getState().resume()
+              onRestart()
+            }}
+          >
+            from the top
+          </button>
           <button type="button" className="quiet" onClick={onLeave}>
             leave the road
           </button>
         </div>
-        <p className="rally-note">escape, either way</p>
+        <p className="rally-note">escape puts you back on it</p>
       </div>
     </div>
   )

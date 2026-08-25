@@ -216,6 +216,34 @@ export interface Message {
   body: string
   /** epoch ms, from the server clock where there is one. */
   at: number
+  /**
+   * The message this one answers, if it answers one.
+   *
+   * An id and nothing else — the quoted words are *not* copied in. Two reasons
+   * and the second is the one that matters: a copy is a second version of
+   * something that already exists, and a conversation between two people that
+   * runs for years must not accumulate two versions of anything. And an id
+   * resolves against the same list the reply is drawn from, so a quote can
+   * never show text that is not in the conversation.
+   *
+   * The message it points at may be older than the window that got loaded, in
+   * which case there is nothing to quote and the reply says so rather than
+   * pretending.
+   */
+  replyTo?: string
+  /**
+   * Who has put a heart on it, and when.
+   *
+   * One heart, from each of you, and that is the whole vocabulary. Not an
+   * emoji picker: there are exactly two people here forever, so a reaction is
+   * a yes or nothing — and a row of six alternatives to a heart would be six
+   * ways of saying something less than the one it replaced.
+   *
+   * The time is kept because it is free and it is the honest thing to know:
+   * she may have hearted something days after you said it, and that is a
+   * different event from hearting it while you were both awake.
+   */
+  hearts?: Partial<Record<UserId, number>>
 }
 
 export interface DailyAnswer {
@@ -468,8 +496,21 @@ export interface DataLayer {
    */
   watchMessages(listener: (messages: Message[]) => void, limit?: number): () => void
 
-  /** Say something. Empty bodies are refused rather than stored. */
-  sendMessage(body: string): Promise<void>
+  /**
+   * Say something. Empty bodies are refused rather than stored.
+   *
+   * `replyTo` is the id of the message being answered, if any. It is refused
+   * the same way an empty body is if it names nothing.
+   */
+  sendMessage(body: string, replyTo?: string): Promise<void>
+
+  /**
+   * Put a heart on something she said, or take yours off.
+   *
+   * Yours only — the seam has no way to express "heart this on her behalf" and
+   * the rules would refuse it if it did.
+   */
+  heartMessage(id: string, on: boolean): Promise<void>
 
   /**
    * Mark the conversation read up to now.

@@ -35,6 +35,7 @@ import {
   getDoc,
   getFirestore,
   onSnapshot,
+  deleteField,
   orderBy,
   query,
   limit as fsLimit,
@@ -796,12 +797,25 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
               const raw = d.data() as Record<string, unknown>
               const body = str(raw.body, '')
               if (body === '') return null
-              return {
-                id: d.id,
-                by: userId(raw.by),
-                body,
-                at: num(raw.at, 0),
-              } satisfies Message
+              const raws = raw.hearts as Record<string, unknown> | undefined
+              /*
+                Absent rather than present-and-undefined.
+
+                `{ replyTo: undefined }` is not the same shape as `{}` to
+                TypeScript's optional properties, and a `satisfies Message`
+                on the first one fails — which is the type system pointing at
+                something real: a message with an explicit undefined reply is
+                a message that has been asked about its reply and answered
+                "none", and that is not what a message with no reply is.
+              */
+              const hearts: Message['hearts'] = {}
+              if (typeof raws?.warm === 'number') hearts.warm = raws.warm
+              if (typeof raws?.cool === 'number') hearts.cool = raws.cool
+
+              const message: Message = { id: d.id, by: userId(raw.by), body, at: num(raw.at, 0) }
+              if (typeof raw.replyTo === 'string') message.replyTo = raw.replyTo
+              if (hearts.warm !== undefined || hearts.cool !== undefined) message.hearts = hearts
+              return message
             })
             .filter((m): m is Message => m !== null)
             .reverse()
@@ -810,13 +824,14 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       )
     },
 
-    async sendMessage(body) {
+    async sendMessage(body, replyTo) {
       const text = body.trim()
       if (text === '') return
       const id = newId()
       await setDoc(doc(db, MESSAGES, id), {
         by: me,
         body: text,
+        ...(replyTo ? { replyTo } : {}),
         // The server's clock, not this phone's. Two people seven timezones
         // apart with a minute of drift between their devices would otherwise
         // see the conversation in two different orders.
@@ -829,6 +844,20 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         { lastReadAt: { [me]: now() } },
         { merge: true },
       )
+    },
+
+    /*
+      One field, merged.
+
+      Written as `hearts.<me>` through `updateDoc` rather than by merging a
+      whole `hearts` object, so two people hearting two different messages —
+      or the same one — in the same second cannot overwrite each other. The
+      rules only ever let you write your own key; see firestore.rules.
+    */
+    async heartMessage(id, on) {
+      await updateDoc(doc(db, MESSAGES, id), {
+        [`hearts.${me}`]: on ? now() : deleteField(),
+      })
     },
 
     async markMessagesRead() {

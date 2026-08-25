@@ -40,6 +40,29 @@ const IDLE: CarInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, boos
 /** Flat out, straight ahead. */
 const FLAT: CarInput = { steer: 0, throttle: 1, brake: 0, handbrake: false, boost: false }
 
+/**
+ * Wind the car up to a speed, and give up loudly rather than hang.
+ *
+ * These were nine bare `while (speedOf(car) < 42)` loops, which is fine
+ * right up until the day the car's top speed is lowered past one of them —
+ * and then this harness does not fail, it **hangs**: no output, no error, no
+ * clue which of the nine it is sitting in. It cost twenty minutes to find,
+ * and the whole value of a headless check is that it answers in a minute.
+ *
+ * A test that cannot finish is worse than one that fails, so this one fails.
+ */
+function windUpTo(track: Track, car: CarState, target: number): void {
+  for (let step = 0; step < 120 * 120; step++) {
+    if (speedOf(car) >= target) return
+    advanceCar(track, car, FLAT, DT)
+  }
+  throw new Error(
+    `rally-check: cannot wind the car up to ${target} m/s — it tops out at ` +
+      `${speedOf(car).toFixed(1)}. Either the car has got slower than this test ` +
+      `expects, or the target needs lowering. Top speed is TOP_SPEED in physics.ts.`,
+  )
+}
+
 function fixed(n: number, places = 2): string {
   return Number.isFinite(n) ? n.toFixed(places) : String(n)
 }
@@ -183,7 +206,7 @@ function skidPad() {
 function handbrake() {
   const track = flatTrack(4000)
   const car = createCar(track)
-  while (speedOf(car) < 25) advanceCar(track, car, FLAT, DT)
+  windUpTo(track, car, 25)
 
   let peakSlip = 0
   let peakScrub = 0
@@ -215,7 +238,7 @@ function handbrake() {
 function lift() {
   const track = flatTrack(4000)
   const car = createCar(track)
-  while (speedOf(car) < 38) advanceCar(track, car, FLAT, DT)
+  windUpTo(track, car, 32)
   let peak = 0
   for (let step = 0; step < 120 * 3; step++) {
     advanceCar(track, car, { steer: 1, throttle: 1, brake: 0, handbrake: false, boost: false }, DT)
@@ -247,7 +270,7 @@ function steeringPulse() {
   ] as const) {
     const track = flatTrack(4000)
     const car = createCar(track)
-    while (speedOf(car) < 42) advanceCar(track, car, FLAT, DT)
+    windUpTo(track, car, 34)
 
     let peakN = 0
     let peakHeading = 0
@@ -297,7 +320,7 @@ function hairpin() {
   ] as const) {
     const track = flatTrack(3000)
     const car = createCar(track)
-    while (speedOf(car) < 25) advanceCar(track, car, FLAT, DT)
+    windUpTo(track, car, 25)
     const entry = speedOf(car)
 
     let turned = 0
@@ -538,10 +561,10 @@ function understeerGradient() {
  */
 function recovery() {
   const rows: string[] = []
-  for (const v of [22, 34, 44]) {
+  for (const v of [20, 28, 34]) {
     const track = flatTrack(9000)
     const car = createCar(track)
-    while (speedOf(car) < v) advanceCar(track, car, FLAT, DT)
+    windUpTo(track, car, v)
 
     // A yaw impulse, as if a stone had caught the back of the car.
     car.yaw += 0.75
@@ -666,7 +689,7 @@ function pedals() {
   const car = createCar(track)
 
   // Up to speed, then off the power entirely and let it run down.
-  while (speedOf(car) < 30) advanceCar(track, car, FLAT, DT)
+  windUpTo(track, car, 30)
   const from = speedOf(car)
   const liftedAt = car.elapsed
   let coastTo = -1
@@ -680,7 +703,7 @@ function pedals() {
 
   // Again, this time on the brakes from the same speed.
   const braked = createCar(track)
-  while (speedOf(braked) < 30) advanceCar(track, braked, FLAT, DT)
+  windUpTo(track, braked, 30)
   const brakeFrom = braked.elapsed
   let stopIn = -1
   let stopped = 0
@@ -781,7 +804,7 @@ function liftOff() {
   ] as const) {
     const track = flatTrack(9000)
     const car = createCar(track)
-    while (speedOf(car) < 34) advanceCar(track, car, FLAT, DT)
+    windUpTo(track, car, 34)
 
     let peakYaw = 0
     let peakSlip = 0
@@ -852,7 +875,7 @@ function liftOff() {
 function driftMode() {
   const track = flatTrack(9000)
   const car = createCar(track)
-  while (speedOf(car) < 30) advanceCar(track, car, FLAT, DT)
+  windUpTo(track, car, 30)
 
   const rows: string[] = []
   /** Heading change over a stretch, unwrapped — `psi` lives on a circle. */

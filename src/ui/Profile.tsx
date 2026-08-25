@@ -16,6 +16,7 @@ import { useData, useWorldSlice } from '@/data/provider'
 import { parseCoordinates } from '@/systems/geo'
 import { isValidTimeZone, localTimeLabel } from '@/systems/time'
 import { useProfileSheet } from '@/systems/profileSheet'
+import { useNotify } from '@/systems/notify'
 
 /**
  * Somewhere to start. Not a complete list — anything IANA is accepted below,
@@ -30,6 +31,51 @@ const ZONES = [
   'America/New_York',
   'UTC',
 ]
+
+/**
+ * Whether this device should say something when she does.
+ *
+ * Here rather than in the Stars because it is a setting and this is where the
+ * settings are — but also because it is *about this device*, and so is
+ * everything else on this sheet.
+ *
+ * **The words have to be exact.** A web page cannot notify you once it is
+ * closed; that needs a service worker holding a push subscription, which is
+ * the PWA work in the plan and is not built. So it says "while the garden is
+ * open" and means it. The honesty law is not a style — a toggle that implies
+ * more than it does fails silently, at night, for somebody who was waiting.
+ */
+function Telling() {
+  const wanted = useNotify((s) => s.wanted)
+  const standing = useNotify((s) => s.standing)
+  const want = useNotify((s) => s.want)
+  const refresh = useNotify((s) => s.refresh)
+
+  useEffect(() => refresh(), [refresh])
+
+  if (standing === 'unsupported') return null
+
+  const blocked = standing === 'denied'
+
+  return (
+    <p className="pot-rate">
+      <label className="profile-toggle">
+        <input
+          type="checkbox"
+          checked={wanted && !blocked}
+          disabled={blocked}
+          onChange={(e) => void want(e.target.checked)}
+        />
+        <span className="profile-field">tell me when she says something</span>
+      </label>
+      <span className="pot-why">
+        {blocked
+          ? 'This browser is refusing notifications for the garden. It has to be turned back on in the browser’s own settings for this site — a page cannot ask twice.'
+          : 'While the garden is open, on this device — in another tab, or with the screen off. It cannot reach you once the page is closed.'}
+      </span>
+    </p>
+  )
+}
 
 export function ProfileSheet() {
   const data = useData()
@@ -168,6 +214,8 @@ export function ProfileSheet() {
                 it empty and no distance is shown, rather than a wrong one.
               </span>
             </p>
+
+            <Telling />
 
             <p className="door-trouble" role="status" aria-live="polite">
               {trouble ?? ''}

@@ -1,5 +1,6 @@
 import type { GameDefinition } from '../types'
 import WordDuel from './WordDuel'
+import WordDuelEmblem from './emblem'
 
 /**
  * What you chose for her. The opening move, and the security rules hold it
@@ -41,10 +42,20 @@ export default {
   cadence: 'daily',
   duration: 'a few minutes, once a day',
   order: 0,
+  /*
+    A clock is what makes this one different, so a clock is what it is called.
+    See `live` on GameDefinition for why the shell no longer names it.
+  */
+  invite: {
+    name: 'leave {them} a word',
+    tip: 'She picks yours apart whenever she next comes down here',
+  },
+  live: { name: 'time challenge', tip: 'Five minutes each, same word' },
 
   makeSetup(seed) {
     return { seed }
   },
 
+  Emblem: WordDuelEmblem,
   Component: WordDuel,
 } satisfies GameDefinition<DuelSetup, DuelMove>

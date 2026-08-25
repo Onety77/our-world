@@ -222,10 +222,49 @@ const ROUNDS_KEY = 'garden:rounds:v1'
  * talking would otherwise repaint the meadow, the river and the overlay on
  * every sentence — and a chat is the one thing here that will change often.
  */
+/**
+ * A few things already said, so the sky is not empty the first time you stand
+ * under it.
+ *
+ * Same reasoning as the seeded letters, and the same caveat: this is the
+ * *mock*. The Firebase layer starts genuinely empty, because a real
+ * conversation that arrives pre-populated with sentences neither of you wrote
+ * would be the single worst thing this garden could do.
+ *
+ * It is here because half of what the Stars can now do is invisible without
+ * it — a reply needs something to reply to, a heart needs something to sit on,
+ * and "one light, low over her dawn" cannot be judged against no lights at
+ * all. The last one is hers and unanswered, which is the state the corner and
+ * the notification are both built around. "Reset world" in the dev panel
+ * clears the lot.
+ */
+function seedMessages(): Message[] {
+  const now = Date.now()
+  const minute = 60_000
+  const drafts: [UserId, string, number, string?][] = [
+    ['warm', 'Found somewhere with a whole sky in it. I think you will like it.', 260],
+    ['cool', 'Is it the one you would not tell me about for three weeks?', 213],
+    ['warm', 'That one. There is a tree in it that keeps things.', 190],
+    ['cool', 'It is nearly morning here and I am still awake looking at this.', 26],
+  ]
+  return drafts.map(([by, body, agoMinutes], index) => ({
+    id: `seed-said-${index}`,
+    by,
+    body,
+    at: now - agoMinutes * minute,
+    // The third answers the second, so a quote has something to draw.
+    ...(index === 2 ? { replyTo: 'seed-said-1' } : {}),
+    // And she left a heart on the first, which is the two-colour state.
+    ...(index === 0 ? { hearts: { cool: now - 250 * minute } } : {}),
+  }))
+}
+
 function loadMessages(): Message[] {
-  if (typeof localStorage === 'undefined') return []
+  if (typeof localStorage === 'undefined') return seedMessages()
   try {
-    const raw = JSON.parse(localStorage.getItem(MESSAGES_KEY) ?? '[]')
+    const stored = localStorage.getItem(MESSAGES_KEY)
+    if (stored === null) return seedMessages()
+    const raw = JSON.parse(stored)
     return Array.isArray(raw) ? (raw as Message[]) : []
   } catch {
     return []
@@ -595,20 +634,35 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       }
     },
 
-    async sendMessage(body) {
+    async sendMessage(body, replyTo) {
       const text = body.trim()
       // An empty message is not a message. Refused here rather than disabled
       // in the UI alone, because the seam is the thing both layers share.
       if (text === '') return
+      // A reply to something that is not there is not a reply. Dropped rather
+      // than stored, so nothing downstream has to cope with a dangling id.
+      const answers = replyTo && messages.some((m) => m.id === replyTo) ? replyTo : undefined
       messages = [
         ...messages,
-        { id: newId(), by: me, body: text, at: Date.now() },
+        { id: newId(), by: me, body: text, at: Date.now(), ...(answers ? { replyTo: answers } : {}) },
       ]
       saveMessages()
       tellMessageWatchers()
       // Saying something is also reading everything up to it — you cannot
       // reply to a conversation you have not looked at.
       commit({ ...state, lastReadAt: { ...state.lastReadAt, [me]: Date.now() } })
+    },
+
+    async heartMessage(id, on) {
+      messages = messages.map((m) => {
+        if (m.id !== id) return m
+        const hearts = { ...(m.hearts ?? {}) }
+        if (on) hearts[me] = Date.now()
+        else delete hearts[me]
+        return { ...m, hearts }
+      })
+      saveMessages()
+      tellMessageWatchers()
     },
 
     async markMessagesRead() {

@@ -215,7 +215,32 @@ service cloud.firestore {
         && request.resource.data.body.size() <= 4000
         && request.resource.data.at is number;
 
-      allow update, delete: if false;
+      /*
+        A message is never edited. A *heart* on one is not editing it.
+
+        The only field either of you may ever change on somebody else's words
+        is your own key under `hearts` — the body, the author and the time are
+        written once and are then the record. `affectedKeys` is what makes that
+        enforceable rather than a convention: a write that touches anything
+        besides `hearts.<me>` is refused here, not in the client.
+
+        Taking a heart back is a delete of that same key, which arrives as the
+        same affected key, so it needs no separate rule.
+      */
+      allow update: if isOneOfUs()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['hearts'])
+        // `get` with a default on *both* sides, because either one can be
+        // absent: the first heart on a message arrives before the map exists,
+        // and taking back the only heart can remove the map entirely. Reading
+        // a missing field directly is an error, and an error is a denial — so
+        // without this the two ends of a heart's life are the two that fail.
+        && request.resource.data.get('hearts', {}).diff(
+             resource.data.get('hearts', {})
+           ).affectedKeys().hasOnly([me()]);
+
+      allow delete: if false;
     }
 
     match /rounds/{roundId} {

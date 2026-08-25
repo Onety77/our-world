@@ -1185,6 +1185,22 @@ canvas {
   color: rgba(242, 239, 230, 0.24);
 }
 
+/*
+  A thumb is not a mouse pointer.
+
+  These are the confirm-and-cancel of the entire world — hand it in, lay it
+  down, back to the fire — and at 31px tall they were under every published
+  minimum for a touch target. The *look* stays exactly the same: the extra is
+  padding, which is invisible and catchable, rather than a bigger typeface.
+  Keyed on the pointer rather than the width, because a small window on a
+  laptop is still a mouse.
+*/
+@media (pointer: coarse) {
+  .put-back {
+    padding-block: 0.8rem;
+  }
+}
+
 .sheet-actions {
   display: flex;
   gap: 1.8rem;
@@ -2264,6 +2280,103 @@ canvas {
 }
 
 /*
+  How fast you are going.
+
+  The third exception to "no interface", and the note in `EmberRally` says why
+  it earned one: everything else the racer tells you about speed is *relative*
+  — the wind, the field of view, the walls, the gearbox — and not one of them
+  can say "this is as fast as it goes".
+
+  **Top right, and that was decided by the thumbs.** Racing games put it bottom
+  right, which here is the pedal: on a phone the right half of the screen is
+  the throttle, so the number would live under a thumb for the whole race.
+  Both bottom corners are hands. The top of the frame is receding tunnel roof,
+  and on a phone the camera aims high so there is more of it.
+
+  No dial, no bezel, no needle. The number, and a line of light under it — the
+  same vocabulary as the ember bar at the bottom of the screen, so the two read
+  as one instrument in two places rather than as two widgets.
+*/
+.rally-speed {
+  position: absolute;
+  z-index: 4;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1.15rem, env(safe-area-inset-right));
+  display: grid;
+  /* the number and its unit on one line, the fill under both */
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  justify-items: end;
+  gap: 0 0.32em;
+  text-align: right;
+  pointer-events: none;
+}
+
+.rally-speed b {
+  grid-column: 1;
+  font-family: var(--serif);
+  font-weight: 400;
+  /* Big. It is read in peripheral vision at forty metres a second, which is
+     the only reading condition that matters and is not a gentle one. */
+  font-size: clamp(2.1rem, 6.4vw, 3.1rem);
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-shadow: var(--lift);
+  /* Or the number dances as 1s and 8s swap width, and the one thing on screen
+     that has to be still is the thing moving. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.rally-speed-unit {
+  grid-column: 2;
+  font-family: var(--sans);
+  font-size: 0.56rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.46);
+  text-shadow: var(--lift);
+}
+
+.rally-speed i {
+  grid-column: 1 / -1;
+  margin-top: 0.34rem;
+  width: clamp(4.6rem, 16vw, 6.4rem);
+  height: 2px;
+  transform-origin: 100% 50%;
+  transform: scaleX(0);
+  /* Brightest at the right, where it starts — it grows back toward the
+     number rather than away from it, so the eye lands on both at once. */
+  background: linear-gradient(90deg, rgba(226, 236, 255, 0.25), #dbe6ff);
+  box-shadow: 0 0 6px rgba(190, 214, 255, 0.4);
+}
+
+/* Flat out. The one moment the meter is worth a glance. */
+.rally-speed i.flat {
+  background: linear-gradient(90deg, rgba(255, 214, 160, 0.4), #ffd79a);
+  box-shadow: 0 0 12px rgba(255, 190, 110, 0.85);
+}
+
+/*
+  Behind the meter, a track it is filling along.
+
+  Barely there — the same trick the ember bar uses. Without it the line has a
+  value but no *scale*, and a bar with no scale is just a light that changes
+  length.
+*/
+.rally-speed::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: clamp(4.6rem, 16vw, 6.4rem);
+  height: 2px;
+  background: rgba(226, 236, 255, 0.12);
+  z-index: -1;
+}
+
+/*
   The road, held still.
 
   Over the whole screen and *opaque enough to stop it*, for the same reason the
@@ -3006,7 +3119,9 @@ canvas {
   left: 0;
   right: 0;
   margin: 0;
-  /* Written every frame — see the note above. Nothing here may transition. */
+  /* The transform is written every frame — see the note above, and nothing
+     may transition *that*. `translate` is a separate property and belongs to
+     the swipe; see the block at the end of this file. */
   transform-origin: 50% 50%;
   will-change: transform, opacity;
   text-align: center;
@@ -3251,12 +3366,47 @@ canvas {
   on top of "The Tree of Thoughts" and its invitation — the music covering the
   name of the place you were standing in.
 */
-.player {
+/*
+  The corner: music, and the conversation, in one column.
+
+  **Every other corner of this world is spoken for**, and that is not an
+  accident of layout — it is what the garden is made of. Bottom left is the
+  name of the place you are looking at and the way into it; top left is the way
+  back out; top right is the two of you and your two clocks; bottom centre is
+  the row of marks. The conversation was put in the bottom left and the place
+  card was made to *disappear* for it, which is not resolving a collision, it
+  is hiding the evidence of one.
+
+  So the two things that follow you everywhere share a corner. They belong
+  together anyway: neither music nor talking is somewhere you *go*, both are
+  things happening while you are somewhere else, and a single quiet column in
+  one corner is less furniture than two.
+
+  Anchored at the bottom on a laptop, so it grows *upward* and the music never
+  moves. On a phone it goes to the top under the two of you — which is where
+  the player already went on its own, for the good reason that the bottom of a
+  phone is thumbs.
+*/
+.corner {
   position: fixed;
   right: max(1.25rem, env(safe-area-inset-right));
   bottom: max(1.1rem, env(safe-area-inset-bottom));
   z-index: 11;
   width: min(17.5rem, calc(100vw - 2.5rem));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.85rem;
+  /* The column is only a frame; nothing in the gaps should catch a gesture. */
+  pointer-events: none;
+}
+
+.corner > * {
+  pointer-events: auto;
+}
+
+.player {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -3512,7 +3662,7 @@ canvas {
   growing up into the same crowded space.
 */
 @media (max-width: 34rem) {
-  .player {
+  .corner {
     /* Below the two of you, who occupy the top right down to about
        six rem on the narrowest screen. */
     top: max(7.2rem, calc(env(safe-area-inset-top) + 6.6rem));
@@ -3520,6 +3670,16 @@ canvas {
     left: max(1.25rem, env(safe-area-inset-left));
     right: max(1.25rem, env(safe-area-inset-right));
     width: auto;
+    /*
+      The music leads on a phone and the conversation hangs under it, so the
+      column grows *downward* away from the top edge. Reversing the flex rather
+      than reordering the markup keeps the reading order — conversation first —
+      for anything that follows the document instead of the layout.
+    */
+    flex-direction: column-reverse;
+  }
+
+  .player {
     /* Bar first, list under it — the reverse of the desktop stack. */
     flex-direction: column-reverse;
   }
@@ -3537,6 +3697,35 @@ canvas {
 
   .player-elapsed {
     order: -2;
+  }
+
+  /*
+    Inside a place — or inside a game, a letter, a form — the corner takes the
+    top edge itself.
+
+    `top: 7.2rem` above is measured off the two of you and the clocks. But that
+    block hides the moment you enter anywhere, so from the Hollow onward the
+    corner was left hanging in mid-air with nothing above it, and inside a game
+    it hung over the middle of the board. It looked like a bug because it was
+    one, and it was in every place and every game, not just the newest.
+
+    So when the top is free it goes to the very top, and it stops spanning the
+    width: what is below it is a stable band a place can lay out under, which
+    is what `.scatter` does. It is not hidden, because "reachable without
+    leaving what you are doing" is the entire reason the music and the
+    conversation share a corner rather than being places you go.
+  */
+  .corner.clear {
+    /* Under the way back out, which keeps the top left of every place. */
+    top: max(3.1rem, calc(env(safe-area-inset-top) + 2.7rem));
+    bottom: auto;
+    left: auto;
+    width: min(15.5rem, calc(100vw - 2.5rem));
+  }
+
+  /* Nothing up here at all once the screen is taken — not even the way out. */
+  .corner.clear.only {
+    top: max(0.9rem, calc(env(safe-area-inset-top) + 0.5rem));
   }
 }
 
@@ -3569,7 +3758,7 @@ canvas {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.34rem;
+  gap: 0.3rem;
   padding: 0 0.5rem;
   translate: calc(var(--at) * -100%) 0;
   transition:
@@ -3585,61 +3774,285 @@ canvas {
 .game-card strong {
   font-family: var(--serif);
   font-weight: 400;
-  font-size: clamp(1.35rem, 5vw, 1.85rem);
+  font-size: clamp(1.5rem, 5.4vw, 2.05rem);
   color: var(--ink);
-  line-height: 1.1;
+  line-height: 1.06;
+  margin-top: 0.55rem;
 }
 
 .game-card small {
   font-family: var(--serif);
   font-size: 0.9rem;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--ink-dim);
-  max-width: 24ch;
+  max-width: 26ch;
+  margin-top: 0.1rem;
 }
 
 .game-length {
   font-family: var(--sans);
-  font-size: 0.56rem;
-  letter-spacing: 0.16em;
+  font-size: 0.54rem;
+  letter-spacing: 0.17em;
   text-transform: uppercase;
   color: var(--ink-faint);
 }
 
-/* ---- the two ways in ---- */
+/* --------------------------------------------------------------------------
+   The emblems
 
-.game-ways {
-  display: flex;
-  justify-content: center;
-  gap: 1.6rem;
-  flex-wrap: wrap;
-  margin-top: 0.9rem;
+   Each game draws itself out of its own parts — see `Emblem` on
+   GameDefinition for why, and the two `emblem.tsx` files for what. These are
+   the shared frame: a fixed box so the row does not jump as you swipe along
+   it, and a warm pool of light under everything, because these are objects
+   lying on the floor of a cave and not pictures hung on a wall.
+   -------------------------------------------------------------------------- */
+
+.emblem {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(9rem, 42vw, 12.5rem);
+  height: clamp(3.4rem, 15vw, 4.6rem);
+  pointer-events: none;
 }
 
-.game-ways button {
+/* The firelight it is sitting in. */
+.emblem::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -0.55rem;
+  translate: -50% 0;
+  width: 118%;
+  height: 2.1rem;
+  background: radial-gradient(
+    50% 50% at 50% 50%,
+    rgba(255, 168, 88, 0.14) 0%,
+    transparent 72%
+  );
+  z-index: -1;
+}
+
+/* ---- Word Duel: a word half worked out on five stones ---- */
+
+.emblem-stones {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.2rem, 1vw, 0.36rem);
+}
+
+.emblem-stones i {
+  display: grid;
+  place-items: center;
+  width: clamp(1.5rem, 6.6vw, 2rem);
+  height: clamp(1.5rem, 6.6vw, 2rem);
+  font-family: var(--serif);
+  font-style: normal;
+  font-size: clamp(0.78rem, 3.2vw, 1.02rem);
+  color: var(--ink-dim);
+  /* the same stone the board is made of — lit from above, in its own shadow */
+  background:
+    radial-gradient(ellipse 70% 60% at 38% 30%, rgba(255, 255, 255, 0.09), transparent 60%),
+    linear-gradient(163deg, #3f3a33, #2a2622);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.06),
+    0 2px 5px rgba(0, 0, 0, 0.45);
+}
+
+/*
+  One each.
+
+  Warm is you and cool is her, everywhere in this garden — so a row with one of
+  each lit on it says "a word each, two people" with no words at all.
+*/
+.emblem-stones i.lit.warm {
+  color: #2a2015;
+  background: linear-gradient(163deg, #e8a552, #c07f33);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.2),
+    0 2px 8px rgba(224, 150, 70, 0.3);
+}
+
+.emblem-stones i.lit.cool {
+  color: #1b2233;
+  background: linear-gradient(163deg, #a9bce8, #7e93c8);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    0 2px 8px rgba(150, 176, 232, 0.28);
+}
+
+/* Nothing laid here yet, and nothing pretending otherwise. */
+.emblem-stones.waiting i {
+  opacity: 0.4;
+}
+
+/* ---- Ember Rally: two cars in the dark ---- */
+
+.emblem-lamps i {
+  position: absolute;
+}
+
+/* the rock they are in */
+.emblem-lamps .throat {
+  inset: 0;
+  background: radial-gradient(
+    58% 78% at 50% 62%,
+    rgba(120, 74, 40, 0.4) 0%,
+    rgba(52, 32, 20, 0.28) 44%,
+    transparent 76%
+  );
+}
+
+/* her line of fire, running away up the road */
+.emblem-lamps .trail {
+  left: 38%;
+  right: 38%;
+  top: 34%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(176, 198, 244, 0.5),
+    transparent
+  );
+  filter: blur(0.5px);
+}
+
+.emblem-lamps .lamp {
+  border-radius: 50%;
+}
+
+/*
+  Hers is smaller and higher up the frame because she is further away. It is
+  the only perspective cue something this size can carry, and the only one it
+  needs — the whole game is that she is up the road and you are not.
+*/
+.emblem-lamps .lamp.hers {
+  width: 0.42rem;
+  height: 0.42rem;
+  top: 28%;
+  background: #cfe0ff;
+  box-shadow: 0 0 9px 2px rgba(150, 180, 240, 0.55);
+}
+
+.emblem-lamps .lamp.hers.left {
+  left: 44%;
+}
+.emblem-lamps .lamp.hers.right {
+  left: 52%;
+}
+
+.emblem-lamps .lamp.mine {
+  width: 0.72rem;
+  height: 0.72rem;
+  bottom: 22%;
+  background: #fff0d2;
+  box-shadow:
+    0 0 14px 4px rgba(255, 190, 110, 0.55),
+    0 0 30px 10px rgba(255, 150, 60, 0.22);
+}
+
+.emblem-lamps .lamp.mine.left {
+  left: 34%;
+}
+.emblem-lamps .lamp.mine.right {
+  right: 34%;
+}
+
+/* ---- the ways in ---- */
+
+/*
+  One invitation and two alternatives, rather than three labels in a row.
+
+  It was three words in small capitals at one size, which is a toolbar: nothing
+  about it said which one you probably wanted, and "vs cool" sat at the same
+  weight as "one player" as though they were the same kind of choice. The
+  garden's other thresholds are a serif verb — "plant a thought", "add to
+  ours" — and this is the Hollow's.
+*/
+.game-ways {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1.15rem;
+}
+
+.game-go {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+  font-family: var(--serif);
+  font-size: clamp(1.08rem, 3.4vw, 1.28rem);
+  color: var(--ink);
+  text-shadow: var(--lift);
+}
+
+/* The same beam of light every other way-in in the garden is underlined with. */
+.game-go::after {
+  content: '';
+  display: block;
+  height: 1px;
+  width: 100%;
+  margin-top: 0.4rem;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.55;
+  transition: opacity 0.4s ease;
+}
+
+.game-go:hover,
+.game-go:focus-visible {
+  color: var(--warm);
+  outline: none;
+}
+
+.game-go:hover::after,
+.game-go:focus-visible::after {
+  opacity: 1;
+}
+
+.game-else {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/*
+  The two alternatives, and only them.
+
+  Scoped to `.game-else` rather than to every button in the row: written as
+  `.game-ways button` it also matched the serif invitation above — which comes
+  earlier in this file — and quietly turned it back into a word in small
+  capitals, identical to the two things it is supposed to be louder than.
+*/
+.game-else button {
   background: none;
   border: 0;
   cursor: pointer;
   padding: 0.35rem 0.1rem;
   font-family: var(--sans);
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
+  font-size: 0.66rem;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--ink);
+  color: var(--ink-dim);
   text-shadow: var(--lift);
 }
 
-.game-ways button.quiet {
+
+.game-else button.quiet {
   color: var(--ink-dim);
 }
 
-.game-ways button:hover,
-.game-ways button:focus-visible {
+.game-else button:hover,
+.game-else button:focus-visible {
   color: var(--warm);
 }
 
-/* The same beam of light the rest of the garden underlines things with. */
-.game-ways button::after {
+.game-else button::after {
   content: '';
   display: block;
   height: 1px;
@@ -4073,4 +4486,1507 @@ canvas {
   .arrival button {
     animation: none;
   }
+}
+
+/* --------------------------------------------------------------------------
+   Answering, hearting, and the corner
+
+   Everything below belongs to the conversation. Three things were missing and
+   all three are the same kind of missing: the Stars could show you a
+   conversation beautifully and could not let you *do* anything to it except
+   add another line to the end.
+   -------------------------------------------------------------------------- */
+
+/*
+  What a message answers, above it.
+
+  Indented, quieter, smaller, and clipped to two lines — it is context, not
+  content, and a quote that competes with the reply under it has made the reply
+  harder to read in order to explain it. The rule down the left is the only
+  ornament, and it is the oldest one there is for "these are somebody else's
+  words".
+*/
+.said-answering {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 26ch;
+  margin: 0 auto 0.3rem;
+  padding-left: 0.62rem;
+  border-left: 1px solid rgba(242, 239, 230, 0.22);
+  text-align: left;
+  font-family: var(--serif);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: rgba(242, 239, 230, 0.5);
+}
+
+/* Out of the loaded window. Said plainly rather than left blank. */
+.said-answering.gone {
+  font-style: italic;
+  color: rgba(242, 239, 230, 0.34);
+}
+
+/* ---- the quote over the composer ---- */
+
+.saying-answering,
+.whisper-answering {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  margin: 0;
+  padding-left: 0.62rem;
+  border-left: 1px solid rgba(242, 239, 230, 0.24);
+}
+
+.saying-quote,
+.whisper-quote {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: rgba(242, 239, 230, 0.55);
+  /* One line: this is a reminder of what you picked, not a re-reading of it. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.saying-drop,
+.whisper-drop {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0.1rem;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.55rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.42);
+}
+
+.saying-drop:hover,
+.whisper-drop:hover {
+  color: var(--ink);
+}
+
+/* --------------------------------------------------------------------------
+   The conversation folded into a corner
+
+   Bottom left, mirroring the music in the bottom right, and for exactly the
+   same reason: talking is not somewhere you go, it is something you do while
+   you are somewhere else. See ui/Whisper.
+
+   No panel and no bubble. Text on the world with the garden's lift shadow —
+   being useful does not suspend the design law.
+   -------------------------------------------------------------------------- */
+
+.whisper,
+.whisper-fold {
+  width: 100%;
+  text-align: left;
+  /*
+    The heavy lift, not the ordinary one.
+
+    This corner has no idea what is behind it: the Stars' own dawn, the black
+    of a cave, or — the case that broke it — a hillside in full afternoon sun,
+    which is the brightest thing in the garden and exactly where the ordinary
+    shadow gives up. Same four layers the conversation in the sky uses, for the
+    same reason: the tight one holds the letterforms and the wide one darkens
+    the ground behind the whole block without ever reading as a shape.
+  */
+  text-shadow:
+    0 1px 2px rgba(4, 6, 12, 0.95),
+    0 0 8px rgba(4, 6, 12, 0.92),
+    0 0 22px rgba(4, 6, 12, 0.85),
+    0 0 44px rgba(4, 6, 12, 0.65);
+}
+
+.whisper-fold {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: none;
+  border: 0;
+  padding: 0.35rem 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: rgba(242, 239, 230, 0.86);
+}
+
+.whisper-fold:hover {
+  color: var(--ink);
+}
+
+/*
+  The mark.
+
+  A small light rather than a badge with a number in it — the number is in the
+  words beside it, and a counter in a circle is the one shape this garden has
+  spent its whole life not drawing. It breathes when she is waiting.
+*/
+.whisper-mark {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(242, 239, 230, 0.3);
+}
+
+.whisper-fold.waiting .whisper-mark {
+  background: var(--cool);
+  box-shadow: 0 0 9px 2px rgba(159, 182, 232, 0.6);
+  animation: whisper-waiting 3.4s ease-in-out infinite;
+}
+
+.whisper-fold.waiting .whisper-fold-words {
+  color: var(--ink);
+}
+
+@keyframes whisper-waiting {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.whisper-fold-words {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.whisper.open {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.whisper-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.whisper-said {
+  margin: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-family: var(--serif);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+/*
+  Who said it, in the sans the garden labels everything with — and in their own
+  colour, so four lines in a corner are still two people.
+*/
+.whisper-who {
+  flex: 0 0 auto;
+  font-family: var(--sans);
+  font-size: 0.55rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.whisper-said.mine .whisper-who {
+  color: #e8b97e;
+}
+
+.whisper-said.hers .whisper-who {
+  color: #a9c0ff;
+}
+
+.whisper-body {
+  color: rgba(242, 239, 230, 0.94);
+  /* Two lines each. It is a corner, not a transcript. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.whisper-none {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.whisper-write {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.7rem;
+}
+
+.whisper-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.45);
+  padding: 0.2rem 0 0.3rem;
+  resize: none;
+  font-family: var(--serif);
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.whisper-field::placeholder {
+  color: rgba(242, 239, 230, 0.55);
+}
+
+.whisper-field:focus {
+  outline: none;
+  border-bottom-color: rgba(242, 239, 230, 0.8);
+}
+
+.whisper-send,
+.whisper-fold-away {
+  background: none;
+  border: 0;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.whisper-fold-away {
+  align-self: flex-start;
+  color: var(--ink-dim);
+}
+
+.whisper-send:hover,
+.whisper-fold-away:hover {
+  color: var(--warm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .whisper-fold.waiting .whisper-mark {
+    animation: none;
+  }
+}
+
+/* The notification toggle on the profile sheet. */
+.profile-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+}
+
+.profile-toggle input {
+  accent-color: var(--warm);
+  width: 0.95rem;
+  height: 0.95rem;
+  cursor: pointer;
+}
+/* --------------------------------------------------------------------------
+   Reaching for a message
+
+   Nothing is drawn until you do — see `ui/Said` for the argument. What is here
+   is the *feedback*: a line that follows a swipe, the mark that says letting go
+   will answer it, the menu a right-click opens, and hearts, which are state
+   rather than a control and so are always visible.
+   -------------------------------------------------------------------------- */
+
+.said,
+.whisper-said {
+  /* The line is the control, so it has to accept the gesture — and the browser
+     must not decide a leftward drag on it was a scroll and take it away. */
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/*
+  Following the thumb.
+
+  `translate` is written by the gesture and `transform` by the Stars' own frame
+  loop — the lift, the lean, the scale, the parallax. They compose, which is the
+  whole reason the independent property exists and the same reason the garden's
+  drift-in uses it. A transition on it would fight the drag, so it is only there
+  for the snap back, and the drag clears it.
+*/
+.said,
+.whisper-said {
+  transition: translate 0.28s cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+
+/*
+  Far enough left that letting go answers it.
+
+  The mark comes in where the line came *from*, which is the direction the
+  gesture is telling you about. It is the only thing this whole interaction
+  draws, and it is drawn for about a third of a second.
+*/
+.said::after,
+.whisper-said::after {
+  content: '↩';
+  position: absolute;
+  top: 50%;
+  right: -1.5rem;
+  translate: 0 -50%;
+  font-size: 0.9rem;
+  color: var(--cool);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+.whisper-said {
+  position: relative;
+}
+
+.said[data-answering]::after,
+.whisper-said[data-answering]::after {
+  opacity: 1;
+}
+
+/* --- hearts, which are state --- */
+
+.said-hearts {
+  display: inline-flex;
+  gap: 0.14em;
+  margin-left: 0.45em;
+  font-size: 0.72em;
+  line-height: 1;
+  vertical-align: baseline;
+}
+
+.said .said-hearts {
+  display: block;
+  justify-content: center;
+  margin: 0.2rem 0 0;
+}
+
+.said-hearts i {
+  font-style: normal;
+}
+
+.said-hearts i.mine {
+  color: #ff9d6b;
+  text-shadow: 0 0 10px rgba(255, 130, 70, 0.6);
+}
+
+.said-hearts i.hers {
+  color: #a9c0ff;
+  text-shadow: 0 0 10px rgba(150, 180, 250, 0.55);
+}
+
+/* --- the menu a right-click opens --- */
+
+/*
+  The one place in this garden with a list of choices in a box, and it is not
+  one: no fill, no border, no rounded rectangle. Two words on the dark with the
+  garden's heaviest lift under them, which is exactly what every other floating
+  thing here is made of. It is small because it has two items in it and will
+  never have more — there are two things you can do to something somebody said.
+*/
+.said-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  padding: 0.35rem 0;
+  text-shadow:
+    0 1px 2px rgba(4, 6, 12, 0.95),
+    0 0 8px rgba(4, 6, 12, 0.92),
+    0 0 26px rgba(4, 6, 12, 0.88),
+    0 0 52px rgba(4, 6, 12, 0.7);
+  animation: drift-in 0.24s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.said-menu button {
+  background: none;
+  border: 0;
+  padding: 0.32rem 0.2rem;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.said-menu button:hover,
+.said-menu button:focus-visible {
+  color: var(--warm);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .said,
+  .whisper-said,
+  .said-menu {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   What is waiting
+
+   The Hollow's second view: one line per game, all of them at once, and a way
+   straight in. See `Challenges` in ui/Threshold for why it exists and why the
+   four states are worded the way they are.
+   -------------------------------------------------------------------------- */
+
+/*
+  The way there, set apart.
+
+  Under the marks and behind a hairline, because it is not one of the games. A
+  row you swipe along is things you play; this is a report on all of them, and
+  without the rule it reads as a fourth item in a list of three.
+*/
+/*
+  Scoped to the Hollow, and that is not decoration.
+
+  `.threshold > button` is the garden's big serif invitation — "plant a
+  thought", "add to ours" — and this is a direct child of a threshold, so it
+  inherited a two-rem serif and came out as the largest thing on the screen,
+  louder than the game it sits under. Two classes beat a class and an element,
+  which is the whole reason for the extra one.
+*/
+.hollow-threshold .to-waiting {
+  position: relative;
+  margin-top: 1.15rem;
+  padding: 0.9rem 0.4rem 0.3rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  text-shadow: var(--lift);
+  font-family: var(--sans);
+}
+
+.to-waiting::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: 3.4rem;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(242, 239, 230, 0.28),
+    transparent
+  );
+}
+
+.to-waiting:hover,
+.to-waiting:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+/*
+  What is waiting, on the way in to the thing that lists it.
+
+  The label is a name and this is the answer, so it is set apart on its own
+  line and lit: warm because most of what it ever says is something you can go
+  and do. If it read the same as the label nobody would look at it, and if it
+  were not there you would have to open a list to find out there was nothing in
+  it.
+*/
+.to-waiting-now {
+  display: block;
+  margin-top: 0.34rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  color: var(--warm);
+  text-transform: none;
+  font-variant: small-caps;
+}
+
+/* ---- the list itself ---- */
+
+.challenges {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.challenges-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.1rem;
+  width: min(24rem, 84vw);
+}
+
+/*
+  One line each: the game on the left, where it stands on the right.
+
+  Two columns and nothing between them — no rule, no dots, no fill. The names
+  are in the serif everything in this world is named in and the states are in
+  the small sans it labels things with, which is enough to tell them apart
+  across a gap.
+*/
+.standing {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.55rem 0.2rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  text-shadow: var(--lift);
+}
+
+.standing-game {
+  font-family: var(--serif);
+  font-size: 1.06rem;
+  color: var(--ink-dim);
+  transition: color 0.3s ease;
+}
+
+.standing:hover .standing-game,
+.standing:focus-visible .standing-game {
+  color: var(--ink);
+}
+
+.standing:focus-visible {
+  outline: none;
+}
+
+.standing-state {
+  flex: 0 0 auto;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/*
+  The four states, and only two of them are lit.
+
+  **Your move** is warm, because it is the one you can do something about right
+  now. **She has been** is her own cool light — the thing this whole view was
+  built to be able to say. Waiting on her and nothing-yet stay quiet: neither
+  is news and neither is actionable, and lighting all four would be lighting
+  none of them.
+*/
+.standing-yours .standing-state {
+  color: var(--warm);
+}
+
+.standing-both .standing-state {
+  color: var(--cool);
+}
+
+.standing-both .standing-game {
+  color: var(--ink);
+}
+
+.challenges-back {
+  margin-top: 0.4rem;
+  background: none;
+  border: 0;
+  padding: 0.35rem 0.2rem;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+}
+
+.challenges-back:hover,
+.challenges-back:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+/* --------------------------------------------------------------------------
+   Scattergories
+
+   A tabletop game played on the floor of a cave. The cave keeps rendering
+   behind all of this — the hearths, the drifting room, the embers — and none
+   of it is drawn again here; what is on top is a die, a glass and a sheet of
+   paper, in the same language every other object in this garden is made of.
+   -------------------------------------------------------------------------- */
+
+.scatter {
+  grid-template-rows: auto 1fr auto;
+}
+
+.scatter-title {
+  margin: 0.35rem 0 0.5rem;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 5.4vw, 2.1rem);
+  line-height: 1.12;
+  color: var(--ink);
+  text-shadow: var(--lift);
+}
+
+/* ---- the die ---- */
+
+/*
+  A stone cube with a letter cut into it.
+
+  Not a rounded rectangle with a border — a lump of dark rock lit from above,
+  the same way the word game's pebbles are, with the letter glowing out of the
+  carving rather than printed on the face. The brass at the corners is one
+  inset highlight and does more than it has any right to.
+*/
+.die {
+  display: inline-grid;
+  place-items: center;
+  width: clamp(3.1rem, 13vw, 4rem);
+  height: clamp(3.1rem, 13vw, 4rem);
+  /* Lopsided, like everything else in this world that is meant to be real. */
+  border-radius: 22% 26% 20% 24% / 24% 20% 26% 22%;
+  background:
+    radial-gradient(ellipse 70% 60% at 34% 26%, rgba(255, 255, 255, 0.1), transparent 62%),
+    linear-gradient(158deg, #3d382f, #232019);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 214, 150, 0.18),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.5),
+    0 6px 16px rgba(0, 0, 0, 0.55);
+  rotate: -4deg;
+}
+
+.die b {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 6.4vw, 2rem);
+  line-height: 1;
+  color: #ffcf94;
+  /* Cut into the stone: a dark edge above, an ember glow out of the groove. */
+  text-shadow:
+    0 -1px 0 rgba(0, 0, 0, 0.75),
+    0 0 12px rgba(255, 160, 70, 0.65),
+    0 0 30px rgba(255, 130, 50, 0.35);
+}
+
+/* It clatters, and then it stops. */
+.die.rolling {
+  animation: die-roll 0.86s cubic-bezier(0.25, 0.9, 0.3, 1) 1;
+}
+
+@keyframes die-roll {
+  0% {
+    rotate: -26deg;
+    translate: -1.4rem -0.5rem;
+    scale: 0.86;
+  }
+  55% {
+    rotate: 14deg;
+    translate: 0.3rem 0;
+    scale: 1.06;
+  }
+  78% {
+    rotate: -9deg;
+  }
+  100% {
+    rotate: -4deg;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+/* ---- the glass ---- */
+
+/*
+  Ember sand, falling.
+
+  Two tapered bowls and a thread between them. There is no bar and no digit
+  bigger than a whisper, because the one thing a glass does better than a clock
+  is tell you *roughly* how long is left without asking you to read anything —
+  which is the whole point when the other thing you are doing is writing.
+*/
+.glass {
+  position: relative;
+  display: inline-block;
+  width: clamp(1.5rem, 6vw, 1.9rem);
+  height: clamp(3.1rem, 13vw, 4rem);
+  margin-left: 1.1rem;
+  vertical-align: middle;
+}
+
+.glass i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: block;
+  overflow: hidden;
+}
+
+/*
+  The vessel itself, whether or not there is anything in it.
+
+  An `inset` ring cannot draw this: the ring follows the element's *box* and the
+  clip path then cuts the two diagonals straight off it, so the empty bowl had
+  no sides at all and the full one read as a solid orange funnel with a stem.
+  `drop-shadow` traces the alpha shape instead, which is the tapered bowl — one
+  soft line of light around the glass, which is what glass looks like at a fire.
+*/
+.glass-top,
+.glass-foot {
+  height: 46%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 235, 200, 0.09),
+    rgba(255, 235, 200, 0.03)
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 186, 0.3);
+  filter: drop-shadow(0 0 1.5px rgba(255, 226, 186, 0.6));
+}
+
+/* The bowls taper toward the waist, which is what makes it a glass. */
+.glass-top {
+  top: 0;
+  clip-path: polygon(0 0, 100% 0, 62% 100%, 38% 100%);
+}
+
+.glass-foot {
+  bottom: 0;
+  clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+}
+
+/*
+  Sand, and it has to look like sand rather than like a filled shape.
+
+  The first cut was one flat orange, which at full made the top bowl a solid
+  triangle and the whole thing read as a funnel. Ember sand is dark at depth
+  and bright where light gets into it, so it is graded — and the bowl keeps a
+  visible edge above the fill line, which is what says *glass*.
+*/
+.glass-sand {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 200, 130, 0.95), #c96f27);
+  box-shadow: inset 0 0 8px rgba(255, 170, 90, 0.5);
+}
+
+/*
+  Both piles are anchored to the waist, because that is where sand goes.
+
+  The top bowl was anchored to its *rim*, which meant the wide end stayed full
+  and the narrow tip emptied — sand falling upwards. It read as almost-full for
+  most of the three minutes and then vanished, which is the one thing a glass
+  is for and it was getting it backwards.
+*/
+.glass-top .glass-sand {
+  transform-origin: 50% 100%;
+}
+
+.glass-foot .glass-sand {
+  transform-origin: 50% 100%;
+}
+
+/*
+  Scoped, because `.glass i` above is (0,1,1) and a bare `.glass-thread` is
+  (0,1,0) — so `left: 0; right: 0` beat `left: 50%` and the falling sand was
+  drawn hanging off the left edge of the glass rather than down its middle.
+*/
+.glass i.glass-thread {
+  top: 44%;
+  bottom: 44%;
+  left: 50%;
+  right: auto;
+  width: 2px;
+  translate: -50% 0;
+  background: linear-gradient(180deg, #ffc272, rgba(255, 160, 70, 0.4));
+  box-shadow: 0 0 6px rgba(255, 160, 70, 0.7);
+}
+
+/*
+  The last thirty seconds.
+
+  It warms and breathes. Not a colour change to red and not a flash — this is a
+  game between two people who like each other, and an alarm would be the wrong
+  thing entirely. The same restraint the word game's clock is held to.
+*/
+.glass.urgent .glass-sand,
+.glass.urgent .glass-thread {
+  background: linear-gradient(180deg, #ffd89a, #ff8a3c);
+  box-shadow: 0 0 16px rgba(255, 150, 60, 0.85);
+  animation: glass-urgent 1.6s ease-in-out infinite;
+}
+
+@keyframes glass-urgent {
+  0%,
+  100% {
+    opacity: 0.78;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.scatter-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.scatter-left {
+  margin: 0 0 0 0.9rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- what is on the sheet before you turn the glass ---- */
+
+.scatter-mid {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.scatter-peek {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: center;
+}
+
+.scatter-peek li {
+  font-family: var(--serif);
+  font-size: clamp(0.92rem, 3.2vw, 1.05rem);
+  line-height: 1.75;
+  color: var(--ink-dim);
+  text-shadow: var(--lift);
+}
+
+.scatter-peek li.more {
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ---- the sheet ---- */
+
+/*
+  Twelve lines of paper under a brass clip.
+
+  It scrolls, and on a phone it **snaps**, so exactly one category sits above
+  the keyboard with the one before and the one after showing at its edges. That
+  is the whole mobile design: the keyboard never has to be closed to move
+  around, because Enter goes to the next line and the notches below go anywhere.
+*/
+/*
+  A sheet of paper, not the width of the room.
+
+  The game shell fills the screen, and at a laptop's width that put the
+  category on the far left and the answer on the far right with two feet of
+  cave between them — which is not a sheet, it is a spreadsheet. Paper has a
+  width, and this is it.
+*/
+.scatter-sheet,
+.scatter-reveal {
+  width: min(44rem, 100%);
+  margin-inline: auto;
+}
+
+.scatter-sheet {
+  margin: 0 auto;
+  padding: 0.2rem 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  scrollbar-width: none;
+}
+
+.scatter-sheet::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+  Nothing is cut in half at either end.
+
+  Twelve lines do not fit a phone, so the sheet scrolls — and a scroll box with
+  a hard edge slices the first and last category through the middle of their
+  letters, which reads as broken rather than as "there is more". The fade says
+  the same thing and says it the way paper does. Only where it is needed: a
+  laptop shows all twelve and gets no mask at all, so nothing is dimmed for a
+  reader who can already see the whole sheet.
+*/
+@media (max-width: 34rem) {
+  .scatter-sheet,
+  .scatter-reveal {
+    --edge: 1.6rem;
+    mask-image: linear-gradient(
+      180deg,
+      transparent 0,
+      #000 var(--edge),
+      #000 calc(100% - var(--edge)),
+      transparent 100%
+    );
+  }
+}
+
+.scatter-sheet li {
+  padding: 0.5rem 0.1rem;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.09);
+}
+
+.scatter-sheet label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  cursor: text;
+}
+
+.scatter-cat {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: clamp(0.9rem, 3.1vw, 1.02rem);
+  line-height: 1.4;
+  color: var(--ink-dim);
+  text-shadow: var(--lift);
+}
+
+.scatter-write {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: min(11rem, 42%);
+}
+
+/* The letter, beside every line, so it is never out of sight while writing. */
+.scatter-write b {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 0.9rem;
+  color: rgba(255, 190, 120, 0.55);
+}
+
+.scatter-write input {
+  width: 100%;
+  min-width: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.22);
+  padding: 0.1rem 0 0.22rem;
+  font-family: var(--serif);
+  font-size: clamp(0.95rem, 3.4vw, 1.05rem);
+  color: var(--ink);
+  text-shadow: var(--lift);
+}
+
+.scatter-sheet li.written .scatter-write input {
+  border-bottom-color: rgba(255, 190, 120, 0.45);
+}
+
+.scatter-write input:focus {
+  outline: none;
+  border-bottom-color: rgba(255, 200, 140, 0.85);
+}
+
+/* The sheet you have already handed in, read back while you wait. */
+.scatter-sheet.sealed li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.scatter-mine {
+  flex: 0 0 auto;
+  font-family: var(--serif);
+  font-size: 0.98rem;
+  color: #ffdcab;
+  text-shadow: var(--lift);
+}
+
+/* ---- the foot: notches, and handing it in ---- */
+
+.scatter-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+/*
+  Twelve carved notches.
+
+  Which lines have something on them, and a way straight to any of them without
+  the keyboard going away. Not a progress bar: a bar would say "eight of twelve"
+  and these say *which* eight, which is the thing you actually want to know
+  with forty seconds left.
+*/
+.scatter-notches {
+  display: flex;
+  gap: 0.34rem;
+}
+
+.scatter-notches button {
+  width: 0.44rem;
+  height: 0.9rem;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  border-radius: 40% 60% 55% 45%;
+  background: rgba(242, 239, 230, 0.14);
+  transition:
+    background 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.scatter-notches button.on {
+  background: linear-gradient(180deg, #ffb45e, #cf7a2e);
+  box-shadow: 0 0 8px rgba(255, 150, 60, 0.5);
+}
+
+/* ---- the reveal ---- */
+
+.scatter-score {
+  margin: 0.5rem 0 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
+  font-family: var(--serif);
+  text-shadow: var(--lift);
+}
+
+.scatter-score b {
+  font-weight: 400;
+  font-size: clamp(1.6rem, 6vw, 2.2rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.scatter-score.big b {
+  font-size: clamp(2.4rem, 9vw, 3.4rem);
+}
+
+.scatter-score .mine {
+  color: #ffdcab;
+}
+
+.scatter-score .hers {
+  color: #c3d6ff;
+}
+
+.scatter-score span {
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.scatter-reveal {
+  margin: 0 auto;
+  padding: 0.2rem 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none;
+}
+
+.scatter-reveal::-webkit-scrollbar {
+  display: none;
+}
+
+.scatter-reveal li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 0.5rem 0.9rem;
+  padding: 0.42rem 0.1rem;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.08);
+}
+
+/*
+  One answer, and what became of it.
+
+  Everything that happens on a reveal is a class on this element, so the
+  burning-away of a matched pair is CSS rather than a timeline anybody has to
+  drive frame by frame.
+*/
+.scatter-said {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  text-align: right;
+  font-family: var(--serif);
+  font-size: 0.98rem;
+  text-shadow: var(--lift);
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.scatter-said.mine {
+  color: #ffdcab;
+}
+
+.scatter-said.hers {
+  color: #c3d6ff;
+}
+
+/* The letter that would have been ignited, kept for the flourish below. */
+.scatter-said > i {
+  display: none;
+}
+
+/* Nothing written, or written for the wrong letter. */
+.scatter-said.said-blank,
+.scatter-said.said-wrong-letter,
+.scatter-said.said-repeated {
+  color: var(--ink-faint);
+}
+
+.scatter-said.said-wrong-letter .scatter-word,
+.scatter-said.said-repeated .scatter-word {
+  text-decoration: line-through;
+  text-decoration-color: rgba(242, 239, 230, 0.4);
+}
+
+/*
+  You both wrote it.
+
+  It goes out. Warm and cool both fade toward ash and the word dims — playful
+  rather than punishing, because two people arriving at the same answer is the
+  funniest thing that happens in this game and should not look like a penalty.
+*/
+.scatter-said.said-matched {
+  color: rgba(242, 239, 230, 0.34);
+}
+
+.scatter-said.said-matched .scatter-word {
+  animation: scatter-ash 1.1s ease-out both;
+}
+
+@keyframes scatter-ash {
+  0% {
+    color: inherit;
+    text-shadow: 0 0 14px rgba(255, 170, 90, 0.7);
+  }
+  60% {
+    color: #ffb977;
+    text-shadow: 0 0 20px rgba(255, 150, 60, 0.85);
+  }
+  100% {
+    color: rgba(242, 239, 230, 0.34);
+    text-shadow: var(--lift);
+  }
+}
+
+/* Struck out by a challenge. */
+.scatter-said.said-struck .scatter-word {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
+
+.scatter-struck {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Worth more than one, because the letter came round again. */
+.scatter-echo {
+  margin-left: 0.35rem;
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: #ffc07a;
+  animation: scatter-ignite 0.9s ease-out both;
+}
+
+@keyframes scatter-ignite {
+  0% {
+    opacity: 0;
+    text-shadow: none;
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 16px rgba(255, 170, 80, 0.9);
+  }
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(255, 170, 80, 0.5);
+  }
+}
+
+/*
+  A challenge, behind a long press.
+
+  Hidden on purpose. The boxed game's challenge is rare and this one has to be
+  rarer still — with two people there is no majority to settle it, so every
+  challenge is a small conversation, and a button on every line would turn a
+  round of a game into a review meeting.
+*/
+/*
+  A row of the sheet, not a thing floating over it.
+
+  It was `position: absolute` inside her answer — a grid cell about seven
+  characters wide — so it collapsed to that width and was drawn straight across
+  the next three categories: three lines of unreadable text over three lines of
+  readable ones. Spanning the row instead costs one reflow of a list that is
+  not moving, and needs no panel behind it to be legible, which is the whole
+  reason not to float it.
+*/
+.scatter-challenge {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.2rem 0.9rem;
+  padding-top: 0.35rem;
+  animation: drift-in 0.24s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+/* The line under question, while it is under question. */
+.scatter-said.asked .scatter-word {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 178, 96, 0.5);
+  text-underline-offset: 0.24em;
+}
+
+.scatter-challenge em {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+}
+
+.scatter-challenge button {
+  background: none;
+  border: 0;
+  /* Block padding, not a bigger word: a thumb needs the target, the sheet
+     does not need another shout. Same reasoning as `.put-back`. */
+  padding: 0.7rem 0;
+  margin: -0.55rem 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--warm);
+}
+
+.scatter-challenge small {
+  /* First in the row and last in the reading order: the consequence is what
+     you want under your eye while you decide, and it is also the quietest
+     thing here, so it takes the empty left end rather than crowding the two
+     words that matter. */
+  order: -1;
+  margin-right: auto;
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+/* ---- the emblem ---- */
+
+/*
+  The die, and two hands writing.
+
+  Word Duel is its stones; the Rootway is its headlamps; this is the die,
+  because the die is the thing everybody at a table looks at. A warm mark on
+  one side and a cool one on the other say the rest: you are both filling in
+  the same sheet at the same moment.
+*/
+.emblem-die .face {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  font-family: var(--serif);
+  font-style: normal;
+  font-size: 1.24rem;
+  color: #ffcf94;
+  border-radius: 22% 26% 20% 24% / 24% 20% 26% 22%;
+  rotate: -5deg;
+  background:
+    radial-gradient(ellipse 70% 60% at 34% 26%, rgba(255, 255, 255, 0.1), transparent 62%),
+    linear-gradient(158deg, #3d382f, #232019);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 214, 150, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.5);
+  text-shadow:
+    0 -1px 0 rgba(0, 0, 0, 0.7),
+    0 0 12px rgba(255, 160, 70, 0.7);
+}
+
+/*
+  The lift is not optional here.
+
+  These sit straight on a lit cave wall, and without a shadow behind them a
+  faint letter over a bright facet stops being a letter and becomes a smudge —
+  which is worse than not drawing it, because a smudge reads as a rendering
+  fault. With the shadow they can stay quiet and still be legibly letters.
+*/
+.emblem-die .loose {
+  position: absolute;
+  font-family: var(--serif);
+  font-style: normal;
+  color: var(--ink);
+  text-shadow: var(--lift);
+  translate: -50% -50%;
+}
+
+/* Two pencil strokes, mid-word. */
+.emblem-die .stroke {
+  position: absolute;
+  top: 50%;
+  width: 1.5rem;
+  height: 2px;
+  border-radius: 2px;
+}
+
+.emblem-die .stroke.warm {
+  left: 16%;
+  rotate: -8deg;
+  background: linear-gradient(90deg, transparent, #e8a552);
+  box-shadow: 0 0 8px rgba(232, 165, 82, 0.4);
+}
+
+.emblem-die .stroke.cool {
+  right: 16%;
+  rotate: 7deg;
+  background: linear-gradient(270deg, transparent, #a9bce8);
+  box-shadow: 0 0 8px rgba(169, 188, 232, 0.4);
+}
+
+/* ---- a phone ---- */
+
+@media (max-width: 34rem) {
+  /*
+    The music and the conversation own the top right of a phone while a game
+    is open (see `.corner.clear`). The die and the glass sit dead centre, so
+    they were underneath it. Start the whole game below that band instead of
+    trying to thread the two through each other — the sheet scrolls anyway, so
+    what this costs is one line of categories, and what it buys is a layout
+    that does not depend on how long the current track's name is.
+  */
+  .scatter {
+    padding-top: 7.3rem;
+  }
+
+  /*
+    One category above the keyboard, with its neighbours showing.
+
+    Snapping rather than free scrolling, so a line always settles where it can
+    be read instead of half off the top. The list is short enough that the
+    snap never feels like a fight.
+  */
+  .scatter-sheet {
+    scroll-snap-type: y proximity;
+    scroll-padding-top: 20%;
+  }
+
+  .scatter-sheet li {
+    scroll-snap-align: center;
+    padding: 0.62rem 0.1rem;
+  }
+
+  .scatter-sheet label {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.3rem;
+  }
+
+  .scatter-write {
+    width: 100%;
+  }
+
+  .scatter-reveal li {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .scatter-said {
+    text-align: left;
+    min-width: 0;
+  }
+
+  .scatter-challenge {
+    right: auto;
+    left: 0;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .die.rolling,
+  .glass.urgent .glass-sand,
+  .glass.urgent .glass-thread,
+  .scatter-said.said-matched .scatter-word,
+  .scatter-echo {
+    animation: none;
+  }
+}
+
+/*
+  Everything the die is about to tell you, held back until it has.
+
+  The roll takes nine hundred milliseconds and the letter must not be readable
+  anywhere on the screen before it lands — a throw whose result is already
+  printed underneath it is not a throw.
+*/
+.scatter-landed,
+.scatter-peek {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.scatter-landed.shown,
+.scatter-peek.shown {
+  opacity: 1;
+}
+
+/* For the one word in a lower-cased line that has to keep its capital. */
+.keep-case {
+  text-transform: none;
 }

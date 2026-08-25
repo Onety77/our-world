@@ -7,9 +7,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useData } from '@/data/provider'
-import type { Round } from '@/data/types'
-import { seedFromId, type GameDefinition } from './types'
+import { useData, useWorldSlice } from '@/data/provider'
+import type { Round, UserId } from '@/data/types'
+import { localDateKey } from '@/systems/time'
+import { seedFromId, type GameCadence, type GameDefinition } from './types'
 
 export { localDateKey } from '@/systems/time'
 
@@ -91,6 +92,93 @@ export function useRound<Setup, MoveData>(
     opening,
     play,
   }
+}
+
+/**
+ * How a round stands, without opening it.
+ *
+ * ---------------------------------------------------------------------------
+ * **Four states, and every one of them is something you are allowed to know.**
+ *
+ * This is the whole difficulty, and it is why the states are worded the way
+ * they are. The security rules withhold her *opening* move until yours exists
+ * — that is the seal — so before you have played, "has she been?" genuinely
+ * has no answer on your device. `watchRound` reports an empty move list in
+ * that case, which is correct and is not the same as "she has not played".
+ *
+ * So the list never claims anything about her until you have moved:
+ *
+ *   nothing   the round has not been opened by either of you today
+ *   yours     you have not played it. Whether she has is sealed, and saying
+ *             "your move" is true either way, which is why that is the wording
+ *   hers      you have played and she has not — knowable, because the seal
+ *             lifts the moment your own opening move lands
+ *   both      you have both been here today
+ *
+ * That last one is the point of the whole feature. The note at the top of
+ * `Round` in `data/types.ts` says it: the good feeling in an asynchronous game
+ * is not winning, it is opening the Hollow and seeing that she has been. Until
+ * now the Hollow could not show you that without your opening every game in it
+ * one at a time and reading what each one said.
+ *
+ * **Read-only, and that matters.** It deliberately does not call `openRound`.
+ * Merely looking at what is waiting must not create a round — otherwise every
+ * glance at the list would write a document for a game you never played.
+ * ---------------------------------------------------------------------------
+ */
+export type Turn = 'nothing' | 'yours' | 'hers' | 'both'
+
+/** Where a round stands, from your side of the seal. Pure, so it is testable. */
+export function turnOf(round: Round | null, me: UserId): Turn {
+  if (!round) return 'nothing'
+  const them = me === 'warm' ? 'cool' : 'warm'
+  const mine = round.moves.filter((m) => m.by === me).length
+  if (mine === 0) return 'yours'
+  const theirs = round.moves.filter((m) => m.by === them).length
+  return theirs === 0 ? 'hers' : 'both'
+}
+
+/**
+ * Where today's round stands in every game at once.
+ *
+ * One hook and one effect for all of them, rather than a hook per game. Two
+ * reasons and the second is the one that decided it: calling a hook inside a
+ * loop over the registry is a rule nobody should have to reason about even
+ * when the array happens to be constant — and, more usefully, the *summary*
+ * needs all of them before the list is ever opened, so the watchers cannot
+ * belong to the rows.
+ *
+ * Keyed by game id. A game with no round yet is simply absent, which reads as
+ * 'nothing'.
+ */
+export function useStandings(games: readonly { id: string; cadence: GameCadence }[]): Record<string, Turn> {
+  const data = useData()
+  const me = data.me
+  const zone = useWorldSlice((s) => s.profiles[me].timeZone)
+  const [turns, setTurns] = useState<Record<string, Turn>>({})
+
+  const ids = useMemo(
+    () =>
+      games.map((game) => ({
+        game: game.id,
+        // The same key `ui/Playing` opens, so these are genuinely the rounds
+        // you would walk into rather than a second idea of which is today's.
+        id: `${game.id}:${game.cadence === 'daily' ? localDateKey(zone) : 'current'}`,
+      })),
+    [games, zone],
+  )
+
+  useEffect(() => {
+    setTurns({})
+    const offs = ids.map(({ game, id }) =>
+      data.watchRound(id, (round) =>
+        setTurns((prev) => ({ ...prev, [game]: turnOf(round, me) })),
+      ),
+    )
+    return () => offs.forEach((off) => off())
+  }, [data, me, ids])
+
+  return turns
 }
 
 /**

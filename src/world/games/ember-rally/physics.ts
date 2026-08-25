@@ -220,8 +220,29 @@ const RELAX = 0.45
  * actually measured rather than asserted. A car that hits its rev limiter in
  * top has no top speed, it has a governor, and a straight stops being a place
  * where anything is decided.
+ *
+ * ---------------------------------------------------------------------------
+ * **This is where the top speed lives, and it was far too low.**
+ *
+ * At 1.16 the car ran to a hundred and sixty-seven kilometres an hour, and
+ * nearly two hundred on the ember — down a tunnel between four and seven
+ * metres wide. Two separate things were wrong with that, and only one of them
+ * was the number:
+ *
+ * The number was too big for the road. But the *feel* was worse: drag rises
+ * with the square of speed, so a terminal velocity that far away is one the
+ * car spends the entire straight creeping toward and never reaches. It reads
+ * as a car with **no maximum at all** — you hold the throttle and the number
+ * keeps going up, until you arrive at a corner carrying a speed you never
+ * chose. "It feels like it doesn't have a top speed" is exactly what an
+ * under-damped terminal velocity feels like, and no amount of grip fixes it.
+ *
+ * More than twice the drag puts it at a hundred and thirty-one, *and* — the
+ * part that matters — the car now gets there in the first third of a straight
+ * and sits on it. There is a speed, you reach it, you know you are at it.
+ * ---------------------------------------------------------------------------
  */
-const DRAG = 1.16
+const DRAG = 2.68
 /** Downforce, newtons per (m/s)². About fifteen per cent of its weight flat out. */
 const LIFT = 0.75
 const LIFT_FRONT = 0.42
@@ -323,10 +344,27 @@ const MAX_YAW_RATE = 2.9
  */
 const CATCH = 0.34
 
-/** Roughly 165 km/h, and it takes the whole of a straight to get there. */
-export const TOP_SPEED = 46
-/** Nothing may exceed this, boost included. */
-const SPEED_CEILING = 58
+/**
+ * What the car actually does, flat out and unboosted: 131 km/h.
+ *
+ * Not a limit — `DRAG` is the limit and this is what it works out to. It is
+ * here because half the game normalises against it: how far the chase camera
+ * stands off, how wide the field of view opens, how loud the wind is, and how
+ * full the speedometer's line reads. Measure it with `npm run rally` after
+ * touching drag, gearing or torque, and put the answer here — a reference
+ * speed that is a third higher than the real one quietly means the camera
+ * never fully opens and the meter never fills.
+ */
+export const TOP_SPEED = 36.4
+/**
+ * Nothing may exceed this, boost included: 158 km/h.
+ *
+ * A backstop and not a cap. The car tops out at 131 on its own and 143 on the
+ * ember, both against the air, so this is never reached in play — which is the
+ * point. A clamp you meet is a wall you can feel, and the moment a player can
+ * feel it, drag has stopped being the thing that decides a straight.
+ */
+const SPEED_CEILING = 44
 /** How fast it will go backwards. Slow: reverse is for getting unstuck. */
 const REVERSE_LIMIT = 7
 
@@ -413,7 +451,7 @@ export const BOOST_COST = 1
  * a press with nothing in it is not a boost of two hundredths of a second.
  */
 const BOOST_FLOOR = 0.04
-const BOOST_TORQUE = 1.62
+const BOOST_TORQUE = 1.38
 
 /**
  * The shell on its springs, as frequency and damping.
@@ -1267,7 +1305,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
 
   // --- everything else acting on the body ----------------------------------
   let along = totalX
-  along -= DRAG * v * Math.abs(car.vs) * (car.boostLeft > 0 ? 0.86 : 1)
+  along -= DRAG * v * Math.abs(car.vs)
   along -= MASS * G * rollingDrag * Math.sign(car.vs || 1)
   // The road tilts under it.
   along -= MASS * G * road.grade

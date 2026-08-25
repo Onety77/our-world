@@ -1,5 +1,5 @@
 /**
- * The meadow. Tens of thousands of blades in two draw calls, and it never
+ * The meadow. Tens of thousands of blades in three draw calls, and it never
  * runs out however far you look.
  *
  * Every blade is the same tapering strip. Instance attributes give each one
@@ -8,32 +8,10 @@
  * roots the blade at the terrain height, and bends it. So the field follows you
  * for free — moving never costs another instance, and there is no edge to find.
  *
- * ---------------------------------------------------------------------------
- * **It is two layers, and that is the whole design.**
- *
- * One layer of one size cannot do this job. Spread thin enough to reach the
- * treeline and you can see the ground between the blades; kept dense enough to
- * look like turf and the budget runs out at twenty-six metres — which is what
- * used to happen, and it put a hard line across the garden with real grass in
- * front of it and painted ground behind. Everything past that line was a lawn.
- *
- * So the budget is split. **Underfoot**: short blades at thirty a square
- * metre, out to about eighteen metres, which is turf. **Beyond that**:
- * tussocks — twice as tall, three times as wide, at barely one a square metre
- * — out to seventy-odd. At forty metres a single blade is a third of a pixel
- * and a *clump* is four, so the far layer is drawn as the clumps: it is what
- * you can actually see at that range, and it costs a twentieth of what
- * covering the same ground with turf would.
- *
- * The far layer starts at the camera rather than at the edge of the near one.
- * A ring that begins where another ends needs the two densities to agree
- * across the join and they never quite do — and tussocks standing *through*
- * the near turf is what a meadow looks like anyway.
- *
- * It also came out cheaper than the single dense disc it replaced, because a
- * tussock at seventy metres does not need four segments to bend through. See
- * `segments` below.
- * ---------------------------------------------------------------------------
+ * **It is three layers of decreasing density, and that is the whole design.**
+ * The table in `LAYERS` says what each one is for and why two of them was not
+ * enough; the short version is that a single layer has to choose between
+ * covering the ground and reaching the treeline, and cannot do both.
  */
 
 import { useEffect, useMemo, useRef } from 'react'
@@ -94,11 +72,41 @@ interface Layer {
   from: number
 }
 
+/**
+ * The meadow, in three.
+ *
+ * **Two was not enough, and the failure was instructive.** Turf out to
+ * eighteen metres and tussocks beyond it left a *gap in kind*: the near layer
+ * was a continuous surface and the far one was a scatter of separate clumps at
+ * one and a bit a square metre, and there was nothing in between. So the
+ * middle distance — the part of the meadow you spend the most time looking at,
+ * because it is where the horizon and the landmarks are — came out as polka
+ * dots on bare ground. Reaching further had cost evenness, which is the wrong
+ * trade: an even field that stops is better than a patchy one that does not.
+ *
+ * Three layers close it, and it is the *density* that steps down rather than
+ * the layer suddenly changing character:
+ *
+ *   turf       thirty a square metre, four segments, out to about sixteen.
+ *              A continuous surface. This is what you stand in.
+ *   field      five and a half a square metre, half again as tall, out to
+ *              thirty-odd. Not a surface any more and not clumps either —
+ *              grass with ground showing between it, which is what a meadow
+ *              at that range actually looks like.
+ *   tussocks   one a square metre, twice as tall, out past sixty. By here a
+ *              blade is a third of a pixel and only the clumps are legible,
+ *              so the clumps are what is drawn.
+ *
+ * Each layer fades in where the one before it is thinning, so no ring is ever
+ * a boundary. And it came out *cheaper* than the two-layer version it
+ * replaces, because the two outer layers are two-segment blades: a blade at
+ * thirty metres does not bend through an arc anybody can resolve.
+ */
 const LAYERS: Layer[] = [
   {
     seed: 'meadow',
-    share: 0.55,
-    density: 30,
+    share: 0.4,
+    density: 26,
     segments: 4,
     tall: 1,
     wide: 1,
@@ -108,30 +116,52 @@ const LAYERS: Layer[] = [
   },
   {
     /*
+      The field.
+
+      The layer that was missing, and the one doing most of the work. Tufts
+      only a little tighter than the turf's and only half again as tall, so
+      crossing from one to the other is a change of density and nothing else —
+      which is the whole point. A layer that changes size *and* spacing *and*
+      shape at a ring is a ring you can see.
+    */
+    seed: 'meadow:mid',
+    share: 0.34,
+    density: 5.5,
+    segments: 2,
+    tall: 1.5,
+    wide: 1.45,
+    perTuft: 7,
+    clump: 0.8,
+    from: 6,
+  },
+  {
+    /*
       Tussocks.
 
-      Bigger tufts of fewer, larger blades. Seven to a clump rather than
-      eleven, because at this size eleven is a bush; and the clumps sit further
-      apart, so what carries across the middle distance is the *scatter* of
-      them over the rolling ground rather than an even pile.
+      Bigger tufts of fewer, larger blades — and *not* tight ones. Pulling the
+      clump in to a fifth of its spread is what turned these into polka dots:
+      at that spacing a tussock is a solid dot of grass with two metres of bare
+      ground round it, and a field of dots is the thing this is trying not to
+      be. Half is loose enough to read as a clump of grass and tight enough
+      not to read as seven separate blades.
     */
     seed: 'meadow:far',
-    share: 0.45,
-    density: 1.3,
+    share: 0.26,
+    density: 1.15,
     segments: 2,
-    tall: 2.0,
-    wide: 2.6,
-    perTuft: 9,
-    clump: 0.2,
+    tall: 2.3,
+    wide: 2.4,
+    perTuft: 8,
+    clump: 0.5,
     /*
       Nothing this big directly under the lens.
 
       The garden's eye is four and a half metres up and a metre-and-a-half
       tussock rooted straight below it fills a third of the frame with one
-      blade. Fading them in over the first several metres costs nothing — the
-      near layer owns that ground — and keeps the bottom of the picture turf.
+      blade. Fading them in costs nothing — the two layers inside own that
+      ground — and keeps the bottom of the picture turf.
     */
-    from: 9,
+    from: 20,
   },
 ]
 

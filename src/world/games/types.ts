@@ -104,6 +104,44 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
   cadence: GameCadence
   /** Human-readable, for the UI: "a minute", "one a day". */
   duration: string
+  /**
+   * What the ordinary, asynchronous way in is called *here*.
+   *
+   * The one that matters, because it is the one that will actually be used —
+   * Lagos and Shanghai share a sliver of evening, so nearly every round starts
+   * with one of you alone. The shell used to write "vs {her name}" over it,
+   * which is true of a duel and says nothing at all about what pressing it
+   * *does*: in Word Duel it leaves her a word to come back to, and in the
+   * racer it puts a line down the Rootway for her to chase. Those are the
+   * things somebody is deciding between, and a shell cannot name them.
+   *
+   * Left out, it falls back to "play with {her name}", which is at least not
+   * wrong.
+   */
+  invite?: {
+    /** The verb. Lower case; `{them}` is replaced with her name. */
+    name: string
+    /** One line, on hover, saying what happens next. */
+    tip: string
+  }
+  /**
+   * What the live way in is called *here*, and what it promises.
+   *
+   * The Hollow used to call it "time challenge" for every game there is,
+   * because the first live round ever built was Word Duel's five-minute one
+   * and the shell learned the name from it. Then the racer got a live round
+   * and inherited a label describing a clock it does not have — the two of you
+   * on the same road at the same moment is not a time challenge, and calling
+   * it one is the shell telling the player something untrue about their game.
+   *
+   * A game with no live round leaves this out and does not get the button.
+   */
+  live?: {
+    /** The verb on the button. Lower case; the row sets its own case. */
+    name: string
+    /** One line, on hover, saying what it actually is. */
+    tip: string
+  }
   /** Position around the Hollow's fire. Lower appears first. */
   order?: number
 
@@ -117,6 +155,32 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
 
   /** Override the generic "both moved" rule for multi-stage games. */
   isSettled?(state: { mine: MoveData[]; theirs: MoveData[]; solo: boolean }): boolean
+
+  /**
+   * The game, as one small object, for the row you choose it from.
+   *
+   * -------------------------------------------------------------------------
+   * **Games were being chosen from a paragraph.** The Hollow listed each one
+   * as a title, two lines of description and three words in small capitals,
+   * which is a settings screen. Nothing about it looked like a thing you
+   * *play* — and with more than one game in the row there was no way to tell
+   * them apart at a glance at all, because both were a block of text in the
+   * same face at the same size in the same place.
+   *
+   * So each game draws itself. Not a screenshot and not an icon — *the game's
+   * own object*, made of the same parts the game is made of: Word Duel is
+   * stones, because its board is stones; the Rootway is two pairs of headlamps
+   * in the dark, because that is the whole picture of the race. Both are a
+   * handful of gradients, so they are sharp at any size, cost nothing to load,
+   * and cannot go stale the way a screenshot does.
+   *
+   * It belongs on the definition rather than in the Hollow for exactly the
+   * reason `Component` and `Stage` do: adding a game must never mean editing a
+   * switch somewhere else. A game with no emblem still lists — it just gets a
+   * quieter entry, which is honest rather than broken.
+   * -------------------------------------------------------------------------
+   */
+  Emblem?: ComponentType
 
   Component: ComponentType<GameProps<Setup, MoveData>>
 

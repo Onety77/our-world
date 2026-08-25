@@ -484,6 +484,9 @@ class Driving {
   /** Whether the meter is currently drawn as full. Toggled, not set. */
   private barFull = false
   private barBurning = false
+  /** Last whole km/h written to the meter, so it is written once per change. */
+  private shownKmh = -1
+  private speedFlat = false
   private gritDue = 0
   private smokeDue = 0
   /**
@@ -756,6 +759,32 @@ class Driving {
       if (burning !== this.barBurning) {
         this.barBurning = burning
         bar.classList.toggle('burning', burning)
+      }
+    }
+
+    /*
+      The speedometer, written the same way and for the same reason.
+
+      The *text* only changes when the whole number does, which is a handful of
+      times a second rather than sixty: setting `textContent` to the string it
+      already holds still dirties the node and costs a layout on some browsers,
+      and this sits over a scene that needs every millisecond. The line under
+      it is a transform, which never costs layout at all.
+    */
+    const speedo = session.speedo
+    if (speedo) {
+      const kmh = Math.round(speed * 3.6)
+      if (kmh !== this.shownKmh) {
+        this.shownKmh = kmh
+        speedo.value.textContent = String(kmh)
+      }
+      // Against the real top speed, so full means full. See TOP_SPEED.
+      const of = Math.min(1, speed / TOP_SPEED)
+      speedo.line.style.transform = `scaleX(${of.toFixed(3)})`
+      const flat = of > 0.965
+      if (flat !== this.speedFlat) {
+        this.speedFlat = flat
+        speedo.line.classList.toggle('flat', flat)
       }
     }
     args.materials.mine.uniforms.uBrake.value = car.braking

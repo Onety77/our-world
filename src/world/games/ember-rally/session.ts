@@ -65,6 +65,15 @@ export interface RaceSession {
    * beam and the pointer's gaze are written straight to their nodes.
    */
   emberBar: HTMLElement | null
+  /**
+   * The speedometer: the number, and the line under it.
+   *
+   * Two nodes rather than one root to look inside, because this is written
+   * every frame and a `querySelector` per frame is a tree walk per frame for
+   * something whose answer never changes. Same reason as the ember bar: no
+   * React anywhere near it.
+   */
+  speedo: { value: HTMLElement; line: HTMLElement } | null
   /** Called once, with the run, when the car reaches the far fire. */
   onFinish: ((run: RallyRun) => void) | null
 
@@ -77,6 +86,7 @@ export interface RaceSession {
   watch(input: { track: Track; replay: { mine: RallyRun; theirs: RallyRun } }): void
   setSurface(el: HTMLElement | null): void
   setEmberBar(el: HTMLElement | null): void
+  setSpeedo(nodes: { value: HTMLElement; line: HTMLElement } | null): void
   pause(): void
   resume(): void
   begin(): void
@@ -94,6 +104,7 @@ export const useRace = create<RaceSession>((set) => ({
   paused: false,
   surface: null,
   emberBar: null,
+  speedo: null,
   onFinish: null,
 
   open: ({ track, ghost, ghostName = '', onFinish }) =>
@@ -121,6 +132,7 @@ export const useRace = create<RaceSession>((set) => ({
 
   setSurface: (surface) => set({ surface }),
   setEmberBar: (emberBar) => set({ emberBar }),
+  setSpeedo: (speedo) => set({ speedo }),
   begin: () => set({ phase: 'running' }),
   pause: () => set({ paused: true }),
   resume: () => set({ paused: false }),
@@ -137,5 +149,6 @@ export const useRace = create<RaceSession>((set) => ({
       onFinish: null,
       surface: null,
       emberBar: null,
+      speedo: null,
     }),
 }))
