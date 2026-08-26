@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { DataProvider, useData, useWorldSlice } from '@/data/provider'
 import { ambience, type Place } from '@/systems/ambience'
 import { paletteAt } from '@/systems/palette'
-import { localHourIn } from '@/systems/time'
+import { skyHour, useWhoseHour } from '@/systems/whoseHour'
 import { SECTIONS, sectionIndexById } from '@/sections/registry'
 import { useSections } from '@/systems/sections'
 import { attachSwipe } from '@/systems/swipe'
 import { attachPointerLook } from '@/systems/pointerLook'
+import { attachTreeOrbit } from '@/systems/treeOrbit'
 import { World } from '@/world/World'
 import { Door } from '@/ui/Door'
 import { Overlay } from '@/ui/Overlay'
@@ -14,6 +15,7 @@ import { Places } from '@/ui/Places'
 import { Veil } from '@/ui/Veil'
 import { Playing } from '@/ui/Playing'
 import { Talking } from '@/ui/Talking'
+import { VoiceLights } from '@/ui/VoiceLights'
 import { Whisper } from '@/ui/Whisper'
 import { SaidMenu } from '@/ui/Said'
 import { Trouble } from '@/ui/Trouble'
@@ -24,12 +26,27 @@ import { PotForm } from '@/ui/Pot'
 import { ProfileSheet } from '@/ui/Profile'
 import { LetterReader, Writing } from '@/ui/Letters'
 import { Glasshouse } from '@/ui/Glasshouse'
-import { DevPanel } from '@/ui/DevPanel'
+import { Questions, QuestionSeedNotice } from '@/ui/Questions'
+/*
+  The control room, fetched only by whoever opens its door.
+
+  It is a whole page of switches behind a hidden path that exactly one person
+  in the world knows, and it was in the first download of every visit anybody
+  ever made. Deferred it costs nothing to have: /dev7731 is a route you arrive
+  at deliberately, and a fetch on the way in is invisible against the decision
+  to go there.
+*/
+const Admin = later(
+  (): Promise<{ default: ComponentType }> =>
+    import('@/ui/Admin').then((m) => ({ default: m.Admin as ComponentType })),
+)
 import { Threshold } from '@/ui/Threshold'
 import { usePlaying } from '@/systems/playing'
 import { useArrival } from '@/systems/arrival'
-import { useTakenOver } from '@/systems/attention'
+import { takenOverNow, useTakenOver } from '@/systems/attention'
 import { useMemories } from '@/systems/memories'
+import { atTheDoor, useHourOverride } from '@/systems/dev'
+import { later } from '@/systems/later'
 
 /**
  * `?hour=18.6` pins the clock, `?section=river` opens straight into a place,
@@ -46,14 +63,6 @@ function fromUrl(key: string): string | null {
   return new URLSearchParams(location.search).get(key)
 }
 
-function initialHour(): number | null {
-  const raw = fromUrl('hour')
-  if (raw === null) return null
-  const value = Number(raw)
-  return Number.isFinite(value) ? ((value % 24) + 24) % 24 : null
-}
-
-const startHour = initialHour()
 const startSection = fromUrl('section')
 const startBrowse = fromUrl('browse')
 const startGame = fromUrl('game')
@@ -95,7 +104,7 @@ function Garden() {
   // can sit on the very edge.
   const corner = takenOver ? 'corner clear only' : inside ? 'corner clear' : 'corner'
 
-  const [hourOverride, setHourOverride] = useState<number | null>(startHour)
+  const hourOverride = useHourOverride((h) => h.override)
 
   const setCount = useSections((s) => s.setCount)
   const go = useSections((s) => s.go)
@@ -118,9 +127,14 @@ function Garden() {
     if (!el) return
     const swipe = attachSwipe(el)
     const look = attachPointerLook(el)
+    const orbit = attachTreeOrbit(el, () => {
+      const state = useSections.getState()
+      return state.entered && SECTIONS[state.index]?.id === 'tree' && !takenOverNow()
+    })
     return () => {
       swipe.detach()
       look()
+      orbit.detach()
     }
   }, [])
 
@@ -162,14 +176,16 @@ function Garden() {
     }
   }, [data, sectionId])
 
-  // The world runs on your clock, re-checked every half minute.
+  // The same hour the sky is running on, re-checked every half minute — the
+  // wind and the ambient bed have to agree with what is on screen.
   const [tick, setTick] = useState(() => Date.now())
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), 30_000)
     return () => clearInterval(id)
   }, [])
 
-  const hour = hourOverride ?? localHourIn(profiles[me].timeZone, tick)
+  const whose = useWhoseHour((w) => w.whose)
+  const hour = hourOverride ?? skyHour(profiles, me, whose, tick)
   const wind = useMemo(() => paletteAt(hour).wind, [hour])
 
   // --- sound ---------------------------------------------------------------
@@ -193,6 +209,25 @@ function Garden() {
     () => data.watchMemories((all) => useMemories.getState().setAll(all)),
     [data],
   )
+  const currentQuestionId = useWorldSlice((state) => state.questions.current?.id ?? null)
+  const currentQuestionComplete = useWorldSlice(
+    (state) => state.questions.current?.completedAt != null,
+  )
+  const nextQuestionAt = useWorldSlice((state) => state.questions.nextAt)
+
+  // Questions never form a backlog. Ask immediately on an empty Tree, then
+  // wake at the rolling-day boundary even if this tab has stayed open all day.
+  useEffect(() => {
+    if (currentQuestionId && !currentQuestionComplete) return
+    const open = () => void data.ensureQuestion().catch(() => {})
+    const delay = nextQuestionAt === null ? 0 : Math.max(0, nextQuestionAt - data.now())
+    if (delay === 0) {
+      open()
+      return
+    }
+    const timer = window.setTimeout(open, Math.min(delay, 2_147_000_000))
+    return () => window.clearTimeout(timer)
+  }, [data, currentQuestionId, currentQuestionComplete, nextQuestionAt])
   useEffect(() => {
     ambience.setWind(wind)
   }, [wind])
@@ -253,8 +288,11 @@ function Garden() {
       <PotForm />
       <ProfileSheet />
       <Glasshouse />
+      <Questions />
+      <QuestionSeedNotice />
       <Playing />
       <Talking />
+      <VoiceLights />
       {/*
         The two things that follow you everywhere, in one column.
 
@@ -275,7 +313,6 @@ function Garden() {
       {/* Over everything, until it is opened. Last so it is last in the
           stacking order as well as in the file. */}
       <Arrival name={profiles[me === 'warm' ? 'cool' : 'warm'].name} />
-      <DevPanel hourOverride={hourOverride} setHourOverride={setHourOverride} />
     </>
   )
 }
@@ -312,7 +349,20 @@ export default function App() {
   try {
     return (
       <DataProvider door={(state) => <Door state={state} />}>
-        <Garden />
+        {/*
+          The control room instead of the world, not over it.
+
+          Inside the provider, because everything it does needs the data layer —
+          but ahead of <Garden />, so no Canvas is created, no shaders compile
+          and no meadow renders behind a page of form controls.
+        */}
+        {atTheDoor() ? (
+          <Suspense fallback={null}>
+            <Admin />
+          </Suspense>
+        ) : (
+          <Garden />
+        )}
       </DataProvider>
     )
   } catch (e) {

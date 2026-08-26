@@ -9,12 +9,14 @@
 
 import { useEffect, useMemo } from 'react'
 import {
+  Box3,
   Color,
   DoubleSide,
   FrontSide,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   ShaderMaterial,
+  Sphere,
   Vector3,
   type BufferGeometry,
 } from 'three'
@@ -244,6 +246,113 @@ export function buildInstanced(
   geo.setAttribute('iAnchorY', new InstancedBufferAttribute(anchorY, 1))
   geo.instanceCount = items.length
   return geo
+}
+
+/**
+ * The same field, cut into pieces the graphics card can skip.
+ *
+ * ---------------------------------------------------------------------------
+ * **Nothing in this garden was ever culled, and that was most of what it cost.**
+ *
+ * Every big field here — the wood, the meadow, the flowers — was built as one
+ * instanced mesh and marked `frustumCulled={false}`. There was a good reason:
+ * an instanced geometry's bounding sphere is computed from the *base* shape,
+ * which is one leaf or one blade a few centimetres across sitting at the
+ * origin. Three would look at that sphere, decide the whole wood was a
+ * thumbnail-sized object behind the camera, and delete the entire treeline the
+ * moment you turned your head. Switching culling off is the standard fix and
+ * it is the wrong permanent one, because it means **every blade of grass
+ * behind you is transformed, sixty times a second, forever.**
+ *
+ * The camera sees about eighty degrees of a field that surrounds it on all
+ * three hundred and sixty. So roughly three quarters of every field was being
+ * drawn where it could not possibly be seen.
+ *
+ * This cuts a field into square tiles and gives each one an honest bounding
+ * sphere, so the ordinary frustum test can do its ordinary job. The cost is
+ * draw calls — one per tile instead of one per field — and this garden has
+ * enormous headroom there: it renders whole places in eighteen calls, and the
+ * budget on any device made this decade is in the hundreds.
+ *
+ * **The sphere is padded, and the padding is not optional.** Every one of these
+ * fields is displaced in the vertex shader by the wind, so a tile's real
+ * extent is wider than the positions it was built from — and a bounding volume
+ * that is slightly too small does not look like a bounding volume that is
+ * slightly too small. It looks like a corner of the meadow blinking out as you
+ * turn, which is far worse than the cost of drawing a tile you did not need.
+ * ---------------------------------------------------------------------------
+ */
+export function buildTiles(
+  base: BufferGeometry,
+  items: FormInstance[],
+  {
+    tile = 24,
+    sway = 2.5,
+  }: {
+    /** Metres to a side. Smaller culls more and costs more draw calls. */
+    tile?: number
+    /** Metres of wind travel to allow for. See above — err large. */
+    sway?: number
+  } = {},
+): InstancedBufferGeometry[] {
+  if (items.length === 0) return [buildInstanced(base, items)]
+
+  const buckets = new Map<string, FormInstance[]>()
+  for (const item of items) {
+    const key = `${Math.floor(item.offset[0] / tile)},${Math.floor(item.offset[2] / tile)}`
+    const into = buckets.get(key)
+    if (into) into.push(item)
+    else buckets.set(key, [item])
+  }
+
+  const out: InstancedBufferGeometry[] = []
+  for (const group of buckets.values()) {
+    const geo = buildInstanced(base, group)
+
+    /*
+      The box the tile really occupies.
+
+      Taken from each instance's own position *and its scale*, because these
+      are not points: a limb is anchored at its foot and runs its whole length
+      away from it, and a bounding volume built from the anchors alone would be
+      short by the height of a tree.
+    */
+    let minX = Infinity
+    let minY = Infinity
+    let minZ = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let maxZ = -Infinity
+    for (const it of group) {
+      const reach = Math.max(Math.abs(it.scale[0]), Math.abs(it.scale[1]), Math.abs(it.scale[2]))
+      minX = Math.min(minX, it.offset[0] - reach)
+      minY = Math.min(minY, it.offset[1] - reach)
+      minZ = Math.min(minZ, it.offset[2] - reach)
+      maxX = Math.max(maxX, it.offset[0] + reach)
+      maxY = Math.max(maxY, it.offset[1] + reach)
+      maxZ = Math.max(maxZ, it.offset[2] + reach)
+    }
+
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    const cz = (minZ + maxZ) / 2
+    const radius =
+      Math.hypot(maxX - cx, maxY - cy, maxZ - cz) + sway
+
+    geo.boundingSphere = new Sphere(new Vector3(cx, cy, cz), radius)
+    /*
+      And a box to match, because three checks the sphere first and then, for
+      anything that survives, nothing else — but other code (raycasts, helpers,
+      a future shadow pass) reads the box, and a geometry whose two bounds
+      disagree is a bug waiting for whoever adds that code.
+    */
+    geo.boundingBox = new Box3(
+      new Vector3(minX - sway, minY - sway, minZ - sway),
+      new Vector3(maxX + sway, maxY + sway, maxZ + sway),
+    )
+    out.push(geo)
+  }
+  return out
 }
 
 export function useFormMaterial(

@@ -17,6 +17,7 @@ import { useData, useWorldSlice } from '@/data/provider'
 import { potTotal } from '@/data/local'
 import { format, parseMajor, progressToward } from '@/data/money'
 import { usePot } from '@/systems/pot'
+import { useQuestions } from '@/systems/questions'
 
 export function PotForm() {
   const data = useData()
@@ -66,6 +67,7 @@ export function PotForm() {
     setAmount('')
     setNote('')
     close()
+    if (parsed.minor > 0) useQuestions.getState().announceSeed()
   }
 
   const total = potTotal(state)

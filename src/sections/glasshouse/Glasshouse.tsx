@@ -18,6 +18,8 @@ import {
   BoxGeometry,
   Group,
   PlaneGeometry,
+  Matrix4,
+  type PerspectiveCamera,
   Raycaster,
   Vector2,
   Vector3,
@@ -27,15 +29,31 @@ import { otherUser } from '@/data/types'
 import type { Memory } from '@/data/types'
 import { useSections } from '@/systems/sections'
 import { useMemories } from '@/systems/memories'
+import { isHersAndNew, useStoodIn } from '@/systems/newness'
 import { buildInstanced, useFormMaterial } from '@/world/forms'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { Trees } from '@/world/Trees'
-import { aisle, aisleAt, alongTheAisle, buildingZ, pulling, stepAisle, walkTo } from './aisle'
+import {
+  aisle,
+  aisleAt,
+  alongTheAisle,
+  buildingX,
+  buildingTurn,
+  buildingZ,
+  lean,
+  pulling,
+  stepAisle,
+  focus,
+  stepLean,
+  walkTo,
+} from './aisle'
 import { flagstones, ironFrame, panelKey, roofGlazing, vines, wallGlazing } from './ironwork'
-import { BAY, GLASS_X, GLASS_Y, HALF, paneAt, paneSize, slotFor } from './layout'
+import { BAY, GLASS_X, GLASS_Y, HALF, forceStand, paneAt, paneSize, slotFor, standFor } from './layout'
 import { FarPanes, NearPane, Pools } from './Panes'
 import { EmptyFrame } from './EmptyFrame'
 import { Motes } from './Motes'
+import { Flowers } from './Flowers'
+import { openPane } from './view'
 
 /**
  * How many panes get their actual photograph.
@@ -120,7 +138,11 @@ export default function Glasshouse() {
   // --- travelling ----------------------------------------------------------
 
   const building = useRef<Group>(null)
+  const facingRef = useRef<Group>(null)
   const probe = useMemo(() => new Vector3(), [])
+  const standing = useMemo(() => new Vector3(), [])
+  const sideways = useMemo(() => new Vector3(), [])
+  const forward = useMemo(() => new Vector3(), [])
 
   useEffect(() => {
     const surface = document.querySelector<HTMLElement>('.surface')
@@ -128,10 +150,181 @@ export default function Glasshouse() {
     return alongTheAisle(surface)
   }, [])
 
-  useFrame((_, rawDelta) => {
+  /*
+    Which wall the nearest pane is on.
+
+    A ref, written by the same pass that decides which memories are near — it
+    already sorts them by distance, so the lean costs no search of its own.
+  */
+  const facing = useRef<-1 | 0 | 1>(0)
+
+  /*
+    The one that is open, resolved to its age and slot once rather than every
+    frame. Null while you are walking.
+  */
+  /*
+    What she hung here while you were away.
+
+    Frozen on arrival and cleared on the way out — see `useStoodIn`. Which
+    means the corridor greets you with her photographs lit, once, and is an
+    ordinary corridor the next time you walk it. The count in the corner still
+    says how many; this says *which*, and where, and that somebody was here.
+  */
+  const since = useStoodIn('glasshouse')
+  const freshIds = useMemo(
+    () =>
+      new Set(
+        memories
+          .filter((memory) => !memory.removed && isHersAndNew(memory, otherUser(me), since))
+          .map((memory) => memory.id),
+      ),
+    [memories, me, since],
+  )
+
+  const opened = useMemo(() => {
+    if (!openId) return null
+    const age = memories.findIndex((m) => m.id === openId)
+    return age < 0 ? null : { age, slot: slotFor(age) }
+  }, [openId, memories])
+
+  /*
+    Walk to it, and hold the wall it is on.
+
+    Opening a memory *moves you to it* — the aisle glides to its bay and the
+    building turns square to its wall — rather than putting a panel over a
+    world that has stopped. By the time the photograph is readable you are
+    standing in front of the pane it lives in, which is the whole difference
+    between this and a lightbox.
+  */
+  useEffect(() => {
+    if (!opened) return
+    walkTo(opened.slot.z)
+  }, [opened])
+
+  useFrame(({ camera, size }, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 20)
     stepAisle(delta)
-    if (building.current) building.current.position.z = buildingZ()
+    stepLean(delta, opened ? opened.slot.side : facing.current, Boolean(opened))
+    const group = building.current
+
+    if (group) {
+      group.position.z = buildingZ()
+      group.position.x = buildingX()
+    }
+    if (facingRef.current) facingRef.current.rotation.y = buildingTurn()
+
+    /*
+      Where that pane lands on screen, for the photograph to sit on.
+
+      Two points projected — the centre, and one corner — which is all an
+      axis-aligned rectangle needs. It is only axis-aligned because the pane is
+      exactly perpendicular by the end of the turn and has no tilt of its own;
+      see the notes on `stepLean` and on `slotFor`. The matrix has to be
+      refreshed by hand because this runs *before* three updates the world
+      matrices for the frame, and a frame-old transform is a photograph that
+      lags the pane it is supposed to be lying on.
+    */
+    if (!group || !opened) {
+      openPane.at = focus.open
+      if (focus.open < 0.002) openPane.live = false
+      return
+    }
+    group.updateWorldMatrix(true, false)
+    const { w, h } = paneSize()
+    const [px, py, pz] = paneAt(opened.slot, h)
+
+    /*
+      Stepping across, as well as along.
+
+      -----------------------------------------------------------------------
+      **The turn pivots about the middle of the aisle. Nobody stands there.**
+
+      The note on the nested groups says the building turns about the point the
+      camera is looking at, and for a twenty-degree glance that is true enough
+      to be worth saying. It is not true at ninety. SlideCamera stands the
+      camera a metre or so off the aisle centreline and several metres back
+      down it, aimed with a yaw of its own, and `backOffFor` moves it again
+      with the aspect — so swinging a wall a full quarter turn about the
+      centreline carries the open pane sideways by however far off it you
+      happen to be standing. Measured on a phone: the photograph settled with
+      its centre thirty-two pixels from the left edge, most of it past the side
+      of the screen, while every eased number in the system reported it had
+      arrived exactly where it was asked to. Which is what `__glass.open` is
+      for.
+
+      The correction is a walk. Once the building is square, its local Z *is*
+      the screen's sideways axis — so stepping across to stand in front of a
+      picture and walking along the aisle to reach its bay turn out to be the
+      same motion through the same number.
+
+      Solved rather than guessed. Matching the pane's X to the camera's was the
+      obvious version and left it fifty pixels out, because being level with
+      something is not the same as having it in front of you when the camera is
+      also turned. What is actually wanted is the pane on the camera's own
+      sideways axis: how far the pane is off that axis now, over how fast one
+      metre of aisle moves it along that axis. Both come straight out of the
+      matrices, so this holds for any camera the sections ever hand it, at any
+      aspect, without a constant to keep in step.
+
+      Faded on `focus.open` because it is only the right correction at ninety
+      degrees, and only wanted there.
+      -----------------------------------------------------------------------
+    */
+    if (focus.open > 0.0005) {
+      /*
+        Two solves, in this order, because the second reads what the first did.
+
+        Both have the same shape. Take how far the pane currently misses the
+        mark along one of the camera's own axes; divide by how fast one metre
+        of building movement carries it along that axis; move the building by
+        that much. Fade it on the turn, because both are only the right answer
+        once the wall is square.
+
+        Depth first, along local X, until the pane is `standFrom()` metres in
+        front of the camera. Then across, along local Z — which is the aisle,
+        and which after the turn is the screen's sideways axis — until the pane
+        is on the camera's centre line.
+      */
+      sideways.setFromMatrixColumn(camera.matrixWorld, 0)
+      // Cameras look down their own -Z, so this is the way you are facing.
+      forward.setFromMatrixColumn(camera.matrixWorld, 2).negate()
+
+      const depth = probe.set(px, py, pz).applyMatrix4(group.matrixWorld).sub(camera.position).dot(forward)
+      const perMetre = standing.set(1, 0, 0).transformDirection(group.matrixWorld).dot(forward)
+      // Near zero while the wall is still edge-on: moving sideways does not
+      // change how far away it is, and the answer is not meaningful yet.
+      if (Math.abs(perMetre) > 1e-3) {
+        const want = standFor((camera as PerspectiveCamera).fov, size.width / Math.max(1, size.height))
+        group.position.x += ((want - depth) / perMetre) * focus.open
+        group.updateWorldMatrix(true, false)
+      }
+
+      const off = probe.set(px, py, pz).applyMatrix4(group.matrixWorld).sub(camera.position)
+      const along = standing.set(0, 0, 1).transformDirection(group.matrixWorld)
+      const rate = along.dot(sideways)
+      if (Math.abs(rate) > 1e-3) {
+        group.position.z += (-off.dot(sideways) / rate) * focus.open
+        group.updateWorldMatrix(true, false)
+      }
+    }
+
+    probe.set(px, py, pz).applyMatrix4(group.matrixWorld).project(camera)
+    const cx = (probe.x * 0.5 + 0.5) * size.width
+    const cy = (-probe.y * 0.5 + 0.5) * size.height
+
+    probe
+      .set(px, py + h / 2, pz + (w / 2) * -opened.slot.side)
+      .applyMatrix4(group.matrixWorld)
+      .project(camera)
+    const ex = (probe.x * 0.5 + 0.5) * size.width
+    const ey = (-probe.y * 0.5 + 0.5) * size.height
+
+    openPane.x = cx
+    openPane.y = cy
+    openPane.halfW = Math.abs(ex - cx)
+    openPane.halfH = Math.abs(ey - cy)
+    openPane.at = focus.open
+    openPane.live = true
   })
 
   /*
@@ -149,9 +342,11 @@ export default function Glasshouse() {
     const w = window as unknown as Record<string, unknown>
     w.__glassOpen = (id: string | null) => useMemories.getState().open(id)
     w.__glassWalk = (metres: number) => walkTo(metres)
+    w.__glassReach = (metres: number) => forceStand(metres)
     return () => {
       delete w.__glassOpen
       delete w.__glassWalk
+      delete w.__glassReach
     }
   }, [])
 
@@ -167,17 +362,30 @@ export default function Glasshouse() {
   */
   useFrame(({ camera, size }) => {
     if (!SHOT || memories.length === 0) return
-    const age = Math.max(0, memories.length - 1)
+    let age = memories.length - 1
+    while (age >= 0 && memories[age].removed) age--
+    if (age < 0) return
     const slot = slotFor(age)
-    const { w, h } = paneSize(memories[age].width, memories[age].height)
+    const { w, h } = paneSize()
     const [px, py, pz] = paneAt(slot, h)
     // Two vectors, because `project` works in place: one object reused would
     // measure the distance from the camera to a normalised device coordinate.
-    probe.set(GLASS_X + px, GLASS_Y + py, pz + buildingZ())
+    const group = building.current
+    if (!group) return
+    /*
+      Through the group's own matrix.
+
+      The building leans *and* turns now, so adding the offsets by hand would
+      measure a pane that is not where this one is — and the whole value of
+      this probe is that it reports the real rectangle rather than a plausible
+      one. Same reason `whichPane` inverts the same matrix.
+    */
+    probe.set(px, py, pz).applyMatrix4(group.matrixWorld)
     const away = probe.distanceTo(camera.position)
     const middle = probe.clone().project(camera)
     const edge = probe
-      .set(GLASS_X + px, GLASS_Y + py + h / 2, pz + buildingZ() + (w / 2) * -slot.side)
+      .set(px, py + h / 2, pz + (w / 2) * -slot.side)
+      .applyMatrix4(group.matrixWorld)
       .project(camera)
     ;(window as unknown as Record<string, unknown>).__glass = {
       camera: [camera.position.x, camera.position.y, camera.position.z].map((n) => +n.toFixed(2)),
@@ -189,6 +397,42 @@ export default function Glasshouse() {
       // it is a photograph or a coloured speck, and whether a thumb can hit it.
       widthPx: +(Math.abs(edge.x - middle.x) * size.width).toFixed(0) * 2,
       away: +away.toFixed(1),
+      /*
+        And the open state's own workings.
+
+        Where the photograph lands when a memory is open is decided by three
+        eased numbers pulling against each other — how far through the turn,
+        how far the building has been pushed sideways, and where along the
+        aisle it has walked to. If the picture comes out off-centre, the only
+        useful question is *which of the three has not arrived*, and by eye
+        that is unanswerable. Headless caps delta per frame, so all three
+        settle in slow motion and a test that waits a fixed time measures a
+        half-finished turn and calls it a bug.
+      */
+      open: opened
+        ? {
+            at: +focus.open.toFixed(3),
+            shift: +lean.shift.toFixed(2),
+            turn: +lean.turn.toFixed(3),
+            walked: +aisleAt().toFixed(2),
+            wants: +aisle.to.toFixed(2),
+            side: opened.slot.side,
+            z: +opened.slot.z.toFixed(2),
+            /*
+              Where you are standing, in the building's own coordinates.
+
+              `stand[0]` is the one that matters: the aisle is 5.24 metres
+              across, so anything past ±2.62 means the camera has left through
+              a wall — which looks, on a screenshot, exactly like a photograph
+              nicely framed against a flat grey nothing.
+            */
+            stand: (() => {
+              const at = standing.copy(camera.position)
+              group.worldToLocal(at)
+              return [+at.x.toFixed(2), +at.z.toFixed(2)]
+            })(),
+          }
+        : null,
     }
   })
 
@@ -208,10 +452,20 @@ export default function Glasshouse() {
     const here = aisleAt()
     const picked: { id: string; index: number; away: number }[] = []
     for (let i = 0; i < memories.length; i++) {
+      if (memories[i].removed) continue
       const away = Math.abs(slotFor(i).z - here)
       if (away < REACH) picked.push({ id: memories[i].id, index: i, away })
     }
     picked.sort((a, b) => a.away - b.away)
+    /*
+      Lean toward the closest, and only while it is genuinely close.
+
+      Past four metres the building straightens up, so walking the length of
+      the aisle is not a continuous sway from side to side — it settles onto a
+      pane, holds while you are with it, and lets go.
+    */
+    facing.current =
+      picked.length > 0 && picked[0].away < 4 ? slotFor(picked[0].index).side : 0
     const ids = picked.slice(0, NEAR).map((p) => p.id)
     const key = ids.join('|')
     if (key === nearKey.current) return
@@ -277,7 +531,8 @@ export default function Glasshouse() {
       )
       ray.setFromCamera(ndc, camera)
 
-      const hit = whichPane(ray, memories, buildingZ())
+      if (!building.current) return
+      const hit = whichPane(ray, memories, building.current)
       if (!hit) return
 
       /*
@@ -320,6 +575,10 @@ export default function Glasshouse() {
   const taken = useMemo(() => {
     const keys = new Set<string>()
     for (let i = 0; i < memories.length; i++) {
+      // A memory that has been taken out does *not* hold its panel open. The
+      // ordinary milky glazing goes back in and the wall closes over it with
+      // no gap and no empty frame — see the note on Memory.removed.
+      if (memories[i].removed) continue
       const slot = slotFor(i)
       keys.add(panelKey(slot.bay, slot.side))
     }
@@ -353,9 +612,16 @@ export default function Glasshouse() {
 
   const growth = useMemo(() => {
     const base = new PlaneGeometry(1, 1)
-    // Roughly one clump per metre and a half of building, so the vines thicken
-    // with the Glasshouse rather than being a fixed amount of scenery in it.
-    const built = buildInstanced(base, vines(length, Math.round(length * 0.66)))
+    /*
+      Two and a half clumps a metre, and it was two thirds of one.
+
+      Sparse growth reads as a few leaves somebody stuck on, and the whole
+      point of it is that this place has been left alone for a long time. It is
+      one instanced quad per leaf in a batch that already existed, so the cost
+      of making the Glasshouse feel properly overgrown is a few thousand
+      triangles and no extra draw call.
+    */
+    const built = buildInstanced(base, vines(length, Math.round(length * 2.5)))
     base.dispose()
     return built
   }, [length])
@@ -383,6 +649,9 @@ export default function Glasshouse() {
         gapWidth={0.9}
         flatten={0.4}
         leafDetail={0.34}
+        /* The heaviest thing in the Glasshouse was never the Glasshouse — it
+            was the branchwork of these hundred and thirty trees. See woodDetail. */
+        woodDetail={0.3}
       />
 
       {/*
@@ -396,13 +665,26 @@ export default function Glasshouse() {
         terrace never has to know how far down it you have walked.
       */}
       <group position={[GLASS_X, GLASS_Y, 0]}>
+      {/*
+        Three groups, and the nesting is what makes the turn work.
+
+        Outer: where the Glasshouse stands in the world, on its terrace.
+        Middle (`facingRef`): the turn — and because this group's own origin is
+          the point the camera is looking at, the building pivots *about the
+          spot in front of you* rather than about its far end. Rotating the
+          travelling group instead would swing the near bays through the camera
+          and leave the far end static, which is the opposite of turning your
+          head.
+        Inner (`building`): the travel, and the sideways lean.
+      */}
+      <group ref={facingRef}>
       <group ref={building}>
         <mesh geometry={floor} material={stoneMaterial} frustumCulled={false} />
         <mesh geometry={iron} material={ironMaterial} frustumCulled={false} />
         <mesh geometry={glazing} material={glazingMaterial} frustumCulled={false} />
         <mesh geometry={growth} material={leafMaterial} frustumCulled={false} />
 
-        <Pools memories={memories} palette={palette} litId={openId} />
+        <Pools memories={memories} palette={palette} litId={openId} freshIds={freshIds} />
         <FarPanes
           memories={memories}
           palette={palette}
@@ -418,11 +700,14 @@ export default function Glasshouse() {
             picture={urls[memory.id] ?? null}
             together={theirs.online && theirs.looking === memory.id}
             forming={memory.id === formingId}
+            opened={memory.id === openId}
           />
         ))}
 
+        <Flowers memories={memories} palette={palette} />
         <EmptyFrame index={memories.length} palette={palette} />
         <Motes length={length} palette={palette} />
+      </group>
       </group>
       </group>
     </>
@@ -447,15 +732,26 @@ export default function Glasshouse() {
 function whichPane(
   ray: Raycaster,
   memories: Memory[],
-  shift: number,
+  /**
+   * The travelling group. The ray is put into *its* space rather than the maths
+   * being redone in world space.
+   *
+   * That started as tidiness and became necessary: the building now leans and
+   * *turns*, so the walls are no longer planes of constant world x and the
+   * closed-form version quietly began answering with the pane next to the one
+   * you tapped. Inverting one matrix is exact under any transform this place
+   * ever grows, and it means the slot coordinates below — which is how every
+   * other part of the section thinks — are the coordinates being tested.
+   */
+  group: Group,
 ): { id: string; z: number } | null {
-  const origin = ray.ray.origin
-  const dir = ray.ray.direction
+  const local = ray.ray.clone().applyMatrix4(WORLD_TO_LOCAL.copy(group.matrixWorld).invert())
+  const origin = local.origin
+  const dir = local.direction
   let best: { id: string; z: number; t: number } | null = null
 
   for (const side of [-1, 1] as const) {
-    // World space, so the terrace's own offset is part of the wall's position.
-    const planeX = GLASS_X + side * HALF
+    const planeX = side * HALF
     // Parallel to the wall, or behind us: no hit worth having.
     if (Math.abs(dir.x) < 1e-4) continue
     const t = (planeX - origin.x) / dir.x
@@ -465,9 +761,10 @@ function whichPane(
     const z = origin.z + dir.z * t
 
     for (let i = 0; i < memories.length; i++) {
+      if (memories[i].removed) continue
       const slot = slotFor(i)
       if (slot.side !== side) continue
-      const { w, h } = paneSize(memories[i].width, memories[i].height)
+      const { w, h } = paneSize()
       // Through `paneAt`, never off the slot directly: the slot's height is a
       // wish and `paneAt` is where it is clamped to fit under the eaves. Using
       // the raw one is how a target ends up somewhere the picture is not.
@@ -479,11 +776,14 @@ function whichPane(
         a moving building. Half a pane of slop either way is the difference
         between "tap the picture" and "tap exactly the picture".
       */
-      if (Math.abs(z - (slot.z + shift)) > w * 0.72) continue
-      if (Math.abs(y - (GLASS_Y + paneY)) > h * 0.72) continue
+      if (Math.abs(z - slot.z) > w * 0.72) continue
+      if (Math.abs(y - paneY) > h * 0.72) continue
       if (best === null || t < best.t) best = { id: memories[i].id, z: slot.z, t }
     }
   }
 
   return best ? { id: best.id, z: best.z } : null
 }
+
+/** Scratch, so picking allocates nothing per tap. */
+const WORLD_TO_LOCAL = new Matrix4()

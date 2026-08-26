@@ -102,7 +102,7 @@ export function EmptyFrame({ index, palette }: { index: number; palette: SkyPale
   // Nothing has been chosen yet, so there is no aspect to cut to. A frame a
   // little wider than tall is what an empty conservatory bay actually is, and
   // the glass will grow into whatever shape the photograph turns out to be.
-  const size = useMemo(() => paneSize(4, 3), [])
+  const size = useMemo(() => paneSize(), [])
 
   const material = useMemo(
     () =>

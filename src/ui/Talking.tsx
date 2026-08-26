@@ -534,11 +534,22 @@ export function Talking() {
         </div>
       ) : (
         <button type="button" className="start-saying" onClick={startWriting}>
-          <span className="start-saying-hint">
-            {unread > 0
-              ? `${unread} from ${them.name}, since you were last here`
-              : 'one light each, for as long as you like'}
-          </span>
+          {/*
+            Only when there is something to say.
+
+            The hint used to carry a standing line — "one light each, for as
+            long as you like" — under the invitation at all times, which meant
+            two rows of furniture permanently parked under the newest message
+            in the emptiest, quietest place in the garden. It was a nice
+            sentence about the place and it was in the way of the conversation
+            the place is for. What is left is the one case where the line is
+            *news*: how much of hers you have not read.
+          */}
+          {unread > 0 && (
+            <span className="start-saying-hint">
+              {unread} from {them.name}, since you were last here
+            </span>
+          )}
           <span className="start-saying-name">say something</span>
         </button>
       )}

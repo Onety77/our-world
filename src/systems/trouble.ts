@@ -51,6 +51,17 @@ export async function attempt(what: string, run: () => Promise<void>): Promise<b
   }
 }
 
+/** The same failure boundary for operations whose successful value is needed next. */
+export async function attemptValue<T>(what: string, run: () => Promise<T>): Promise<T | null> {
+  try {
+    return await run()
+  } catch (error) {
+    console.error(`[garden] ${what} failed`, error)
+    useTrouble.getState().say(what)
+    return null
+  }
+}
+
 /**
  * Catch anything that got away.
  *

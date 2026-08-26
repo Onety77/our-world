@@ -65,10 +65,18 @@ import {
   SAMPLE_DRIFT,
   SAMPLE_MS,
   SAMPLE_ROUGH,
+  SAMPLE_SHORTCUT,
   SAMPLE_SLIDE,
   type RallyRun,
 } from './model'
-import { END_WALL, roadAt, vergeWidth, type RoadAt, type Track } from './track'
+import {
+  END_WALL,
+  roadAt,
+  roadAtRoute,
+  vergeWidth,
+  type RoadAt,
+  type Track,
+} from './track'
 
 // Re-exported because it lived here first and half the racer imports it from
 // here. It belongs to the road — see the note beside it in track.ts.
@@ -396,8 +404,45 @@ const DRIFT_STRAIGHT_EXIT = 2
  * second to cross over.
  */
 const DRIFT_SWAP = 3.4
-/** The most g the path may pull, and a ceiling on how fast it may rotate. */
-const DRIFT_MAX_G = 1.75
+/**
+ * The tightest arc the arrows can ask for, in metres.
+ *
+ * ---------------------------------------------------------------------------
+ * **The arrows ask for a line, not for a force. This is the difference, and
+ * getting it the wrong way round is what made long corners impossible.**
+ *
+ * The command used to be a yaw rate capped in *g*, on the reasoning that a
+ * flat cap in radians a second would be a gentle curve at 20 m/s and a
+ * pirouette at 45 — which is true, and the cure was worse. A constant lateral
+ * g is a constant *force*, and the arc a constant force draws is `v² / a`: it
+ * opens up with the square of the speed. So holding the stick still through a
+ * corner while the car picked up speed made the car turn *less* every second,
+ * while the corner needed it to turn *more* every second, and the two gaps
+ * added. Measured through a 53 metre corner: yaw rate falling 0.33 → 0.26 rad/s
+ * while the corner's demand rose 0.38 → 0.47. The car tucked to the inside for
+ * the first two seconds, then washed out across the road and into the wall —
+ * and no timing on the entry could prevent it, because the fault accumulated
+ * *after* the entry. It only ever showed in one place: a corner long enough
+ * for the speed to change while the drift was held.
+ *
+ * Asking for a curvature instead means a held stick is a held arc, whatever
+ * the car is doing about speed. Which is the thing a driver is actually trying
+ * to do — you aim at a radius, not at a number of newtons — and it is what
+ * makes a long corner learnable: this much thumb is this much corner.
+ * ---------------------------------------------------------------------------
+ */
+const DRIFT_RADIUS = 25
+/**
+ * And the most g that arc is allowed to pull, which is now a ceiling rather
+ * than the control.
+ *
+ * It still has to exist — without it, full lock at 45 m/s would be a curvature
+ * no car should survive — but it should bite only at the top of the range, not
+ * in the middle of every corner. Above about 23 m/s it starts opening the arc
+ * out again, and that is honest: past there you genuinely are asking for more
+ * than the road can give you, and the answer is to arrive slower.
+ */
+const DRIFT_MAX_G = 2.05
 const DRIFT_TURN = 1.3
 /** What hanging it right out costs, per second, at full angle. */
 const DRIFT_SCRUB = 0.2
@@ -599,6 +644,9 @@ export interface CarState {
   pitchVel: number
   heaveVel: number
 
+  /** Committed to the Rootwake's independent tunnel. */
+  shortcut: boolean
+
   // --- what just happened, cleared every step ------------------------------
   /** 0..1 severity of rock contact, continuous while scraping. */
   hitWall: number
@@ -692,6 +740,7 @@ export function createCar(track: Track): CarState {
     rollVel: 0,
     pitchVel: 0,
     heaveVel: 0,
+    shortcut: false,
     hitWall: 0,
     slam: 0,
     touching: false,
@@ -875,7 +924,7 @@ const forceX = [0, 0, 0, 0]
 const forceY = [0, 0, 0, 0]
 
 function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
-  const road = roadAt(track, car.s, car.road)
+  const road = roadAtRoute(track, car.s, car.shortcut, car.road)
   const v = Math.hypot(car.vs, car.vn)
   const speed = Math.max(0.5, v)
 
@@ -1385,17 +1434,23 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     const speed = Math.max(1, Math.hypot(car.vs, car.vn))
 
     /*
-      How tightly the path bends.
+      How tightly the path bends — as an arc, not as a force.
 
-      Capped in *g* rather than in radians a second, so it means the same thing
-      at every speed: a flat ceiling would be a gentle curve at 20 m/s and a
-      pirouette at 45. Set a little above what the tyres can do, which is what
-      makes a drift genuinely quicker through a tight corner than gripping —
-      and paid for by the scrub below, which is what stops it being quicker
-      through everything.
+      See DRIFT_RADIUS. The arrows name a curvature, the g ceiling and the
+      rotation ceiling trim it at the top of the speed range, and what comes
+      out is a yaw rate because that is what the rest of this block speaks.
+      The order matters: clamp the *line* first, then convert, or the g cap
+      ends up being the thing the driver is steering with again.
+
+      Set a little tighter than what the tyres can do, which is what makes a
+      drift genuinely quicker through a tight corner than gripping — and paid
+      for by the scrub below, which is what stops it being quicker through
+      everything.
     */
-    const ceiling = Math.min(DRIFT_TURN, (DRIFT_MAX_G * G) / speed)
-    const turn = command * ceiling
+    const asked = (command / DRIFT_RADIUS) * car.driftBlend
+    const most = (DRIFT_MAX_G * G) / (speed * speed)
+    const bend = Math.sign(asked) * Math.min(Math.abs(asked), most)
+    const turn = Math.max(-DRIFT_TURN, Math.min(DRIFT_TURN, bend * speed))
 
     /*
       The angle it hangs at, following the same key that is steering it.
@@ -1568,16 +1623,37 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   let acrossRoad = car.vs * sin + car.vn * cos
 
   const denom = Math.max(0.4, 1 - car.n * road.curv)
-  const sDot = alongRoad / denom
+  const sDot = alongRoad / (denom * road.metric)
 
   car.s += sDot * dt
   car.n += acrossRoad * dt
-  car.psi += (car.yaw - road.curv * sDot) * dt
+  car.psi += (car.yaw - road.curv * sDot * road.metric) * dt
   // An angle, so it lives on a circle. Without this a couple of hard corners
   // leave psi at twelve radians and every consumer of it — the ghost, the
   // spirit's own steering — is reading a number that no longer means anything.
   if (car.psi > Math.PI) car.psi -= Math.PI * 2
   else if (car.psi < -Math.PI) car.psi += Math.PI * 2
+
+  const split = track.split
+  if (split) {
+    // The choice happens in the shared stone before the tunnels pull apart.
+    if (
+      !car.shortcut &&
+      car.s >= split.from + 4 &&
+      car.s <= split.commitAt &&
+      car.n > split.portalN
+    ) {
+      car.shortcut = true
+      car.struck.clear()
+    }
+    // Both centrelines and headings are already the same again here. Changing
+    // route is therefore a topological change, not a teleport or a correction.
+    if (car.shortcut && car.s >= split.rejoinAt) {
+      car.shortcut = false
+      car.struck.clear()
+    }
+    roadAtRoute(track, car.s, car.shortcut, road)
+  }
 
   /*
     The rock.
@@ -1591,6 +1667,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   */
   car.slam = 0
   car.hitWall = 0
+
   const limit = wallAt(road) - CAR_HALF_WIDTH
   const touching = Math.abs(car.n) > limit
   if (touching) {
@@ -1647,7 +1724,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
 
   // --- stones --------------------------------------------------------------
   car.hitStone = false
-  for (let i = 0; i < track.boulders.length; i++) {
+  for (let i = 0; !car.shortcut && i < track.boulders.length; i++) {
     if (car.struck.has(i)) continue
     const stone = track.boulders[i]
     if (Math.abs(stone.s - car.s) > 2.4) continue
@@ -1826,7 +1903,8 @@ export class Recorder {
       (car.boostLeft > 0 ? SAMPLE_BOOST : 0) |
       (car.rough ? SAMPLE_ROUGH : 0) |
       (car.braking > 0.35 ? SAMPLE_BRAKE : 0) |
-      (wheelspinOf(car) > 0.3 ? SAMPLE_SLIDE : 0)
+      (wheelspinOf(car) > 0.3 ? SAMPLE_SLIDE : 0) |
+      (car.shortcut ? SAMPLE_SHORTCUT : 0)
     this.path.push(
       Math.round(car.n * 1000),
       Math.round(car.s * 100),

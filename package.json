@@ -11,7 +11,8 @@
     "rules": "node scripts/rules.mjs",
     "rally": "npx --yes tsx scripts/rally-check.ts",
     "tris": "npx --yes tsx scripts/tri-count.ts",
-    "scatter": "npx --yes tsx scripts/scatter-check.ts"
+    "scatter": "npx --yes tsx scripts/scatter-check.ts",
+    "shaders": "npx --yes tsx scripts/shader-check.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

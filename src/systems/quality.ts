@@ -46,12 +46,21 @@ interface QualityState {
   grassCount: number
   flowerCount: number
   dpr: number
-  /** True once we've stepped down, so the dev panel can say so. */
+  /** True once we've stepped down, so the control room can say so. */
   degraded: boolean
   degrade(): void
+  /**
+   * Pin a tier by hand, from `/dev7731`.
+   *
+   * Clears `degraded`, because choosing one deliberately is not the watchdog
+   * having stepped down and the two should not be confused when reading the
+   * page back. `?tier=` still wins at startup, so screenshot scripts are
+   * unaffected by whatever was last set here.
+   */
+  setTier(tier: Tier): void
 }
 
-function shape(tier: Tier, degraded: boolean): Omit<QualityState, 'degrade'> {
+function shape(tier: Tier, degraded: boolean): Omit<QualityState, 'degrade' | 'setTier'> {
   const t = TIERS[tier]
   return {
     tier,
@@ -69,6 +78,7 @@ export const useQuality = create<QualityState>((set, get) => ({
     if (next === get().tier) return
     set(shape(next, true))
   },
+  setTier: (tier) => set(shape(tier, false)),
 }))
 
 /**

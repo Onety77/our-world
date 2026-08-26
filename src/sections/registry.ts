@@ -9,7 +9,7 @@
  * right and swiped between, so `order` is the position in the row.
  */
 
-import type { ComponentType } from 'react'
+import type { Later } from '@/systems/later'
 
 export interface SectionCamera {
   /** Where the camera sits, relative to the section's own anchor. */
@@ -29,8 +29,21 @@ export interface SectionDefinition {
   /** Position in the row, left to right. Must be unique. */
   order: number
   camera: SectionCamera
-  /** Everything in this place. Rendered at the section's own anchor. */
-  Scene: ComponentType
+  /**
+   * Everything in this place, fetched when it is wanted.
+   *
+   * The rest of this definition is a handful of strings and a camera, and it
+   * stays eager because the row of places has to be drawn before you have
+   * chosen one — you swipe between names, and a name you have to download is a
+   * name that is not there. The *world* behind each name is the heavy half, and
+   * only ever one of them is on screen.
+   *
+   * See `later`. It carries its own `warm()`, and the rule is to call that on
+   * the first hint rather than on the press: `World` warms every place once the
+   * garden has settled, and `SlideCamera` warms whichever one a slide is headed
+   * for. By the time you arrive it is already here.
+   */
+  Scene: Later
 }
 
 const modules = import.meta.glob<{ default: SectionDefinition }>('./*/index.ts', {

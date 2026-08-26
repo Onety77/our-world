@@ -33,8 +33,10 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   getFirestore,
   onSnapshot,
+  deleteDoc,
   deleteField,
   orderBy,
   query,
@@ -42,6 +44,9 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  runTransaction,
+  where,
+  writeBatch,
   type Firestore,
 } from 'firebase/firestore'
 /*
@@ -50,9 +55,11 @@ import {
   Firestore documents are capped at a megabyte and are the wrong shape for
   binary anyway; Storage is a bucket with its own rules file. It is imported
   here and nowhere else, which is the point of the seam — nothing above this
-  folder knows the Glasshouse is backed by a bucket rather than by IndexedDB.
+  folder knows the Glasshouse and the Stars' brief voice-lights are backed by
+  a bucket rather than by IndexedDB.
 */
 import {
+  deleteObject,
   getDownloadURL,
   getStorage,
   ref as storageRef,
@@ -89,8 +96,16 @@ import {
   type Profile,
   type UserId,
   type WorldState,
+  type QuestionAnswer,
+  type QuestionRound,
+  type VoiceLight,
 } from './types'
 import { newId } from './ids'
+import {
+  QUESTION_DAY,
+  QUESTION_PROMPTS,
+  questionHash,
+} from './questionPrompts'
 
 // ---------------------------------------------------------------------------
 // Where things live
@@ -114,6 +129,11 @@ const ROUNDS = 'rounds'
 const PLANTS = 'plants'
 const DECOR = 'decor'
 const MOVES = 'moves'
+const QUESTION_ROUNDS = 'questionRounds'
+const QUESTION_ANSWERS = 'answers'
+const QUESTION_SEEDS = 'questionSeeds'
+const VOICE_LIGHTS = 'voiceLights'
+const VOICE_LIGHT_CONFIG = 'voiceLightConfig'
 
 /** Presence is per person, under a path only that person may write. */
 const presencePath = (id: UserId) => `presence/${id}`
@@ -184,6 +204,14 @@ function emptyWorld(): WorldState {
     plants: [],
     decor: [],
     today: null,
+    questions: {
+      current: null,
+      history: [],
+      availableSeeds: 0,
+      queued: 0,
+      nextAt: null,
+      loaded: false,
+    },
     firstArrivalAt: null,
     lastReadAt: { warm: 0, cool: 0 },
   }
@@ -277,6 +305,37 @@ function toContribution(
   }
 }
 
+interface PrivateQuestionSeed {
+  id: string
+  prompt: string
+  contributionId: string | null
+  availableAfter: number
+  usedAt: number | null
+}
+
+function toQuestionRound(id: string, d: Record<string, unknown>): QuestionRound | null {
+  const prompt = str(d.prompt, '')
+  if (prompt === '') return null
+  return {
+    id,
+    prompt,
+    openedAt: num(d.openedAt, 0),
+    completedAt: typeof d.completedAt === 'number' ? d.completedAt : null,
+    answered: {
+      warm: d.answeredWarm === true,
+      cool: d.answeredCool === true,
+    },
+    answers: {},
+  }
+}
+
+function toQuestionAnswer(d: Record<string, unknown> | undefined): QuestionAnswer | null {
+  if (!d) return null
+  const body = str(d.body, '')
+  if (body === '') return null
+  return { by: userId(d.by), body, at: num(d.at, 0) }
+}
+
 // ---------------------------------------------------------------------------
 // The layer
 // ---------------------------------------------------------------------------
@@ -342,6 +401,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
    * range in the same frame share one round trip instead of racing.
    */
   const pictures = new Map<string, Promise<string>>()
+  const voiceUrls = new Map<string, Promise<string>>()
 
   /**
    * The server's clock minus this device's. Phones are routinely a minute out,
@@ -391,6 +451,64 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
   }
   /** The highest seq of mine the server has confirmed, per round. */
   const seenSeq = new Map<string, number>()
+
+  // ---- the question vine -------------------------------------------------
+  // The seed documents stay private to their planter. Shared rounds contain
+  // the prompt but deliberately carry no source or author field.
+  let questionRounds: QuestionRound[] = []
+  let questionSeeds: PrivateQuestionSeed[] = []
+  let questionRoundsLoaded = false
+  let questionSeedsLoaded = false
+  let questionRevision = 0
+
+  async function refreshQuestions() {
+    const revision = ++questionRevision
+    const hydrated = await Promise.all(
+      questionRounds.map(async (round): Promise<QuestionRound> => {
+        const answers: QuestionRound['answers'] = {}
+        const both = round.answered.warm && round.answered.cool
+        const wanted = both ? USER_IDS : round.answered[me] ? [me] : []
+        await Promise.all(
+          wanted.map(async (who) => {
+            try {
+              const snap = await getDoc(
+                doc(db, QUESTION_ROUNDS, round.id, QUESTION_ANSWERS, who),
+              )
+              const answer = toQuestionAnswer(
+                snap.data() as Record<string, unknown> | undefined,
+              )
+              if (answer) answers[who] = answer
+            } catch {
+              // Before both have answered, the other document is expected to
+              // be permission-denied. An empty slot is the sealed state.
+            }
+          }),
+        )
+        return { ...round, answers }
+      }),
+    )
+    if (revision !== questionRevision) return
+
+    const spent = new Set(
+      questionSeeds
+        .filter((seed) => seed.contributionId)
+        .map((seed) => seed.contributionId as string),
+    )
+    const current = hydrated.at(-1) ?? null
+    commit({
+      ...state,
+      questions: {
+        current,
+        history: hydrated.filter((round) => round.completedAt !== null),
+        availableSeeds: state.contributions.filter(
+          (entry) => entry.by === me && entry.inPotCurrency.minor > 0 && !spent.has(entry.id),
+        ).length,
+        queued: questionSeeds.filter((seed) => seed.usedAt === null).length,
+        nextAt: current?.completedAt ? current.openedAt + QUESTION_DAY : null,
+        loaded: questionRoundsLoaded && questionSeedsLoaded,
+      },
+    })
+  }
 
   // ---- clock ---------------------------------------------------------------
   unsubscribes.push(
@@ -519,7 +637,53 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         .filter((c): c is Contribution => c !== null)
         .sort((a, b) => a.at - b.at)
       commit({ ...state, contributions })
+      void refreshQuestions()
     }),
+  )
+
+  // ---- the question vine -------------------------------------------------
+  unsubscribes.push(
+    onSnapshot(
+      query(collection(db, QUESTION_ROUNDS), orderBy('openedAt', 'asc')),
+      (snap) => {
+        questionRounds = snap.docs
+          .map((entry) =>
+            toQuestionRound(entry.id, entry.data() as Record<string, unknown>),
+          )
+          .filter((round): round is QuestionRound => round !== null)
+        questionRoundsLoaded = true
+        void refreshQuestions()
+      },
+    ),
+  )
+
+  /*
+    Only mine. This is part of the anonymity model rather than a bandwidth
+    optimisation: the other person's planted prompt must never arrive on this
+    device while it is still in the pool. When it opens, the shared round has
+    only the words and no field saying where they came from.
+  */
+  unsubscribes.push(
+    onSnapshot(
+      query(collection(db, QUESTION_SEEDS), where('by', '==', me)),
+      (snap) => {
+        questionSeeds = snap.docs.flatMap((entry) => {
+          const raw = entry.data() as Record<string, unknown>
+          const prompt = str(raw.prompt, '')
+          if (prompt === '') return []
+          return [{
+            id: entry.id,
+            prompt,
+            contributionId:
+              typeof raw.contributionId === 'string' ? raw.contributionId : null,
+            availableAfter: num(raw.availableAfter, 0),
+            usedAt: typeof raw.usedAt === 'number' ? raw.usedAt : null,
+          } satisfies PrivateQuestionSeed]
+        })
+        questionSeedsLoaded = true
+        void refreshQuestions()
+      },
+    ),
   )
 
   // ---- presence ------------------------------------------------------------
@@ -744,6 +908,141 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       await setDoc(doc(db, ...WORLD_DOC), { pot: { goal } }, { merge: true })
     },
 
+    // ---- the question vine ------------------------------------------------
+
+    async ensureQuestion() {
+      const at = now()
+      const latest = await getDocs(
+        query(collection(db, QUESTION_ROUNDS), orderBy('openedAt', 'desc'), fsLimit(1)),
+      )
+      const latestDoc = latest.docs[0]
+      const current = latestDoc
+        ? toQuestionRound(
+            latestDoc.id,
+            latestDoc.data() as Record<string, unknown>,
+          )
+        : null
+      if (current) {
+        const both = current.answered.warm && current.answered.cool
+        if (!both || at < current.openedAt + QUESTION_DAY) return
+      }
+
+      // Only this person's private pool is queryable. Her planted prompt never
+      // reaches this device before it becomes a source-less shared round.
+      const seedSnap = await getDocs(
+        query(collection(db, QUESTION_SEEDS), where('by', '==', me)),
+      )
+      const eligible = seedSnap.docs.flatMap((entry) => {
+        const raw = entry.data() as Record<string, unknown>
+        const prompt = str(raw.prompt, '')
+        if (
+          prompt === '' ||
+          typeof raw.usedAt === 'number' ||
+          num(raw.availableAfter, 0) > at
+        ) return []
+        return [{ id: entry.id, prompt }]
+      })
+
+      const ordinal = questionRounds.length
+      const roll = questionHash(`${Math.floor(at / QUESTION_DAY)}:${ordinal}:${me}`)
+      const planted = eligible.length > 0 && roll % 3 === 0
+        ? eligible[roll % eligible.length]
+        : null
+      const usedPrompts = new Set(questionRounds.map((round) => round.prompt))
+      const unused = QUESTION_PROMPTS.filter((prompt) => !usedPrompts.has(prompt))
+      const pool = unused.length > 0 ? unused : [...QUESTION_PROMPTS]
+      const prompt = planted?.prompt ?? pool[questionHash(`tree:${ordinal}`) % pool.length]
+
+      // One deterministic document per UTC day. If both phones arrive at the
+      // same instant, one create wins; the other cannot overwrite it because
+      // question rounds are create-only in the rules.
+      const id = `question-${Math.floor(at / QUESTION_DAY)}`
+      const roundRef = doc(db, QUESTION_ROUNDS, id)
+      const body = {
+        prompt,
+        openedAt: at,
+        answeredWarm: false,
+        answeredCool: false,
+      }
+      try {
+        if (planted) {
+          const batch = writeBatch(db)
+          batch.set(roundRef, body)
+          batch.update(doc(db, QUESTION_SEEDS, planted.id), { usedAt: at })
+          await batch.commit()
+        } else {
+          await setDoc(roundRef, body)
+        }
+      } catch (error) {
+        // A simultaneous opener is success, not an error. Anything else still
+        // needs to surface through the normal trouble path.
+        if (!(await getDoc(roundRef)).exists()) throw error
+      }
+    },
+
+    async answerQuestion(roundId, body) {
+      const text = body.trim()
+      if (text === '') return
+      const roundRef = doc(db, QUESTION_ROUNDS, roundId)
+      const answerRef = doc(db, QUESTION_ROUNDS, roundId, QUESTION_ANSWERS, me)
+      await runTransaction(db, async (transaction) => {
+        const [roundSnap, answerSnap] = await Promise.all([
+          transaction.get(roundRef),
+          transaction.get(answerRef),
+        ])
+        if (!roundSnap.exists() || answerSnap.exists()) return
+        const raw = roundSnap.data() as Record<string, unknown>
+        const mine = me === 'warm' ? raw.answeredWarm : raw.answeredCool
+        if (mine === true) return
+        const otherAnswered = me === 'warm'
+          ? raw.answeredCool === true
+          : raw.answeredWarm === true
+        const at = now()
+        transaction.set(answerRef, { by: me, body: text, at })
+        transaction.update(roundRef, {
+          [me === 'warm' ? 'answeredWarm' : 'answeredCool']: true,
+          ...(otherAnswered ? { completedAt: at } : {}),
+        })
+      })
+    },
+
+    async plantQuestion(prompt) {
+      const text = prompt.trim()
+      if (text === '') return
+      const spent = new Set(
+        questionSeeds
+          .filter((seed) => seed.contributionId)
+          .map((seed) => seed.contributionId as string),
+      )
+      const contribution = state.contributions.find(
+        (entry) => entry.by === me && entry.inPotCurrency.minor > 0 && !spent.has(entry.id),
+      )
+      if (!contribution) throw new Error('There is no question seed waiting to be planted.')
+      const plantedAt = now()
+      const delayDays = 2 + (questionHash(contribution.id) % 6)
+      await setDoc(doc(db, QUESTION_SEEDS, contribution.id), {
+        by: me,
+        prompt: text,
+        contributionId: contribution.id,
+        plantedAt,
+        availableAfter: plantedAt + delayDays * QUESTION_DAY,
+      })
+    },
+
+    async plantAdminQuestion(prompt) {
+      const text = prompt.trim()
+      if (text === '') return
+      if (me !== 'warm') throw new Error('The control-room question pool belongs to warm.')
+      const plantedAt = now()
+      await setDoc(doc(db, QUESTION_SEEDS, `admin-${newId()}`), {
+        by: me,
+        admin: true,
+        prompt: text,
+        plantedAt,
+        availableAfter: plantedAt + QUESTION_DAY,
+      })
+    },
+
     async addPollen(amount) {
       // Read-then-write rather than increment(): pollen is shared and rarely
       // touched, and a plain number is far easier to reason about in the rules
@@ -852,10 +1151,18 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
           .map((d) => {
             const raw = d.data() as Record<string, unknown>
             const path = str(raw.path, '')
-            // A memory with no picture behind it is not a memory; it is a
-            // half-written document from an upload that died. Dropped here so
-            // nothing above ever has to render a pane that cannot exist.
-            if (path === '') return null
+            const gone = raw.removed as Record<string, unknown> | undefined
+
+            /*
+              A memory with no picture and no `removed` is a half-written
+              document from an upload that died — dropped here, so nothing
+              above ever has to render a pane that cannot exist.
+
+              One that *has* been removed is kept, and has to be: its index in
+              this list is a pane's place in the building, and dropping it here
+              would renumber every memory after it. See `Memory.removed`.
+            */
+            if (path === '' && !gone) return null
 
             const memory: Memory = {
               id: d.id,
@@ -866,6 +1173,13 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
               tint: str(raw.tint, '#4a4a4a'),
               blur: str(raw.blur, ''),
               path,
+            }
+            if (gone) {
+              memory.removed = { by: userId(gone.by), at: num(gone.at, 0) }
+              // Nothing else on a removed memory is meaningful, and reading
+              // the leftovers back would be the one way a cleared line could
+              // reappear.
+              return memory
             }
             if (typeof raw.when === 'string' && raw.when !== '') memory.when = raw.when
             if (typeof raw.why === 'string' && raw.why !== '') memory.why = raw.why
@@ -897,10 +1211,13 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     */
     async hangMemory(input) {
       const id = newId()
-      const path = `memories/${id}.jpg`
+      const path = `memories/${id}.${input.ext}`
 
       await uploadBytes(storageRef(store, path), input.display, {
-        contentType: 'image/jpeg',
+        // Whatever was actually encoded — WebP where the browser has it. A
+        // mislabelled object is served with the wrong type forever, and the
+        // Storage rules check this, so a guess here is an upload that fails.
+        contentType: input.type,
         /*
           A year, immutable. Every one of these is written once and never
           changed — the path has a fresh id in it — so there is no version of
@@ -943,6 +1260,50 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
           ? { theirs: deleteField() }
           : { theirs: { by: me, body: text, at: now() } },
       )
+    },
+
+    /*
+      Taken out of the glass. The file goes; the document stays, empty.
+
+      The *file* first, and the document second — the same order as hanging one
+      and for the same reason. A document cleared before the delete succeeded
+      would leave a memory that says it has no picture while the picture is
+      still sitting in the bucket, which is the one shape that is both a lie
+      and a bill. This way a failed delete leaves the memory whole, and the
+      person can simply try again.
+
+      See the note on `Memory.removed` for why this is not a delete.
+    */
+    async removeMemory(id) {
+      const at = doc(db, MEMORIES, id)
+      const now = await getDoc(at)
+      const raw = now.data() as Record<string, unknown> | undefined
+      if (!raw) return
+      // Yours only. The rules refuse it too; refusing here as well means the
+      // seam behaves the same way against the mock, where there are no rules.
+      if (userId(raw.by) !== me) return
+      const path = str(raw.path, '')
+      if (path === '') return
+
+      await deleteObject(storageRef(store, path)).catch((error: unknown) => {
+        // Already gone is not a failure — it is the state we were asking for,
+        // and a half-finished removal from a dropped connection has to be
+        // finishable rather than stuck.
+        const code = (error as { code?: string })?.code
+        if (code !== 'storage/object-not-found') throw error
+      })
+      pictures.delete(path)
+
+      await updateDoc(at, {
+        removed: { by: me, at: this.now() },
+        // Everything that was *in* the memory. What is left is its number.
+        path: '',
+        tint: '#000000',
+        blur: '',
+        when: deleteField(),
+        why: deleteField(),
+        theirs: deleteField(),
+      })
     },
 
     /*
@@ -1057,6 +1418,115 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         { lastReadAt: { [me]: now() } },
         { merge: true },
       )
+    },
+
+    watchVoiceLights(listener) {
+      let lights: VoiceLight[] = []
+      let limit = 3
+      const tell = () => listener({ lights: lights.filter((light) => light.slot < limit), limit })
+      const offLights = onSnapshot(collection(db, VOICE_LIGHTS), (snap) => {
+        lights = snap.docs.flatMap((entry) => {
+          const raw = entry.data() as Record<string, unknown>
+          const path = str(raw.path, '')
+          const waveform = Array.isArray(raw.waveform)
+            ? raw.waveform.filter((value): value is number => typeof value === 'number').slice(0, 48)
+            : []
+          if (path === '') return []
+          return [{
+            id: entry.id,
+            by: userId(raw.by),
+            slot: Math.max(0, Math.round(num(raw.slot, 0))),
+            at: num(raw.at, 0),
+            duration: Math.max(0, num(raw.duration, 0)),
+            path,
+            mime: str(raw.mime, 'audio/webm'),
+            waveform,
+          } satisfies VoiceLight]
+        }).sort((a, b) => a.at - b.at)
+        tell()
+      })
+      const offConfig = onSnapshot(doc(db, VOICE_LIGHT_CONFIG, 'ours'), (snap) => {
+        const raw = (snap.data() ?? {}) as Record<string, unknown>
+        limit = Math.max(1, Math.min(12, Math.round(num(raw.limit, 3))))
+        tell()
+      })
+      return () => {
+        offLights()
+        offConfig()
+      }
+    },
+
+    async leaveVoiceLight({ slot, audio, mime, ext, duration, waveform }) {
+      const config = await getDoc(doc(db, VOICE_LIGHT_CONFIG, 'ours'))
+      const limit = Math.max(1, Math.min(12, Math.round(num(config.data()?.limit, 3))))
+      const place = Math.round(slot)
+      if (place < 0 || place >= limit) throw new Error('That voice-light place does not exist.')
+      if (duration <= 0 || duration > 30.5) throw new Error('A voice-light can be at most thirty seconds.')
+
+      const id = `${me}-${place}`
+      const atDoc = doc(db, VOICE_LIGHTS, id)
+      const previous = await getDoc(atDoc)
+      const oldPath = str(previous.data()?.path, '')
+      const path = `voice-lights/${me}/${newId()}.${ext.replace(/[^a-z0-9]/gi, '') || 'webm'}`
+      await uploadBytes(storageRef(store, path), audio, {
+        contentType: mime,
+        cacheControl: 'private, max-age=31536000, immutable',
+      })
+      const light: VoiceLight = {
+        id,
+        by: me,
+        slot: place,
+        at: now(),
+        duration,
+        path,
+        mime,
+        waveform: waveform.slice(0, 48).map((value) => Math.max(0, Math.min(1, value))),
+      }
+      const { id: _id, ...body } = light
+      try {
+        await setDoc(atDoc, body)
+      } catch (error) {
+        await deleteObject(storageRef(store, path)).catch(() => {})
+        throw error
+      }
+      if (oldPath && oldPath !== path) {
+        await deleteObject(storageRef(store, oldPath)).catch(() => {})
+        voiceUrls.delete(oldPath)
+      }
+      return light
+    },
+
+    async removeVoiceLight(slot) {
+      const atDoc = doc(db, VOICE_LIGHTS, `${me}-${Math.round(slot)}`)
+      const existing = await getDoc(atDoc)
+      const raw = existing.data() as Record<string, unknown> | undefined
+      if (!raw || userId(raw.by) !== me) return
+      const path = str(raw.path, '')
+      if (path) {
+        await deleteObject(storageRef(store, path)).catch((error: unknown) => {
+          if ((error as { code?: string })?.code !== 'storage/object-not-found') throw error
+        })
+        voiceUrls.delete(path)
+      }
+      await deleteDoc(atDoc)
+    },
+
+    voiceLightUrl(light) {
+      const existing = voiceUrls.get(light.path)
+      if (existing) return existing
+      const asking = getDownloadURL(storageRef(store, light.path)).catch((error) => {
+        voiceUrls.delete(light.path)
+        throw error
+      })
+      voiceUrls.set(light.path, asking)
+      return asking
+    },
+
+    async setVoiceLightLimit(limit) {
+      if (me !== 'warm') throw new Error('Only the warm account owns this hidden setting.')
+      await setDoc(doc(db, VOICE_LIGHT_CONFIG, 'ours'), {
+        limit: Math.max(1, Math.min(12, Math.round(limit))),
+      })
     },
 
     watchRound(id, listener) {

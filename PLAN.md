@@ -1,6 +1,6 @@
 # The Garden — what this is, and the whole plan
 
-Read this first. Then `FIREBASE.md` for go-live state, then
+Read this first. Then `STEPS.md` for everything needed to take it live, then
 `src/world/games/README.md` before touching games. Keep this file current — it
 exists so any session can pick the project up cold.
 
@@ -15,6 +15,19 @@ apart). It is a **surprise gift**; she has not seen it.
 **It is not a site and not an app.** It is a small set of beautiful 3D places
 you move between, each holding one thing the two of you actually do together.
 
+> **Two of us work on this repository — Claude and Codex — sometimes at the
+> same time.** `NOTES.md` is the log of what each has just changed and what it
+> measured; read the top of it before starting. This file is the plan and the
+> reasoning; that one is the recent past.
+>
+> Everything below is meant to be *true now*, not a history of what was once
+> intended. An unticked box is an instruction to somebody, so a box that is
+> secretly done is worse than no box at all — it sends the next reader looking
+> for work that does not exist, and the dangerous version of that is finding
+> something that merely looks like it and deleting the wrong thing. If you
+> finish something, tick it. If you find a line here that is no longer true,
+> the fix is part of the job that made it untrue.
+
 ### The pivot (Aug 2026) — read this before touching anything
 
 The first build was a walkable world: an avatar, a meadow, travel between
@@ -28,7 +41,7 @@ the activities are the entire point. Gone for good:
 
 **What replaced it:** the garden is the home, and its places are the levels.
 You swipe horizontally to browse living previews of the Tree, Wellspring,
-Hollow and Stars without leaving the garden. Tapping **enter this place** moves
+Hollow, Stars and Glasshouse without leaving the garden. Tapping **enter this place** moves
 the camera inside and reveals that place's activities. No feet, no avatar.
 Browsing chooses a place; entering uses it.
 
@@ -45,7 +58,7 @@ it reads as one world seen in five places.
 | **The Wellspring** | a **river** between stone banks, mist, reeds | money the two of you have really set aside. **The more saved, the fuller and faster the river runs.** Never labelled "saved" — it is *ours*. |
 | **The Hollow** | a **cave**, firelit, embers climbing, rock that shifts in the light | games. Word Duel, Ember Rally and Scattergories live here. The room drifting slightly is deliberate and liked — keep it. |
 | **The Stars** | a dark plain under an enormous sky, two lights, **one horizon glowing with her dawn** | **chat, and it is built.** Every message is a light: the newest hangs low over her dawn, older ones climb and recede into the star field until they are indistinguishable from stars. Scroll or drag to walk back through it. Answer any line and the quote sits above your reply; put a heart on one and **its light in the sky burns bigger, warmer and steadier for good**. The split horizon is the point: when it's night here it's morning there. |
-| **The Glasshouse** | an old **iron conservatory** in the meadow, milky glazing with holes in it, vines through the roof | **photographs.** Every picture either of you keeps becomes a pane of coloured glass in the wall, and the building is literally made of them: the ironwork is always whole and the glass is only where a memory has been hung. Walk the aisle and the light each photograph throws lies in coloured pools across the floor. One picture, one line — and the other one may add exactly one thing, on the *back* of the glass. |
+| **The Glasshouse** | an old **iron conservatory** in the meadow, overgrown, milky glazing with holes in it | **photographs.** A flower grows on the floor in front of every one, in that picture's own colours, and after dark the frames and the flowers are the light. The room turns to face the pane you settle on. Every picture either of you keeps becomes a pane of coloured glass in the wall, and the building is literally made of them: the ironwork is always whole and the glass is only where a memory has been hung. Walk the aisle and the light each photograph throws lies in coloured pools across the floor. One picture, one line — and the other one may add exactly one thing, on the *back* of the glass. |
 
 More sections slot in later by adding one folder.
 
@@ -919,6 +932,328 @@ the river.**
   off undefined. That is the *garden*, on the very first run, before either of
   you has left anything: the one state every visitor sees and the one nothing
   else exercises. Empty is not "one, at index zero".
+- **The world runs on her clock, not yours.** It ran on your own from the day
+  it was built, which is obvious, comfortable and does nothing: you already
+  know what time it is where you are, so the sky was telling you something you
+  could get by looking out of the window. Swapped, it does the one thing the
+  whole place is for — it is nine at night in Kano and four in the morning in
+  Shanghai, you open the garden and it is *four in the morning*, and she opens
+  it and gets your evening. Neither of you is looking at your own weather.
+  Everything downstream followed for nothing, because every part of this world
+  already reads one number: sky, fog, grass, wind, the ambient bed, the
+  Hollow's fire, the Glasshouse's glass. **The Stars needed no change at all**,
+  and that is the part worth copying: its far horizon has always asked for
+  *the other one's* hour rather than naming a person, so when the sky flipped
+  the horizon flipped with it and the place still says the true thing. Name the
+  relationship, never the person. `systems/whoseHour`, switchable at
+  `/dev7731`.
+- **The dev panel was the one piece of interface in a world that has none.** A
+  grey disclosure marked `dev`, top left, over the meadow, over the cave, over
+  the first thing she will ever open — and "she can just ignore it" is not
+  something you get to say about a gift. It is a *place* now: `/dev7731`, which
+  nothing links to and nothing hints at, and where the garden does not render
+  at all. The page is deliberately ugly — boxes, borders, monospace, a
+  scrollbar — because the one screen that is machinery has to be unmistakably
+  machinery, and the moment it starts looking like the garden somebody wonders
+  whether it is part of it.
+- **Deleting a photograph cannot delete its document.** A pane's place in the
+  Glasshouse is its index in the oldest-first list, which is what stops every
+  pane moving when one is added — so removing the document would slide a
+  hundred photographs one bay down the building. The file is deleted from
+  storage for real; the document stays as a marker with nothing in it. **And
+  then the question is what happens to the space**, which is the interesting
+  half. An empty frame left standing is a scar you walk past forever. The
+  answer that is not a compromise comes from the building's own rule — glass is
+  coloured where a memory is, and there is no memory there any more — so the
+  panel simply stops being held open and the ordinary milky glazing goes back
+  into it. No gap, no wound, nothing to point at. One fewer coloured pane.
+- **A star has to fit inside its own cell.** A lattice star field only ever
+  tests the cell a pixel falls in, so anything drawn wider than the distance
+  from the star's point to its cell wall is *clipped at that wall* — and a
+  clipped soft disc is a square. That was the original bug in the Stars, and
+  rebuilding the sky reintroduced it by a different route: a halo nearly a
+  whole cell across, and a field of little grey rectangles again. The point is
+  kept to the middle half of its cell now and the total radius under a quarter
+  of one, which means **a star can only be as big as its lattice is coarse** —
+  so there are two lattices. A fine one for the hundreds of small ones, a
+  coarse one for the handful with room to actually glow. One lattice can have
+  many stars or big stars, and never both.
+- **Being generous with a range is how a thing becomes a wash.** The Stars'
+  dawn covered the forward hemisphere cubed and fell off only *upward*, so at
+  her sunrise it painted the bottom half of the frame solid orange — which is
+  what "you just added that sunset colour in the middle" was pointing at. Sixth
+  power narrows it to a region you could point at; falling off downward as well
+  keeps it off the ground. The same mistake in the same file: the plain faded
+  out between forty and a hundred and fifty metres, so the ground was gone long
+  before it met the sky and **the split horizon this place is named for had no
+  line in it.** Taking it out to a hundred and ninety puts its edge and the
+  horizon on the same line, so there is no edge to see.
+- **Contrast is what separates a galaxy from fog.** Straight fbm multiplied
+  into a band is a smooth grey field and reads as haze on the lens. Pushing the
+  cloud through a `smoothstep` throws away the middle of the range and leaves
+  clouds with edges, which is what the real thing has — and a dark lane cut
+  down the length of it does more than another octave ever would.
+- **A number in prose is a lie waiting for the number to change.** Scattergories
+  went from four rounds to two, and the ending screen went on announcing "four
+  rounds" in two hardcoded places — a game nobody had played. Counted from the
+  match instead. Anything that says how many of something there are should be
+  reading the same value the thing is built from.
+- **A picture on a corridor wall is seen edge-on, and no amount of moving
+  closer fixes it.** The Glasshouse's worst fault was that it read as a tunnel
+  containing memories rather than memories that had grown into a tunnel, and
+  the measurable half of that was a focused pane occupying twenty-eight pixels
+  on a phone. The instinct — get closer, make it bigger — is wrong: a pane's
+  width runs *down the aisle*, which is the viewing direction, so almost all of
+  it is depth at any distance. Only **turning** converts it. The building now
+  rotates twenty-two degrees about the point in front of you when you settle on
+  a pane, and the same photograph went from twenty-eight pixels to a hundred
+  and thirty-two, thirty-four per cent of the screen. The lean sideways, which
+  was the first attempt, was worth about a fifth of that on its own.
+  **When something on a wall reads small, check the angle before the distance.**
+- **The turn needs three nested groups, and which one rotates is the whole
+  trick.** Rotating the group that *travels* would swing the near bays through
+  the camera and leave the far end still — the opposite of turning your head.
+  A separate group between the terrace and the travel puts the pivot at the
+  middle of the aisle, which is close enough to the point you are looking at
+  for a twenty-two degree glance and nowhere near it at ninety — see the next
+  entry. And once
+  anything rotates, closed-form picking against "the wall is at world x = k"
+  starts quietly answering with the neighbouring pane: the ray is inverted into
+  the building's own space now, which is exact under any transform and happens
+  to be the coordinates every other part of the section already thinks in.
+- **"About the point in front of you" was near enough at 22° and wrong at
+  90°.** Opening a memory drives the same turn all the way round, so the pane
+  is exactly perpendicular and projects to an axis-aligned rectangle a DOM
+  photograph can be laid on. But the building pivots about the middle of the
+  aisle and nobody stands there: SlideCamera puts the camera off the centreline
+  and back down it, aimed with a yaw of its own, and `backOffFor` moves it
+  again with the aspect. Swinging a wall a quarter turn about a point you are
+  not standing on carries the pane sideways by however far off it you are. It
+  settled thirty-two pixels from the left edge of a phone. So the scene solves
+  it instead — how far the pane misses along one of the camera's own axes, over
+  how fast a metre of building carries it along that axis, faded on the turn.
+  Depth first, then across. **A constant that happens to be right on the
+  viewport you are looking at is not a fix, and the way to tell is to publish
+  the number and open a second viewport.**
+- **The same mistake, one level down: a distance in metres is not a
+  composition.** Standing five metres from a pane fills ninety-nine per cent of
+  a phone's width and twenty-eight per cent of a laptop's. Identical building,
+  identical pane, and the aspect does all of it — which is precisely what
+  `backOffFor` exists in SlideCamera to deal with, made again in a section.
+  `standFor` now solves the distance backwards from the size the pane should
+  end up: a bit under half the screen's height, capped at nine tenths of its
+  width, and never further back than the wall behind you — because pushing past
+  that put the camera outside the far glazing, looking in through grey glass at
+  a photograph perfectly framed against a flat grey nothing. **Both failures
+  looked like success in every number the system was already printing.**
+- **Headless renders in slow motion, and a fixed wait measures a half-finished
+  animation.** Every frame is clamped to `1/20` of a second and SwiftShader
+  manages one or two a second, so four seconds of wall clock is under one of
+  eased time. Three separate "bugs" in the open state were the ease not having
+  arrived. Wait on the state — poll until the rectangle stops moving *and* the
+  turn reports 1 — never on the clock.
+- **A number says how many; only the world can say where.** The corners have
+  always carried counters — "2 from Cool", "2 for you" — and they stay, because
+  a glow cannot count. What they cannot do is tell you *which* thing, or make a
+  room feel as though somebody was in it while you were asleep. So each place
+  now lights what she left there since you last stood in it: a pool in the
+  Glasshouse, a light in the Stars, a band carried down the Wellspring, a few
+  more embers on the Hollow's fire. The Tree already did it, via `readAt`.
+- **A "since you were here" mark has to be per place, and frozen while you are
+  in the room.** One mark for the whole garden means a glance at the Tree
+  silently clears the other four and you never find them. And a mark written on
+  *arrival* clears the very thing you came to see, on the frame you arrive —
+  so it is read on the way in, held for the visit, and written on the way out.
+  Kept on the device: "have I seen this" is a fact about a person looking at a
+  screen, not about the garden, and it needs no collection and no rule change.
+- **Anything that accumulates must only ever go up.** The Hollow's ember veins
+  are fed by the shared pollen pool — which is *spent*. Reading it directly
+  would have dimmed the room the day the two of them bought something with it:
+  a place punishing you for using what it gave you. A local high-water mark,
+  and the larger of the two wins.
+- **A registry that discovers its folders eagerly hands you the whole world at
+  once.** `import.meta.glob(..., { eager: true })` is a lovely way to write a
+  registry — a folder is a place, nothing to wire up — and each folder's
+  `index.ts` reached straight into the scene it described, so every place, all
+  three games, the racer's physics and both roads, and the entire Firebase SDK
+  were downloaded before the first blade of grass. **696 KB gzipped before
+  first paint; 404 KB now.** The split is not size-based: the row of places and
+  the row of games are drawn *before* you choose one, so names, blurbs,
+  cameras and card emblems stay eager. Only the worlds behind them are fetched.
+- **Deferring the load is easy; deferring the *wait* is the work.** A place
+  fetched at the moment you swipe to it is a place that shows you an empty
+  world for a beat, which is worse than the thing it fixed. Three answers, and
+  it needs all three: warm everything once the garden settles, warm a place the
+  moment a slide picks it (half a fade before the world swaps), and warm a game
+  when its card becomes the selected one. And then a fallback that is not a
+  spinner but `<GardenHub />` — so the worst case is the garden you were
+  already standing in, held a moment longer. Verified by sampling triangles
+  *mid-fade* into all five places with every chunk delayed two seconds: never
+  below 730,000, never zero.
+- **Firebase was in the bundle of people who will never make a request.**
+  `DATA_BACKEND` defaults to 'local' and only `RealProvider` has ever needed the
+  SDK, but `provider.tsx` imported it at the top of the file — 214 KB gzipped,
+  a third of the download, shipped to the mock as well. It now loads inside the
+  effect that provider already had, behind the 'connecting' state it was
+  already showing. `import type` stays: it is erased.
+- **Nothing in the garden was ever culled, and that was most of what it cost.**
+  Every big field — the wood, the meadow, the flowers — carried
+  `frustumCulled={false}`, for a real reason: an instanced geometry's bounding
+  sphere comes from the *base* shape, which is one leaf at the origin, so three
+  would delete the whole treeline the moment the camera turned. Switching
+  culling off is the standard fix and the wrong permanent one. The camera sees
+  about eighty degrees of a field that surrounds it on three hundred and sixty
+  — **three quarters of every field was being drawn where it could not be
+  seen.** `buildTiles` cuts a field into squares with honest bounds; draw calls
+  went from eighteen to about forty-five, which on a budget in the hundreds is
+  nothing, and the Glasshouse went from 334k triangles to 91k for a *visually
+  identical frame*. Verified by rendering it both ways and comparing.
+- **The dial that exists is not the dial that costs.** The leaves had a detail
+  control and had had one for a long time; the branches never did. A tree is
+  113 limb boxes at ten triangles each against 250 leaf cards at four — the
+  branchwork cost *more* than the foliage, and in the Glasshouse it was 147,000
+  triangles at a distance where a branch is a pixel wide. `woodDetail` draws a
+  limb as one box instead of two and drops the outermost ring, which sit inside
+  their own leaf spray. The tips, the splits, the sprays and every place a
+  letter hangs are computed identically — **the rng is consumed in the same
+  order whatever the detail**, so a thinned wood is the same wood.
+- **When the thing cannot be culled, cull it where it is made.** The meadow and
+  the flowers have no world positions in any buffer: they are wrapped around
+  the camera in the vertex shader every frame, so there is nothing for a
+  bounding box to hold. They are culled in the shader instead, by the same
+  `fade` that already softened the rim of the disc — a blade behind you comes
+  out with zero height and collapses before it shades a pixel. Reusing the
+  existing mechanism is what makes it safe: nothing new can pop, because
+  nothing new happens.
+- **Measure the frame, not the thing you suspect.** `?shot=1` now publishes
+  `window.__frame` — draw calls, triangles, programs, geometries, textures, fps
+  and the eight heaviest meshes. It immediately overturned the assumption this
+  work started from: the Glasshouse felt heavy, and 83% of what it drew was the
+  ring of trees *around* it. The building — the iron, the glass, the flowers,
+  the photographs — was 3%. Draw calls and textures were never the problem
+  anywhere; this garden is vertex-bound and always was.
+- **A counting script that has gone stale is worse than none.** `npm run tris`
+  went on reporting the treeline at 314,000 after it became 184,000, because it
+  called the generator without the new dial. A number nobody checks is a number
+  everybody trusts.
+- **A branch in the road did not need a branch in the model.** The racer's
+  position is one number — arc length along a single spline — and the Rootway
+  now has a shortcut anyway, because `sDot = alongRoad / (1 - n·curv)` has been
+  in the physics since the first version and that denominator *is* the
+  geometry: the inside of a bend is a shorter arc. So the Split is a cavern
+  wide enough for two lines with a rockfall between them, and the inside covers
+  341 metres of road where the outside covers 402. **Before building a system
+  to express something, check whether the maths already expresses it.**
+- **A choice needs somewhere to happen.** The rockfall first started twelve
+  metres after the cavern opened, which is a third of a second at racing speed:
+  not a decision, a reflex, and one you could only get right by already
+  knowing. Worse, the walls take about sixty metres to finish opening — the
+  width is smoothed like everything else — so for the first stretch the car
+  *cannot* be on the inside line however hard it steers, because there is no
+  road there yet. Fifty-two metres of open cavern is two seconds: long enough
+  to see both ways past, pick one, and get there.
+- **Test the road, not the driver.** Two controllers raced through the Split
+  and the answer swung between one second and thirteen depending on which of
+  them had the worse lap — which measured the controllers. The thing that can
+  actually break is geometric, so it is computed geometrically now: the
+  integral of `(1 - n·curv)`, no driver, exact and repeatable. **When a
+  measurement is noisy, ask whether the thing you care about is really a
+  simulation at all.**
+- **A held stick has to hold a *line*, not a force — and the difference only
+  shows up in a long corner.** The drift's command was a yaw rate capped in g,
+  which sounds speed-independent and is the opposite: constant lateral g draws
+  an arc of `v² / a`, so it opens up with the square of the speed. Hold the
+  drift through a corner while the car gains speed and it turns *less* every
+  second while the corner asks for *more* — the two gaps add, the car tucks in
+  for two seconds and then washes out across the road, and no entry timing
+  prevents it because the fault accumulates after the entry. Measured over four
+  seconds the demand went 0.38 → 0.47 rad/s while the drift gave 0.33 → 0.26.
+  The command is a curvature now and the g cap is a ceiling on top of it.
+  **A bug that only appears after several seconds of holding something is
+  invisible to every test that pokes and lets go.**
+- **The effect that sets a DOM node is the cleanup that clears it, and no other
+  code may.** The racer writes its speedometer and ember bar straight to their
+  nodes sixty times a second, and the store's `close()` used to null those
+  nodes — while the component that *registered* them mounted once and never
+  again. So from the second attempt onward the machine wrote to nothing and
+  both meters froze at whatever they were showing. It read as random (the
+  number you happened to be doing when you pressed restart), survived until you
+  left to the menu, moved nothing in the physics, threw nothing, and could not
+  appear in a screenshot. The tell was that steering kept working — the same
+  effect re-set the surface a line later, so the one node put back was the one
+  that never looked broken. **When one of three identical things works, that
+  asymmetry is the diagnosis.**
+- **Going under water is a change to the light, not a thing drawn on top of
+  one.** Every material in the racer reads one shared block of uniforms, built
+  so the tunnel and the car could never be lit by two different ideas of "lit".
+  Move five of those numbers and a kilometre of causeway goes under together,
+  including the parts nobody thought about. The corollary is the whole cost:
+  anything that draws itself must fog itself. The glass tube, the shoals and
+  the silt are the only things on either road outside the shared materials, and
+  the first version of the tube stayed the same brightness for nine hundred
+  metres to the vanishing point — a lit plastic pipe rather than a tunnel
+  disappearing into green.
+- **The sky can only ever be the fog colour.** A hand-picked underwater teal
+  drew a hard horizontal seam across the middle of the frame, where the
+  underside of the water stopped and the dome behind it began. Everything in a
+  scene fades to `uFogColor` at distance; the dome does not fade to anything,
+  because it *is* the distance. Any other value is a join, and a join across
+  the horizon is the first thing the eye finds.
+- **Identical frames disappear, and disappearing is the job.** Panes used to be
+  cut to each photograph's own proportions, which sounds respectful and looks
+  like a noticeboard — six different rectangles down a wall, and the eye spends
+  its attention on the *outlines*. One ratio for every frame, with the picture
+  centre-cropped into it, and suddenly you are looking at the photographs.
+  Three by two because it is what cameras shoot and, at this bay, the ratio
+  that makes the pane largest. Cropped only in the wall: opening a memory shows
+  the whole thing at its own shape, which is where a picture is actually read.
+- **Glass takes light away.** The near panes multiplied the photograph by the
+  pane's own body, which peaks a little over one — so every bright picture came
+  out blown, and a sunset was a white rectangle with a band across it. Real
+  glass transmits about three quarters and adds a sheen on top. A transmission
+  under one is the difference between "behind glass" and "backlit".
+- **A file picker must be opened inside the user gesture.** It was opened from
+  an effect, which runs after paint and outside the activation window — Safari
+  on iOS refuses that outright, and React's Strict Mode double-invokes it in
+  development, which gave two pickers, one orphaned, and a screen stuck on
+  "Opening your pictures…". It is called straight from the button now and what
+  it returns lands in the store. **Anything gated on user activation — pickers,
+  audio contexts, fullscreen, clipboard — belongs in the handler, never in an
+  effect the handler causes.**
+- **Bigger *and* smaller, by changing the encoder.** The stored copy was 1600px
+  of JPEG, which is enough to show a photograph and not enough to have kept
+  one. It is 2560px of WebP now: two and a half times the pixels, and at
+  matched quality WebP is a quarter to a third smaller than JPEG, so the file
+  barely moves. The support check is a real one-pixel encode rather than a
+  version sniff, because a browser that lies about `toBlob` hands back a PNG
+  three times the size. It is still deliberately not the original — a phone
+  photograph is megabytes of detail only a sensor can see.
+- **Density is what makes a place feel lived in, and it is nearly free.** The
+  vines went from two thirds of a clump per metre to two and a half, and the
+  wall from forty per cent missing panels to seventeen — one number each, both
+  inside batches that already existed, and between them they are most of the
+  difference between a building site and somewhere that has been left alone for
+  years. The forty per cent was chosen when the camera looked straight down the
+  aisle and the walls were edge-on; the moment it turned to face them, the same
+  number read as holes.
+- **A synchronous encode that never finishes has no error to catch.**
+  `canvas.toDataURL` blocks and `canvas.toBlob` settles in a callback, so a
+  browser that cannot produce the format asked for does not throw — it simply
+  never answers. The Glasshouse's sixteen-pixel preview was hardcoded to JPEG,
+  and in one headless Chromium a JPEG encode measured here *never came back*
+  while WebP finished in 223 milliseconds. The whole "leave a memory" flow sat
+  on "getting it ready" forever with nothing in the console, because of the
+  *preview*. Two fixes and both are general: **ask for the format the browser
+  has already proved it can write** — the encoder is chosen by encoding a real
+  pixel, so use that answer everywhere rather than hardcoding one — and **race
+  every encode against a clock**, falling back and then failing with a sentence
+  somebody can act on. For the one action in this world that cannot be retried
+  by reloading, a silent hang is the worst failure there is.
+- **What was encoded has to travel with the bytes.** Once the encoder can fall
+  back, a module-level constant naming the format is a lie waiting to happen:
+  the object would be stored as WebP, labelled JPEG, and refused by the Storage
+  rules — or served as the wrong type forever. `Prepared` carries its own type
+  and extension now, and the seam labels the object with those.
 - **A billboard needs a falloff, and a lattice needs a jitter.** The Stars had
   both bugs at once and both read as rendering faults. The dome lit a whole
   hash *cell* per star, so every star was a seven-pixel grey square; and the
@@ -979,8 +1314,10 @@ on numbers — a field of view, a wall three metres away, a screen twice as tall
 as it is wide — publish the numbers and read them. The Glasshouse puts the
 focus pane's projected rectangle on `window.__glass` under `?shot=1`, and that
 is what proved a whole afternoon's theory wrong in one run: the panes had never
-been cut off at the frame edge, they were simply small. `__glassOpen(id)` and
-`__glassWalk(m)` are there for the same reason `?rally=ride` is — driving a
+been cut off at the frame edge, they were simply small. `__glass.open` reports the turn, the walk, and where the
+camera is standing in the building's own coordinates — which is how two
+invisible failures in the open state were found in one run. `__glassOpen(id)`,
+`__glassWalk(m)` and `__glassReach(m)` are there for the same reason `?rally=ride` is — driving a
 raycast at a quad on a moving wall tests the raycast, not the rule under test.
 
 **Anything the app writes every frame cannot be posed from the console.** The
@@ -1017,8 +1354,18 @@ while scraping the rock, which is exactly when you want to.
 
 Nor does counting the cost: `npm run tris` prints what each part of the garden
 spends in triangles, which is the only useful form of "is it slow". The renderer
-will tell you the frame is a million and a half; it will not tell you that
-sixty per cent of that is leaves on trees nobody can see.
+will tell you what a frame costs; it will not tell you *which part of the
+garden is spending it*, and every time anybody has guessed at that they have
+been wrong. `window.__frame` under `?shot=1` answers the same question from
+inside a browser, including the eight heaviest meshes in the scene, and the two
+together are how the last three rounds of this work were decided.
+
+Note that `tris` counts what the garden **builds**, not what it draws. Since
+the fields were cut into tiles with honest bounding volumes, an open-air place
+draws between a third and a half of what that script lists. It also went stale
+once — reporting the treeline at its old figure for a while after `woodDetail`
+halved it — which is the whole argument for checking a counting script against
+a browser now and then. A number nobody checks is a number everybody trusts.
 
 Physics does not need a browser at all: `npm run rally` drives the car headless
 and prints acceleration, top speed, cornering grip, what the handbrake does and
@@ -1132,6 +1479,39 @@ handling changed.
       with no dictionary anywhere. Sealed by giving each round its own round
       document, so every sheet is a seq 0 and `firestore.rules` did not change.
       Three ways in — *roll for her*, on your own, roll together
+- [x] **Signs that she has been here.** Every place lights what she left in
+      it since you last stood there — and the counters in the corners stay, so
+      the world says *which* and the words say *how many*. Plus a Hollow that
+      finally keeps what happens in it: ember veins spreading through the rock
+      over a season of rounds, slowly, and never downwards
+- [x] **Half the download, and none of it missed.** Places, games, the admin
+      page and the Firebase SDK are fetched when they are wanted rather than
+      shipped to everybody — 696 KB gzipped before first paint down to 404 KB,
+      with the rest warmed quietly once the garden has settled and a fallback
+      that is the garden itself rather than a spinner
+- [x] **A frame worth half of what it was.** The garden was drawing three
+      quarters of a million triangles with culling switched off everywhere and
+      no detail control on the branchwork, which was the single most expensive
+      omission in it. Tiles with honest bounds, a `woodDetail` to match
+      `leafDetail`, and a shader-side cull for the two fields that follow the
+      camera. On a phone: the Glasshouse 334k → 55k, the garden 472k → 306k,
+      and not a pixel different in either
+- [x] **The Split, and a longer Rootway.** The Rootway is ninety seconds
+      rather than sixty, and somewhere past half way it opens into a cavern
+      with a rockfall down the middle: the road on the left, and on the right
+      an unlit five-metre lane that is fifteen per cent shorter. No branch in
+      the model — the saving falls out of the Frenet term the physics has
+      always divided by. The racing line is forced outside it so the spirit
+      never takes it
+- [x] **The Drowned Mile.** A kilometre of the Moonbreak's middle goes under
+      the water instead of over it: a lip, a straight ten-per-cent dive, half a
+      minute in a glass tube nineteen metres down among kelp, drowned survey
+      stones, two shoals and something much larger crossing overhead, and the
+      mirror of the dive on the way out. It keeps the driving of the two bands
+      it replaced — what changes is where you are, not what you are doing. The
+      whole of it is a move of the shared light block plus four draw calls, and
+      it is the cheapest kilometre on either road because water takes the fog
+      in to seventy-eight metres
 - [x] **The Glasshouse, the fifth place.** An iron conservatory built out of
       every picture the two of you keep: one instanced quad per memory in its
       own average colour for the whole building, the real photograph for the
@@ -1142,11 +1522,22 @@ handling changed.
       the glass. Plus the storage seam: on-device orientation, downscale and
       metadata stripping, the tint and a sixteen-pixel preview kept in the
       document, `storage.rules`, and the memories collection in
-      `firestore.rules`
+      `firestore.rules`. Opening one is somewhere you walk to: the aisle
+      glides to its bay and the room turns square to the wall, solved against
+      the camera each frame so it holds on any screen, with everything else in
+      the building quietly losing its light while it happens
 - [ ] Visual polish and full desktop/mobile screenshot sweep of both modes
-- [ ] Delete the dead world: Figure, People, cloth, gait, body, benchSpots,
-      Benches, Placed, CameraRig walking, places/*, navigation, Catalogue,
-      placing, Flora-as-decor
+- [x] **The dead world is gone.** Figure, People, cloth, gait, body,
+      benchSpots, Benches, Placed, CameraRig walking, `places/*`, navigation,
+      Catalogue, placing and Flora-as-decor were all deleted some time ago —
+      this line sat here unticked long after the fact, which is worse than not
+      having written it: an unticked box is an instruction, and the next reader
+      goes hunting for files that do not exist. A sweep on 26 Aug found four
+      orphans left in the whole of `src` — `Bottles`, `Lamps`, `Water` and
+      `SoftOrb`, twenty-one kilobytes between them — and they went too.
+      `Water.tsx` was worth two deletions: it also differed from the live
+      `water.ts` only in case, which is fine on this machine and breaks on any
+      Linux host
 - [ ] Full regression + screenshot sweep, update the in-world guide
 
 ## After that

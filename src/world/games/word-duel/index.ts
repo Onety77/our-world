@@ -1,5 +1,5 @@
+import { later } from '@/systems/later'
 import type { GameDefinition } from '../types'
-import WordDuel from './WordDuel'
 import WordDuelEmblem from './emblem'
 
 /**
@@ -57,5 +57,5 @@ export default {
   },
 
   Emblem: WordDuelEmblem,
-  Component: WordDuel,
+  Component: later(() => import('./WordDuel')),
 } satisfies GameDefinition<DuelSetup, DuelMove>

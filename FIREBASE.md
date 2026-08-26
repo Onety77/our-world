@@ -1,5 +1,13 @@
 # Turning the garden on
 
+> **Read `STEPS.md` instead.** It supersedes this file and covers the whole
+> job, in order — the console, the env file, all three rule files, hosting, the
+> first two-device pass, and what still will not work.
+>
+> This file is kept for the two things at the bottom that are worth knowing and
+> are not steps: the China problem, and what it costs to run. The table below
+> was true before the Glasshouse and is now wrong in one row, corrected there.
+
 ## Where this actually stands
 
 Checked against the live project, not from memory:
@@ -9,11 +17,11 @@ Checked against the live project, not from memory:
 | Email/password sign-in | **done** — switched on |
 | Firestore | **done** — created, and locked (denying everything, which is correct until the rules go up) |
 | Realtime Database | **done** — created at `https://our-world-c9a07-default-rtdb.firebaseio.com`, locked |
-<!-- | Cloud Storage | not createdc xdfg.;lrtr;t[r55555555555555555555555] — **and it doesn't need to be.** Nothing uses it yet. It's for the music files later, and it gets its own rules then. Ignore it. | -->
+| Cloud Storage | **not created — and it now has to be.** Glasshouse photographs and the brief Stars voice-lights are the two things here that store bytes. They share the locked-down `storage.rules`; `npm run rules` fills and emits it alongside the other two. See `STEPS.md` 1.2. |
 | The two accounts | **not done** |
 | The rules | **not published** |
 
-So: two things left, below.
+So: three things left — the accounts, Storage, and the rules. Walked through in **STEPS.md**.
 
 ---
 
@@ -45,9 +53,9 @@ npm run rules
 ```
 
 That reads the two addresses out of `.env.local` and writes
-`rules-out/firestore.rules` and `rules-out/database.rules.json` with them
-filled in. **Don't hand-edit the templates in the repo root** — the addresses
-have to match what the app uses, and keeping that fact in three files is three
+`rules-out/firestore.rules`, `rules-out/database.rules.json` and
+`rules-out/storage.rules` with them filled in. **Don't hand-edit the templates in the repo root** — the addresses
+have to match what the app uses, and keeping that fact in four files is four
 places to get it wrong. The failure mode is silent: mismatched rules just deny
 everything and the garden looks broken for no visible reason.
 
@@ -55,6 +63,7 @@ Then, in the console:
 
 - `rules-out/firestore.rules` → **Firestore Database → Rules** → paste → **Publish**
 - `rules-out/database.rules.json` → **Realtime Database → Rules** → paste → **Publish**
+- `rules-out/storage.rules` → **Storage → Rules** → paste → **Publish**
 
 Nothing takes effect until you press Publish on each.
 

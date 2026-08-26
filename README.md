@@ -17,8 +17,10 @@ npm run dev
 
 No `.env` is needed to start. The data layer defaults to **local** — everything
 lives in memory and `localStorage`, nothing leaves the device, and the corner of
-the dev panel says so. `.env.example` documents every key for when Firebase
-lands in Phase 01.
+the dev panel says so. `.env.example` documents every key.
+
+**To make it real** — two accounts, Storage, the rules, hosting — follow
+[`STEPS.md`](./STEPS.md) start to finish.
 
 ### On your phone
 
@@ -33,7 +35,8 @@ that was only ever checked on a laptop is the classic way to find out too late.
 | --- | --- |
 | `?hour=18.6` | Pins the garden's clock. `6.4` dawn, `13` midday, `18.6` dusk, `1` deep night. |
 | `?tier=low` | Forces a quality tier — `low`, `medium`, `high`. Handy for feeling what a slower phone gets. |
-| `?place=reading-tree` | Opens straight into a place instead of the Clearing. |
+| `?section=glasshouse` | Opens straight into a place instead of the garden. `browse=` selects one without entering. |
+| `?shot=1` | Keeps the drawing buffer for screenshots, and publishes `__glass` / `__rally` for measuring. |
 
 Both are also in the **dev** panel, top left, along with a slider for the hour,
 the profile editor, and controls to move the other person's light around so you
@@ -44,8 +47,8 @@ can see what being here together looks like on your own.
 ## Controls
 
 The garden is the home screen. Swipe across its living place previews, then
-choose **enter this place** to move inside the Tree, Wellspring, Hollow, or
-Stars. Back/Escape returns to the garden.
+choose **enter this place** to move inside the Tree, Wellspring, Hollow, Stars
+or Glasshouse. Back/Escape returns to the garden.
 
 | | |
 | --- | --- |

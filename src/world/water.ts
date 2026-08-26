@@ -193,6 +193,23 @@ const VERT = /* glsl */ `
   varying vec3 vNormal;
   varying float vCrest;
   varying float vStreak;
+  /**
+   * Where the carried band is, this frame. See uCarrying in the fragment stage.
+   *
+   * Worked out here rather than down there, and that is not a preference — it
+   * is the second time this exact wall has been walked into. The fragment stage
+   * declares a mediump float precision and the vertex stage does not, so a
+   * uniform named in both is highp in one and mediump in the other, and the
+   * program simply refuses to link: **"Precisions of uniform 'uTime' differ
+   * between VERTEX and FRAGMENT shaders."** Nothing throws, nothing is drawn,
+   * and the river is a dry valley with no error anywhere on screen. The
+   * Glasshouse lost an afternoon to the same thing with a uniform called uForm.
+   *
+   * A varying has one precision, declared once, in both stages. So anything
+   * time-varying is computed up here and handed down — which is what the note
+   * further up this file has been saying all along.
+   */
+  varying float vCarry;
 
   void main() {
     vUv = uv;
@@ -253,6 +270,8 @@ const VERT = /* glsl */ `
     // Narrow about the channel's own centreline, not about the origin, so the
     // bends survive at any width.
     p.x = aCentre + (position.x - aCentre) * uWidth;
+    // Runs with the current, one band, slowly. See vCarry.
+    vCarry = fract(uv.y - uTime * 0.06);
     p.y += h;
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -284,8 +303,27 @@ const FRAG = /* glsl */ `
   uniform float uFogFar;
   uniform float uLight;
   uniform float uSun;
+  /**
+   * Something she put in while you were away, travelling down the water.
+   *
+   * ---------------------------------------------------------------------------
+   * The Wellspring already says how full it is by being wider and faster, which
+   * is the right way for a river to talk and is completely useless for saying
+   * *when*: a river that has been brimming for a fortnight looks exactly like
+   * one that was filled this morning.
+   *
+   * So a contribution you have not seen sends one band of brighter water down
+   * the channel, over and over, slowly. It is not a marker sitting on the spot
+   * where she put something in — nothing here is a pin on a map — it is the
+   * river carrying it, which is what a river does with anything you give it.
+   *
+   * Zero the next time you come. See useStoodIn.
+   * ---------------------------------------------------------------------------
+   */
+  uniform float uCarrying;
 
   varying vec2 vUv;
+  varying float vCarry;
   varying float vDepth;
   varying vec3 vNormal;
   varying float vCrest;
@@ -337,6 +375,17 @@ const FRAG = /* glsl */ `
     float foam = shore * (0.4 + 0.6 * smoothstep(0.0, 0.9, vStreak));
     col = mix(col, vec3(0.86, 0.89, 0.88), foam * 0.34);
 
+    /*
+      The ribbon. A soft band, a quarter of the channel long, running with the
+      current — and brightest in the middle of the water rather than at the
+      banks, so it reads as something being carried rather than as foam.
+    */
+    if (uCarrying > 0.001) {
+      float band = smoothstep(0.24, 0.0, abs(vCarry - 0.5));
+      float midstream = 1.0 - smoothstep(0.15, 0.85, across);
+      col += vec3(0.42, 0.68, 0.74) * band * midstream * uCarrying * 0.5;
+    }
+
     col *= uLight;
 
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
@@ -383,6 +432,7 @@ export function makeWaterMaterial({
       uFlow: { value: flow },
       uChop: { value: chop },
       uWidth: { value: width },
+      uCarrying: { value: 0 },
       uLength: { value: length },
       uDeep: { value: new Color('#2e474f') },
       uShallow: { value: new Color('#6f8a83') },

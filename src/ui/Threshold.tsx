@@ -7,7 +7,7 @@
  * game adds another invitation without rebuilding this shell.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefCallback } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { SECTIONS } from '@/sections/registry'
@@ -15,10 +15,12 @@ import { useSections } from '@/systems/sections'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
 import { useTakenOver } from '@/systems/attention'
-import { useMemories } from '@/systems/memories'
+import { standing, useMemories } from '@/systems/memories'
 import { usePlaying } from '@/systems/playing'
 import { GAMES } from '@/world/games/registry'
+import { theRoom } from '@/systems/waiting'
 import { useStandings, type Turn } from '@/world/games/useRound'
+import { useQuestions } from '@/systems/questions'
 
 /**
  * What there is to play, one at a time.
@@ -59,10 +61,16 @@ function LiveWayIn({
   game,
   them,
   live,
+  selected,
+  buttonRef,
+  onFocus,
 }: {
   game: string
   them: string
   live: { name: string; tip: string }
+  selected: boolean
+  buttonRef: RefCallback<HTMLButtonElement>
+  onFocus?(): void
 }) {
   const data = useData()
   const me = data.me
@@ -94,8 +102,10 @@ function LiveWayIn({
 
   return (
     <button
+      ref={buttonRef}
       type="button"
-      className="quiet game-live"
+      className={`quiet game-live${selected ? ' is-selected' : ''}`}
+      onFocus={onFocus}
       onClick={start}
       disabled={!bothHere}
       title={bothHere ? live.tip : them + ' is not here right now'}
@@ -174,18 +184,41 @@ function Challenges({
   onPlay(id: string): void
   onBack(): void
 }) {
+  const [selected, setSelected] = useState(0)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const focused = document.activeElement
+      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+        event.preventDefault()
+        setSelected((at) => Math.min(GAMES.length - 1, at + 1))
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+        event.preventDefault()
+        setSelected((at) => Math.max(0, at - 1))
+      } else if (event.key === 'Enter' && !event.repeat) {
+        event.preventDefault()
+        const game = GAMES[selected]
+        if (game) onPlay(game.id)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onPlay, selected])
+
   return (
     <div className="challenges">
       <span className="threshold-whisper">where everything stands, today</span>
       <div className="challenges-list">
-        {GAMES.map((game) => (
-          <Waiting
-            key={game.id}
-            name={game.name}
-            turn={turns[game.id] ?? 'nothing'}
-            them={them}
-            onPlay={() => onPlay(game.id)}
-          />
+        {GAMES.map((game, index) => (
+          <span key={game.id} className={index === selected ? 'is-selected' : ''}>
+            <Waiting
+              name={game.name}
+              turn={turns[game.id] ?? 'nothing'}
+              them={them}
+              onPlay={() => onPlay(game.id)}
+            />
+          </span>
         ))}
       </div>
       <button type="button" className="challenges-back" onClick={onBack}>
@@ -226,7 +259,7 @@ function TheHollow() {
    * *card* would be a game you cannot play, sitting between two you can, and
    * the marks underneath would count it as a fourth thing to swipe to.
    */
-  const [showing, setShowing] = useState<'games' | 'waiting'>('games')
+  const [showing, setShowing] = useState<'games' | 'waiting' | 'ways'>('games')
 
   /*
     Watched from here rather than from the rows, so the way in can say what is
@@ -235,31 +268,113 @@ function TheHollow() {
   */
   const turns = useStandings(GAMES)
 
+  /*
+    Tell the room, so the fire can say it too.
+
+    The words stay — "2 for you", on the way in — because a number is the only
+    thing that can say *how many*. What a number cannot do is make the cave feel
+    any different, and a room with a turn waiting in it should. So the fire
+    throws a few more embers, and nothing anywhere says why.
+
+    Written rather than watched. These three listeners are already open here,
+    and a three-dimensional room subscribing to the same three rounds a second
+    time so it can decide how many sparks to draw is a real cost on somebody's
+    phone for a decorative one. See `theRoom`.
+  */
+  const yours = Object.values(turns).filter((turn) => turn === 'yours').length
+  useEffect(() => {
+    theRoom.waitingForYou = yours
+    // Quiet again on the way out, or the fire stays awake in an empty room.
+    return () => {
+      theRoom.waitingForYou = 0
+    }
+  }, [yours])
+
   // One past the end is the "more coming" card, which is always there.
   const [at, setAt] = useState(0)
+  const [way, setWay] = useState(0)
   const last = GAMES.length
-  const go = (by: 1 | -1) => setAt((n) => Math.max(0, Math.min(last, n + by)))
+  const game = GAMES[at]
+  const go = useCallback(
+    (by: 1 | -1) => setAt((n) => Math.max(0, Math.min(last, n + by))),
+    [last],
+  )
+  const chooseGame = useCallback((index: number) => {
+    if (!GAMES[index]) return
+    setAt(index)
+    setWay(0)
+    setShowing('ways')
+  }, [])
 
   const track = useRef<HTMLDivElement>(null)
+  const cards = useRef<(HTMLButtonElement | null)[]>([])
+  const ways = useRef<(HTMLButtonElement | null)[]>([])
   useEffect(() => {
+    if (showing !== 'games') return
     const el = track.current
     if (!el) return
     const swipe = alongTheRow(el, go)
     return swipe
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [last])
+  }, [go, showing])
+
+  useEffect(() => {
+    setWay(0)
+    cards.current[at]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+
+    /*
+      And fetch the game you are looking at, before you ask for it.
+
+      Games are deferred — see `later` — and this is the hint that makes the
+      deferral free. Arriving at a card is not the same as choosing it: it is a
+      press away at the very least, and usually a good deal more, because the
+      three ways in are still to be read. That is the whole gap the fetch needs.
+
+      The one either side, too. A row you can swipe is a row where the next
+      thing is one flick away, and the flick is faster than a network.
+    */
+    for (const near of [at, at - 1, at + 1]) {
+      const game = GAMES[near]
+      if (!game) continue
+      game.Component.warm()
+      game.Stage?.warm()
+    }
+  }, [at])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') go(1)
-      if (e.key === 'ArrowLeft') go(-1)
+      const focused = document.activeElement
+      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
+      if (showing === 'games' && e.key === 'ArrowRight') {
+        e.preventDefault()
+        go(1)
+      } else if (showing === 'games' && e.key === 'ArrowLeft') {
+        e.preventDefault()
+        go(-1)
+      } else if (
+        showing === 'ways' &&
+        (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') &&
+        game
+      ) {
+        e.preventDefault()
+        const count = game.live ? 3 : 2
+        setWay((current) =>
+          e.key === 'ArrowDown' || e.key === 'ArrowRight'
+            ? (current + 1) % count
+            : (current - 1 + count) % count,
+        )
+      } else if (e.key === 'Enter' && !e.repeat) {
+        if (focused instanceof HTMLButtonElement) return
+        e.preventDefault()
+        if (showing === 'games' && game) chooseGame(at)
+        else if (showing === 'ways') ways.current[way]?.click()
+      } else if (showing === 'ways' && e.key === 'Escape') {
+        e.preventDefault()
+        setShowing('games')
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [last])
-
-  const game = GAMES[at]
+  }, [at, chooseGame, game, go, showing, way])
 
   if (showing === 'waiting') {
     return (
@@ -267,27 +382,129 @@ function TheHollow() {
         <Challenges
           turns={turns}
           them={them.name}
-          onPlay={(id) => play(id, false)}
+          onPlay={(id) => {
+            const index = GAMES.findIndex((candidate) => candidate.id === id)
+            if (index >= 0) chooseGame(index)
+          }}
           onBack={() => setShowing('games')}
         />
       </div>
     )
   }
 
-  return (
-    <div className="threshold hollow-threshold" ref={track}>
-      <span className="threshold-whisper">something to play, whenever you are here</span>
+  if (showing === 'ways' && game) {
+    return (
+      <div className="threshold hollow-threshold hollow-selector hollow-way-threshold">
+        <button
+          type="button"
+          className="hollow-way-back"
+          onClick={() => setShowing('games')}
+        >
+          ‹ choose another game
+        </button>
 
-      <div className="game-row" style={{ '--at': at } as React.CSSProperties}>
-        {GAMES.map((g) => (
-          <div className="game-card" key={g.id} aria-hidden={g.id !== game?.id}>
-            {g.Emblem ? <g.Emblem /> : null}
+        <header className="hollow-way-heading">
+          <span className="threshold-whisper">the game is chosen</span>
+          <span className="hollow-way-emblem" aria-hidden="true">
+            {game.Emblem ? <game.Emblem /> : null}
+          </span>
+          <h2>{game.name}</h2>
+          <p>{game.blurb}</p>
+          <small>{game.duration}</small>
+        </header>
+
+        <div className="game-ways" role="group" aria-label={`ways to enter ${game.name}`}>
+          <span className="game-way-label">now choose how you enter</span>
+          <button
+            ref={(node) => { ways.current[0] = node }}
+            type="button"
+            className={`game-go${way === 0 ? ' is-selected' : ''}`}
+            onFocus={() => setWay(0)}
+            onClick={() => play(game.id, false)}
+            title={game.invite?.tip}
+          >
+            {game.invite
+              ? game.invite.name.replace('{them}', them.name)
+              : `play with ${them.name}`}
+          </button>
+          <div className="game-else">
+            <button
+              ref={(node) => { ways.current[1] = node }}
+              type="button"
+              className={`quiet${way === 1 ? ' is-selected' : ''}`}
+              onFocus={() => setWay(1)}
+              onClick={() => play(game.id, true)}
+            >
+              on your own
+            </button>
+            {game.live ? (
+              <LiveWayIn
+                game={game.id}
+                them={them.name}
+                live={game.live}
+                selected={way === 2}
+                buttonRef={(node) => { ways.current[2] = node }}
+                onFocus={() => setWay(2)}
+              />
+            ) : null}
+          </div>
+        </div>
+        <p className="game-key-guide">↑ ↓ choose · enter confirm · escape back</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="threshold hollow-threshold hollow-selector" ref={track}>
+      <header className="hollow-game-heading">
+        <span className="threshold-whisper">the fire is lit · choose what happens here</span>
+        <h2>Choose your game</h2>
+        <span className="hollow-game-count">
+          {String(at + 1).padStart(2, '0')} / {String(last + 1).padStart(2, '0')}
+        </span>
+      </header>
+
+      <div className="game-showcase">
+        <button
+          type="button"
+          className="game-step previous"
+          aria-label="previous game"
+          disabled={at === 0}
+          onClick={() => go(-1)}
+        >
+          ‹
+        </button>
+        <div className="game-row" role="group" aria-label="games in the Hallow">
+        {GAMES.map((g, index) => (
+          <button
+            ref={(node) => { cards.current[index] = node }}
+            type="button"
+            className={`game-card${index === at ? ' is-selected' : ''}`}
+            key={g.id}
+            aria-current={index === at ? 'true' : undefined}
+            onClick={() => {
+              if (index === at) chooseGame(index)
+              else setAt(index)
+            }}
+          >
+            <span className="game-card-number">{String(index + 1).padStart(2, '0')}</span>
+            <span className="game-card-object">{g.Emblem ? <g.Emblem /> : null}</span>
             <strong>{g.name}</strong>
             <span className="game-length">{g.duration}</span>
             <small>{g.blurb}</small>
-          </div>
+            <span className="game-card-command">
+              {index === at ? 'enter to choose' : 'bring to the fire'}
+            </span>
+          </button>
         ))}
-        <div className="game-card" aria-hidden={game !== undefined}>
+        <button
+          ref={(node) => { cards.current[last] = node }}
+          type="button"
+          className={`game-card game-card-coming${at === last ? ' is-selected' : ''}`}
+          aria-current={at === last ? 'true' : undefined}
+          onClick={() => setAt(last)}
+        >
+          <span className="game-card-number">{String(last + 1).padStart(2, '0')}</span>
           {/* Five stones with nothing on them. The row's own language for
               "there is a place for this and it is empty". */}
           <span className="emblem emblem-stones waiting" aria-hidden="true">
@@ -297,47 +514,41 @@ function TheHollow() {
             <i />
             <i />
           </span>
-          <strong>more, in time</strong>
-          <span className="game-length">not yet</span>
+          <strong>the next fire</strong>
+          <span className="game-length">still being made</span>
           <small>
             Ultimate noughts and crosses, hidden fleet, dots and boxes. One
             folder each — the fire has room.
           </small>
+          <span className="game-card-command">the Hallow has space</span>
+        </button>
         </div>
+        <button
+          type="button"
+          className="game-step next"
+          aria-label="next game"
+          disabled={at === last}
+          onClick={() => go(1)}
+        >
+          ›
+        </button>
       </div>
 
-      {game ? (
-        <div className="game-ways">
-          {/*
-            The one you will actually press, set like the rest of the garden's
-            invitations — a serif verb, not a word in small capitals. The other
-            two are alternatives to it and are quieter, which is what a row of
-            three identical labels could never say.
-          */}
-          <button
-            type="button"
-            className="game-go"
-            onClick={() => play(game.id, false)}
-            title={game.invite?.tip}
-          >
-            {game.invite
-              ? game.invite.name.replace('{them}', them.name)
-              : `play with ${them.name}`}
-          </button>
-          <div className="game-else">
-            <button type="button" className="quiet" onClick={() => play(game.id, true)}>
-              on your own
-            </button>
-            {game.live ? (
-              <LiveWayIn game={game.id} them={them.name} live={game.live} />
-            ) : null}
-          </div>
-        </div>
-      ) : (
-        <p className="game-soon">nothing to open here yet</p>
-      )}
+      {/*
+        The peeking card says there is another one; this says which. The two
+        do different jobs — the sliver is what makes you reach for the arrow,
+        the name is what tells you whether to bother — and the row reads as a
+        place with more in it rather than as a list you have reached the end of.
+      */}
+      <p className="game-next" aria-hidden="true">
+        {at < last ? (
+          <>
+            next · <em>{at + 1 === last ? 'the next fire' : GAMES[at + 1].name}</em>
+          </>
+        ) : null}
+      </p>
 
-      <div className="game-marks" role="presentation">
+      <div className="game-marks" aria-label="choose a game">
         {Array.from({ length: last + 1 }, (_, i) => (
           <button
             type="button"
@@ -348,6 +559,8 @@ function TheHollow() {
           />
         ))}
       </div>
+
+      <p className="game-key-guide">← → choose a game · enter open</p>
 
       {/*
         Set apart, under the marks and below a rule.
@@ -405,8 +618,10 @@ function alongTheRow(el: HTMLElement, go: (by: 1 | -1) => void): () => void {
  * counted, rated or totalled anywhere.
  */
 function TheGlasshouse() {
-  const start = useMemories((s) => s.setHanging)
-  const count = useMemories((s) => s.all.length)
+  const start = useMemories((s) => s.leaveOne)
+  // What is still in the glass. A memory taken out keeps its document, and
+  // therefore its place in the building, but it is not a pane any more.
+  const count = useMemories((s) => standing(s.all).length)
   const loaded = useMemories((s) => s.loaded)
 
   return (
@@ -425,7 +640,15 @@ function TheGlasshouse() {
               ? 'one pane, so far'
               : `${count} panes, so far`}
       </span>
-      <button type="button" onClick={() => start(true)}>
+      {/*
+        Straight to the picker, from the tap itself.
+
+        Not through an effect: a file input only opens reliably when it is
+        clicked synchronously inside a user gesture, and iOS Safari refuses one
+        that arrives a tick later. See the note on the picked picture in
+        systems/memories.
+      */}
+      <button type="button" onClick={() => void start()}>
         leave a memory here
       </button>
     </div>
@@ -433,21 +656,52 @@ function TheGlasshouse() {
 }
 
 export function Threshold() {
+  const data = useData()
   const index = useSections((s) => s.index)
   const entered = useSections((s) => s.entered)
   const write = useReading((s) => s.startWriting)
   const tend = usePot((s) => s.show)
   const takenOver = useTakenOver()
+  const questions = useWorldSlice((state) => state.questions)
 
   if (!entered || takenOver) return null
 
   const id = SECTIONS[index].id
 
   if (id === 'tree') {
+    const current = questions.current
+    const mine = current?.answered[data.me] ?? false
+    const both = Boolean(current?.answered.warm && current?.answered.cool)
     return (
       <div className="threshold tree-threshold">
         <span className="threshold-whisper">one thought, one flower</span>
         <button type="button" onClick={write}>plant a thought</button>
+        <div className="tree-rituals">
+          {current ? (
+            <button type="button" onClick={useQuestions.getState().openCurrent}>
+              <span aria-hidden="true">✦</span>{' '}
+              {both ? 'read the newest bloom' : mine ? 'your answer is waiting' : 'the Tree is asking'}
+            </button>
+          ) : null}
+          {questions.availableSeeds > 0 ? (
+            <button type="button" onClick={useQuestions.getState().openPlanting}>
+              <span aria-hidden="true">◇</span>{' '}
+              plant a question · {questions.availableSeeds}
+            </button>
+          ) : null}
+          {questions.history.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => useQuestions.getState().openArchive(questions.history.at(-1)!.id)}
+            >
+              all answered questions · {questions.history.length}
+            </button>
+          ) : null}
+        </div>
+        <span className="tree-turn-guide">
+          <span className="tree-turn-pointer">drag or scroll to circle · ← → turn · home returns</span>
+          <span className="tree-turn-touch">drag sideways to circle the tree</span>
+        </span>
       </div>
     )
   }

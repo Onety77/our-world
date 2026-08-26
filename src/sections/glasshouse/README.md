@@ -11,15 +11,39 @@ The oldest memory stands at the far end and the newest at the near one, where
 you arrive and where the empty frame waits. So the only direction there is in
 here is backwards through time.
 
+## Memories first
+
+The building must never be the subject. Three things enforce that, and all
+three came out of one failure: a focused pane occupying twenty-eight pixels on
+a phone while the ironwork had the whole middle of the frame.
+
+**It turns.** Settle on a pane and the building rotates twenty-two degrees
+about the point in front of you — because a picture on a corridor wall is seen
+*edge-on*, its width running down the aisle, and no amount of moving closer
+changes that. It leans sideways too, which is the smaller half. The same
+photograph is a hundred and thirty-two pixels now: thirty-four per cent of a
+phone screen.
+
+**Every frame is the same shape.** Three by two, with the picture centre-
+cropped into it. Identical frames disappear, and once they disappear you are
+looking at photographs rather than at a row of differently-shaped outlines.
+Cropped only in the wall — opening a memory shows the whole thing.
+
+**Every memory grows a flower** on the floor in front of it, in that
+photograph's own colours pushed away from grey so it reads as a flower rather
+than a smudge. A row of them says *many* long before a row of rectangles does,
+and after dark the petals are the only floor lighting there is.
+
 ## The shape of it
 
 ```
 layout.ts      where it stands, how big it is, and where memory `n` hangs
 ironwork.ts    ribs, purlins, glazing, the dwarf wall, the terrace, the vines
 Panes.tsx      the glass — far (colour only), near (the picture), and the pools
+Flowers.tsx    one per memory, in its colours, and the lamps after dark
 EmptyFrame.tsx the one that is waiting
 Motes.tsx      dust in the light
-aisle.ts       how far down the building you are standing
+aisle.ts       how far down the aisle you are, the lean, and the turn
 Glasshouse.tsx the scene, the travel and the picking
 ```
 
@@ -52,7 +76,34 @@ instantly, no request — and swaps to the real photograph when it arrives. "The
 glass clears and the image appears" is therefore the literal behaviour of a
 progressive load rather than an animation pretending to be one.
 
-The open case is DOM because a photograph is the one thing in this world that
+## Opening one is somewhere you go
+
+Tapping a pane does not put a panel over a stopped world. The aisle glides to
+its bay, the building turns square to its wall, and the photograph ends up in
+front of you because **you are standing in front of it** — the room is still
+there, above it, below it and either side. Everything else in the building
+loses its light while that happens (`uHush`), so the wall does not go on
+selling other people's evenings next to the one you asked for.
+
+Three things had to be true first, and each one is a note somewhere in here:
+
+1. **No pane has a tilt.** A face-on rectangle projects to an axis-aligned
+   rectangle, which a DOM element can be laid on exactly. Two degrees of
+   hand-hung wobble makes that impossible. See `slotFor`.
+2. **The turn pivots about the middle of the aisle, and nobody stands there.**
+   SlideCamera puts the camera off the centreline and back down it, and
+   `backOffFor` moves it again with the aspect. So the scene *solves* the
+   building's position each frame against the camera's own axes — depth along
+   local X until the pane is `standFor()` metres away, then across along
+   local Z until it is on the centre line. Both faded on the turn, because
+   both are only true at ninety degrees.
+3. **How far you stand cannot be a constant.** Five metres fills 99% of a
+   phone's width and 28% of a laptop's — same building, same pane. `standFor`
+   solves the distance from the size the pane should *end up*: a bit under half
+   the screen's height, never more than nine tenths of its width, never further
+   back than the wall behind you.
+
+The photograph itself is DOM because it is the one thing in this world that
 somebody *chose*, that cannot be made again, and whose colours are the whole
 content. Everything drawn inside the Canvas goes through ACES tone mapping at
 exposure 0.98, through fog, and through whatever the hour has done to the
@@ -133,13 +184,33 @@ library for a file that is perfectly fine.
   of view, on a screen that might be twice as tall as it is wide — and "does
   the picture fit" is not a question anybody can answer by eye across four
   viewports.
-- `__glassOpen(id)` / `__glassWalk(m)` — the two verbs. Opening a particular
-  memory from a test otherwise means aiming a mouse at a quad on a wall three
-  metres away in a building that is sliding past, which tests the raycast
-  rather than the thing under test.
+- `__glass.open` — the open state's own workings, when one is open: how far
+  through the turn, how far it has walked, which side, and `stand` — where the
+  camera is in the building's own coordinates, where anything past ±2.62 means
+  it has left through a wall.
+- `__glassOpen(id)` / `__glassWalk(m)` / `__glassReach(m)` — the verbs.
+  Opening a particular memory from a test otherwise means aiming a mouse at a
+  quad on a wall three metres away in a building that is sliding past, which
+  tests the raycast rather than the thing under test. `__glassReach` pins the
+  standing distance so it can be swept across viewports in one run instead of
+  four minutes per value.
 
 The first of those has already paid for itself once: a "standoff" was added to
 stop the near panes being cut off on a phone, and sweeping it against `__glass`
 showed the panes had never been cut off at any value — they were simply small,
 and every metre of standoff made them smaller. Measure the thing before
 compensating for it.
+
+`__glass.open` earned its place the same way, immediately. An open memory
+settled with its centre thirty-two pixels from the left edge of a phone, most
+of it off the side, while every eased number in the system reported that it had
+arrived exactly where it had been asked to go — because they had, and the thing
+they had been asked for was wrong. Then, once centred, it came out beautifully
+framed against a flat grey nothing: the camera was standing a metre outside the
+far glazing, looking in. Neither of those is visible in a number you did not
+think to print, and both are obvious in one.
+
+Headless is also in slow motion. Every frame is clamped to `1/20` of a second
+and SwiftShader manages one or two a second, so four seconds of wall clock is
+under one second of eased time — long enough to screenshot a half-finished turn
+and file it as a bug. Wait on the state, not on the clock.

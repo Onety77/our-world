@@ -4,7 +4,14 @@ import { useGameStage } from '../stage'
 import { makeTrack } from './track'
 import { driveSpirit } from './spirit'
 import { useRace } from './session'
-import { moveRun, timeLabel, type RallyMove, type RallyRun, type RallySetup } from './model'
+import {
+  moveRun,
+  timeLabel,
+  type RallyMove,
+  type RallyRun,
+  type RallySetup,
+  type StageId,
+} from './model'
 
 /**
  * Ember Rally — everything that is words.
@@ -30,8 +37,93 @@ import { moveRun, timeLabel, type RallyMove, type RallyRun, type RallySetup } fr
  * and the road remembers both of you.
  */
 
-type View = 'menu' | 'road' | 'replay'
+type View = 'courses' | 'menu' | 'road' | 'replay'
 type RaceKind = 'qualifying' | 'chase'
+const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown']
+
+/**
+ * `?stage=moonbreak` opens that road and drops you straight onto it.
+ *
+ * ---------------------------------------------------------------------------
+ * The fourth of the racer's debug hooks, and it exists for the same reason as
+ * the other three: there are now two roads, one of them is two minutes long,
+ * and the interesting part of it is nine hundred metres in. Getting a picture
+ * of that meant a course picker, a menu, a countdown and a minute of driving —
+ * on a software renderer at two frames a second. Paired with `?rally=ride` and
+ * `?from=`, this makes it one URL.
+ *
+ * Deliberately only skips the *menus*. It does not skip the countdown, or put
+ * the car anywhere, or change how anything drives — a hook that quietly alters
+ * what it is showing you is worse than no hook, because you cannot tell.
+ * ---------------------------------------------------------------------------
+ */
+const OPEN_ON = (() => {
+  if (typeof location === 'undefined') return null
+  const asked = new URLSearchParams(location.search).get('stage')
+  return STAGES.includes(asked as StageId) ? (asked as StageId) : null
+})()
+
+const COURSES: Record<StageId, {
+  name: string
+  place: string
+  short: string
+  soloTitle: string
+  soloCopy: string
+  spirit: string
+  returnTo: string
+  setTitle: string
+  setCopy: string
+  sealedTitle: string
+  chaseHome: string
+  resultKicker: string
+  finishPlace: string
+}> = {
+  rootway: {
+    name: 'The Rootway',
+    place: 'fire and stone',
+    short: 'A close, changing road beneath the garden. Learn it by the lanterns.',
+    soloTitle: 'Something is already down there',
+    soloCopy: 'A small fire knows this road and it is quicker than it looks. It leaves a pale line through the tunnel; follow that and you will not be far off. Brake into the bend, hold the slide, and let go at the apex.',
+    spirit: 'the fire-spirit',
+    returnTo: 'return to the fire',
+    setTitle: 'Set a line she cannot see',
+    setCopy: 'Learn the turns and leave your tyre marks in the dark. Her first run stays under the stone until yours is beside it — and yours stays under it until hers is.',
+    sealedTitle: 'The stone stays closed.',
+    chaseHome: 'home to the fire',
+    resultKicker: 'two lines through one dark',
+    finishPlace: 'the fire',
+  },
+  moonbreak: {
+    name: 'The Moonbreak',
+    place: 'water and open sky',
+    short: 'A long pale causeway over the drowned high garden. Fast, exposed, unforgiving.',
+    soloTitle: 'A pale car is crossing the water',
+    soloCopy: 'The road is visible here, but that does not make it kind. Carry speed across the Mirror Flats, give Tidecut one honest brake, then brake earlier than feels necessary when four amber pearls call the Moonhook.',
+    spirit: 'the moon-spirit',
+    returnTo: 'return to the moonwell',
+    setTitle: 'Leave a wake she cannot see',
+    setCopy: 'Learn the pale turns and leave your tyre marks above the water. Her first crossing stays under the moon until yours is beside it — and yours stays there until hers is.',
+    sealedTitle: 'The water keeps it.',
+    chaseHome: 'home across the water',
+    resultKicker: 'two wakes under one moon',
+    finishPlace: 'the moonwell',
+  },
+  stormcrown: {
+    name: 'The Stormcrown',
+    place: 'rain and high stone',
+    short: 'The longest road: cedar ascent, cloud ridge, three mountain hairpins, then Stormfall.',
+    soloTitle: 'A white fire is climbing into weather',
+    soloCopy: 'The mountain tells the truth in landmarks. Three amber cairns call Gale Bend; five call the Thunder Stair. Brake while the road is straight, turn once, and keep something for the wet descent.',
+    spirit: 'the storm-spirit',
+    returnTo: 'return to the stormfire',
+    setTitle: 'Leave a line above the cloud',
+    setCopy: 'Carry one private line from the cedars to the crown. Her climb stays inside the weather until yours is beside it — and neither of you sees the mountain give the other away.',
+    sealedTitle: 'The storm keeps it.',
+    chaseHome: 'home through the rain',
+    resultKicker: 'two lights under one storm',
+    finishPlace: 'the stormfire',
+  },
+}
 
 /**
  * The only instruction in the whole game, in whichever language this machine
@@ -55,6 +147,71 @@ const CONTROLS =
     ? 'left thumb steers · right thumb holds the throttle, pull down to brake and slide · tap for the ember'
     : 'up to go · down to brake · arrows to steer · space to slide · shift for the ember'
 
+/** Arrow selection plus Enter, while leaving native button activation intact. */
+function useMenuKeys(count: number, activate: (index: number) => void) {
+  const [selected, setSelected] = useState(0)
+  const activateRef = useRef(activate)
+  activateRef.current = activate
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const focused = document.activeElement
+      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
+      if (
+        event.key === 'ArrowRight' || event.key === 'ArrowDown' ||
+        event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+      ) {
+        event.preventDefault()
+        const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        setSelected((at) => (at + (forward ? 1 : -1) + count) % count)
+      } else if (event.key === 'Enter' && !event.repeat) {
+        if (focused instanceof HTMLButtonElement) return
+        event.preventDefault()
+        activateRef.current(selected)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [count, selected])
+
+  return [selected, setSelected] as const
+}
+
+interface RallyAction {
+  label: string
+  onChoose(): void
+  quiet?: boolean
+  disabled?: boolean
+}
+
+/** Every choice shown after a run obeys the same arrows-and-Enter contract. */
+function RallyActions({ actions }: { actions: RallyAction[] }) {
+  const [selected, setSelected] = useMenuKeys(actions.length, (index) => {
+    const action = actions[index]
+    if (action && !action.disabled) action.onChoose()
+  })
+
+  return (
+    <>
+      <div className="rally-actions">
+        {actions.map((action, index) => (
+          <button
+            type="button"
+            className={`${action.quiet ? 'quiet' : ''}${selected === index ? ' is-selected' : ''}`.trim()}
+            disabled={action.disabled}
+            key={action.label}
+            onFocus={() => setSelected(index)}
+            onClick={action.onChoose}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+      <p className="rally-menu-keys">↑ ↓ choose · enter confirm</p>
+    </>
+  )
+}
+
 export default function EmberRally({
   theirName,
   solo,
@@ -74,18 +231,19 @@ export default function EmberRally({
     seed and the stage are the only things the road actually depends on.
   */
   const seed = setup?.seed ?? 1
-  const stage = setup?.stage ?? 'rootway'
-  const track = useMemo(() => makeTrack(seed, stage), [seed, stage])
+  const [stage, setStage] = useState<StageId | null>(OPEN_ON)
+  const activeStage = stage ?? setup?.stage ?? 'rootway'
+  const track = useMemo(() => makeTrack(seed, activeStage), [seed, activeStage])
   // Only when there is nobody to race. Driving a whole lap costs about a tenth
   // of a second, and in a two-player round nothing ever looks at it.
   const spirit = useMemo(() => (solo ? driveSpirit(track, track.seed) : null), [track, solo])
 
-  const myLine = moveRun(mine, 'qualifying')
-  const theirLine = moveRun(theirs, 'qualifying')
-  const myChase = moveRun(mine, 'chase', true)
-  const theirChase = moveRun(theirs, 'chase', true)
+  const myLine = moveRun(mine, 'qualifying', activeStage)
+  const theirLine = moveRun(theirs, 'qualifying', activeStage)
+  const myChase = moveRun(mine, 'chase', activeStage, true)
+  const theirChase = moveRun(theirs, 'chase', activeStage, true)
 
-  const [view, setView] = useState<View>('menu')
+  const [view, setView] = useState<View>(OPEN_ON ? 'road' : 'courses')
   /**
    * Which go this is.
    *
@@ -113,6 +271,18 @@ export default function EmberRally({
     setView('menu')
   }
 
+  const choose = (next: StageId) => {
+    setStage(next)
+    setLastRun(null)
+    setFault('')
+    setView('menu')
+  }
+
+  const backToCourses = () => {
+    setLastRun(null)
+    setView('courses')
+  }
+
   // Kept in a ref so the road can call it without being rebuilt every render —
   // a race that remounted whenever a piece of React state moved would restart
   // the tunnel mid-corner.
@@ -122,7 +292,7 @@ export default function EmberRally({
     setSaving(true)
     setFault('')
     try {
-      await play({ kind, run })
+      await play({ kind, stage: activeStage, run })
     } catch {
       setFault('The Hollow could not keep that run. Your time is still here until you leave.')
     } finally {
@@ -133,17 +303,23 @@ export default function EmberRally({
   if (!setup) {
     return (
       <div className="rally rally-centre">
-        <p className="rally-kicker">the rootway</p>
+        <p className="rally-kicker">ember rally</p>
         <p className="rally-copy">The road is opening.</p>
       </div>
     )
+  }
+
+  const course = COURSES[activeStage]
+
+  if (view === 'courses') {
+    return <CoursePicker onChoose={choose} onLeave={onLeave} />
   }
 
   // --- on the road ---------------------------------------------------------
 
   if (view === 'road') {
     const ghost = (solo ? spirit : kind === 'chase' ? theirLine : null) ?? null
-    const ghostName = solo ? 'the fire-spirit' : theirName
+    const ghostName = solo ? course.spirit : theirName
     return (
       <Road
         attempt={attempt}
@@ -162,6 +338,7 @@ export default function EmberRally({
             fault={fault}
             onDone={backToFire}
             onAgain={!solo && kind === 'qualifying' ? null : () => start(kind)}
+            returnLabel={course.returnTo}
           />
         ) : null}
       </Road>
@@ -184,16 +361,17 @@ export default function EmberRally({
   if (solo) {
     return (
       <Briefing
-        kicker="the rootway · alone"
-        title={myChase ? 'Again, then' : 'Something is already down there'}
-        copy="A small fire knows this road and it is quicker than it looks. It leaves a pale line through the tunnel; follow that and you will not be far off. Brake into the bend, hold the slide, and let go at the apex."
+        kicker={`${course.name.toLowerCase()} · alone`}
+        title={myChase ? 'Again, then' : course.soloTitle}
+        copy={course.soloCopy}
         primary={myChase ? 'run it again' : 'start the engine'}
         onPrimary={() => start('chase')}
-        onLeave={onLeave}
+        onLeave={backToCourses}
+        leaveLabel="choose another road"
         foot={
           myChase && spirit
-            ? `your last run · ${timeLabel(myChase.timeMs)} · the spirit · ${timeLabel(spirit.timeMs)}`
-            : 'one road · one fire-spirit · no waiting for anybody'
+            ? `your last run · ${timeLabel(myChase.timeMs)} · ${course.spirit} · ${timeLabel(spirit.timeMs)}`
+            : `${course.place} · one spirit · no waiting for anybody`
         }
       />
     )
@@ -202,12 +380,13 @@ export default function EmberRally({
   if (!myLine) {
     return (
       <Briefing
-        kicker="the rootway · first passage"
-        title="Set a line she cannot see"
-        copy="Learn the turns and leave your tyre marks in the dark. Her first run stays under the stone until yours is beside it — and yours stays under it until hers is."
+        kicker={`${course.name.toLowerCase()} · first passage`}
+        title={course.setTitle}
+        copy={course.setCopy}
         primary="set my line"
         onPrimary={() => start('qualifying')}
-        onLeave={onLeave}
+        onLeave={backToCourses}
+        leaveLabel="choose another road"
         foot={CONTROLS}
       />
     )
@@ -216,17 +395,15 @@ export default function EmberRally({
   if (!theirLine) {
     return (
       <div className="rally rally-centre">
-        <p className="rally-kicker">your line is in</p>
-        <h1>The stone stays closed.</h1>
+        <p className="rally-kicker">your line is in · {course.name.toLowerCase()}</p>
+        <h1>{course.sealedTitle}</h1>
         <p className="rally-copy">
           Nobody sees anybody&rsquo;s road until both first runs are here. There is nothing to
-          wait beside — come back when the fire has been sat at twice.
+          wait beside — come back when this road has been travelled twice.
         </p>
-        <div className="rally-actions">
-          <button type="button" onClick={onLeave}>
-            back to the games
-          </button>
-        </div>
+        <RallyActions actions={[
+          { label: 'choose another road', onChoose: backToCourses },
+        ]} />
         <p className="rally-note">your line · {timeLabel(myLine.timeMs)}</p>
       </div>
     )
@@ -237,10 +414,11 @@ export default function EmberRally({
       <Briefing
         kicker={`${theirName.toLowerCase()} has been down there`}
         title="Her light is on the road"
-        copy="This time the pale car is real: her steering, her braking, every place she got it wrong. She sets off when you do. Catch her, pass her, and bring both lines home to the fire."
+        copy={`This time the pale car is real: her steering, her braking, every place she got it wrong. She sets off when you do. Catch her, pass her, and bring both lines ${course.chaseHome}.`}
         primary="begin the chase"
         onPrimary={() => start('chase')}
-        onLeave={onLeave}
+        onLeave={backToCourses}
+        leaveLabel="choose another road"
         foot={`${timeLabel(theirLine.timeMs)} of road ahead of you`}
       />
     )
@@ -255,14 +433,10 @@ export default function EmberRally({
           Your headlights have gone quiet. The second set of tyre marks appears whenever the
           road is travelled again.
         </p>
-        <div className="rally-actions">
-          <button type="button" onClick={() => start('chase')}>
-            run it again
-          </button>
-          <button type="button" className="quiet" onClick={onLeave}>
-            back to the games
-          </button>
-        </div>
+        <RallyActions actions={[
+          { label: 'run it again', onChoose: () => start('chase') },
+          { label: 'choose another road', onChoose: backToCourses, quiet: true },
+        ]} />
       </div>
     )
   }
@@ -273,13 +447,15 @@ export default function EmberRally({
 
   return (
     <div className="rally rally-centre">
-      <p className="rally-kicker">two lines through one dark</p>
+      <p className="rally-kicker">
+        {course.resultKicker}
+      </p>
       <h1>
         {together
           ? 'Side by side.'
           : mineFirst
-            ? 'You reached the fire first.'
-            : `${theirName} reached the fire first.`}
+            ? `You reached ${course.finishPlace} first.`
+            : `${theirName} reached ${course.finishPlace} first.`}
       </h1>
       <div className="rally-times">
         <span>
@@ -292,18 +468,110 @@ export default function EmberRally({
           {timeLabel(theirChase.timeMs)}
         </span>
       </div>
-      <p className="rally-copy">The pollen is shared. The road remembers both of you.</p>
-      <div className="rally-actions">
-        <button type="button" onClick={() => setView('replay')}>
-          watch the two runs
+      <p className="rally-copy">The pollen is shared. {course.name} remembers both of you.</p>
+      <RallyActions actions={[
+        { label: 'watch the two runs', onChoose: () => setView('replay') },
+        { label: 'race it again', onChoose: () => start('chase'), quiet: true },
+        { label: 'choose another road', onChoose: backToCourses, quiet: true },
+      ]} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The three roads
+// ---------------------------------------------------------------------------
+
+/**
+ * A place chosen by looking into it.
+ *
+ * These are not menu cards and deliberately have no metadata furniture. Each
+ * button is a small threshold made from the course's own visual grammar: the
+ * Rootway closes around two warm lamps; the Moonbreak opens onto water and a
+ * broken white arch. The words only say the difference the pictures cannot.
+ */
+function CoursePicker({
+  onChoose,
+  onLeave,
+}: {
+  onChoose(stage: StageId): void
+  onLeave(): void
+}) {
+  const [selected, setSelected] = useMenuKeys(STAGES.length, (index) => {
+    const stage = STAGES[index]
+    if (stage) onChoose(stage)
+  })
+
+  return (
+    <div className="rally rally-courses">
+      <div className="rally-course-heading">
+        <p className="rally-kicker">ember rally · three roads</p>
+        <h1>Where do you want the engine?</h1>
+      </div>
+
+      <div className="rally-course-doors">
+        <button
+          type="button"
+          className={`rally-course rootway${selected === 0 ? ' is-selected' : ''}`}
+          aria-current={selected === 0 ? 'true' : undefined}
+          onFocus={() => setSelected(0)}
+          onClick={() => onChoose('rootway')}
+        >
+          <span className="rally-course-scene" aria-hidden="true">
+            <i className="course-vault one" />
+            <i className="course-vault two" />
+            <i className="course-road" />
+            <i className="course-lamps"><b /><b /></i>
+          </span>
+          <span className="rally-course-name">The Rootway</span>
+          <span className="rally-course-copy">{COURSES.rootway.short}</span>
+          <span className="rally-course-enter">go below</span>
         </button>
-        <button type="button" className="quiet" onClick={() => start('chase')}>
-          race it again
+
+        <button
+          type="button"
+          className={`rally-course moonbreak${selected === 1 ? ' is-selected' : ''}`}
+          aria-current={selected === 1 ? 'true' : undefined}
+          onFocus={() => setSelected(1)}
+          onClick={() => onChoose('moonbreak')}
+        >
+          <span className="rally-course-scene" aria-hidden="true">
+            <i className="course-moon" />
+            <i className="course-arch one" />
+            <i className="course-arch two" />
+            <i className="course-water" />
+            <i className="course-road" />
+          </span>
+          <span className="rally-course-name">The Moonbreak</span>
+          <span className="rally-course-copy">{COURSES.moonbreak.short}</span>
+          <span className="rally-course-enter">take the high road</span>
         </button>
-        <button type="button" className="quiet" onClick={onLeave}>
-          back to the games
+
+        <button
+          type="button"
+          className={`rally-course stormcrown${selected === 2 ? ' is-selected' : ''}`}
+          aria-current={selected === 2 ? 'true' : undefined}
+          onFocus={() => setSelected(2)}
+          onClick={() => onChoose('stormcrown')}
+        >
+          <span className="rally-course-scene" aria-hidden="true">
+            <i className="course-lightning" />
+            <i className="course-peak one" />
+            <i className="course-peak two" />
+            <i className="course-peak three" />
+            <i className="course-rain" />
+            <i className="course-road" />
+          </span>
+          <span className="rally-course-name">The Stormcrown</span>
+          <span className="rally-course-copy">{COURSES.stormcrown.short}</span>
+          <span className="rally-course-enter">climb into weather</span>
         </button>
       </div>
+
+      <button type="button" className="rally-course-leave" onClick={onLeave}>
+        back to the games
+      </button>
+      <p className="rally-menu-keys">arrows choose · enter opens the road</p>
     </div>
   )
 }
@@ -355,6 +623,9 @@ function Road({
     useRace.getState().setSurface(surface.current)
     return () => {
       useRace.getState().close()
+      // The one node this component registers, and therefore the one it clears.
+      // See the note on `close` — it deliberately no longer does this for us.
+      useRace.getState().setSurface(null)
       useGameStage.getState().take(false)
     }
   }, [attempt, track, ghost, ghostName])
@@ -362,6 +633,7 @@ function Road({
   return (
     <div className="rally rally-running">
       <div ref={surface} className="rally-input" />
+      <StartLights key={attempt} />
       <EmberBar />
       <Speed />
       <Pause onLeave={onLeave} onRestart={onRestart} hasResult={Boolean(children)} />
@@ -369,6 +641,46 @@ function Road({
         {CONTROLS}
       </p>
       {children}
+    </div>
+  )
+}
+
+/**
+ * A start gantry that cannot be mistaken for scenery.
+ *
+ * Three amber lenses arm in the same three seconds as `COUNTDOWN` in the 3D
+ * machine. React only sees the two meaningful phases — ready and go — while
+ * CSS carries the three fixed beats, so no per-frame state enters the UI.
+ */
+function StartLights() {
+  const phase = useRace((state) => state.phase)
+  const paused = useRace((state) => state.paused)
+  if (phase !== 'ready' && phase !== 'running') return null
+
+  const touch =
+    typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
+
+  return (
+    <div
+      className={`rally-start ${phase}${paused ? ' paused' : ''}`}
+      role="status"
+      aria-live="polite"
+      aria-label={phase === 'running' ? 'Go' : 'Race starts in three lights'}
+    >
+      <span className="rally-start-rail" aria-hidden="true">
+        <i className="amber one" />
+        <i className="amber two" />
+        <i className="amber three" />
+        <b />
+        <i className="green" />
+      </span>
+      <span className="rally-start-cue">
+        {phase === 'running'
+          ? 'go'
+          : touch
+            ? 'hold the right side to raise the engine'
+            : 'hold ↑ to raise the engine'}
+      </span>
     </div>
   )
 }
@@ -543,31 +855,30 @@ function Pause({
       <div className="inner">
         <p className="rally-kicker">the road is holding still</p>
         <h1>Paused</h1>
-        <div className="rally-actions">
-          <button type="button" onClick={() => useRace.getState().resume()}>
-            back to it
-          </button>
-          {/*
-            Resumed first, then restarted.
-
-            The pause flag lives in the session and the road reads it every
-            frame; a new attempt that began while the world was still held
-            would come up stopped, with a countdown that never counts.
-          */}
-          <button
-            type="button"
-            className="quiet"
-            onClick={() => {
+        <RallyActions actions={[
+          {
+            label: 'back to it',
+            onChoose: () => useRace.getState().resume(),
+          },
+          {
+            label: 'from the top',
+            quiet: true,
+            onChoose: () => {
+              /*
+                The pause flag lives in the session and the road reads it every
+                frame; a new attempt begun while the world was still held would
+                come up stopped, with a countdown that never counts.
+              */
               useRace.getState().resume()
               onRestart()
-            }}
-          >
-            from the top
-          </button>
-          <button type="button" className="quiet" onClick={onLeave}>
-            leave the road
-          </button>
-        </div>
+            },
+          },
+          {
+            label: 'leave the road',
+            quiet: true,
+            onChoose: onLeave,
+          },
+        ]} />
         <p className="rally-note">escape puts you back on it</p>
       </div>
     </div>
@@ -622,6 +933,7 @@ function RunOver({
   fault,
   onDone,
   onAgain,
+  returnLabel,
 }: {
   run: RallyRun
   sealed: boolean
@@ -629,6 +941,7 @@ function RunOver({
   fault: string
   onDone(): void
   onAgain: (() => void) | null
+  returnLabel: string
 }) {
   return (
     <div className="rally-over">
@@ -637,21 +950,17 @@ function RunOver({
       <p className="rally-copy">
         {run.strikes > 0
           ? `${run.strikes} ${run.strikes === 1 ? 'time' : 'times'} the rock had you.`
-          : 'Clean through the Rootway.'}
+          : returnLabel.includes('moonwell') ? 'Clean across the Moonbreak.' : 'Clean through the Rootway.'}
         {run.driftMs > 2500 ? ` ${(run.driftMs / 1000).toFixed(1)} seconds sideways.` : ''}
       </p>
       {saving ? <p className="rally-note">keeping the tyre marks…</p> : null}
       {fault ? <p className="rally-fault">{fault}</p> : null}
-      <div className="rally-actions">
-        <button type="button" onClick={onDone} disabled={saving}>
-          return to the fire
-        </button>
-        {onAgain ? (
-          <button type="button" className="quiet" onClick={onAgain} disabled={saving}>
-            run it again
-          </button>
-        ) : null}
-      </div>
+      <RallyActions actions={[
+        { label: returnLabel, onChoose: onDone, disabled: saving },
+        ...(onAgain
+          ? [{ label: 'run it again', onChoose: onAgain, disabled: saving, quiet: true }]
+          : []),
+      ]} />
     </div>
   )
 }
@@ -664,6 +973,7 @@ function Briefing({
   foot,
   onPrimary,
   onLeave,
+  leaveLabel = 'back to the games',
 }: {
   kicker: string
   title: string
@@ -672,21 +982,38 @@ function Briefing({
   foot: string
   onPrimary(): void
   onLeave(): void
+  leaveLabel?: string
 }) {
+  const [selected, setSelected] = useMenuKeys(2, (index) => {
+    if (index === 0) onPrimary()
+    else onLeave()
+  })
+
   return (
     <div className="rally rally-centre">
       <p className="rally-kicker">{kicker}</p>
       <h1>{title}</h1>
       <p className="rally-copy">{copy}</p>
       <div className="rally-actions">
-        <button type="button" onClick={onPrimary}>
+        <button
+          type="button"
+          className={selected === 0 ? 'is-selected' : ''}
+          onFocus={() => setSelected(0)}
+          onClick={onPrimary}
+        >
           {primary}
         </button>
-        <button type="button" className="quiet" onClick={onLeave}>
-          back to the games
+        <button
+          type="button"
+          className={`quiet${selected === 1 ? ' is-selected' : ''}`}
+          onFocus={() => setSelected(1)}
+          onClick={onLeave}
+        >
+          {leaveLabel}
         </button>
       </div>
       <p className="rally-note">{foot}</p>
+      <p className="rally-menu-keys">↑ ↓ choose · enter confirm</p>
     </div>
   )
 }

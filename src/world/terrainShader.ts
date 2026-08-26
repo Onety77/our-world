@@ -73,4 +73,47 @@ vec2 tileAround(vec2 base, vec2 centre, float tile) {
   vec2 cell = floor((centre - base) / tile + 0.5) * tile;
   return base + cell;
 }
+
+/**
+ * How much of a plant to bother growing, given where the camera is looking.
+ *
+ * -----------------------------------------------------------------------------
+ * The meadow and the flowers are laid out in a disc that follows you around, so
+ * you are always standing in the middle of them — and you can only ever see
+ * about eighty degrees of a circle that goes all the way round. Better than
+ * half of every field has always been behind your head.
+ *
+ * They cannot be culled the ordinary way. Their world positions do not exist in
+ * any buffer: they are computed *here*, per frame, by wrapping a tile of blades
+ * around wherever the camera happens to be. There is nothing for a bounding box
+ * to hold on to.
+ *
+ * So they are culled where they are made. A blade behind you comes out of this
+ * with a height of zero, which collapses it to a line with no area, and the
+ * hardware throws it away before it shades a single pixel.
+ *
+ * **It is the same trick the rim already uses**, which is what makes it safe.
+ * The outer edge of the meadow has always faded to nothing rather than stopping
+ * at a line, for exactly the same reason and by exactly the same mechanism, and
+ * the two multiply together as one number. Nothing new can pop, because nothing
+ * new happens.
+ *
+ * The margins are deliberately generous. The screen is about forty degrees
+ * either side of straight ahead; this keeps everything at full height out to
+ * fifty-five, and does not reach zero until ninety. That is fifteen degrees of
+ * slack before the fade even begins — enough for the camera's idle sway, for a
+ * wide window, and for the corners of the frame, which reach further out than
+ * the middle does.
+ * -----------------------------------------------------------------------------
+ */
+float inTheView(vec2 at, vec2 eye, vec2 facing) {
+  vec2 away = at - eye;
+  float far = length(away);
+  // Straight underfoot there is no direction to be behind, and that is where
+  // the grass is most visible. Anything within a couple of metres stays.
+  if (far < 2.5) return 1.0;
+  float ahead = dot(away / far, facing);
+  // cos(90 degrees) = 0, cos(55 degrees) = 0.574.
+  return smoothstep(0.0, 0.574, ahead);
+}
 `

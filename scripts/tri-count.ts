@@ -17,6 +17,20 @@ import { growTree, speciesFor } from '../src/world/tree'
 import { groundHeight } from '../src/systems/terrain'
 import { HUB_WOOD } from '../src/world/hub/layout'
 
+/*
+  One thing this cannot tell you, and it matters more than any line in it.
+
+  These are the triangles the garden *builds*. They are not the triangles it
+  draws. Since the fields were cut into tiles with honest bounding volumes, the
+  frustum throws away everything behind and beside the camera before a vertex
+  is transformed — and since the meadow and the flowers are laid out around the
+  camera in the shader, they collapse anything behind you to nothing there too.
+
+  Measured in a browser with `?shot=1` and `window.__frame`, an open-air place
+  draws between a third and a half of what is listed below, and the Glasshouse
+  draws a sixth. Use this to see which *thing* is expensive; use `__frame` to
+  see what a frame actually costs.
+*/
 const rows: [string, number, string][] = []
 const add = (what: string, tris: number, note = '') => rows.push([what, tris, note])
 
@@ -47,6 +61,15 @@ const WOOD_TRIS = 5 * 2
 const LEAF_TRIS = 4
 /** What the hub's treeline asks for. See `leafDetail` in world/tree. */
 const HUB_LEAF_DETAIL = 0.34
+/**
+ * And how much of its branchwork it draws. See `woodDetail` in world/tree.
+ *
+ * This script reported the treeline at three hundred and fourteen thousand
+ * triangles for a while after that stopped being true, which is worse than not
+ * counting it at all: a number nobody checks is a number everybody trusts. The
+ * limbs are about a fifth of what they were.
+ */
+const HUB_WOOD_DETAIL = 0.3
 
 function woodCost(count: number, heights: [number, number], seed: string) {
   const rng = makeRng(seedFrom(seed))
@@ -59,6 +82,7 @@ function woodCost(count: number, heights: [number, number], seed: string) {
       species: speciesFor(rng),
       rng,
       leafDetail: HUB_LEAF_DETAIL,
+      woodDetail: HUB_WOOD_DETAIL,
     })
     wood += parts.wood.length
     leaves += parts.leaves.length

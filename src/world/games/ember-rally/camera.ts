@@ -47,7 +47,7 @@ import type { PerspectiveCamera } from 'three'
 import { Vector3 } from 'three'
 import { basisAt, roadPoint } from './geometry'
 import { TOP_SPEED, slipOf, speedOf, type CarState } from './physics'
-import { emptyRoad, roadAt, type RoadAt, type Track } from './track'
+import { emptyRoad, roadAtRoute, type RoadAt, type Track } from './track'
 
 const FOV_STILL = 60
 const FOV_FLAT_OUT = 82
@@ -138,10 +138,10 @@ export class ChaseCamera {
     if (INSPECT) {
       this.orbit += dt * 0.35
       const radius = 5.6
-      roadAt(track, car.s + Math.cos(this.orbit) * radius, this.road)
+      roadAtRoute(track, car.s + Math.cos(this.orbit) * radius, car.shortcut, this.road)
       roadPoint(this.road, Math.sin(this.orbit) * radius, 1.5, this.here, basisAt(this.road))
       camera.position.copy(this.here)
-      roadAt(track, car.s, this.road)
+      roadAtRoute(track, car.s, car.shortcut, this.road)
       roadPoint(this.road, car.n, 0.66, this.target, basisAt(this.road))
       camera.lookAt(this.target)
       if (camera.fov !== 34) {
@@ -204,7 +204,7 @@ export class ChaseCamera {
 
     // --- where it sits -------------------------------------------------------
     const behind = Math.max(0, car.s - this.back * (0.4 + engagement * 0.6))
-    roadAt(track, behind, this.road)
+    roadAtRoute(track, behind, car.shortcut, this.road)
     const basis = basisAt(this.road)
     roadPoint(this.road, this.lateral, this.lift, this.here, basis)
 
@@ -212,7 +212,7 @@ export class ChaseCamera {
     // Ahead of the car, and biased toward the racing line, so the corner opens
     // up before you arrive at it rather than after.
     const lookAhead = car.s + 11 + fast * 15
-    roadAt(track, lookAhead, this.road)
+    roadAtRoute(track, lookAhead, car.shortcut, this.road)
     const aimBasis = basisAt(this.road)
     const aimLateral = car.n * 0.45 + this.road.line * 0.4
     // Aimed higher on a phone, which pushes the car down the frame and gives

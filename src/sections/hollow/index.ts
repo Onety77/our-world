@@ -1,5 +1,5 @@
+import { later } from '@/systems/later'
 import type { SectionDefinition } from '../registry'
-import Hollow from './Hollow'
 
 export default {
   id: 'hollow',
@@ -15,5 +15,5 @@ export default {
     // seeming to move, and a tighter space amplifies the same parallax
     sway: 1.5,
   },
-  Scene: Hollow,
+  Scene: later(() => import('./Hollow')),
 } satisfies SectionDefinition

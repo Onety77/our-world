@@ -113,6 +113,43 @@ export interface TreeOptions {
    * 1 is every leaf. Leave it alone for anything you stand under.
    */
   leafDetail?: number
+  /**
+   * How much of the *wood* to actually draw, as a fraction.
+   *
+   * ---------------------------------------------------------------------------
+   * The leaves have had this dial for a long time and the branches never did,
+   * which turned out to be the single most expensive omission in the garden. A
+   * tree is a hundred and thirteen limb boxes and about two hundred and fifty
+   * leaf cards, and the limbs cost *more* than the leaves — ten triangles each
+   * against four. In the Glasshouse, where a hundred and thirty trees stand
+   * between twenty-two and sixty-four metres away, the branches alone were a
+   * hundred and forty-seven thousand triangles: more than the building, the
+   * glass, the flowers and the photographs put together, drawn at a distance
+   * where a branch is about one pixel wide.
+   *
+   * **Nothing here changes the shape of the tree.** That is the whole design of
+   * it, and it is why this is safe to turn a long way down:
+   *
+   *   1 to 0.7   every limb as two boxes with a bend partway along, which is
+   *              what a limb needs when you are standing under it
+   *   under 0.7  the same limb as *one* box from the same start to the same
+   *              end. The bend goes; the tree does not move at all — the tip
+   *              is computed exactly as before, so every child branch, every
+   *              leaf spray and every place a letter hangs is untouched
+   *   under 0.4  and the outermost ring of limbs is not drawn. They are the
+   *              thinnest ones and they are *inside* their own leaf spray, so
+   *              at any distance at all they were never visible in the first
+   *              place. Their children and their foliage still happen
+   *
+   * Which means a background wood can be a quarter of the wood it was, and the
+   * silhouette — the only thing you can resolve at sixty metres — is identical
+   * to the pixel.
+   *
+   * Left at 1 for anything you stand under. The Tree of Letters keeps every
+   * limb it ever had, and it must: a letter is keyed to a hang point by index.
+   * ---------------------------------------------------------------------------
+   */
+  woodDetail?: number
 }
 
 export interface TreeParts {
@@ -304,8 +341,13 @@ export function growTree({
   leafiness = 1,
   density = 1,
   leafDetail = 1,
+  woodDetail = 1,
 }: TreeOptions): TreeParts {
   const shape = SHAPE[species]
+  // See `woodDetail`. Both of these change what is *drawn* and neither changes
+  // where anything is, which is the property that makes them free.
+  const bendLimbs = woodDetail >= 0.7
+  const drawBarest = woodDetail >= 0.4
   const wood: FormInstance[] = []
   const leaves: FormInstance[] = []
   const hangs: [number, number, number][] = []
@@ -330,34 +372,71 @@ export function growTree({
     dir: Vec,
     length: number,
     radius: number,
+    depth: number,
   ): { tip: Vec; heading: Vec } {
     const half = length / 2
     // A limb that bends partway along reads as grown; a straight one reads as
     // a stick, and no amount of branching on top of sticks fixes that.
     const bent = turn(dir, range(rng, 0.04, 0.15), rng() * Math.PI * 2)
 
-    let cursor = from
-    for (const [d, r] of [
-      [dir, radius] as const,
-      [bent, radius * 0.86] as const,
-    ]) {
-      const { lean, rot } = orient(d)
+    /*
+      The rng is drawn from in the same order whatever the detail, so a wood at
+      a quarter of the wood is the *same wood* — same trunk, same splits, same
+      leaves, same places a letter would hang. Only the boxes differ. Anything
+      that consumed randomness conditionally here would give every tree in the
+      garden a different shape at every detail level, and the woods would stop
+      matching the one you walk under.
+    */
+    const tip: Vec = [
+      from[0] + (dir[0] + bent[0]) * half,
+      from[1] + (dir[1] + bent[1]) * half,
+      from[2] + (dir[2] + bent[2]) * half,
+    ]
+
+    // The outermost limbs live inside their own leaf spray. See `woodDetail`.
+    const show = drawBarest || depth < maxDepth
+
+    if (show && bendLimbs) {
+      let cursor = from
+      for (const [d, r] of [
+        [dir, radius] as const,
+        [bent, radius * 0.86] as const,
+      ]) {
+        const { lean, rot } = orient(d)
+        wood.push({
+          offset: [ox + cursor[0], oy + cursor[1], oz + cursor[2]],
+          scale: [r, half, r],
+          rot,
+          lean,
+          anchorY: cursor[1],
+          phase,
+          color: bark,
+        })
+        cursor = [
+          cursor[0] + d[0] * half,
+          cursor[1] + d[1] * half,
+          cursor[2] + d[2] * half,
+        ]
+      }
+    } else if (show) {
+      // One box, from the same place to the same place. Pointed along the
+      // straight line between them rather than along either half, so it lies
+      // where the pair lay.
+      const run: Vec = [tip[0] - from[0], tip[1] - from[1], tip[2] - from[2]]
+      const span = Math.hypot(run[0], run[1], run[2]) || length
+      const { lean, rot } = orient([run[0] / span, run[1] / span, run[2] / span])
       wood.push({
-        offset: [ox + cursor[0], oy + cursor[1], oz + cursor[2]],
-        scale: [r, half, r],
+        offset: [ox + from[0], oy + from[1], oz + from[2]],
+        scale: [radius * 0.93, span, radius * 0.93],
         rot,
         lean,
-        anchorY: cursor[1],
+        anchorY: from[1],
         phase,
         color: bark,
       })
-      cursor = [
-        cursor[0] + d[0] * half,
-        cursor[1] + d[1] * half,
-        cursor[2] + d[2] * half,
-      ]
     }
-    return { tip: cursor, heading: bent }
+
+    return { tip, heading: bent }
   }
 
   /**
@@ -442,7 +521,7 @@ export function growTree({
   }
 
   function grow(from: Vec, dir: Vec, length: number, radius: number, depth: number) {
-    const { tip, heading } = segment(from, dir, length, radius)
+    const { tip, heading } = segment(from, dir, length, radius, depth)
 
     if (depth >= maxDepth || length < height * 0.045) {
       foliage(tip, heading, length)
@@ -524,7 +603,8 @@ export function growTree({
     term *= ratio
   }
 
-  const bole = segment([0, 0, 0], lean, clear, radius)
+  // The trunk, always drawn whatever the detail — depth 0.
+  const bole = segment([0, 0, 0], lean, clear, radius, 0)
   grow(bole.tip, bole.heading, (height - clear) / chain, radius * 0.86, 0)
 
   return { wood, leaves, hangs }

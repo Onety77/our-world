@@ -30,24 +30,67 @@
 /**
  * Longest edge of the copy that gets stored, in pixels.
  *
- * Sixteen hundred is a deliberate middle. It is more than any phone screen
- * this will be looked at on — a 390-point display at three times is 1170 — so
- * a memory opened full-bleed is still sharper than the glass it is behind,
- * with room to have been cropped a little by the aspect of the frame. And it
- * is small enough that a picture costs a couple of hundred kilobytes rather
- * than four megabytes, which over a few hundred memories is the difference
- * between this costing nothing to keep and costing money every month.
+ * ---------------------------------------------------------------------------
+ * **Two thousand five hundred and sixty, and it was sixteen hundred.**
+ *
+ * Sixteen hundred is enough to *show* a picture and not enough to have kept
+ * one. It is barely above a phone screen at three times density, it has no
+ * room left for the crop the frame takes, and it would not print at postcard
+ * size. This is the only data in the garden that cannot be made again, so the
+ * copy that survives should be worth surviving.
+ *
+ * 2560 is 2.5× the pixels for about 2.5× the bytes — call it half a megabyte
+ * with the encoder below. A thousand memories is under a gigabyte, which is
+ * inside the free tier and would still be inside it at ten times the price.
+ * It prints at eight by ten, it is sharper than any screen either of you will
+ * own for a decade, and it is not so large that a phone on a bad connection
+ * gives up on it.
+ *
+ * It is deliberately *not* the original. A modern phone photograph is four to
+ * twelve megabytes of detail nobody will ever look at, and storing it would be
+ * paying rent on the parts of an image that only a sensor can see.
+ * ---------------------------------------------------------------------------
  */
-const LONGEST = 1600
+const LONGEST = 2560
 
 /**
- * JPEG quality for that copy.
+ * Encoder quality.
  *
  * 0.82 rather than 0.9. Above about 0.85 the file grows fast and the pictures
- * do not, and everything here is seen through firelight and fog at the size of
- * a phone.
+ * do not — and at 2560 across, an artefact is a quarter the size on screen
+ * that it was at 1600.
  */
 const QUALITY = 0.82
+
+/**
+ * WebP where it exists, JPEG where it does not.
+ *
+ * The single largest quality-per-byte decision available here: at matched
+ * visual quality WebP is roughly a quarter to a third smaller than JPEG, so
+ * this is how the picture gets *bigger* and the file gets *smaller* at the
+ * same time. Supported by every browser either of you could be holding —
+ * Safari since 14, everything else for years — and the check is a real encode
+ * rather than a version sniff, because a browser that lies about `toBlob`
+ * silently hands back a PNG three times the size.
+ */
+const ENCODER = (() => {
+  if (typeof document === 'undefined') return { type: 'image/jpeg', ext: 'jpg' }
+  try {
+    const probe = document.createElement('canvas')
+    probe.width = 1
+    probe.height = 1
+    const webp = probe.toDataURL('image/webp').startsWith('data:image/webp')
+    return webp
+      ? { type: 'image/webp', ext: 'webp' }
+      : { type: 'image/jpeg', ext: 'jpg' }
+  } catch {
+    return { type: 'image/jpeg', ext: 'jpg' }
+  }
+})()
+
+/** What the stored file is, so the seam can name and label it correctly. */
+export const PICTURE_TYPE = ENCODER.type
+export const PICTURE_EXT = ENCODER.ext
 
 /** The tiny inline preview is this many pixels on its longest edge. */
 const BLUR = 16
@@ -56,8 +99,11 @@ const BLUR = 16
 export const TOO_BIG = 40 * 1024 * 1024
 
 export interface Prepared {
-  /** The copy that gets stored. Always a JPEG, always freshly encoded. */
+  /** The copy that gets stored. Freshly encoded, WebP where the browser has it. */
   display: Blob
+  /** What it actually turned out to be — see the fallback in toBlob. */
+  type: string
+  ext: string
   width: number
   height: number
   /** '#rrggbb' — what the pane is when it is too far away to be worth loading. */
@@ -117,17 +163,65 @@ function canvasOf(width: number, height: number): [HTMLCanvasElement, CanvasRend
   return [canvas, ctx]
 }
 
-function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) =>
-        blob
-          ? resolve(blob)
-          : reject(new PictureTrouble('The picture could not be re-encoded.')),
-      'image/jpeg',
-      quality,
-    )
+/**
+ * Encode a canvas, and never wait forever for it.
+ *
+ * ---------------------------------------------------------------------------
+ * **`toBlob` settles in a callback, so a browser that never calls it hangs the
+ * whole thing with no error anywhere.** That is exactly what was happening
+ * intermittently under software rendering: the picker returned, the screen came
+ * up, and it sat on "getting it ready" indefinitely — no exception, no console
+ * line, nothing to report. For the one action in this world that cannot be
+ * retried by reloading, a silent hang is the worst possible failure.
+ *
+ * So every encode races a clock. If WebP does not answer, it falls back to
+ * JPEG, which every canvas in existence can produce; if *that* does not answer,
+ * it gives up with a sentence somebody can act on. The picture is worse in the
+ * fallback and it exists, which is the right way round.
+ * ---------------------------------------------------------------------------
+ */
+function encode(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+  within: number,
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (blob: Blob | null) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timer)
+      resolve(blob)
+    }
+    const timer = window.setTimeout(() => finish(null), within)
+    try {
+      canvas.toBlob((blob) => finish(blob), type, quality)
+    } catch {
+      finish(null)
+    }
   })
+}
+
+async function toBlob(
+  canvas: HTMLCanvasElement,
+  quality: number,
+): Promise<{ blob: Blob; type: string; ext: string }> {
+  const first = await encode(canvas, ENCODER.type, quality, 8_000)
+  if (first) return { blob: first, type: ENCODER.type, ext: ENCODER.ext }
+
+  if (ENCODER.type !== 'image/jpeg') {
+    const fallback = await encode(canvas, 'image/jpeg', quality, 8_000)
+    // Reported rather than assumed: the seam labels the object with this, and
+    // the Storage rules check the label. A fallback stored as WebP would be
+    // refused by the bucket, or served as the wrong type forever.
+    if (fallback) return { blob: fallback, type: 'image/jpeg', ext: 'jpg' }
+  }
+
+  throw new PictureTrouble(
+    'This browser would not finish saving that picture. Trying it again, or ' +
+      'from your phone, usually works.',
+  )
 }
 
 /** Two hex digits, always two. */
@@ -192,7 +286,7 @@ export async function prepare(file: Blob): Promise<Prepared> {
     const [big, ctx] = canvasOf(width, height)
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(source, 0, 0, width, height)
-    const display = await toBlob(big, QUALITY)
+    const encoded = await toBlob(big, QUALITY)
 
     // The sixteen-pixel version, drawn off the already-shrunk one so the
     // browser does the second reduction from something it has just drawn.
@@ -205,14 +299,38 @@ export async function prepare(file: Blob): Promise<Prepared> {
     const tint = averageOf(sctx.getImageData(0, 0, bw, bh).data)
     // Quality 0.7 on a sixteen-pixel image is a few hundred bytes and there is
     // nothing in it fine enough to lose.
-    const blur = small.toDataURL('image/jpeg', 0.7)
+    /*
+      The same encoder as the display copy, and this is not a preference.
+
+      This was hardcoded to JPEG on the reasoning that sixteen pixels is
+      sixteen pixels and universality beats forty bytes — which is a fine
+      argument and was hiding a hang. `toDataURL` is *synchronous*: a browser
+      that cannot produce the type asked for does not throw, it simply takes as
+      long as it takes, and in one headless Chromium a JPEG encode measured
+      here never came back at all while WebP finished in 223 milliseconds. The
+      whole "leave a memory" flow sat on "getting it ready" forever, with no
+      error to report, because of the *preview*.
+
+      `ENCODER` is chosen by actually encoding a pixel, so this asks for the
+      one format this browser has already proved it can write — and anything
+      that can write a format can read it back into an `<img>`.
+    */
+    const blur = small.toDataURL(ENCODER.type, 0.7)
 
     big.width = 0
     big.height = 0
     small.width = 0
     small.height = 0
 
-    return { display, width, height, tint, blur }
+    return {
+      display: encoded.blob,
+      type: encoded.type,
+      ext: encoded.ext,
+      width,
+      height,
+      tint,
+      blur,
+    }
   } finally {
     source.close()
   }

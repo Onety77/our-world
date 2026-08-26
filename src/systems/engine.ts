@@ -14,12 +14,11 @@
  * way to tell from the code that it would be.
  *
  * ---------------------------------------------------------------------------
- * **Ten voices, and what each one is for.**
+ * **The layers, and what each one is for.**
  *
- *   engine     four oscillators through a soft clipper and a filter that opens
- *              with load. Amplitude-modulated at half the firing rate, which
- *              is the whole difference between an engine and a synthesiser
- *              playing a note
+ *   engine     a finite-harmonic combustion wave through a soft clipper and a
+ *              filter that opens with load, supported by filtered combustion
+ *              texture and quiet mechanical detail
  *   exhaust    a separate low path, so the boom is not something the filter
  *              can take away from you at the top of a gear
  *   induction  a whine that rises with revs and load. The turbo
@@ -79,6 +78,8 @@ export interface EngineVoice {
   set(state: EngineState): void
   /** Stone, or rock. 0..1. */
   hit(force: number): void
+  /** Roots, leaves and old web brushing over the body. 0..1. */
+  brush(force: number): void
   /** A drift let go of cleanly. Tier 1 or 2. */
   chirp(tier: number): void
   /**
@@ -92,9 +93,45 @@ export interface EngineVoice {
   stop(): void
 }
 
-/** Idle, and the limiter, in Hz of firing fundamental. */
-const IDLE_HZ = 34
-const LIMIT_HZ = 232
+/**
+ * Inline-four firing frequency: RPM / 30. The physics runs from 1100 to 7200
+ * RPM, so these values are the actual engine rather than an unrelated musical
+ * range laid over it.
+ */
+const IDLE_HZ = 1100 / 30
+const LIMIT_HZ = 7200 / 30
+
+/** A rounded combustion wave: strong low orders, no sawtooth's endless fizz. */
+function combustionWave(ctx: BaseAudioContext, dark = false): PeriodicWave {
+  const harmonics = dark
+    ? [0, 1, 0.48, 0.24, 0.13, 0.08, 0.045, 0.025]
+    : [0, 1, 0.62, 0.4, 0.29, 0.21, 0.15, 0.105, 0.074, 0.052, 0.036, 0.025]
+  const real = new Float32Array(harmonics.length)
+  const imag = new Float32Array(harmonics.length)
+  for (let i = 1; i < harmonics.length; i++) {
+    // Small deterministic phase offsets stop every partial peaking together.
+    // That single shared peak is the brittle edge of a synthetic saw stack.
+    const phase = Math.sin(i * 2.17) * 0.36
+    real[i] = harmonics[i] * Math.sin(phase)
+    imag[i] = harmonics[i] * Math.cos(phase)
+  }
+  return ctx.createPeriodicWave(real, imag)
+}
+
+function softClip(drive: number): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(513)
+  const norm = Math.tanh(drive)
+  for (let i = 0; i < curve.length; i++) {
+    const x = (i / (curve.length - 1)) * 2 - 1
+    curve[i] = Math.tanh(x * drive) / norm
+  }
+  return curve
+}
+
+function smoothstep(from: number, to: number, value: number): number {
+  const t = Math.max(0, Math.min(1, (value - from) / (to - from)))
+  return t * t * (3 - 2 * t)
+}
 
 /**
  * A cave, as an impulse response.
@@ -137,9 +174,24 @@ export function createEngineVoice(
   grainSeconds: number,
   onStop: () => void,
 ): EngineVoice {
+  const bornAt = ctx.currentTime
+
+  // Keep the complete car inside a speaker-safe envelope. The previous voice
+  // could sum phase-aligned oscillators, sub-bass and collision transients
+  // directly into the master output.
   const out = ctx.createGain()
   out.gain.value = 0.0001
-  out.connect(master)
+  const speakerCut = ctx.createBiquadFilter()
+  speakerCut.type = 'highpass'
+  speakerCut.frequency.value = 42
+  speakerCut.Q.value = 0.7
+  const safety = ctx.createDynamicsCompressor()
+  safety.threshold.value = -13
+  safety.knee.value = 16
+  safety.ratio.value = 4
+  safety.attack.value = 0.004
+  safety.release.value = 0.16
+  out.connect(speakerCut).connect(safety).connect(master)
 
   /*
     The tunnel.
@@ -154,7 +206,7 @@ export function createEngineVoice(
   verbSend.gain.value = 0.26
   const verbReturn = ctx.createGain()
   verbReturn.gain.value = 0.9
-  verbSend.connect(verb).connect(verbReturn).connect(master)
+  verbSend.connect(verb).connect(verbReturn).connect(speakerCut)
 
   /** Everything mechanical goes to both. */
   const dry = ctx.createGain()
@@ -165,99 +217,113 @@ export function createEngineVoice(
   // --- the engine ------------------------------------------------------------
 
   const clip = ctx.createWaveShaper()
-  {
-    const curve = new Float32Array(257)
-    for (let i = 0; i <= 256; i++) {
-      const x = i / 128 - 1
-      curve[i] = Math.tanh(x * 2.6)
-    }
-    clip.curve = curve
-  }
+  // A little bark under load. Kept well below the old saw-stack distortion,
+  // but no longer so polished that the car sounds electrically perfect.
+  clip.curve = softClip(1.7)
+  clip.oversample = '2x'
 
   const tone = ctx.createBiquadFilter()
   tone.type = 'lowpass'
-  tone.frequency.value = 700
-  tone.Q.value = 1.6
+  tone.frequency.value = 620
+  tone.Q.value = 0.72
 
-  /*
-    The bark.
-
-    A resonant peak an octave or so over the fundamental, in parallel with the
-    lowpass. Rally cars are loud in a very specific band and this is it — take
-    it out and the engine is a well-behaved hum that never sounds like it is
-    working, however high the note goes.
-  */
-  const bark = ctx.createBiquadFilter()
-  bark.type = 'bandpass'
-  bark.frequency.value = 340
-  bark.Q.value = 2.6
-  const barkGain = ctx.createGain()
-  barkGain.gain.value = 0.5
+  const presence = ctx.createBiquadFilter()
+  presence.type = 'bandpass'
+  presence.frequency.value = 520
+  presence.Q.value = 1.05
+  const presenceGain = ctx.createGain()
+  presenceGain.gain.value = 0.0001
 
   const engineGain = ctx.createGain()
   engineGain.gain.value = 0.0001
 
-  const oscA = ctx.createOscillator()
-  oscA.type = 'sawtooth'
-  const oscB = ctx.createOscillator()
-  oscB.type = 'sawtooth'
-  oscB.detune.value = 13
-  // An octave down, square — this is the weight of it.
-  const oscC = ctx.createOscillator()
-  oscC.type = 'square'
-  // A fifth over, which makes the firing sound uneven and the engine angry.
-  const oscD = ctx.createOscillator()
-  oscD.type = 'sawtooth'
+  // One phase-coherent combustion voice replaces the detuned saw/square
+  // stack. Its finite harmonic series carries an inline-four's body without
+  // the beating, fizzy edge of several primitive oscillators fighting.
+  const combustion = ctx.createOscillator()
+  combustion.setPeriodicWave(combustionWave(ctx))
+  const combustionLevel = ctx.createGain()
+  combustionLevel.gain.value = 0.82
+  combustion.connect(combustionLevel).connect(tone).connect(clip).connect(engineGain)
+  combustion.connect(presence).connect(presenceGain).connect(engineGain)
 
-  const mixA = ctx.createGain()
-  mixA.gain.value = 0.5
-  const mixB = ctx.createGain()
-  mixB.gain.value = 0.42
-  const mixC = ctx.createGain()
-  // The voice is created at rest. Start without a 17 Hz square wave pushing
-  // the speaker cone; `set` restores its driven level as the car wakes up.
-  mixC.gain.value = 0.05
-  const mixD = ctx.createGain()
-  mixD.gain.value = 0.16
-
-  const stack = ctx.createGain()
-  oscA.connect(mixA).connect(stack)
-  oscB.connect(mixB).connect(stack)
-  oscC.connect(mixC).connect(stack)
-  oscD.connect(mixD).connect(stack)
-  stack.connect(tone)
-  stack.connect(bark).connect(barkGain).connect(engineGain)
-  tone.connect(clip).connect(engineGain)
+  // Valve-train detail is quiet at idle and arrives under load. It adds
+  // mechanical urgency without becoming a separate, piercing note.
+  const mechanical = ctx.createOscillator()
+  mechanical.type = 'triangle'
+  const mechanicalBand = ctx.createBiquadFilter()
+  mechanicalBand.type = 'bandpass'
+  mechanicalBand.frequency.value = 620
+  mechanicalBand.Q.value = 0.8
+  const mechanicalGain = ctx.createGain()
+  mechanicalGain.gain.value = 0.0001
+  mechanical.connect(mechanicalBand).connect(mechanicalGain).connect(engineGain)
   engineGain.connect(dry)
 
-  // the putter: a slow ring on the engine's own gain, at half the firing rate
-  const firing = ctx.createOscillator()
-  firing.type = 'sawtooth'
-  const firingDepth = ctx.createGain()
-  // Start inside the safe idle range. `set` opens this with the revs; the old
-  // driven value made the first half-second the harshest one.
-  firingDepth.gain.value = 0.0035
-  firing.connect(firingDepth).connect(engineGain.gain)
+  // Filtered combustion texture stops the held tone from sounding perfectly
+  // mathematical. Its gain is always positive: no phase inversion, no crack.
+  const textureSource = ctx.createBufferSource()
+  textureSource.buffer = grain
+  textureSource.loop = true
+  textureSource.playbackRate.value = 0.72
+  const textureBand = ctx.createBiquadFilter()
+  textureBand.type = 'bandpass'
+  textureBand.frequency.value = 260
+  textureBand.Q.value = 0.75
+  const textureGain = ctx.createGain()
+  textureGain.gain.value = 0.0001
+  textureSource.connect(textureBand).connect(textureGain).connect(engineGain)
 
   // --- the exhaust -----------------------------------------------------------
-  // Its own path, below the filter, so the bottom end never disappears.
+  // A darker copy of the firing order gives weight without a subsonic octave.
   const exhaust = ctx.createOscillator()
-  exhaust.type = 'triangle'
+  exhaust.setPeriodicWave(combustionWave(ctx, true))
   const exhaustShape = ctx.createBiquadFilter()
   exhaustShape.type = 'lowpass'
-  exhaustShape.frequency.value = 260
-  exhaustShape.Q.value = 3.2
+  exhaustShape.frequency.value = 230
+  exhaustShape.Q.value = 0.8
   const exhaustGain = ctx.createGain()
   exhaustGain.gain.value = 0.0001
   exhaust.connect(exhaustShape).connect(exhaustGain).connect(dry)
 
   // --- induction -------------------------------------------------------------
+  const intakeSource = ctx.createBufferSource()
+  intakeSource.buffer = grain
+  intakeSource.loop = true
+  intakeSource.playbackRate.value = 1.1
+  const intakeBand = ctx.createBiquadFilter()
+  intakeBand.type = 'bandpass'
+  intakeBand.frequency.value = 900
+  intakeBand.Q.value = 0.65
+  const intakeGain = ctx.createGain()
+  intakeGain.gain.value = 0.0001
+  intakeSource.connect(intakeBand).connect(intakeGain).connect(dry)
+
+  // Nitro is a column of fast air, not merely a higher engine note. This wide
+  // filtered rush sits behind the combustion voice for the whole burn; an
+  // onset thump below makes the exact instant the boost catches unmistakable.
+  const boostSource = ctx.createBufferSource()
+  boostSource.buffer = grain
+  boostSource.loop = true
+  boostSource.playbackRate.value = 1.85
+  const boostHigh = ctx.createBiquadFilter()
+  boostHigh.type = 'highpass'
+  boostHigh.frequency.value = 620
+  boostHigh.Q.value = 0.55
+  const boostLow = ctx.createBiquadFilter()
+  boostLow.type = 'lowpass'
+  boostLow.frequency.value = 4300
+  boostLow.Q.value = 0.72
+  const boostGain = ctx.createGain()
+  boostGain.gain.value = 0.0001
+  boostSource.connect(boostHigh).connect(boostLow).connect(boostGain).connect(dry)
+
   const turbo = ctx.createOscillator()
   turbo.type = 'sine'
   const turboBand = ctx.createBiquadFilter()
   turboBand.type = 'bandpass'
-  turboBand.frequency.value = 2600
-  turboBand.Q.value = 1.4
+  turboBand.frequency.value = 2200
+  turboBand.Q.value = 0.7
   const turboGain = ctx.createGain()
   turboGain.gain.value = 0.0001
   turbo.connect(turboBand).connect(turboGain).connect(dry)
@@ -334,24 +400,27 @@ export function createEngineVoice(
 
   // --- the brakes ------------------------------------------------------------
   const brakeCry = ctx.createOscillator()
-  brakeCry.type = 'sawtooth'
+  brakeCry.type = 'triangle'
   brakeCry.frequency.value = 1750
   const brakeBand = ctx.createBiquadFilter()
   brakeBand.type = 'bandpass'
   brakeBand.frequency.value = 1750
-  brakeBand.Q.value = 9
+  brakeBand.Q.value = 3.5
   const brakeGain = ctx.createGain()
   brakeGain.gain.value = 0.0001
   brakeCry.connect(brakeBand).connect(brakeGain).connect(dry)
 
-  for (const node of [oscA, oscB, oscC, oscD, firing, exhaust, turbo, brakeCry]) {
+  for (const node of [combustion, mechanical, exhaust, turbo, brakeCry]) {
     node.start()
   }
+  textureSource.start()
+  intakeSource.start()
+  boostSource.start()
   roadSource.start()
   windSource.start()
   front.source.start()
   rear.source.start()
-  out.gain.setTargetAtTime(1, ctx.currentTime, 0.35)
+  out.gain.setTargetAtTime(1, bornAt, 0.24)
 
   // --- state carried between frames -----------------------------------------
   let stopped = false
@@ -365,6 +434,7 @@ export function createEngineVoice(
   let pulseDue = 0
   let pressureAmount = 0
   let limiter = 0
+  let lastBoost = false
 
   /** A short shaped bite of noise. Everything percussive is one of these. */
   function noiseBurst(
@@ -401,9 +471,30 @@ export function createEngineVoice(
    * snapping.
    */
   function bang(now: number, size: number) {
-    noiseBurst(now, 0.06 + size * 0.2, 0.05 + size * 0.06, 'lowpass', 170 + size * 200, 1.1, 0.4)
-    noiseBurst(now, 0.03 + size * 0.13, 0.03, 'bandpass', 1500 + size * 2400, 1.6, 2.4)
+    noiseBurst(now, 0.04 + size * 0.13, 0.05 + size * 0.06, 'lowpass', 190 + size * 170, 0.9, 0.4)
+    noiseBurst(now, 0.018 + size * 0.07, 0.035, 'bandpass', 1300 + size * 1900, 1.2, 2.1)
   }
+
+  // Starter motor, compression strokes, then the first clean catch. This is
+  // deliberately a short one-shot scene rather than part of the looping idle.
+  const starter = ctx.createOscillator()
+  starter.type = 'triangle'
+  const starterFilter = ctx.createBiquadFilter()
+  starterFilter.type = 'bandpass'
+  starterFilter.frequency.value = 240
+  starterFilter.Q.value = 0.75
+  const starterGain = ctx.createGain()
+  starter.frequency.setValueAtTime(72, bornAt)
+  starter.frequency.exponentialRampToValueAtTime(112, bornAt + 0.56)
+  starterGain.gain.setValueAtTime(0.0001, bornAt)
+  starterGain.gain.exponentialRampToValueAtTime(0.026, bornAt + 0.045)
+  starterGain.gain.setValueAtTime(0.023, bornAt + 0.46)
+  starterGain.gain.exponentialRampToValueAtTime(0.0001, bornAt + 0.63)
+  starter.connect(starterFilter).connect(starterGain).connect(dry)
+  starter.start(bornAt)
+  starter.stop(bornAt + 0.66)
+  noiseBurst(bornAt + 0.05, 0.018, 0.5, 'bandpass', 540, 0.8, 0.78)
+  noiseBurst(bornAt + 0.49, 0.048, 0.11, 'lowpass', 210, 0.75, 0.52)
 
   return {
     set(state) {
@@ -420,30 +511,11 @@ export function createEngineVoice(
       /*
         --- standing still ------------------------------------------------
 
-        **An idle that does not move is the worst sound in the game.**
-
-        What was here was arithmetic: at rest, `revs` is zero and `throttle` is
-        zero, so the fundamental was exactly 34 Hz, the gain was exactly 0.06
-        and the firing modulation was exactly 0.42 deep at exactly 17 Hz — a
-        perfectly steady low tone with a perfectly steady chop on it, held for
-        as long as you sat there. Nothing in nature does that. It is a test
-        tone, and after ten seconds it is a headache.
-
-        Two things make a car sitting there sound like a car sitting there:
-
-        **It hunts.** A real idle wanders by a few tens of rpm — the mixture is
-        never quite right, the load is never quite constant, and the whole
-        thing breathes. Three slow wobbles at rates with no common multiple, so
-        the pattern never comes round twice.
-
-        **It is restrained.** A stationary car must not spend speaker travel on
-        sub-bass or sharp synthetic ticks. The octave-down oscillator and the
-        exhaust are pulled back, and the firing pulse is kept inside the tonal
-        body's gain instead of being allowed to invert it.
-
-        All of it is scaled by `idleness`, which is one only when the car is
-        genuinely sitting there and gone the moment there is throttle or revs.
-        The sound of the car being *driven* is untouched.
+        Idle should breathe, but it should never call attention to itself.
+        Three very small, incommensurate wobbles keep it alive without making
+        the pitch seasick. There is no sub-octave oscillator or bipolar gain
+        modulation here: both were spending speaker travel below a laptop's
+        useful range and were the source of the old crackling putter.
       */
       const idleness = (1 - Math.min(1, revs / 0.2)) * (1 - Math.min(1, throttle * 3))
       const hunt =
@@ -454,7 +526,7 @@ export function createEngineVoice(
       // --- the note ----------------------------------------------------------
       const fundamental =
         (IDLE_HZ + (LIMIT_HZ - IDLE_HZ) * revs) *
-        (1 + hunt * 0.045 * idleness) *
+        (1 + hunt * 0.012 * idleness) *
         (state.boost ? 1.04 : 1)
 
       /*
@@ -466,37 +538,27 @@ export function createEngineVoice(
         always gives itself away.
       */
       limiter = revs > 0.985 ? 1 : Math.max(0, limiter - dt * 6)
-      const bounce = limiter > 0 ? (Math.sin(now * 92) > 0 ? 1 : 0.62) : 1
+      // A shallow, rounded torque cut communicates the limiter. Hard binary
+      // gating was the abrasive buzz at maximum speed.
+      const bounce = 1 - limiter * (0.1 + (Math.sin(now * 58) * 0.5 + 0.5) * 0.12)
 
-      oscA.frequency.setTargetAtTime(fundamental, now, 0.03)
-      oscB.frequency.setTargetAtTime(fundamental * 1.004, now, 0.03)
-      oscC.frequency.setTargetAtTime(fundamental * 0.5, now, 0.045)
-      oscD.frequency.setTargetAtTime(fundamental * 1.5, now, 0.04)
-      firing.frequency.setTargetAtTime(fundamental * 0.5, now, 0.05)
-      // The putter is a low-revs thing. At the top of a gear it would be a
-      // tremolo, and no engine has one. This oscillator is connected directly
-      // to an AudioParam, so its value is an absolute gain — 0.42 here used to
-      // overwhelm the 0.02 idle body, invert it every cycle, and make laptop
-      // speakers crack at 17 Hz. At rest it is deliberately small and bounded.
-      const drivenPutter = 0.42 - revs * 0.3
-      const idlePutter = 0.0035 + hunt * 0.001
-      firingDepth.gain.setTargetAtTime(
-        drivenPutter * (1 - idleness) + idlePutter * idleness,
-        now,
-        0.12,
-      )
+      combustion.frequency.setTargetAtTime(fundamental, now, 0.028)
+      mechanical.frequency.setTargetAtTime(fundamental * 2, now, 0.035)
+      exhaust.frequency.setTargetAtTime(fundamental, now, 0.04)
 
-      // The octave-down square is useful weight on power. At idle it is a
-      // 17 Hz cone excursion, not a note, so leave only a trace of it.
-      mixC.gain.setTargetAtTime(0.5 - idleness * 0.45, now, 0.16)
+      presence.frequency.setTargetAtTime(fundamental * 2.25 + 170, now, 0.06)
+      presenceGain.gain.setTargetAtTime(0.035 + throttle * 0.2 + revs * 0.055, now, 0.08)
 
-      bark.frequency.setTargetAtTime(fundamental * 2.1, now, 0.05)
-      barkGain.gain.setTargetAtTime(0.22 - idleness * 0.17 + throttle * 0.5, now, 0.1)
+      mechanicalBand.frequency.setTargetAtTime(430 + revs * 1250, now, 0.08)
+      mechanicalGain.gain.setTargetAtTime(0.006 + revs * 0.022 + throttle * 0.03, now, 0.08)
+
+      textureBand.frequency.setTargetAtTime(180 + revs * 820 + throttle * 260, now, 0.07)
+      textureGain.gain.setTargetAtTime(0.018 + throttle * 0.066 + revs * 0.02, now, 0.08)
 
       tone.frequency.setTargetAtTime(
-        340 + revs * 1150 + throttle * 900 + (state.boost ? 800 : 0),
+        430 + revs * 1450 + throttle * 780 + (state.boost ? 380 : 0),
         now,
-        0.05,
+        0.065,
       )
 
       /*
@@ -512,38 +574,66 @@ export function createEngineVoice(
         Quiet enough to sit beneath the cave, with just enough slow movement
         that it never becomes a test tone.
       */
-      const body = 0.06 - idleness * (0.042 - hunt * 0.002)
-      const power = (body + throttle * 0.075) * (1 - cut * 0.88) * bounce
-      engineGain.gain.setTargetAtTime(power, now, 0.02)
+      const wake = smoothstep(0.3, 0.86, now - bornAt)
+      const body = 0.026 + revs * 0.018 + throttle * 0.056 + hunt * idleness * 0.0012
+      const power = body * (1 - cut * 0.82) * bounce * wake
+      engineGain.gain.setTargetAtTime(power, now, 0.025)
 
-      // Half the firing fundamental is useful boom while moving, but at idle
-      // it is subsonic. Raise it to the fundamental and almost remove its gain.
-      exhaust.frequency.setTargetAtTime(fundamental * (0.5 + idleness * 0.5), now, 0.04)
-      exhaustShape.frequency.setTargetAtTime(140 + revs * 220, now, 0.08)
+      exhaustShape.frequency.setTargetAtTime(180 + revs * 430 + throttle * 160, now, 0.08)
       exhaustGain.gain.setTargetAtTime(
-        (0.03 - idleness * (0.026 - hunt * 0.002) +
-          throttle * 0.05 +
-          (state.boost ? 0.03 : 0)) *
-          (1 - cut * 0.9),
+        (0.007 + revs * 0.017 + throttle * 0.041 + (state.boost ? 0.016 : 0)) *
+          (1 - cut * 0.86) * wake,
         now,
-        0.04,
+        0.055,
       )
 
       // --- induction ---------------------------------------------------------
       const spool = throttle * revs
-      turbo.frequency.setTargetAtTime(900 + revs * 4200 + (state.boost ? 900 : 0), now, 0.12)
-      turboGain.gain.setTargetAtTime(
-        (0.004 + spool * 0.026 + (state.boost ? 0.03 : 0)) * (1 - cut * 0.7),
+      intakeBand.frequency.setTargetAtTime(620 + revs * 1800 + throttle * 720, now, 0.1)
+      intakeGain.gain.setTargetAtTime(
+        (0.001 + throttle * (0.014 + revs * 0.038)) * (1 - cut * 0.75) * wake,
         now,
-        0.09,
+        0.07,
       )
+      turbo.frequency.setTargetAtTime(1050 + revs * 3100 + (state.boost ? 500 : 0), now, 0.14)
+      turboBand.frequency.setTargetAtTime(1200 + revs * 2800, now, 0.15)
+      turboGain.gain.setTargetAtTime(
+        (spool * 0.01 + (state.boost ? 0.016 : 0)) * (1 - cut * 0.7) * wake,
+        now,
+        0.12,
+      )
+      boostHigh.frequency.setTargetAtTime(580 + revs * 620, now, 0.08)
+      boostLow.frequency.setTargetAtTime(3300 + revs * 2200, now, 0.1)
+      boostGain.gain.setTargetAtTime(
+        state.boost ? (0.046 + throttle * 0.018) * wake : 0.0001,
+        now,
+        state.boost ? 0.035 : 0.11,
+      )
+      if (state.boost && !lastBoost) {
+        noiseBurst(now, 0.075, 0.16, 'bandpass', 820, 0.8, 0.85)
+        noiseBurst(now + 0.015, 0.042, 0.22, 'highpass', 1800, 0.55, 2.2, out)
+        const catchTone = ctx.createOscillator()
+        catchTone.type = 'sine'
+        const catchGain = ctx.createGain()
+        catchTone.frequency.setValueAtTime(126, now)
+        catchTone.frequency.exponentialRampToValueAtTime(62, now + 0.18)
+        catchGain.gain.setValueAtTime(0.0001, now)
+        catchGain.gain.exponentialRampToValueAtTime(0.055, now + 0.008)
+        catchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24)
+        catchTone.connect(catchGain).connect(dry)
+        catchTone.start(now)
+        catchTone.stop(now + 0.26)
+      } else if (!state.boost && lastBoost) {
+        noiseBurst(now, 0.026, 0.18, 'bandpass', 1250, 0.7, 1.6, out)
+      }
+      lastBoost = state.boost
 
       // --- road and wind -----------------------------------------------------
       const fast = Math.min(1.2, v / 44)
       roadBand.frequency.setTargetAtTime(240 + fast * 760 + state.rough * 420, now, 0.1)
       roadBand.Q.setTargetAtTime(state.rough > 0.5 ? 0.4 : 0.9, now, 0.2)
       roadGain.gain.setTargetAtTime(
-        0.007 + fast * fast * 0.06 + state.rough * fast * 0.085 + state.wet * fast * 0.03,
+        fast * fast * 0.055 + state.rough * fast * 0.075 + state.wet * fast * 0.025,
         now,
         0.1,
       )
@@ -551,7 +641,7 @@ export function createEngineVoice(
       windShape.frequency.setTargetAtTime(420 + fast * 900, now, 0.15)
       whistle.frequency.setTargetAtTime(1700 + state.tight * 1900, now, 0.2)
       whistle.gain.setTargetAtTime(state.tight * 11 * fast, now, 0.25)
-      windGain.gain.setTargetAtTime(0.004 + fast * fast * 0.085, now, 0.12)
+      windGain.gain.setTargetAtTime(fast * fast * 0.072, now, 0.12)
 
       // The tunnel closes around you as the rock does.
       verbSend.gain.setTargetAtTime(0.18 + state.tight * 0.3, now, 0.4)
@@ -576,19 +666,19 @@ export function createEngineVoice(
       front.band.frequency.setTargetAtTime(700 + frontScrub * 640, now, 0.06)
       front.cry.frequency.setTargetAtTime(1250 + frontScrub * 700, now, 0.08)
       front.cry.gain.setTargetAtTime(frontScrub * 13 * dry_, now, 0.1)
-      front.gain.gain.setTargetAtTime(0.0004 + frontScrub * fast * 0.085, now, 0.05)
+      front.gain.gain.setTargetAtTime(frontScrub * fast * 0.085, now, 0.05)
 
       rear.band.frequency.setTargetAtTime(540 + rearScrub * 520, now, 0.06)
       rear.cry.frequency.setTargetAtTime(980 + rearScrub * 620, now, 0.08)
       rear.cry.gain.setTargetAtTime(rearScrub * 15 * dry_, now, 0.1)
-      rear.gain.gain.setTargetAtTime(0.0005 + rearScrub * fast * 0.13, now, 0.05)
+      rear.gain.gain.setTargetAtTime(rearScrub * fast * 0.13, now, 0.05)
 
       // --- the brakes --------------------------------------------------------
       // Discs cry when they are hot and slow, not when you are flat out.
       const slow = Math.max(0, 1 - v / 26)
       brakeCry.frequency.setTargetAtTime(1500 + slow * 700, now, 0.2)
       brakeBand.frequency.setTargetAtTime(1500 + slow * 700, now, 0.2)
-      brakeGain.gain.setTargetAtTime(state.brake * slow * 0.02, now, 0.08)
+      brakeGain.gain.setTargetAtTime(state.brake * slow * 0.007, now, 0.08)
 
       // --- edges -------------------------------------------------------------
       if (state.gear !== lastGear) {
@@ -615,7 +705,7 @@ export function createEngineVoice(
           band.Q.value = 1.6
           const gain = ctx.createGain()
           gain.gain.setValueAtTime(0.0001, now)
-          gain.gain.exponentialRampToValueAtTime(0.07, now + 0.012)
+          gain.gain.exponentialRampToValueAtTime(0.045, now + 0.012)
           gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.26)
           hiss.connect(band).connect(gain).connect(dry)
           hiss.start(now, Math.random() * (grainSeconds - 0.4), 0.32)
@@ -635,11 +725,11 @@ export function createEngineVoice(
       lastThrottle = throttle
       if (overrun > 0) {
         overrun = Math.max(0, overrun - dt)
-        popDue -= dt * (7 + revs * 16)
+        popDue -= dt * (3.5 + revs * 7)
         while (popDue < 0) {
           popDue += 1
-          if (Math.random() < 0.22) bang(now, 0.35 + Math.random() * 0.3)
-          else noiseBurst(now, 0.02 + Math.random() * 0.05, 0.02, 'bandpass', 900 + Math.random() * 2400, 3, 1.4)
+          if (Math.random() < 0.16) bang(now, 0.25 + Math.random() * 0.24)
+          else noiseBurst(now, 0.012 + Math.random() * 0.025, 0.025, 'bandpass', 850 + Math.random() * 1700, 1.8, 1.3)
         }
       }
 
@@ -676,7 +766,7 @@ export function createEngineVoice(
           const osc = ctx.createOscillator()
           osc.type = 'sine'
           const gain = ctx.createGain()
-          const peak = 0.05 + pressureAmount * 0.16
+          const peak = 0.025 + pressureAmount * 0.075
           osc.frequency.setValueAtTime(96, now)
           osc.frequency.exponentialRampToValueAtTime(41, now + 0.16)
           gain.gain.setValueAtTime(0.0001, now)
@@ -698,6 +788,17 @@ export function createEngineVoice(
       noiseBurst(now, 0.05 + f * 0.24, 0.07 + f * 0.14, 'lowpass', 150 + f * 260, 1.2, 0.4)
       noiseBurst(now, 0.03 + f * 0.16, 0.09, 'bandpass', 1800 + f * 2200, 1.1, 2.2)
       noiseBurst(now, 0.02 + f * 0.1, 0.2, 'highpass', 3200, 0.7, 2.8, verbSend)
+    },
+
+    brush(force) {
+      if (stopped) return
+      const now = ctx.currentTime
+      const f = Math.min(1, Math.max(0, force))
+      // A dry tear first, then leaves and fibres whispering down the body. No
+      // low impact band: this must never sound like the car struck rock.
+      noiseBurst(now, 0.045 + f * 0.075, 0.11, 'bandpass', 720 + f * 520, 0.75, 0.8)
+      noiseBurst(now + 0.018, 0.026 + f * 0.055, 0.24, 'highpass', 1900, 0.48, 2.1)
+      noiseBurst(now + 0.07, 0.018 + f * 0.034, 0.34, 'bandpass', 1050, 0.5, 1.5, verbSend)
     },
 
     chirp(tier) {
@@ -736,8 +837,8 @@ export function createEngineVoice(
       // you hear at the end of a race is a click.
       window.setTimeout(() => {
         for (const node of [
-          oscA, oscB, oscC, oscD, firing, exhaust, turbo, brakeCry,
-          roadSource, windSource, front.source, rear.source,
+          combustion, mechanical, exhaust, turbo, brakeCry,
+          textureSource, intakeSource, boostSource, roadSource, windSource, front.source, rear.source,
         ]) {
           try {
             node.stop()

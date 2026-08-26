@@ -1,5 +1,5 @@
+import { later } from '@/systems/later'
 import type { SectionDefinition } from '../registry'
-import Stars from './Stars'
 
 export default {
   id: 'stars',
@@ -13,5 +13,5 @@ export default {
     target: [0, 3.6, -18],
     sway: 1.2,
   },
-  Scene: Stars,
+  Scene: later(() => import('./Stars')),
 } satisfies SectionDefinition

@@ -16,6 +16,9 @@ import { useFrame } from '@react-three/fiber'
 
 import { useWorldSlice } from '@/data/provider'
 import { potTotal } from '@/data/local'
+import { useData } from '@/data/provider'
+import { otherUser } from '@/data/types'
+import { isHersAndNew, useStoodIn } from '@/systems/newness'
 import { progressToward } from '@/data/money'
 import { useSceneEnv } from '@/world/SceneEnv'
 import {
@@ -54,7 +57,7 @@ const CHANNEL: RibbonOptions = {
   width: [11.5, 15.0],
 }
 
-function Water({ fullness }: { fullness: number }) {
+function Water({ fullness, carrying }: { fullness: number; carrying: boolean }) {
   const { palette } = useSceneEnv()
 
   const geometry = useMemo(() => ribbonGeometry(CHANNEL), [])
@@ -81,6 +84,10 @@ function Water({ fullness }: { fullness: number }) {
       spread is the dial — the number in the corner is only a footnote to it.
     */
     u.uWidth.value = 0.16 + shown.current * 0.84
+    // And whether it is carrying anything of hers you have not seen. Eased, so
+    // it comes up like light rather than switching on.
+    const want = carrying ? 1 : 0
+    u.uCarrying.value += (want - u.uCarrying.value) * (1 - Math.exp(-1.1 * delta))
   })
 
   // Just above the valley floor, rising with fullness. Tied to VALLEY.depth so
@@ -100,6 +107,21 @@ export default function River() {
   const { palette, grassCount } = useSceneEnv()
   const world = useWorldSlice((s) => s)
 
+  /*
+    Whether she put something in while you were away.
+
+    The pot's own total is in the corner, to the penny, and stays there — this
+    does not try to say how much. It says that the river is carrying something
+    you have not seen yet, which is a different sentence and the one a river
+    can actually make.
+  */
+  const since = useStoodIn('river')
+  const me = useData().me
+  const carrying = useMemo(
+    () => world.contributions.some((c) => isHersAndNew(c, otherUser(me), since)),
+    [world.contributions, me, since],
+  )
+
   const fullness = useMemo(() => {
     const total = potTotal(world)
     return riverFullness(progressToward(total, world.pot.goal?.amount ?? null), total.minor)
@@ -108,7 +130,7 @@ export default function River() {
   return (
     <>
       <Grass count={Math.round(grassCount * 0.55)} palette={palette} />
-      <Water fullness={fullness} />
+      <Water fullness={fullness} carrying={carrying} />
 
       {/* the banks: boulders down both sides, and scree behind them */}
       <Rocks

@@ -1,26 +1,27 @@
+import { later } from '@/systems/later'
 import type { GameDefinition } from '../types'
-import Scattergories from './Scattergories'
 import ScattergoriesEmblem from './emblem'
 
 /**
  * One person's twelve answers for one round of the match.
  *
  * ---------------------------------------------------------------------------
- * **A match is four round documents, and that is what keeps it sealed.**
+ * **A match is one round document per round, and that is what keeps it sealed.**
  *
  * The security rules withhold the *opening* move of a round — seq 0 — until
  * yours exists. Everything after seq 0 is open, because a turn-based game
  * where you cannot see her turn is not a game.
  *
- * Scattergories is the opposite shape: all four sheets have to be blind, or
+ * Scattergories is the opposite shape: every sheet has to be blind, or
  * the second person to play simply reads the first one's list and writes
  * around it, which is not a harder round, it is a different and much worse
- * game. Four sheets at seq 0..3 would leave three of the four readable.
+ * game. Two sheets at seq 0 and seq 1 would leave the second one readable.
  *
- * So each round of the match is its own round document — `…:2026-08-24` and
- * then `…-r2`, `-r3`, `-r4` — and every sheet is the seq 0 of one of them.
- * The existing seal covers all four with no rules change at all. See
- * `roundIdFor` in the component.
+ * So each round of the match is its own round document — `…:2026-08-24`, and
+ * then `…-r2` for the second, `-r3` for a third if `ROUNDS` ever grows — and
+ * every sheet is the seq 0 of one of them. The existing seal covers all of
+ * them with no rules change at all, at any number of rounds. See `roundIdFor`
+ * in the component.
  * ---------------------------------------------------------------------------
  */
 export interface Sheet {
@@ -58,7 +59,7 @@ export default {
     'One letter, twelve categories, three minutes. Whatever you both wrote scores nothing.',
   mode: 'async',
   cadence: 'daily',
-  duration: 'four rounds, three minutes each',
+  duration: 'two rounds, three minutes each',
   order: 2,
 
   invite: {
@@ -75,10 +76,10 @@ export default {
   },
 
   /**
-   * Over when the fourth round has been written by both of you.
+   * Over when the last round has been written by both of you.
    *
    * The generic rule — one move each — would settle the match the moment the
-   * first sheets landed, and pay the pollen out three rounds early.
+   * first sheets landed, and pay the pollen out before the match was played.
    */
   isSettled({ mine, theirs, solo }) {
     const sheets = (moves: ScatterMove[]) =>
@@ -89,5 +90,5 @@ export default {
   },
 
   Emblem: ScattergoriesEmblem,
-  Component: Scattergories,
+  Component: later(() => import('./Scattergories')),
 } satisfies GameDefinition<ScatterSetup, ScatterMove>

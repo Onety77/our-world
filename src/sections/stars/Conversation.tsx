@@ -30,6 +30,8 @@ import {
   ShaderMaterial,
 } from 'three'
 import { useData } from '@/data/provider'
+import { otherUser } from '@/data/types'
+import { isHersAndNew, useStoodIn } from '@/systems/newness'
 import { LIGHT_COLORS } from '@/systems/palette'
 import { SKY, seedOf, skySpot, stepWalk, useTalking, walk } from '@/systems/talking'
 
@@ -57,6 +59,7 @@ const VERT = /* glsl */ `
    * a year of it and the nights that mattered are the bright ones.
    */
   attribute float iHeart;
+  attribute float iFresh;
 
   uniform float uWalk;
   uniform float uTime;
@@ -67,6 +70,7 @@ const VERT = /* glsl */ `
   varying vec2 vUv;
   varying float vNear;
   varying float vHeart;
+  varying float vFresh;
 
   void main() {
     /*
@@ -107,7 +111,11 @@ const VERT = /* glsl */ `
     // alone; growing them with age keeps the far end of the conversation as a
     // field of stars rather than as dust. A hearted one is bigger again, and
     // breathes more slowly: a steadier light.
-    float size = breath * (1.0 + max(0.0, age) * 0.06) * (1.0 + iHeart * 0.24);
+    // And a light she left while you were away burns a little larger, and
+    // breathes on its own slow clock — see iFresh.
+    float waiting = iFresh * (0.55 + 0.45 * sin(uTime * 0.8 + iSeed * 6.28));
+    vFresh = waiting;
+    float size = breath * (1.0 + max(0.0, age) * 0.06) * (1.0 + iHeart * 0.24 + waiting * 0.5);
     vec3 offset = (right * position.x + up * position.y) * size;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(at + offset, 1.0);
@@ -117,7 +125,7 @@ const VERT = /* glsl */ `
 const FRAG = /* glsl */ `
   precision mediump float;
 
-  uniform float uUnread;
+  varying float vFresh;
 
   varying vec3 vColor;
   varying vec2 vUv;
@@ -139,7 +147,13 @@ const FRAG = /* glsl */ `
 
     // A heart is worth about a third again in brightness, on top of the size
     // and the colour it has already been given.
-    vec3 col = vColor * glow * (1.0 + uUnread * 0.25 + vHeart * 0.34);
+    /*
+      Brighter for a heart, brighter again for something she left while you
+      were away — and the second one *breathes*, because a steady light is a
+      light that has always been there and a moving one is somebody having been
+      here since. It goes out the next time you come; see useStoodIn.
+    */
+    vec3 col = vColor * glow * (1.0 + vHeart * 0.34 + vFresh * 0.9);
 
     gl_FragColor = vec4(col, glow);
     #include <tonemapping_fragment>
@@ -150,6 +164,15 @@ const FRAG = /* glsl */ `
 export function Conversation() {
   const me = useData().me
   const messages = useTalking((s) => s.messages)
+  /*
+    What she said here while you were away, frozen for this visit.
+
+    The count in the corner still says how many are unread — that is worth
+    knowing and a light cannot count. This says which ones, and where in the
+    sky they are.
+  */
+  const since = useStoodIn('stars')
+
 
   const geometry = useMemo(() => {
     const base = new PlaneGeometry(0.62, 0.62)
@@ -165,6 +188,16 @@ export function Conversation() {
     const age = new Float32Array(n)
     const seed = new Float32Array(n)
     const heart = new Float32Array(n)
+    /*
+      Which of these she said while you were away.
+
+      `uUnread` was declared in the shader and used in the fragment stage, and
+      nothing ever wrote to it — a hook somebody left and never came back to.
+      It was also the wrong shape: one number for the whole sky brightens every
+      light at once, including your own, which says "there is something new
+      here" and not *which*. Per light says which.
+    */
+    const fresh = new Float32Array(n)
     const c = new Color()
 
     const newest = messages.length - 1
@@ -182,6 +215,7 @@ export function Conversation() {
       seed[i] = s
       heart[i] =
         (m.hearts?.warm === undefined ? 0 : 1) + (m.hearts?.cool === undefined ? 0 : 1)
+      fresh[i] = isHersAndNew(m, otherUser(me), since) ? 1 : 0
     })
 
     geo.setAttribute('iOffset', new InstancedBufferAttribute(offset, 3))
@@ -189,12 +223,13 @@ export function Conversation() {
     geo.setAttribute('iAge', new InstancedBufferAttribute(age, 1))
     geo.setAttribute('iSeed', new InstancedBufferAttribute(seed, 1))
     geo.setAttribute('iHeart', new InstancedBufferAttribute(heart, 1))
+    geo.setAttribute('iFresh', new InstancedBufferAttribute(fresh, 1))
     geo.instanceCount = shown.length
     base.dispose()
     return geo
     // me is read for nothing here, but a re-key on it is harmless and keeps
     // the two-light colouring honest if the device ever changes hands
-  }, [messages, me])
+  }, [messages, me, since])
 
   useEffect(() => () => geometry.dispose(), [geometry])
 
@@ -211,7 +246,6 @@ export function Conversation() {
           uTime: { value: 0 },
           uRise: { value: SKY.rise },
           uRecede: { value: SKY.recede },
-          uUnread: { value: 0 },
         },
       }),
     [],

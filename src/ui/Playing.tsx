@@ -6,7 +6,7 @@
  * paying pollen once when it settles. The game itself only plays.
  */
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, Suspense } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { usePlaying } from '@/systems/playing'
@@ -141,19 +141,42 @@ function Runner({
   return (
     // Going in is going somewhere else — see the cave in styles.css.
     <div className="playing underground">
-      <Component
-        me={me}
-        theirName={profiles[them].name}
-        variant={race ? 'race' : null}
-        solo={solo}
-        round={handle.round}
-        setup={handle.setup}
-        mine={handle.mine}
-        theirs={handle.theirs}
-        play={handle.play}
-        award={award}
-        onLeave={onClose}
-      />
+      {/*
+        A game is fetched rather than shipped — see `later` — and this is the
+        one moment it could be felt.
+
+        In practice it never is: the Hollow warms a game the moment its card
+        becomes the selected one, which is at least a press and usually several
+        seconds before anybody enters it, and the whole lot is warmed anyway a
+        couple of seconds after the garden settles. This is for the cold
+        morning where neither of those has happened yet.
+
+        It says the same thing the room already says while a round is being
+        opened, in the same words, because from where you are standing there is
+        no difference between waiting for a game's code and waiting for its
+        round — and the interface should not invent one.
+      */}
+      <Suspense
+        fallback={
+          <div className="reader">
+            <p className="door-waiting">Lighting it.</p>
+          </div>
+        }
+      >
+        <Component
+          me={me}
+          theirName={profiles[them].name}
+          variant={race ? 'race' : null}
+          solo={solo}
+          round={handle.round}
+          setup={handle.setup}
+          mine={handle.mine}
+          theirs={handle.theirs}
+          play={handle.play}
+          award={award}
+          onLeave={onClose}
+        />
+      </Suspense>
     </div>
   )
 }

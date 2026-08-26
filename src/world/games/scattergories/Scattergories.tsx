@@ -3,15 +3,15 @@
  *
  * ---------------------------------------------------------------------------
  * **The real game, and the whole real game.** One letter, twelve categories,
- * three minutes, four rounds. Matching answers cancel, unique ones score, and
- * repeating the letter across a multi-word answer pays extra. What is
- * different is not the rules — it is that the two people playing are seven
- * timezones apart, so a round has to survive one of them being asleep.
+ * three minutes, and two of those to a match. Matching answers cancel, unique
+ * ones score, and repeating the letter across a multi-word answer pays extra.
+ * What is different is not the rules — it is that the two people playing are
+ * seven timezones apart, so a round has to survive one of them being asleep.
  *
- * **A match is four round documents.** Every sheet is the seq 0 of its own
- * round, which is what the security rules already seal, so hers stays
- * unreadable until yours lands — all four rounds, with no rules change. See
- * the note on `Sheet` in `index.ts`, and `roundIdFor` below.
+ * **A match is one round document per round.** Every sheet is the seq 0 of its
+ * own round, which is what the security rules already seal, so hers stays
+ * unreadable until yours lands — at any number of rounds, and with no rules
+ * change. See the note on `Sheet` in `index.ts`, and `roundIdFor` below.
  *
  * **Everything about a round is derived.** The letter and the twelve
  * categories come out of the match seed, so both phones deal an identical
@@ -63,14 +63,14 @@ interface RoundState {
 const empty: RoundState = { mine: null, theirs: null, myStrikes: [], theirStrikes: [] }
 
 /**
- * All four rounds of the match at once.
+ * Every round of the match at once.
  *
- * One effect for the lot rather than a hook per round: four hooks in a loop is
+ * One effect for the lot rather than a hook per round: a hook in a loop is
  * a rule nobody should have to reason about, and the component needs every
  * round's state to work out which one you are even on.
  *
  * Round one is handed in from the shell, already opened. The other three are
- * opened here, and **only when they are reached** — opening all four up front
+ * opened here, and **only when they are reached** — opening them all up front
  * would write three documents for a match somebody abandoned after one round.
  */
 function useMatch(key: string, upTo: number): RoundState[] {
@@ -392,6 +392,8 @@ function Writing({
     }
   })
   const [sending, setSending] = useState(false)
+  const [openingChoice, setOpeningChoice] = useState(0)
+  const [categoryAt, setCategoryAt] = useState(0)
   const fields = useRef<(HTMLInputElement | null)[]>([])
   const handed = useRef(false)
 
@@ -445,6 +447,51 @@ function Writing({
 
   const written = answers.filter((a) => a.trim() !== '').length
 
+  useEffect(() => {
+    if (!landed || glass.turned) return
+    const onKey = (event: KeyboardEvent) => {
+      const focused = document.activeElement
+      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
+      if (
+        event.key === 'ArrowDown' || event.key === 'ArrowRight' ||
+        event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+      ) {
+        event.preventDefault()
+        const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight'
+        setOpeningChoice(forward ? 1 : 0)
+      } else if (event.key === 'Enter' && !event.repeat) {
+        if (focused instanceof HTMLButtonElement) return
+        event.preventDefault()
+        if (openingChoice === 0) glass.turn()
+        else onLeave()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [glass.turned, glass.turn, landed, onLeave, openingChoice])
+
+  useEffect(() => {
+    if (!glass.turned) return
+    const onKey = (event: KeyboardEvent) => {
+      const focused = document.activeElement
+      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        const next = Math.max(
+          0,
+          Math.min(PER_SHEET - 1, categoryAt + (event.key === 'ArrowDown' ? 1 : -1)),
+        )
+        setCategoryAt(next)
+        fields.current[next]?.focus()
+      } else if (event.key === 'Enter' && !event.repeat) {
+        event.preventDefault()
+        fields.current[categoryAt]?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [categoryAt, glass.turned])
+
   if (!glass.turned) {
     return (
       <>
@@ -469,10 +516,20 @@ function Writing({
           </ol>
         </div>
         <div className={`duel-actions scatter-landed ${landed ? 'shown' : ''}`}>
-          <button type="button" className="put-back" onClick={glass.turn}>
+          <button
+            type="button"
+            className={`put-back${openingChoice === 0 ? ' is-selected' : ''}`}
+            onFocus={() => setOpeningChoice(0)}
+            onClick={glass.turn}
+          >
             turn the glass
           </button>
-          <button type="button" className="put-back quiet" onClick={onLeave}>
+          <button
+            type="button"
+            className={`put-back quiet${openingChoice === 1 ? ' is-selected' : ''}`}
+            onFocus={() => setOpeningChoice(1)}
+            onClick={onLeave}
+          >
             not now
           </button>
         </div>
@@ -510,6 +567,7 @@ function Writing({
                   autoCorrect="off"
                   spellCheck={false}
                   aria-label={category.text}
+                  onFocus={() => setCategoryAt(i)}
                   onChange={(e) => {
                     const next = [...answers]
                     next[i] = e.target.value
@@ -517,6 +575,16 @@ function Writing({
                     ambience.nib(0.35 + Math.random() * 0.2)
                   }}
                   onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      const next = Math.max(
+                        0,
+                        Math.min(PER_SHEET - 1, i + (e.key === 'ArrowDown' ? 1 : -1)),
+                      )
+                      setCategoryAt(next)
+                      fields.current[next]?.focus()
+                      return
+                    }
                     if (e.key !== 'Enter') return
                     e.preventDefault()
                     // Enter saves and moves on, so a whole sheet can be filled
@@ -838,10 +906,22 @@ function Over({
   return (
     <>
       <div className="game-head">
-        <p className="game-sub">four rounds · {match.map((r) => r.letter).join(' · ')}</p>
+        {/*
+          Counted, never spelled out.
+
+          This said "four rounds" twice in hardcoded words, so dropping the
+          match to two left the ending screen confidently announcing a game
+          nobody had played. The letters are already listed beside it, which is
+          the honest version of the same fact — and `ROUNDS` can move again
+          without leaving a lie behind.
+        */}
+        <p className="game-sub">
+          {match.length} {match.length === 1 ? 'round' : 'rounds'} ·{' '}
+          {match.map((r) => r.letter).join(' · ')}
+        </p>
         <h1 className="scatter-title">
           {solo
-            ? `${totals.mine} in four rounds.`
+            ? `${totals.mine} across ${match.length}.`
             : drawn
               ? 'Level, after all that.'
               : totals.mine > totals.theirs

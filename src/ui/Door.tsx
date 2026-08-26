@@ -11,7 +11,19 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { signIn } from '@/data/firebase'
+/*
+  Fetched when the button is pressed, not when the door is drawn.
+
+  The door is the first thing this app renders on the real backend, and it is a
+  headline, two fields and a button — it has no business waiting on an
+  authentication library. By the time anyone has typed an address and a
+  password the code has long since arrived; and if it has not, this is already
+  an await inside a submit handler that was always going to take a moment.
+
+  See the note on the same subject in `data/provider`.
+*/
+const signIn = (...args: Parameters<typeof import('@/data/firebase').signIn>) =>
+  import('@/data/firebase').then((m) => m.signIn(...args))
 import type { ConnectionState } from '@/data/provider'
 
 /**

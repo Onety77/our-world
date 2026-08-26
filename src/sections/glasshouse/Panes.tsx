@@ -27,6 +27,7 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { focus } from './aisle'
 import {
   AdditiveBlending,
   Color,
@@ -42,7 +43,7 @@ import {
 import type { Memory } from '@/data/types'
 import type { SkyPalette } from '@/systems/palette'
 import { ambientLightLevel } from '@/world/forms'
-import { HALF, paneAt, paneSize, slotFor } from './layout'
+import { cropFor, HALF, paneAt, paneSize, slotFor } from './layout'
 
 // ---------------------------------------------------------------------------
 // The glass
@@ -153,6 +154,8 @@ const FAR_FRAG = /* glsl */ `
   uniform float uFogFar;
   uniform float uLight;
   uniform float uSun;
+  /** How far the rest of the room has stepped back — see NEAR_FRAG. */
+  uniform float uHush;
 
   varying vec3 vTint;
   varying vec2 vUv;
@@ -166,6 +169,9 @@ const FAR_FRAG = /* glsl */ `
     // Newly formed glass is bright for a moment, the way something just made
     // is warm. Zero at rest, so this costs nothing for the whole building.
     col += vTint * (1.0 - vForm) * 0.5;
+
+    // See uHush. Dimmed rather than faded out, so the wall stays a wall.
+    col *= mix(1.0, 0.34, uHush);
 
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
     col = mix(col, uFogColor, fog);
@@ -227,6 +233,29 @@ const NEAR_FRAG = /* glsl */ `
   uniform float uWhose;
   /** 1 while the other one is looking at this same picture. */
   uniform float uTogether;
+  /**
+   * How much of the sampled picture to keep, about its centre.
+   *
+   * Every frame in the building is the same three by two, so a photograph that
+   * is not that shape is *cropped* rather than squeezed — a stretched face is
+   * worse than a cropped one by a distance that is not close. See cropFor in
+   * layout.ts.
+   */
+  uniform vec2 uCrop;
+  /** 0 by day, 1 after dark: the glass holds its own light. */
+  uniform float uNight;
+
+  /**
+   * How far the rest of the room has stepped back, 0..1.
+   *
+   * Opening a memory turns you square to one pane, and the wall it is on runs
+   * away either side of it full of other people's evenings — on a laptop the
+   * neighbour is half a metre away and just as bright, and the eye goes to it
+   * because it is *new*. So everything that is not the one you opened quietly
+   * loses its light while the turn happens. Not hidden and not greyed: the
+   * room is still there, it has just stopped talking.
+   */
+  uniform float uHush;
 
   varying vec2 vUv;
   varying float vDepth;
@@ -234,7 +263,8 @@ const NEAR_FRAG = /* glsl */ `
   ${GLASS_BODY}
 
   void main() {
-    vec3 picture = texture2D(uMap, vUv).rgb;
+    vec2 shot = (vUv - 0.5) * uCrop + 0.5;
+    vec3 picture = texture2D(uMap, shot).rgb;
 
     /*
       The preview is sixteen pixels stretched over two metres of glass, so it
@@ -245,10 +275,20 @@ const NEAR_FRAG = /* glsl */ `
     */
     vec3 shown = mix(mix(uTint, picture, 0.55), picture, uSharp);
 
-    // Through the glass: the picture takes the pane's own light and sheen, so
-    // it is behind something rather than printed on the wall.
+    /*
+      Through the glass — and glass takes light *away*.
+
+      This multiplied the photograph by the pane's own body, which peaks a
+      little over one, so every bright picture came out blown: a sunset went to
+      near-white with a band across it and the thing you had hung was a pale
+      rectangle. Real glass transmits perhaps three quarters and adds a sheen
+      on top, and that is what this is now — the picture is a shade darker than
+      the original and has a reflection on it, which is what "behind glass"
+      looks like. The one you *open* is untouched, which is where the true
+      colours belong.
+    */
     vec3 glass = glassBody(vec3(1.0), vUv, uLight, uSun, uSunColor);
-    vec3 col = shown * glass;
+    vec3 col = shown * glass * 0.74;
 
     /*
       The seal — a short bar of warm or cool along one edge.
@@ -277,6 +317,22 @@ const NEAR_FRAG = /* glsl */ `
     col += mix(cool, warm, uWhose) * other * uTogether * 1.6;
 
     col += uTint * (1.0 - uForm) * 0.5;
+
+    /*
+      After dark, the picture lights itself.
+
+      There is no sun behind the glass at night, so by the letter of it a pane
+      should be as black as the wall — and a building full of black rectangles
+      is not what anybody wants to walk into at eleven. The fiction is the one
+      the rest of this garden already keeps: what the two of you have kept
+      holds its own light. The landmark says it by glowing from the inside and
+      the pools on the floor say it by getting *stronger* after sunset, so the
+      glass itself saying it is the same sentence in the same voice.
+    */
+    col += shown * uNight * 0.85;
+
+    // See uHush. Dimmed rather than faded out, so the wall stays a wall.
+    col *= mix(1.0, 0.34, uHush);
 
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
     col = mix(col, uFogColor, fog);
@@ -375,6 +431,8 @@ function useLit(material: ShaderMaterial, palette: SkyPalette) {
     if (u.uFogFar) u.uFogFar.value = palette.fogFar
     if (u.uLight) u.uLight.value = ambientLightLevel(palette)
     if (u.uSun) u.uSun.value = Math.min(1, palette.sunIntensity)
+    // Off the sun rather than the clock — see the note in NEAR_FRAG.
+    if (u.uNight) u.uNight.value = Math.max(0, Math.min(1, 1 - palette.sunIntensity / 0.9))
   }, [material, palette])
 }
 
@@ -426,11 +484,15 @@ export function FarPanes({
     let i = 0
     for (let age = 0; age < memories.length; age++) {
       const memory = memories[age]
+      // Taken out of the glass: the wall's plain glazing has gone back into
+      // that panel and there is nothing here to draw. It keeps its age so
+      // every pane after it stays where it is. See `Memory.removed`.
+      if (memory.removed) continue
       if (hideIds.has(memory.id)) continue
       // The index in the *whole* list, never in the filtered one — a pane's
       // place in the building is its age and nothing else.
       const slot = slotFor(age)
-      const { w, h } = paneSize(memory.width, memory.height)
+      const { w, h } = paneSize()
       centre.set(paneAt(slot, h), i * 3)
       size[i * 2] = w
       size[i * 2 + 1] = h
@@ -469,6 +531,7 @@ export function FarPanes({
           uFogFar: { value: 150 },
           uLight: { value: 1 },
           uSun: { value: 1 },
+          uHush: { value: 0 },
         },
       }),
     [],
@@ -489,6 +552,16 @@ export function FarPanes({
   }, [formingId, drawn])
 
   useFrame((_, delta) => {
+    /*
+      The whole far wall steps back while a memory is open.
+
+      Every pane in this batch is by definition not the one being looked at —
+      opening one walks you to its bay, which makes it near — so there is no
+      exception to carve out and no attribute to update. One uniform, once a
+      frame, for the entire building.
+    */
+    material.uniforms.uHush.value = focus.open
+
     if (row.current < 0 || born.current >= 1) return
     born.current = Math.min(1, born.current + delta / 2.2)
     const attr = geometry.getAttribute('iFace') as InstancedBufferAttribute
@@ -516,6 +589,7 @@ export function NearPane({
   picture,
   together,
   forming,
+  opened,
 }: {
   memory: Memory
   index: number
@@ -524,10 +598,12 @@ export function NearPane({
   picture: string | null
   together: boolean
   forming: boolean
+  /** True for the one memory being looked at. The only pane that keeps its light. */
+  opened: boolean
 }) {
   const quad = useQuad()
   const slot = useMemo(() => slotFor(index), [index])
-  const size = useMemo(() => paneSize(memory.width, memory.height), [memory])
+  const size = useMemo(() => paneSize(), [memory])
 
   const material = useMemo(
     () =>
@@ -545,6 +621,9 @@ export function NearPane({
           uSharp: { value: 0 },
           uWhose: { value: memory.by === 'cool' ? 1 : 0 },
           uTogether: { value: 0 },
+          uCrop: { value: new Vector2(1, 1) },
+          uNight: { value: 0 },
+          uHush: { value: 0 },
           uFogColor: { value: new Color('#c3cebe') },
           uSunColor: { value: new Color('#fff2d8') },
           uFogNear: { value: 16 },
@@ -567,6 +646,7 @@ export function NearPane({
     ;(u.uSize.value as Vector2).set(size.w, size.h)
     ;(u.uFace.value as Vector2).set(slot.side, slot.tilt)
     ;(u.uTint.value as Color).set(memory.tint)
+    ;(u.uCrop.value as Vector2).set(...cropFor(memory.width, memory.height))
     u.uWhose.value = memory.by === 'cool' ? 1 : 0
   }, [material, slot, size, memory])
 
@@ -640,6 +720,9 @@ export function NearPane({
     // as a light coming up, not as a rectangle changing state.
     const want = together ? 1 : 0
     u.uTogether.value += (want - u.uTogether.value) * (1 - Math.exp(-4 * delta))
+
+    // Straight off the turn, so the room dims exactly as fast as it swings.
+    u.uHush.value = opened ? 0 : focus.open
   })
 
   return <mesh geometry={quad} material={material} frustumCulled={false} />
@@ -656,15 +739,35 @@ export function Pools({
   memories,
   palette,
   litId,
+  freshIds,
 }: {
   memories: Memory[]
   palette: SkyPalette
   /** The one that is open, whose colour fills the room. */
   litId: string | null
+  /**
+   * The ones she hung while you were away.
+   *
+   * The pools were already this room's way of saying a photograph is *there*.
+   * So a memory you have not seen does not need a new kind of mark — it does
+   * the thing the room already does, a little harder, and it breathes rather
+   * than sitting steady, because a steady light is furniture and a moving one
+   * is somebody having been here. Only ever hers, and only until you come.
+   * See useStoodIn.
+   */
+  freshIds: Set<string>
 }) {
   const quad = useQuad()
 
-  const geometry = useMemo(() => {
+  /*
+    One pool per pane that still has glass in it.
+
+    `lit` comes back alongside, mapping each *row of this buffer* to the memory
+    it belongs to — because once removed memories are skipped, the row index
+    and the memory's age are no longer the same number, and the frame loop
+    below has to brighten the right row when one is opened.
+  */
+  const { geometry, lit } = useMemo(() => {
     const geo = new InstancedBufferGeometry()
     geo.setAttribute('position', quad.attributes.position)
     geo.setAttribute('uv', quad.attributes.uv)
@@ -676,10 +779,15 @@ export function Pools({
     const tint = new Float32Array(n * 3)
     const power = new Float32Array(n)
     const c = new Color()
+    const lit: string[] = []
 
-    memories.forEach((memory, i) => {
-      const slot = slotFor(i)
-      const { w, h } = paneSize(memory.width, memory.height)
+    let i = 0
+    for (let age = 0; age < memories.length; age++) {
+      const memory = memories[age]
+      // Nothing in the glass, so nothing on the floor.
+      if (memory.removed) continue
+      const slot = slotFor(age)
+      const { w, h } = paneSize()
       const [, , poolZ] = paneAt(slot, h)
       /*
         The pool lands between the wall and the middle of the aisle, not
@@ -694,14 +802,16 @@ export function Pools({
       c.set(memory.tint)
       tint.set([c.r, c.g, c.b], i * 3)
       power[i] = 1.5
-    })
+      lit.push(memory.id)
+      i++
+    }
 
     geo.setAttribute('iAt', new InstancedBufferAttribute(at, 3))
     geo.setAttribute('iSpread', new InstancedBufferAttribute(spread, 2))
     geo.setAttribute('iTint', new InstancedBufferAttribute(tint, 3))
     geo.setAttribute('iPower', new InstancedBufferAttribute(power, 1))
-    geo.instanceCount = memories.length
-    return geo
+    geo.instanceCount = i
+    return { geometry: geo, lit }
   }, [memories, quad])
 
   useEffect(() => () => geometry.dispose(), [geometry])
@@ -745,25 +855,35 @@ export function Pools({
     material.uniforms.uNight.value = Math.max(0, Math.min(1, 1 - palette.sunIntensity / 0.9))
   }, [material, palette])
 
-  const lit = useRef(0)
+  const flood = useRef(0)
+  const clock = useRef(0)
 
   useFrame((_, delta) => {
     const attr = geometry.getAttribute('iPower') as InstancedBufferAttribute | undefined
     if (!attr) return
-    const index = litId ? memories.findIndex((m) => m.id === litId) : -1
-    const want = index >= 0 ? 1 : 0
-    const next = lit.current + (want - lit.current) * (1 - Math.exp(-3 * delta))
-    if (Math.abs(next - lit.current) < 0.0005 && want === 0) return
-    lit.current = next
-    for (let i = 0; i < memories.length; i++) {
+    clock.current += delta
+    // The row of the buffer, not the memory's age — see `lit` above.
+    const row = litId ? lit.indexOf(litId) : -1
+    const want = row >= 0 ? 1 : 0
+    const next = flood.current + (want - flood.current) * (1 - Math.exp(-3 * delta))
+    const breathing = freshIds.size > 0
+    if (!breathing && Math.abs(next - flood.current) < 0.0005 && want === 0) return
+    flood.current = next
+    // Slow: about seven seconds a breath. Anything quicker reads as a warning.
+    const breath = 0.62 + 0.38 * Math.sin(clock.current * 0.9)
+    for (let i = 0; i < lit.length; i++) {
       // The open one floods; the rest dim under it, so the room takes the
       // colour of the photograph you are looking at.
-      attr.setX(i, i === index ? 0.5 + lit.current * 2.6 : 0.5 * (1 - lit.current * 0.72))
+      const base = i === row ? 0.5 + flood.current * 2.6 : 0.5 * (1 - flood.current * 0.72)
+      // And one she left while you were away burns above all of it — but only
+      // until you have opened it, at which point it is simply a memory again.
+      const fresh = i !== row && freshIds.has(lit[i]) ? 1.5 * breath * (1 - flood.current * 0.5) : 0
+      attr.setX(i, base + fresh)
     }
     attr.needsUpdate = true
   })
 
-  if (memories.length === 0) return null
+  if (lit.length === 0) return null
   // No rotation on the mesh: POOL_VERT already lays the quad down, mapping the
   // plane's own y onto world z. Turning the mesh as well would stand every
   // pool back up on its edge.

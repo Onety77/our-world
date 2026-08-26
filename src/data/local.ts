@@ -29,16 +29,32 @@ import type {
   Memory,
   Track,
   Listening,
+  QuestionAnswer,
+  QuestionGarden,
+  QuestionRound,
+  VoiceLight,
+  VoiceLightGarden,
 } from './types'
-import { forgetPictures, pictureFromStore, putPicture } from './pictures'
+import { forgetPicture, forgetPictures, pictureFromStore, putPicture } from './pictures'
+import {
+  forgetVoiceClip,
+  forgetVoiceClips,
+  putVoiceClip,
+  voiceClipFromStore,
+} from './voiceClips'
 import { newId } from './ids'
 import { GROWN_DAYS, USER_IDS } from './types'
 import { localDateKey } from '@/systems/time'
+import {
+  QUESTION_DAY,
+  QUESTION_PROMPTS,
+  questionHash,
+} from './questionPrompts'
 
 const STORAGE_KEY = 'garden:v1'
 
 /** Presence is live-only — it never survives a reload, by design. */
-type Persisted = Omit<WorldState, 'presence'>
+type Persisted = Omit<WorldState, 'presence' | 'questions'>
 
 function seedProfile(id: UserId): Profile {
   const s = SEED[id]
@@ -108,6 +124,14 @@ function seedState(): WorldState {
     plants: [],
     decor: [],
     today: null,
+    questions: {
+      current: null,
+      history: [],
+      availableSeeds: 0,
+      queued: 0,
+      nextAt: null,
+      loaded: true,
+    },
     firstArrivalAt: null,
     lastReadAt: { warm: 0, cool: 0 },
   }
@@ -133,6 +157,9 @@ function load(): WorldState {
       // merged field-by-field for the same reason profiles are: somebody who
       // already has stored state predates this and would come back undefined
       lastReadAt: { ...fresh.lastReadAt, ...parsed.lastReadAt },
+      // Questions live beside the world and are reconstructed below. Never let
+      // an older saved world replace the new shape with `undefined`.
+      questions: fresh.questions,
     }
   } catch {
     return fresh
@@ -159,6 +186,81 @@ export interface LocalDataLayer extends DataLayer {
 const LISTENING_KEY = 'garden:listening:v1'
 const TRACKS_KEY = 'garden:tracks:v1'
 const MESSAGES_KEY = 'garden:messages:v1'
+const QUESTIONS_KEY = 'garden:questions:v1'
+const VOICE_LIGHTS_KEY = 'garden:voice-lights:v1'
+const VOICE_LIGHT_LIMIT_KEY = 'garden:voice-light-limit:v1'
+
+interface StoredQuestionSeed {
+  id: string
+  by: UserId
+  prompt: string
+  contributionId: string | null
+  availableAfter: number
+  plantedAt: number
+  usedAt: number | null
+}
+
+interface StoredQuestionRound extends Omit<QuestionRound, 'answers'> {
+  answers: Partial<Record<UserId, QuestionAnswer>>
+}
+
+interface StoredQuestions {
+  rounds: StoredQuestionRound[]
+  seeds: StoredQuestionSeed[]
+}
+
+function loadQuestions(): StoredQuestions {
+  if (typeof localStorage === 'undefined') return { rounds: [], seeds: [] }
+  try {
+    const raw = JSON.parse(localStorage.getItem(QUESTIONS_KEY) ?? 'null') as
+      | Partial<StoredQuestions>
+      | null
+    return {
+      rounds: Array.isArray(raw?.rounds) ? raw.rounds : [],
+      seeds: Array.isArray(raw?.seeds) ? raw.seeds : [],
+    }
+  } catch {
+    return { rounds: [], seeds: [] }
+  }
+}
+
+function questionView(
+  stored: StoredQuestions,
+  state: WorldState,
+  me: UserId,
+): QuestionGarden {
+  const spent = new Set(
+    stored.seeds
+      .filter((seed) => seed.by === me && seed.contributionId)
+      .map((seed) => seed.contributionId as string),
+  )
+  const availableSeeds = state.contributions.filter(
+    (entry) => entry.by === me && entry.inPotCurrency.minor > 0 && !spent.has(entry.id),
+  ).length
+
+  const rounds = stored.rounds
+    .toSorted((a, b) => a.openedAt - b.openedAt)
+    .map((round): QuestionRound => {
+      const both = round.answered.warm && round.answered.cool
+      const answers: QuestionRound['answers'] = {}
+      if (round.answers[me]) answers[me] = round.answers[me]
+      if (both) {
+        if (round.answers.warm) answers.warm = round.answers.warm
+        if (round.answers.cool) answers.cool = round.answers.cool
+      }
+      return { ...round, answers }
+    })
+  const current = rounds.at(-1) ?? null
+
+  return {
+    current,
+    history: rounds.filter((round) => round.completedAt !== null),
+    availableSeeds,
+    queued: stored.seeds.filter((seed) => seed.by === me && seed.usedAt === null).length,
+    nextAt: current?.completedAt ? current.openedAt + QUESTION_DAY : null,
+    loaded: true,
+  }
+}
 
 /**
  * The music, and where it is.
@@ -294,6 +396,22 @@ function loadMessages(): Message[] {
   }
 }
 
+function loadVoiceLights(): VoiceLight[] {
+  if (typeof localStorage === 'undefined') return []
+  try {
+    const raw = JSON.parse(localStorage.getItem(VOICE_LIGHTS_KEY) ?? '[]')
+    return Array.isArray(raw) ? (raw as VoiceLight[]) : []
+  } catch {
+    return []
+  }
+}
+
+function loadVoiceLightLimit(): number {
+  if (typeof localStorage === 'undefined') return 3
+  const value = Number(localStorage.getItem(VOICE_LIGHT_LIMIT_KEY) ?? 3)
+  return Number.isFinite(value) ? Math.max(1, Math.min(12, Math.round(value))) : 3
+}
+
 /**
  * Rounds live beside the world rather than in it.
  *
@@ -355,6 +473,8 @@ function append(stored: StoredRound, by: UserId, data: unknown): StoredRound {
 
 export function createLocalDataLayer(me: UserId): LocalDataLayer {
   let state = load()
+  let questions = loadQuestions()
+  state = { ...state, questions: questionView(questions, state, me) }
   const listeners = new Set<(s: WorldState) => void>()
 
   let rounds = loadRounds()
@@ -391,8 +511,44 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
     }
   }
 
+  function saveQuestions() {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(QUESTIONS_KEY, JSON.stringify(questions))
+    } catch {
+      /* storage full; the ritual still works until this tab closes */
+    }
+  }
+
+  function settleQuestions() {
+    saveQuestions()
+    commit({ ...state, questions: questionView(questions, state, me) })
+  }
+
   function tellMessageWatchers() {
     for (const w of messageWatchers) w.listener(messages.slice(-w.limit))
+  }
+
+  let voiceLights = loadVoiceLights()
+  let voiceLightLimit = loadVoiceLightLimit()
+  const voiceLightWatchers = new Set<(garden: VoiceLightGarden) => void>()
+
+  function voiceGarden(): VoiceLightGarden {
+    return {
+      lights: voiceLights.filter((light) => light.slot < voiceLightLimit).sort((a, b) => a.at - b.at),
+      limit: voiceLightLimit,
+    }
+  }
+
+  function tellVoiceLightWatchers() {
+    const garden = voiceGarden()
+    for (const watcher of voiceLightWatchers) watcher(garden)
+  }
+
+  function saveVoiceLights() {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(VOICE_LIGHTS_KEY, JSON.stringify(voiceLights))
+    localStorage.setItem(VOICE_LIGHT_LIMIT_KEY, String(voiceLightLimit))
   }
 
   let memories = loadMemories()
@@ -437,7 +593,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
   function persist() {
     if (typeof localStorage === 'undefined') return
     try {
-      const { presence: _presence, ...rest } = state
+      const { presence: _presence, questions: _questions, ...rest } = state
       localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
     } catch {
       // storage full or blocked; the garden still works, it just forgets
@@ -587,11 +743,137 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         ...(note ? { note } : {}),
         at: Date.now(),
       }
-      commit({ ...state, contributions: [...state.contributions, entry] })
+      const next = { ...state, contributions: [...state.contributions, entry] }
+      commit({ ...next, questions: questionView(questions, next, me) })
     },
 
     async setPotGoal(goal: Pot['goal']) {
       commit({ ...state, pot: { ...state.pot, goal } })
+    },
+
+    // ---- the question vine ------------------------------------------------
+
+    async ensureQuestion() {
+      const now = Date.now()
+      const current = questions.rounds.toSorted((a, b) => a.openedAt - b.openedAt).at(-1)
+
+      // One question at a time, and never more than one in a rolling day. A
+      // late answer creates no backlog: the next question simply waits here.
+      if (current) {
+        const both = current.answered.warm && current.answered.cool
+        if (!both || now < current.openedAt + QUESTION_DAY) return
+      }
+
+      const usedPrompts = new Set(questions.rounds.map((round) => round.prompt))
+      const eligible = questions.seeds.filter(
+        (seed) => seed.by === me && seed.usedAt === null && seed.availableAfter <= now,
+      )
+      const ordinal = questions.rounds.length
+      const roll = questionHash(`${Math.floor(now / QUESTION_DAY)}:${ordinal}:${me}`)
+      // Roughly one planted question in three, when this person's device is
+      // the one that opens the new day. Otherwise the edited house pool leads.
+      const planted = eligible.length > 0 && roll % 3 === 0
+        ? eligible[roll % eligible.length]
+        : null
+
+      let prompt = planted?.prompt ?? ''
+      if (!prompt) {
+        const unused = QUESTION_PROMPTS.filter((candidate) => !usedPrompts.has(candidate))
+        const pool = unused.length > 0 ? unused : [...QUESTION_PROMPTS]
+        prompt = pool[questionHash(`tree:${ordinal}`) % pool.length]
+      }
+
+      const round: StoredQuestionRound = {
+        id: `question-${Math.floor(now / QUESTION_DAY)}`,
+        prompt,
+        openedAt: now,
+        completedAt: null,
+        answered: { warm: false, cool: false },
+        answers: {},
+      }
+      questions = {
+        rounds: [...questions.rounds, round],
+        seeds: questions.seeds.map((seed) =>
+          seed.id === planted?.id ? { ...seed, usedAt: now } : seed,
+        ),
+      }
+      settleQuestions()
+    },
+
+    async answerQuestion(roundId, body) {
+      const text = body.trim()
+      if (text === '') return
+      const now = Date.now()
+      questions = {
+        ...questions,
+        rounds: questions.rounds.map((round) => {
+          if (round.id !== roundId || round.answered[me]) return round
+          const answered = { ...round.answered, [me]: true }
+          return {
+            ...round,
+            answered,
+            completedAt: answered.warm && answered.cool ? now : null,
+            answers: { ...round.answers, [me]: { by: me, body: text, at: now } },
+          }
+        }),
+      }
+      settleQuestions()
+    },
+
+    async plantQuestion(prompt) {
+      const text = prompt.trim()
+      if (text === '') return
+      const spent = new Set(
+        questions.seeds
+          .filter((seed) => seed.by === me && seed.contributionId)
+          .map((seed) => seed.contributionId as string),
+      )
+      const contribution = state.contributions.find(
+        (entry) => entry.by === me && entry.inPotCurrency.minor > 0 && !spent.has(entry.id),
+      )
+      if (!contribution) throw new Error('There is no question seed waiting to be planted.')
+      const plantedAt = Date.now()
+      const delayDays = 2 + (questionHash(contribution.id) % 6)
+      questions = {
+        ...questions,
+        seeds: [
+          ...questions.seeds,
+          {
+            id: contribution.id,
+            by: me,
+            prompt: text,
+            contributionId: contribution.id,
+            plantedAt,
+            availableAfter: plantedAt + delayDays * QUESTION_DAY,
+            usedAt: null,
+          },
+        ],
+      }
+      settleQuestions()
+    },
+
+    async plantAdminQuestion(prompt) {
+      const text = prompt.trim()
+      if (text === '') return
+      if (me !== 'warm') throw new Error('The control-room question pool belongs to warm.')
+      const plantedAt = Date.now()
+      questions = {
+        ...questions,
+        seeds: [
+          ...questions.seeds,
+          {
+            id: `admin-${newId()}`,
+            by: me,
+            prompt: text,
+            contributionId: null,
+            plantedAt,
+            // Admin prompts still do not jump straight to the front.
+            availableAfter: plantedAt + QUESTION_DAY,
+            usedAt: null,
+          },
+        ],
+      }
+      settleQuestions()
     },
 
     async addPollen(amount) {
@@ -681,7 +963,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         wants folders, IndexedDB wants a flat key — without anything above the
         seam knowing or caring which.
       */
-      const path = `memories/${id}.jpg`
+      const path = `memories/${id}.${input.ext}`
       // The picture first. If this throws, nothing is written, and the failure
       // is a memory that was never hung rather than a pane with a hole in it.
       await putPicture(path, input.display)
@@ -717,6 +999,39 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         }
         return { ...m, theirs: { by: me, body: text, at: Date.now() } }
       })
+      saveMemories()
+      tellMemoryWatchers()
+    },
+
+    async removeMemory(id) {
+      const memory = memories.find((m) => m.id === id)
+      if (!memory || memory.removed) return
+      // Yours only. Enforced at the seam as well as in the interface, because
+      // the seam is the part both layers share and the rules mirror.
+      if (memory.by !== me) return
+
+      // The picture first. If this throws, the document is untouched and the
+      // memory is still whole — the reverse would leave a pane pointing at a
+      // file that is gone, which is the one state this place must not have.
+      await forgetPicture(memory.path)
+
+      memories = memories.map((m) =>
+        m.id !== id
+          ? m
+          : ({
+              // Everything that was *in* the memory goes. What stays is its
+              // number, which is the only reason the document survives at all.
+              id: m.id,
+              by: m.by,
+              at: m.at,
+              width: m.width,
+              height: m.height,
+              tint: '#000000',
+              blur: '',
+              path: '',
+              removed: { by: me, at: Date.now() },
+            } satisfies Memory),
+      )
       saveMemories()
       tellMemoryWatchers()
     },
@@ -771,6 +1086,57 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       commit({ ...state, lastReadAt: { ...state.lastReadAt, [me]: Date.now() } })
     },
 
+    watchVoiceLights(listener) {
+      voiceLightWatchers.add(listener)
+      listener(voiceGarden())
+      return () => voiceLightWatchers.delete(listener)
+    },
+
+    async leaveVoiceLight({ slot, audio, mime, ext, duration, waveform }) {
+      const place = Math.round(slot)
+      if (place < 0 || place >= voiceLightLimit) throw new Error('That voice-light place does not exist.')
+      if (duration <= 0 || duration > 30.5) throw new Error('A voice-light can be at most thirty seconds.')
+      const id = `${me}-${place}`
+      const previous = voiceLights.find((light) => light.id === id)
+      const path = `${me}/${newId()}.${ext.replace(/[^a-z0-9]/gi, '') || 'webm'}`
+      await putVoiceClip(path, audio)
+      const light: VoiceLight = {
+        id,
+        by: me,
+        slot: place,
+        at: Date.now(),
+        duration,
+        path,
+        mime,
+        waveform: waveform.slice(0, 48).map((value) => Math.max(0, Math.min(1, value))),
+      }
+      voiceLights = [...voiceLights.filter((item) => item.id !== id), light]
+      saveVoiceLights()
+      tellVoiceLightWatchers()
+      if (previous && previous.path !== path) await forgetVoiceClip(previous.path).catch(() => {})
+      return light
+    },
+
+    async removeVoiceLight(slot) {
+      const id = `${me}-${Math.round(slot)}`
+      const existing = voiceLights.find((light) => light.id === id)
+      if (!existing) return
+      await forgetVoiceClip(existing.path)
+      voiceLights = voiceLights.filter((light) => light.id !== id)
+      saveVoiceLights()
+      tellVoiceLightWatchers()
+    },
+
+    voiceLightUrl(light) {
+      return voiceClipFromStore(light.path)
+    },
+
+    async setVoiceLightLimit(limit) {
+      voiceLightLimit = Math.max(1, Math.min(12, Math.round(limit)))
+      saveVoiceLights()
+      tellVoiceLightWatchers()
+    },
+
     sayAs(id, body) {
       const text = body.trim()
       if (text === '') return
@@ -798,6 +1164,9 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         localStorage.removeItem(MEMORIES_KEY)
         localStorage.removeItem(LISTENING_KEY)
         localStorage.removeItem(TRACKS_KEY)
+        localStorage.removeItem(QUESTIONS_KEY)
+        localStorage.removeItem(VOICE_LIGHTS_KEY)
+        localStorage.removeItem(VOICE_LIGHT_LIMIT_KEY)
       } catch {
         /* ignore */
       }
@@ -812,11 +1181,17 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       // nothing pointing at it. Fire and forget: "start again" must not wait
       // on a database, and a failure here leaks bytes rather than data.
       void forgetPictures()
+      void forgetVoiceClips()
+      voiceLights = []
+      voiceLightLimit = 3
+      tellVoiceLightWatchers()
       tracks = seedTracks()
       for (const w of trackWatchers) w(tracks)
       listening = loadListening()
       for (const w of listeningWatchers) w(listening)
-      commit(seedState(), { save: false })
+      questions = { rounds: [], seeds: [] }
+      const fresh = seedState()
+      commit({ ...fresh, questions: questionView(questions, fresh, me) }, { save: false })
     },
   }
 }

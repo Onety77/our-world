@@ -241,8 +241,36 @@ export interface Memory {
    * Where the display copy lives. Opaque above the seam — a storage path in
    * the real layer, an IndexedDB key in the mock — and never a URL, because a
    * URL from a private bucket expires and a stored one would rot.
+   *
+   * Empty once the memory has been taken out — see `removed`.
    */
   path: string
+
+  /**
+   * Taken out of the glass, by the one who hung it.
+   *
+   * ---------------------------------------------------------------------------
+   * **The picture is really gone. The document is not, and cannot be.**
+   *
+   * A pane's place in the building is its index in the oldest-first list, and
+   * that index is what makes the place work: nothing moves when a memory is
+   * added. Actually deleting the document would renumber every memory after it
+   * — a hundred photographs all sliding one bay down the building because one
+   * was taken out. So the document stays as a marker with nothing in it: the
+   * file is deleted from storage, `path` is emptied, and the tint, the preview
+   * and both lines are cleared. What is left is a few bytes that say *there was
+   * a number here*.
+   *
+   * **And the wall closes over it.** The panel it occupied is no longer held
+   * open, so the ordinary milky glazing goes back in — which is not a
+   * workaround, it is the building's own rule applied honestly: glass is
+   * coloured where a memory is, and there is no memory there any more. No gap,
+   * no empty frame, no scar. Somebody walking the aisle afterwards sees a
+   * building with one fewer coloured pane in it, and there is nothing to point
+   * at and say *that is where something was removed*.
+   * ---------------------------------------------------------------------------
+   */
+  removed?: { by: UserId; at: number }
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +372,31 @@ export interface Message {
   hearts?: Partial<Record<UserId, number>>
 }
 
+/**
+ * A short recording kept as one light in the Stars.
+ *
+ * These are slots rather than a feed: `warm-0` is always warm's first place,
+ * and replacing it changes that light instead of growing an invisible audio
+ * archive. The small waveform is metadata only; the actual bytes live in
+ * IndexedDB locally and Firebase Storage in the real world.
+ */
+export interface VoiceLight {
+  id: string
+  by: UserId
+  slot: number
+  at: number
+  duration: number
+  path: string
+  mime: string
+  waveform: number[]
+}
+
+export interface VoiceLightGarden {
+  lights: VoiceLight[]
+  /** Maximum standing lights for each person, not the total between them. */
+  limit: number
+}
+
 export interface DailyAnswer {
   by: UserId
   body: string
@@ -359,6 +412,49 @@ export interface DailyQuestion {
   id: string
   prompt: string
   answers: Partial<Record<UserId, DailyAnswer>>
+}
+
+// ---------------------------------------------------------------------------
+// The question vine
+// ---------------------------------------------------------------------------
+
+export interface QuestionAnswer {
+  by: UserId
+  body: string
+  /** epoch ms, from the shared clock where there is one. */
+  at: number
+}
+
+/**
+ * One question the Tree has opened.
+ *
+ * `answered` is public, but the answers are not. Each answer lives in its own
+ * document below the round and the other person's document cannot be read
+ * until both flags are true. This small duplication is the seal.
+ */
+export interface QuestionRound {
+  id: string
+  prompt: string
+  openedAt: number
+  completedAt: number | null
+  answered: Record<UserId, boolean>
+  /** Contains mine while waiting; contains both only after both have answered. */
+  answers: Partial<Record<UserId, QuestionAnswer>>
+}
+
+export interface QuestionGarden {
+  /** The newest question. It remains at the roots until the next one opens. */
+  current: QuestionRound | null
+  /** Every completed question, oldest first. */
+  history: QuestionRound[]
+  /** Unspent question privileges belonging to this person. */
+  availableSeeds: number
+  /** Their planted questions still resting under the roots. */
+  queued: number
+  /** Earliest moment another question may open; null while this one waits. */
+  nextAt: number | null
+  /** False until the question collections have answered once. */
+  loaded: boolean
 }
 
 /**
@@ -482,6 +578,7 @@ export interface WorldState {
   decor: Decor[]
   /** null until today's has been fetched. */
   today: DailyQuestion | null
+  questions: QuestionGarden
   /** Set once, the first time the second person ever arrives. */
   firstArrivalAt: number | null
   /**
@@ -529,6 +626,20 @@ export interface DataLayer {
     note?: string
   }): Promise<void>
   setPotGoal(goal: Pot['goal']): Promise<void>
+
+  // ---- the question vine -------------------------------------------------
+
+  /** Open today's question when the previous one is complete and 24h old. */
+  ensureQuestion(): Promise<void>
+
+  /** Seal my answer. It cannot be edited or taken back. */
+  answerQuestion(roundId: string, body: string): Promise<void>
+
+  /** Spend one contribution-earned seed to put a question into the hidden pool. */
+  plantQuestion(prompt: string): Promise<void>
+
+  /** The hidden control-room way to add a prompt without spending a seed. */
+  plantAdminQuestion(prompt: string): Promise<void>
 
   addPollen(amount: number, reason: string): Promise<void>
 
@@ -619,6 +730,28 @@ export interface DataLayer {
    */
   markMessagesRead(): Promise<void>
 
+  /** Watch the six (by default) rare voice objects and their shared capacity. */
+  watchVoiceLights(listener: (garden: VoiceLightGarden) => void): () => void
+
+  /** Put a prepared recording into one of my fixed places, replacing it if occupied. */
+  leaveVoiceLight(input: {
+    slot: number
+    audio: Blob
+    mime: string
+    ext: string
+    duration: number
+    waveform: number[]
+  }): Promise<VoiceLight>
+
+  /** Remove one of my own lights. */
+  removeVoiceLight(slot: number): Promise<void>
+
+  /** Resolve the binary behind a light without exposing which store provides it. */
+  voiceLightUrl(light: VoiceLight): Promise<string>
+
+  /** Hidden control-room setting. The real layer accepts this only for warm. */
+  setVoiceLightLimit(limit: number): Promise<void>
+
   // ---- the Glasshouse ------------------------------------------------------
 
   /**
@@ -646,6 +779,16 @@ export interface DataLayer {
    */
   hangMemory(input: {
     display: Blob
+    /**
+     * What the display copy actually is.
+     *
+     * Reported by the preparation rather than assumed from a module constant,
+     * because the encoder falls back to JPEG if WebP will not answer — and an
+     * object labelled with the wrong type is refused by the Storage rules, or
+     * served as the wrong thing forever.
+     */
+    type: string
+    ext: string
     width: number
     height: number
     tint: string
@@ -661,6 +804,18 @@ export interface DataLayer {
    * empty body takes it back off rather than storing a blank.
    */
   sayWhatIRemember(id: string, body: string): Promise<void>
+
+  /**
+   * Take one out of the glass. Yours only.
+   *
+   * Deletes the picture from storage for real, and leaves the document behind
+   * with nothing in it — see the note on `Memory.removed` for why it cannot
+   * simply be deleted, and for what the wall does with the space.
+   *
+   * Not undoable, and the seam does not pretend otherwise: there is no bin and
+   * nothing to restore from. The interface asks twice.
+   */
+  removeMemory(id: string): Promise<void>
 
   /**
    * Something a browser can put in an `<img>`.

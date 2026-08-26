@@ -61,8 +61,9 @@ const SHOWN = 8
  * The most recent handful that happen to fall inside the shown bays, so the
  * newest things either of you kept are the colours you can see from outside.
  */
-function previewed(count: number): number[] {
+function previewed(all: { removed?: unknown }[]): number[] {
   const out: number[] = []
+  const count = all.length
   /*
     Nothing yet is nothing, not "memory zero".
 
@@ -76,6 +77,9 @@ function previewed(count: number): number[] {
   const deepest = count - 1
   for (let i = deepest; i >= 0 && out.length < 22; i--) {
     if (slotFor(deepest).bay - slotFor(i).bay > SHOWN - 2) break
+    // Taken out of the glass: it keeps its bay so nothing else moves, and it
+    // has no colour to show from a meadow away.
+    if (all[i].removed) continue
     out.push(i)
   }
   return out
@@ -203,7 +207,7 @@ export function GlasshouseLandmark() {
     the section uses, so the two can never disagree about which is which.
   */
   const glazing = useMemo(() => {
-    const chosen = previewed(memories.length)
+    const chosen = previewed(memories)
     const taken = new Set(chosen.map((age) => {
       const slot = slotFor(age)
       return panelKey(slot.bay - shiftedBy(chosen), slot.side)
@@ -227,7 +231,7 @@ export function GlasshouseLandmark() {
     going, which is the opposite of the one thing this landmark exists to say.
   */
   const glass = useMemo(() => {
-    const chosen = previewed(memories.length)
+    const chosen = previewed(memories)
     const quad = new PlaneGeometry(1, 1)
     const geo = new InstancedBufferGeometry()
     geo.setAttribute('position', quad.attributes.position)
@@ -244,7 +248,7 @@ export function GlasshouseLandmark() {
 
     chosen.forEach((age, i) => {
       const slot = slotFor(age)
-      const { w, h } = paneSize(memories[age].width, memories[age].height)
+      const { w, h } = paneSize()
       const [x, y, z] = paneAt(slot, h)
       centre[i * 3] = x
       centre[i * 3 + 1] = y

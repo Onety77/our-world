@@ -1,5 +1,5 @@
+import { later } from '@/systems/later'
 import type { SectionDefinition } from '../registry'
-import Tree from './Tree'
 import { MEADOW_X, MEADOW_Y, MEADOW_Z } from './layout'
 
 export default {
@@ -18,5 +18,5 @@ export default {
     target: [MEADOW_X, MEADOW_Y + 6.8, MEADOW_Z],
     sway: 1,
   },
-  Scene: Tree,
+  Scene: later(() => import('./Tree')),
 } satisfies SectionDefinition

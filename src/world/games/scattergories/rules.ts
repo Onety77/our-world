@@ -14,9 +14,20 @@
 
 import { CATEGORIES, DIE_FACES, fits, type Category } from './categories'
 
-/** Categories on a sheet, and rounds in a match. Both from the boxed game. */
+/** Categories on a sheet. From the boxed game. */
 export const PER_SHEET = 12
-export const ROUNDS = 4
+
+/**
+ * Rounds in a match.
+ *
+ * Two, and the boxed game says three or four. Four is what a table of six
+ * people play over an evening; two people on phones seven timezones apart are
+ * doing something else, and four rounds of the same twelve-minute shape in a
+ * row is where a good idea turns into homework. Two is one letter, then one
+ * more with everything you learned from the first — which is a match, and
+ * leaves you wanting the third rather than finishing it out of duty.
+ */
+export const ROUNDS = 2
 /** Three minutes, in milliseconds. */
 export const GLASS_MS = 3 * 60 * 1000
 

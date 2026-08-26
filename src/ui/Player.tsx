@@ -115,6 +115,17 @@ export function Player() {
   // --- the sound ------------------------------------------------------------
   const audio = useRef<HTMLAudioElement>(null)
 
+  // A voice-light is deliberately rare and intimate. Let it sit in front of
+  // the shared song without changing the shared playback state for her.
+  useEffect(() => {
+    const duck = (event: Event) => {
+      const active = (event as CustomEvent<boolean>).detail === true
+      if (audio.current) audio.current.volume = active ? 0.14 : 1
+    }
+    window.addEventListener('garden:voice-light', duck)
+    return () => window.removeEventListener('garden:voice-light', duck)
+  }, [])
+
   useEffect(() => {
     const el = audio.current
     if (!el) return

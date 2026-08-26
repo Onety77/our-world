@@ -20,7 +20,7 @@
  * ---------------------------------------------------------------------------
  */
 
-import { makeRng, range, seedFrom } from '@/systems/rng'
+import { makeRng, seedFrom } from '@/systems/rng'
 import { groundHeight } from '@/systems/terrain'
 
 /**
@@ -67,13 +67,13 @@ export const PLINTH = 7
  * scale rather than as somewhere you are standing. Close enough that both
  * walls are in view is what makes it intimate.
  */
-export const HALF = 2.85
+export const HALF = 2.62
 
 /** Where the walls stop being vertical and the roof starts to curve over. */
-export const EAVE = 2.3
+export const EAVE = 2.52
 
 /** The ridge, at the middle of the roof. */
-export const RIDGE = 3.85
+export const RIDGE = 3.95
 
 /**
  * The dwarf wall — the low course of stone the glazing starts on top of.
@@ -85,7 +85,7 @@ export const RIDGE = 3.85
  * height, so a wall of photographs is something you look *at* rather than
  * down at.
  */
-export const DWARF = 0.62
+export const DWARF = 0.5
 
 /**
  * Distance between one bay of ironwork and the next.
@@ -97,26 +97,36 @@ export const DWARF = 0.62
 export const BAY = 3.25
 
 /**
- * How much glass a memory gets, in square metres, before its shape is decided.
+ * Every frame in the building is this shape, and this size.
  *
- * Constant *area* rather than constant height, which is what makes a portrait
- * come out tall and narrow and a landscape wide and low without either of them
- * being bigger than the other. A shared height would make a panorama enormous
- * and a phone photograph a slot; a shared width does the reverse.
+ * ---------------------------------------------------------------------------
+ * **One ratio, and the pictures are cropped to it.**
+ *
+ * Panes used to be cut to whatever shape the photograph happened to be, which
+ * is the respectful-sounding option and looks like a jumble: a wall of
+ * rectangles in six proportions reads as a noticeboard, and the eye spends its
+ * attention on the *outlines* instead of on what is inside them. Identical
+ * frames disappear, and once the frames disappear you are looking at the
+ * photographs — which is the entire point of the place and the thing it was
+ * getting wrong.
+ *
+ * Three by two, because it is what cameras actually shoot, and because at this
+ * bay it is the ratio that makes the pane biggest: 2.34 across a 3.12 panel,
+ * with iron either side and almost none wasted. A square would give up a third
+ * of the area and four by three nearly a fifth.
+ *
+ * The crop is centred and happens in the shader, off the stored dimensions —
+ * see `cropFor`. Nothing is cropped when a memory is *opened*: that shows the
+ * whole photograph at its own proportions, which is where a picture is
+ * actually looked at.
+ * ---------------------------------------------------------------------------
  */
-const AREA = 2.15
+export const FRAME_RATIO = 3 / 2
 
-/**
- * And it has to fit the panel it is set into.
- *
- * A memory does not hang *on* the wall, it *is* one of the wall's panels — so
- * these are the bay and the glazed height, less a margin for the iron round
- * it. The first version let a pane be any size and float wherever, and it read
- * exactly as it was: banners hung in a shelter, rather than glass in a
- * building.
- */
-const WIDEST = BAY - 0.62
-const TALLEST = EAVE - DWARF - 0.24
+/** How wide the glass is, in metres. The panel less an iron margin. */
+export const FRAME_W = BAY - 0.9
+/** And how tall, from the ratio. */
+export const FRAME_H = FRAME_W / FRAME_RATIO
 
 export interface Slot {
   /** -1 left wall, 1 right wall. */
@@ -175,54 +185,72 @@ export function slotFor(index: number): Slot {
       bay = before.bay + (side === before.side || rng() < 0.55 ? 1 : 0)
     }
 
+    /*
+      Dead centre of its bay, on one line, with no tilt.
+
+      -------------------------------------------------------------------------
+      **Every scrap of randomness here was a mistake, and it took looking at a
+      wall of them to see it.**
+
+      The height wandered between the dwarf wall and the eaves, the z drifted a
+      little either way, and each pane sat a degree or two off true. The
+      reasoning was that a shared centreline reads as a picture rail and nothing
+      in here was hung by a machine — which is a fine argument about *one* pane
+      and completely wrong about twenty. Down a wall it does not read as
+      hand-hung, it reads as **misaligned**: the eye is very good at spotting a
+      line that is nearly straight, and it spends all its attention on the
+      wobble instead of on the photographs.
+
+      It is the same lesson as the frames all being one shape. Regularity
+      disappears, and disappearing is the job — the building should stop being
+      something you notice. What is left irregular is the *placement*: which
+      bay, which side, and how many bays get skipped. That is where the
+      looseness belongs, because that is a fact about how the two of you filled
+      the building rather than about how carefully anybody hung anything.
+
+      And it is what makes the open state possible at all. A pane that is
+      exactly perpendicular to the wall, at a known height, projects to a clean
+      rectangle on screen — which is what the photograph aligns itself to when
+      you open it. A tilt of two degrees is enough to make that impossible.
+      -------------------------------------------------------------------------
+    */
     slots.push({
       side,
       bay,
-      /*
-        The centre of its bay, give or take.
-
-        A memory occupies a *panel* of the wall — one bay wide, between the
-        dwarf wall and the eaves — so it can only wander within it. The first
-        version let z drift freely and the panes ended up straddling the ribs,
-        which is what made them read as things hung in front of the building
-        rather than as part of it.
-      */
-      z: bay * BAY + BAY / 2 + range(rng, -0.1, 0.1),
-      /*
-        And never all at one height.
-
-        All on a shared centreline the wall reads as a picture rail, which is
-        the gallery this place is specifically not. `paneAt` clamps this
-        against the pane's own size, so a tall one settles lower on its own.
-      */
-      y: range(rng, DWARF + 0.55, EAVE - 0.5),
-      inset: range(rng, 0.03, 0.09),
-      tilt: range(rng, -0.025, 0.025),
+      z: bay * BAY + BAY / 2,
+      /** One line, at about the height a picture is hung. */
+      y: DWARF + (EAVE - DWARF) / 2,
+      /** Set into the iron by the same amount everywhere. */
+      inset: 0.06,
+      tilt: 0,
     })
   }
   return slots[want]
 }
 
+/** Every pane, always. Kept as a function because every call site had one. */
+export function paneSize(): { w: number; h: number } {
+  return { w: FRAME_W, h: FRAME_H }
+}
+
 /**
- * How big the glass is, given the shape of what is behind it.
+ * How to sample a photograph so it fills the frame without being stretched.
  *
- * From the stored pixel dimensions, never from the decoded image — the pane has
- * to be cut before anything has been fetched, and a pane that resizes when its
- * photograph arrives would make the whole wall twitch as you walked past it.
+ * Returns the scale to apply to uv *about its centre*: the long axis of the
+ * source is squeezed until what is left matches the frame, which is a centred
+ * crop. A portrait loses its top and bottom, a panorama loses its ends, and
+ * neither is ever distorted — a stretched face is worse than a cropped one by
+ * a distance that is not close.
+ *
+ * From the stored dimensions rather than the decoded image, because the pane
+ * has to be cut before anything has been fetched. A pane that re-cropped when
+ * its photograph arrived would make the whole wall twitch as you walked past.
  */
-export function paneSize(width: number, height: number): { w: number; h: number } {
-  const aspect = Math.max(0.2, Math.min(5, width / Math.max(1, height)))
-  let w = Math.sqrt(AREA * aspect)
-  let h = Math.sqrt(AREA / aspect)
-  if (w > WIDEST) {
-    h *= WIDEST / w
-    w = WIDEST
-  }
-  if (h > TALLEST) {
-    w *= TALLEST / h
-    h = TALLEST
-  }
-  return { w, h }
+export function cropFor(width: number, height: number): [number, number] {
+  const source = Math.max(0.05, width) / Math.max(0.05, height)
+  return source > FRAME_RATIO
+    ? [FRAME_RATIO / source, 1]
+    : [1, source / FRAME_RATIO]
 }
 
 /**
@@ -254,4 +282,64 @@ export function paneAt(slot: Slot, height: number): [number, number, number] {
  */
 export function builtTo(count: number): number {
   return slotFor(Math.max(0, count)).bay * BAY
+}
+
+/**
+ * How much of the screen an open memory should take.
+ *
+ * ---------------------------------------------------------------------------
+ * **A distance in metres cannot be the answer, and it took two viewports to
+ * see it.**
+ *
+ * Standing five metres from a pane fills ninety-nine per cent of a phone's
+ * width and twenty-eight per cent of a laptop's. Same building, same pane,
+ * same distance — the aspect does all of it, which is the very thing
+ * `backOffFor` exists in SlideCamera to deal with and the same mistake made
+ * again one level down. So the distance is solved from the size you want the
+ * pane to *end up*, and the numbers that stay fixed are these two.
+ *
+ * Height first, because it is the honest one: the vertical field of view does
+ * not change with the shape of the screen, so "a bit under half the height" is
+ * the same picture on a phone and on a laptop. Width is a ceiling on top of
+ * it, for wide screens where filling the height would run the pane off the
+ * sides.
+ * ---------------------------------------------------------------------------
+ */
+export const OPEN_HEIGHT = 0.46
+/** And never wider than this much of it. */
+export const OPEN_WIDTH = 0.9
+
+/**
+ * And how far back you may stand, which the building decides.
+ *
+ * The pane is `HALF - inset` from the middle of the aisle and the wall behind
+ * you is `HALF` the other way, so anything past their sum is standing outside
+ * in the meadow looking in through the near glazing — a photograph beautifully
+ * framed against a flat grey nothing, which is exactly what it looked like.
+ * The margin keeps you a hand's width inside.
+ */
+const FURTHEST = 2 * HALF - 0.24
+/** Close enough to read it, no closer. Under this the pane overruns the screen. */
+const NEAREST = 2.4
+
+/** Set from a test. `?shot=1` only — see the verbs in the scene. */
+let forced = 0
+export function forceStand(metres: number): void {
+  forced = metres
+}
+
+/**
+ * Where to stand to open the pane, in metres from its glass.
+ *
+ * Perspective, backwards: a pane `FRAME_H` tall fills `OPEN_HEIGHT` of the
+ * screen at exactly one distance, and this is that distance — then the same
+ * sum for the width, then whichever asks you to stand further, then the walls.
+ */
+export function standFor(fovDegrees: number, aspect: number): number {
+  if (forced) return forced
+  // What one metre at one metre's distance covers, as a fraction of the screen.
+  const spread = 2 * Math.tan((fovDegrees * Math.PI) / 360)
+  const forHeight = FRAME_H / (OPEN_HEIGHT * spread)
+  const forWidth = FRAME_W / (OPEN_WIDTH * spread * Math.max(0.2, aspect))
+  return Math.min(FURTHEST, Math.max(NEAREST, Math.max(forHeight, forWidth)))
 }

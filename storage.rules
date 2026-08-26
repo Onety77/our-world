@@ -1,7 +1,7 @@
 rules_version = '2';
 
 /*
-  The bucket. Photographs, and nothing else, ever.
+  The bucket. Photographs and brief voice-lights, and nothing else.
 
   This is the third rules file and the first one that guards *bytes*. Same law
   as the other two: two people, forever, matched by address, and everybody else
@@ -44,6 +44,10 @@ service firebase.storage {
       return email() == warmEmail() || email() == coolEmail();
     }
 
+    function me() {
+      return email() == warmEmail() ? 'warm' : 'cool';
+    }
+
     match /memories/{file} {
       allow read: if isOneOfUs();
 
@@ -56,28 +60,59 @@ service firebase.storage {
       */
       allow create: if isOneOfUs()
         && resource == null
-        && request.resource.contentType == 'image/jpeg'
+        // WebP where the browser had it, JPEG where it did not — see
+        // systems/picture. Both, and nothing else: this is the only place a
+        // content type is trusted, so the list is the list.
+        && (request.resource.contentType == 'image/webp'
+            || request.resource.contentType == 'image/jpeg')
         /*
-          Eight megabytes. The client re-encodes everything to at most sixteen
-          hundred pixels of JPEG before it gets here, which lands around two
-          hundred kilobytes — so this is not a limit anybody will meet. It is
-          here so that a bug in the preparation step, or a client that has been
+          Eight megabytes. The client re-encodes everything to at most 2560
+          pixels on the long edge before it gets here, which lands around half
+          a megabyte — so this is not a limit anybody will meet. It is here so
+          that a bug in the preparation step, or a client that has been
           tampered with, cannot fill the bucket.
         */
         && request.resource.size < 8 * 1024 * 1024;
 
-      /*
-        Never. Same reasoning as the delete rule on the documents: this is the
-        only data in the garden that cannot be made again, and a delete rule is
-        a way to lose a photograph forever at three in the morning.
+      /* An uploaded picture is never edited. */
+      allow update: if false;
 
-        Sweeping up files whose upload succeeded and whose document then failed
-        is a console job, done deliberately, by a person.
+      /*
+        Delete is allowed, and this rule used to say it never would be.
+        The note is kept because the reasoning still holds and the decision
+        changed anyway.
+
+        The old reasoning: this is the only data in the garden that cannot be
+        made again, so a delete rule is a way to lose a photograph forever at
+        three in the morning. That is true. What outweighs it is that "delete"
+        has to *mean* delete — the Glasshouse offers to take a memory out of
+        the glass, and an offer that quietly leaves the file in a bucket would
+        be a lie about the one thing somebody might be deleting for.
+
+        What guards it instead is everything around it: only the person who
+        hung a memory can take it out (enforced in `firestore.rules`, where the
+        document is), the interface asks twice, and there is no bulk anything.
+        Storage cannot tell who hung which file, so the check that matters
+        lives with the document and this rule is deliberately the looser half
+        of the pair.
       */
-      allow update, delete: if false;
+      allow delete: if isOneOfUs();
     }
 
-    /* Everything outside /memories, to everybody, forever. */
+    match /voice-lights/{who}/{file} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && who == me()
+        && resource == null
+        && request.resource.contentType.matches('audio/(webm|mp4|ogg)(;.*)?')
+        && request.resource.size < 3 * 1024 * 1024;
+
+      allow update: if false;
+      allow delete: if isOneOfUs() && who == me();
+    }
+
+    /* Everything outside the two byte stores, to everybody, forever. */
     match /{allPaths=**} {
       allow read, write: if false;
     }

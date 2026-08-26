@@ -258,6 +258,7 @@ const VERT = /* glsl */ `
   uniform float uTime;
   uniform float uWind;
   uniform vec2 uCentre;    // camera, on the ground plane
+  uniform vec2 uFacing;    // and which way it is looking, on the same plane
   uniform float uTile;
   uniform float uFadeStart;
   uniform float uFadeEnd;
@@ -279,6 +280,8 @@ const VERT = /* glsl */ `
     // Fade to nothing at the rim rather than stopping at a line — a hard edge
     // is what would give away that the meadow is a disc following you around.
     float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, away);
+    // And nothing behind you at all. See inTheView.
+    fade *= inTheView(world, uCentre, uFacing);
     // and, for the tussocks, up from nothing over the first few metres
     fade *= uFadeIn > 0.0 ? smoothstep(uFadeIn * 0.3, uFadeIn, away) : 1.0;
     // nothing grows in the river
@@ -380,7 +383,8 @@ function Blades({
           uTime: { value: 0 },
           uWind: { value: 1 },
           uCentre: { value: new Vector2() },
-          uTile: { value: tile },
+      uFacing: { value: new Vector2(0, 1) },
+                    uTile: { value: tile },
           uFadeStart: { value: radius * 0.72 },
           uFadeEnd: { value: radius * 0.98 },
           uFadeIn: { value: layer.from },
@@ -416,6 +420,19 @@ function Blades({
     t.current += delta
     material.uniforms.uTime.value = t.current
     material.uniforms.uCentre.value.set(camera.position.x, camera.position.z)
+    /*
+      Which way the camera is looking, flattened onto the ground.
+
+      The third column of a camera's world matrix is the direction it is
+      looking *away* from, so this is negated. Taken from the matrix rather
+      than from the rotation because the camera is aimed with lookAt and its
+      Euler angles are a derived thing that has been wrong before.
+    */
+    const m = camera.matrixWorld.elements
+    const fx = -m[8]
+    const fz = -m[10]
+    const len = Math.hypot(fx, fz) || 1
+    material.uniforms.uFacing.value.set(fx / len, fz / len)
   })
 
   return <mesh geometry={geometry} material={material} frustumCulled={false} />

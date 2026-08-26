@@ -31,9 +31,20 @@ import {
   type CarInput,
   type CarState,
 } from '../src/world/games/ember-rally/physics'
-import { makeTrack, roadAt, type Track } from '../src/world/games/ember-rally/track'
+import {
+  MOONBREAK,
+  STORMCROWN,
+  makeTrack,
+  roadAt,
+  shortcutRoadAt,
+  sunkAt,
+  WATER_Y,
+  type Track,
+} from '../src/world/games/ember-rally/track'
 import { driveSpirit, spiritDriver } from '../src/world/games/ember-rally/spirit'
 import { isRun, runAt, runDurationMs } from '../src/world/games/ember-rally/model'
+import type { StageId } from '../src/world/games/ember-rally/model'
+import { useRace } from '../src/world/games/ember-rally/session'
 
 const DT = 1 / 120
 const IDLE: CarInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false }
@@ -360,8 +371,25 @@ function hairpin() {
 function realRoad() {
   const lines: string[] = []
   let worstSpin = 0
-  for (const seed of [1, 7, 42, 1234, 90210]) {
-    const track = makeTrack(seed)
+  /*
+    Every road. Rootway changes by seed; the two authored roads need one each.
+
+    The Rootway changes its order with the seed, so it is worth several; the
+    Moonbreak is one authored course and one run of it says everything. It was
+    added to this check the day it stopped being the only new thing anybody was
+    looking at — a road nothing drives end to end in Node is a road whose
+    corners have never been proved to *have* a line through them.
+  */
+  const roads: [string, number, StageId][] = [
+    ['rootway 1', 1, 'rootway'],
+    ['rootway 7', 7, 'rootway'],
+    ['rootway 42', 42, 'rootway'],
+    ['rootway 1234', 1234, 'rootway'],
+    ['moonbreak', 1, 'moonbreak'],
+    ['stormcrown', 1, 'stormcrown'],
+  ]
+  for (const [name, seed, stage] of roads) {
+    const track = makeTrack(seed, stage)
     const car = createCar(track)
     const drive = spiritDriver(track, seed ^ 0x1234)
     const recorder = new Recorder()
@@ -384,13 +412,13 @@ function realRoad() {
       if (broke) break
     }
     if (broke) {
-      lines.push(`  seed ${String(seed).padEnd(6)} BROKE (${broke}) at ${fixed(car.elapsed)}s`)
+      lines.push(`  ${name.padEnd(13)} BROKE (${broke}) at ${fixed(car.elapsed)}s`)
       continue
     }
     const run = recorder.finish(car)
     worstSpin = Math.max(worstSpin, spins / guard)
     lines.push(
-      `  seed ${String(seed).padEnd(6)} ${fixed(car.elapsed).padStart(6)}s   ` +
+      `  ${name.padEnd(13)} ${fixed(car.elapsed).padStart(6)}s   ` +
         `top ${fixed(top, 1).padStart(4)}   ` +
         `strikes ${String(car.strikes).padStart(2)}   ` +
         `drift ${fixed(car.driftMs / 1000, 1).padStart(4)}s   ` +
@@ -400,6 +428,60 @@ function realRoad() {
     )
   }
   return lines.join('\n')
+}
+
+/** The long mountain actually earns that name, in distance and driven time. */
+function theStormcrown(): string {
+  const track = makeTrack(1, 'stormcrown')
+  const moonbreak = makeTrack(1, 'moonbreak')
+  const car = createCar(track)
+  const drive = spiritDriver(track, 0x71c4)
+  const crossed = new Map<number, number>()
+  const landmarks = [
+    STORMCROWN.climb.to,
+    STORMCROWN.galeBend.exit,
+    STORMCROWN.cloudShelf.to,
+    STORMCROWN.thunderStair.exit,
+    STORMCROWN.eye.to,
+    STORMCROWN.stormfall.to,
+    track.finishAt,
+  ]
+  let guard = 0
+  let wall = 0
+  while (!car.finished && guard++ < 40_000) {
+    advanceCar(track, car, drive(car, DT), DT)
+    if (car.touching) wall++
+    for (const mark of landmarks) if (car.s >= mark && !crossed.has(mark)) crossed.set(mark, car.elapsed)
+  }
+
+  let peak = -Infinity
+  let lowest = Infinity
+  let narrowest = Infinity
+  let hardest = 0
+  for (let i = 0; i < track.y.length; i++) {
+    peak = Math.max(peak, track.y[i])
+    lowest = Math.min(lowest, track.y[i])
+    narrowest = Math.min(narrowest, track.width[i])
+    hardest = Math.max(hardest, Math.abs(track.curv[i]))
+  }
+  const sectorTimes = landmarks.map((mark, index) => {
+    const at = crossed.get(mark) ?? NaN
+    const before = index === 0 ? 0 : crossed.get(landmarks[index - 1]) ?? NaN
+    return at - before
+  })
+  const longEnough = track.finishAt > moonbreak.finishAt * 1.3
+  const timedRight = car.finished && car.elapsed > 125 && car.elapsed < 210
+  const readableStair = hardest > 0.036 && narrowest < 4.8
+
+  return [
+    `  road             ${(track.length / 1000).toFixed(2)} km (${longEnough ? 'longer than Moonbreak by at least 30%' : 'TOO SHORT'})`,
+    `  spirit           ${car.elapsed.toFixed(1)}s (${timedRight ? 'long, but inside one sitting' : 'OUTSIDE THE 125-210s TARGET'})`,
+    `  mountain         ${(peak - lowest).toFixed(1)}m of vertical range; ${(track.y.at(-1) ?? 0).toFixed(1)}m at home`,
+    `  road grammar     ${(narrowest * 2).toFixed(1)}m narrowest deck; ${(1 / hardest).toFixed(1)}m tightest radius (${readableStair ? 'demanding' : 'NEEDS MORE DEFINITION'})`,
+    `  spirit contact   ${((wall / Math.max(1, guard)) * 100).toFixed(1)}% of steps; ${car.strikes} strikes`,
+    `  sector seconds   ${sectorTimes.map((time) => Number.isFinite(time) ? time.toFixed(1) : '—').join(' · ')}`,
+    `                   rainwood+climb · gale · shelf · stair · eye · fall · home`,
+  ].join(NEWLINE)
 }
 
 /** The ghost must be readable back out of what the recorder wrote. */
@@ -953,6 +1035,302 @@ function driftMode() {
 
   return rows.join('\n')
 }
+/** The Rootwake stays worth taking and worth being frightened of. It measures
+ * route length, mastered duration, tightest usable width, and spirit clearance
+ * from the separately authored ledge on several seeds. */
+const NEWLINE = String.fromCharCode(10)
+
+/**
+ * A long drift, held on one side.
+ *
+ * ---------------------------------------------------------------------------
+ * The reported fault, as a measurement: through a corner tighter than a right
+ * angle, one that needs the drift carried for several seconds, the car creeps
+ * off the line even when the input is right — and it gets worse the longer the
+ * corner lasts.
+ *
+ * What it measures is the gap between what the drift turns and what the corner
+ * asks for, second by second, at a constant command. Not where the car ends up
+ * — a constant command holds an *arc*, so it can hold a wrong one perfectly,
+ * and the angle the entry left behind would swamp the signal. The fault was
+ * that the gap itself grew: a command capped in g is a constant force, and the
+ * arc a constant force draws opens with the square of the speed. A gap that
+ * stays put is a drift you can hold, and no entry timing fixes one that walks,
+ * because it accumulates after the entry.
+ * ---------------------------------------------------------------------------
+ */
+function heldDrift(): string {
+  const rows: string[] = []
+
+  for (const degrees of [95, 130, 170]) {
+    const radius = (120 / (degrees * Math.PI)) * 180
+    const track = flatTrack(20_000, 1 / radius)
+    const car = createCar(track)
+
+    // Settle on the line gripping first, or the drift starts from wherever the
+    // acceleration run happened to leave the car.
+    for (let step = 0; step < 120 * 14; step++) {
+      const steer = Math.max(-1, Math.min(1, -car.n * 0.19 - car.psi * 1.35 - car.yaw * 0.11))
+      const wide = Math.abs(car.n) > 3
+      advanceCar(track, car, { steer, throttle: wide ? 0.35 : 0.9, brake: 0, handbrake: false, boost: false }, DT)
+    }
+    // Flick it, then hold one command and nothing else — a perfect thumb.
+    for (let step = 0; step < 120 * 0.3; step++) {
+      advanceCar(track, car, { steer: 1, throttle: 0.4, brake: 0.25, handbrake: true, boost: false }, DT)
+    }
+
+    const command = Math.min(1, 25 / radius)
+    const gaps: number[] = []
+    for (let second = 1; second <= 4; second++) {
+      for (let step = 0; step < 120; step++) {
+        advanceCar(track, car, { steer: command, throttle: 0.8, brake: 0, handbrake: false, boost: false }, DT)
+      }
+      gaps.push(speedOf(car) / radius - car.yaw)
+    }
+    const walk = Math.abs(gaps[gaps.length - 1] - gaps[0])
+    rows.push(
+      `  ${String(degrees).padStart(3)}° · ${radius.toFixed(0)}m   hold ${command.toFixed(2)}   ` +
+        gaps.map((g, i) => `${i + 1}s ${g >= 0 ? '+' : ''}${g.toFixed(3)}`).join('  ') +
+        `   walked ${walk.toFixed(3)}`,
+    )
+  }
+  rows.push('  (rad/s the corner asks for, less what the drift is giving)')
+  rows.push('  Held steady means the drift keeps up as the car gains speed. It used to walk by 0.16.')
+  return rows.join(NEWLINE)
+}
+
+/**
+ * The Drowned Mile is as long as it is supposed to be.
+ *
+ * ---------------------------------------------------------------------------
+ * The one thing about the dive that is a *number* rather than a picture, and
+ * therefore the one thing a screenshot cannot check. It was built to a brief:
+ * about half a minute under the water, long enough that it stops being a
+ * tunnel you pass through and becomes somewhere you are. That is a length of
+ * road over a speed, and both halves drift — lengthen the deep straight and it
+ * grows; make the car faster, or the dive steeper, and it shrinks, and none of
+ * those edits look like they are touching it.
+ *
+ * Driven by the fire-spirit, which takes the deep flat out, so this prints the
+ * floor of the range. A person braking for the sweeps spends longer.
+ *
+ * Also checks the two things the geometry has to get right and which are
+ * silent when wrong: that the road comes back up to the height it left from,
+ * and that the waterline crossings the tube and the light are told about are
+ * where the road actually goes under.
+ * ---------------------------------------------------------------------------
+ */
+function theDrownedMile(): string {
+  const track = makeTrack(1, 'moonbreak')
+  const car = createCar(track)
+  const drive = spiritDriver(track, 0x1234)
+
+  let under = 0
+  let deepest = 0
+  let slowest = Infinity
+  let quickest = 0
+  let guard = 0
+  while (!car.finished && guard++ < 60_000) {
+    advanceCar(track, car, drive(car, DT), DT)
+    if (sunkAt(track, car.s) > 0.02) {
+      under += DT
+      deepest = Math.max(deepest, WATER_Y - roadAt(track, car.s).y)
+      slowest = Math.min(slowest, speedOf(car))
+      quickest = Math.max(quickest, speedOf(car))
+    }
+  }
+
+  const crossing = (from: number, to: number) => {
+    const step = from < to ? 1 : -1
+    for (let s = from; step > 0 ? s < to : s > to; s += step) {
+      if (roadAt(track, s).y <= WATER_Y) return s
+    }
+    return NaN
+  }
+  const wentUnder = crossing(MOONBREAK.deep.from, MOONBREAK.deep.to)
+  const cameUp = crossing(MOONBREAK.deep.to, MOONBREAK.deep.from)
+  const before = roadAt(track, MOONBREAK.deep.from - 6).y
+  const after = roadAt(track, MOONBREAK.deep.to + 6).y
+  const wanted = under >= 26 && under <= 42
+
+  return [
+    `  under the water ${under.toFixed(1)}s at the spirit's pace — a person is slower`,
+    `                  ${wanted ? 'inside the half-minute it was built for' : 'OUTSIDE THE 26-42s IT WAS BUILT FOR'}`,
+    `  deepest         ${deepest.toFixed(1)}m below the surface`,
+    `  speed down there ${slowest.toFixed(0)} to ${quickest.toFixed(0)} m/s`,
+    `  goes under at   ${wentUnder.toFixed(0)}m, comes up at ${cameUp.toFixed(0)}m`,
+    `                  the tube is told ${MOONBREAK.deep.under.in} and ${MOONBREAK.deep.under.out} — ` +
+      `${Math.abs(wentUnder - MOONBREAK.deep.under.in) < 14 && Math.abs(cameUp - MOONBREAK.deep.under.out) < 14 ? 'near enough' : 'THE MOUTHS ARE IN THE WRONG PLACE'}`,
+    `  level either end ${before.toFixed(2)}m in, ${after.toFixed(2)}m out — ` +
+      `${Math.abs(before - after) < 1.2 ? 'comes back to where it left' : 'THE DIVE DOES NOT CLOSE'}`,
+  ].join(NEWLINE)
+}
+
+/**
+ * The two meters survive a restart.
+ *
+ * ---------------------------------------------------------------------------
+ * A store test rather than a car test, and it guards a rule rather than a
+ * value: **the effect that sets a DOM node is the cleanup that clears it, and
+ * no other code may.**
+ *
+ * The ember bar and the speedometer are live nodes handed to the store by the
+ * components that render them and written to sixty times a second by the
+ * machine. `close()` used to null them, and `Road` calls `close()` on every
+ * attempt change — so from the second go onward the machine wrote to nothing
+ * and both meters froze at whatever they were showing. It looked random, moved
+ * nothing in the physics, threw nothing, and no screenshot could show it.
+ * ---------------------------------------------------------------------------
+ */
+function metersSurviveRestart(): string {
+  const rows: string[] = []
+  const track = makeTrack(7, 'rootway')
+  const bar = { id: 'ember' } as unknown as HTMLElement
+  const speedo = {
+    value: { id: 'value' } as unknown as HTMLElement,
+    line: { id: 'line' } as unknown as HTMLElement,
+  }
+  const surface = { id: 'surface' } as unknown as HTMLElement
+
+  useRace.getState().open({ track, ghost: null, onFinish: () => {} })
+  // What the components' effects do when they mount.
+  useRace.getState().setEmberBar(bar)
+  useRace.getState().setSpeedo(speedo)
+  useRace.getState().setSurface(surface)
+  rows.push(
+    `  after the first go     bar ${useRace.getState().emberBar ? 'held' : 'LOST'}  ·  speedo ${useRace.getState().speedo ? 'held' : 'LOST'}`,
+  )
+
+  // "Run it again": Road's effect re-runs, and the meter components do not.
+  for (let go = 2; go <= 4; go++) {
+    useRace.getState().close()
+    useRace.getState().setSurface(null)
+    useRace.getState().open({ track, ghost: null, onFinish: () => {} })
+    useRace.getState().setSurface(surface)
+    const state = useRace.getState()
+    rows.push(
+      `  go ${go}                   bar ${state.emberBar === bar ? 'held' : 'LOST'}  ·  speedo ${state.speedo === speedo ? 'held' : 'LOST'}  ·  surface ${state.surface === surface ? 'held' : 'LOST'}`,
+    )
+  }
+
+  // And leaving for the menu really does let go, because the components unmount.
+  useRace.getState().close()
+  useRace.getState().setSurface(null)
+  useRace.getState().setEmberBar(null)
+  useRace.getState().setSpeedo(null)
+  const gone = useRace.getState()
+  rows.push(
+    `  back to the menu       ${!gone.emberBar && !gone.speedo && !gone.surface ? 'all three let go' : 'A NODE IS STILL HELD'}`,
+  )
+  return rows.join(NEWLINE)
+}
+
+function theSplit(): string {
+  const rows: string[] = []
+  for (const seed of [1, 42, 90210]) {
+    const track = makeTrack(seed, 'rootway')
+    const split = track.split
+    if (!split) return '  NO SPLIT ON THE ROOTWAY — it should always have one'
+
+    let separation = Infinity
+    let tightest = Infinity
+    let hardest = 0
+    for (let at = split.from + 120; at < split.to - 140; at += 2) {
+      const main = roadAt(track, at)
+      const hidden = shortcutRoadAt(split, at)
+      separation = Math.min(separation, Math.hypot(main.x - hidden.x, main.y - hidden.y, main.z - hidden.z))
+      tightest = Math.min(tightest, hidden.width * 2)
+      hardest = Math.max(hardest, Math.abs(hidden.curv))
+    }
+    let mainPace = 0
+    let hiddenPace = 0
+    for (let at = split.from; at < split.to; at += 2) {
+      const mainRoad = roadAt(track, at)
+      const hiddenRoad = shortcutRoadAt(split, at)
+      mainPace += 2 / Math.min(35, Math.sqrt(12.9 / Math.max(0.0003, Math.abs(mainRoad.curv))))
+      hiddenPace += (2 * hiddenRoad.metric) / Math.min(35, Math.sqrt(12.9 / Math.max(0.0003, Math.abs(hiddenRoad.curv))))
+    }
+    const masteredAdvantage = mainPace - hiddenPace
+    const hardRoad = shortcutRoadAt(split, split.hardAt)
+    const veryHardRoad = shortcutRoadAt(split, split.veryHardAt)
+
+    const mainCar = createCar(track)
+    const mainDrive = spiritDriver(track, seed ^ 0x1927, 0.82, true)
+    let mouthAt = 0
+    let mainExitAt = 0
+    let guard = 0
+    while (!mainCar.finished && guard++ < 36_000) {
+      advanceCar(track, mainCar, mainDrive(mainCar, DT), DT)
+      if (!mouthAt && mainCar.s >= split.from) mouthAt = mainCar.elapsed
+      if (!mainExitAt && mainCar.s >= split.to) mainExitAt = mainCar.elapsed
+    }
+
+    const hiddenCar = createCar(track)
+    const hiddenDrive = spiritDriver(track, seed ^ 0x1927, 0.82, true)
+    let hiddenMouthAt = 0
+    let hiddenExitAt = 0
+    let hiddenMinimumSpeed = Infinity
+    let hiddenMinimumAt = 0
+    let hiddenMinimumN = 0
+    let hiddenWallSteps = 0
+    guard = 0
+    while (!hiddenCar.finished && guard++ < 36_000) {
+      if (!hiddenCar.shortcut && hiddenCar.s >= split.from + 5 && hiddenCar.s < split.rejoinAt) {
+        hiddenCar.shortcut = true
+        hiddenCar.n = Math.min(hiddenCar.n, 0.4)
+      }
+      advanceCar(track, hiddenCar, hiddenDrive(hiddenCar, DT), DT)
+      if (!hiddenMouthAt && hiddenCar.s >= split.from) hiddenMouthAt = hiddenCar.elapsed
+      if (hiddenCar.shortcut) {
+        const hiddenSpeed = speedOf(hiddenCar)
+        if (hiddenSpeed < hiddenMinimumSpeed) {
+          hiddenMinimumSpeed = hiddenSpeed
+          hiddenMinimumAt = hiddenCar.s
+          hiddenMinimumN = hiddenCar.n
+        }
+        if (hiddenCar.hitWall > 0) hiddenWallSteps++
+      }
+      if (!hiddenExitAt && hiddenCar.s >= split.to) hiddenExitAt = hiddenCar.elapsed
+    }
+    const advantage = mainCar.elapsed - hiddenCar.elapsed
+
+    rows.push(
+      `  seed ${String(seed).padEnd(6)} main ${mainCar.elapsed.toFixed(1)}s   Rootwake ${hiddenCar.elapsed.toFixed(1)}s   ` +
+        `${advantage.toFixed(1)}s quicker` +
+        (masteredAdvantage >= 8 && masteredAdvantage <= 12 ? '' : '   ← MASTERED PACE MISSES THE TEN-SECOND TARGET'),
+    )
+    rows.push(
+      `               ${split.mainLength.toFixed(0)}m main centreline · ${split.shortcutLength.toFixed(0)}m hidden centreline · ` +
+        `${tightest.toFixed(1)}m narrowest deck · r${(1 / hardest).toFixed(1)}m tightest bend`,
+    )
+    rows.push(
+      `               signature corners r${(1 / Math.abs(hardRoad.curv)).toFixed(1)}m hard / ` +
+        `r${(1 / Math.abs(veryHardRoad.curv)).toFixed(1)}m very hard`,
+    )
+    rows.push(
+      `               mouth at ${mouthAt.toFixed(1)}s · ${separation.toFixed(1)}m minimum rock separation · ` +
+        `solid walls agree with the tyres`,
+    )
+    rows.push(
+      `               spirit stays ${mainCar.shortcut ? 'INSIDE THE SECRET ROAD' : 'on the ordinary road'} · ` +
+        `hidden run ${hiddenCar.strikes} strikes`,
+    )
+    rows.push(
+      `               branch sector ${(hiddenExitAt - hiddenMouthAt).toFixed(1)}s vs main ${(mainExitAt - mouthAt).toFixed(1)}s; ` +
+        `branch low speed ${hiddenMinimumSpeed.toFixed(1)}m/s at ${(hiddenMinimumAt - split.from).toFixed(0)}m (n ${hiddenMinimumN.toFixed(1)}); ` +
+        `wall ${(hiddenWallSteps * DT).toFixed(1)}s`,
+    )
+    const splitStart = roadAt(track, split.from)
+    const splitEnd = roadAt(track, split.to)
+    rows.push(
+      `               portals ${Math.hypot(splitEnd.x - splitStart.x, splitEnd.y - splitStart.y, splitEnd.z - splitStart.z).toFixed(0)}m apart in the world`,
+    )
+    rows.push(
+      `               mastered pace saves ${masteredAdvantage.toFixed(1)}s (main ${mainPace.toFixed(1)} / hidden ${hiddenPace.toFixed(1)})`,
+    )
+  }
+  return rows.join(NEWLINE)
+}
 
 const sections: [string, () => string][] = [
   ['A straight', straightLine],
@@ -970,6 +1348,11 @@ const sections: [string, () => string][] = [
   ['The fire-spirit, on real roads', realRoad],
   ['The ghost, written and read back', ghostRoundTrip],
   ['What a step costs', cost],
+  ['A long drift, held on one side', heldDrift],
+  ['The Rootwake', theSplit],
+  ['The Drowned Mile', theDrownedMile],
+  ['The Stormcrown', theStormcrown],
+  ['The meters survive a restart', metersSurviveRestart],
 ]
 
 for (const [name, run] of sections) {

@@ -41,6 +41,238 @@
     0 0 30px rgba(6, 12, 10, 0.6);
 }
 
+/* -------------------------------------------------------------------------
+   Voice-lights — a few recordings as celestial objects, never an audio inbox
+   ------------------------------------------------------------------------- */
+
+.voice-lights-ui {
+  --voice-warm: #ffd69a;
+  --voice-cool: #a9d8ff;
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  color: #f5f0e7;
+}
+
+.voice-lights-ui button,
+.voice-lights-ui audio {
+  pointer-events: auto;
+}
+
+.voice-sky-touch {
+  --voice-color: var(--voice-warm);
+  position: absolute;
+  left: var(--voice-x);
+  top: var(--voice-y);
+  width: 78px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  opacity: .68;
+  animation: voice-comet-drift 8s ease-in-out var(--voice-delay) infinite;
+  cursor: pointer;
+}
+
+.voice-sky-touch.cool { --voice-color: var(--voice-cool); transform: translate(-50%, -50%) rotate(14deg) scaleX(-1); }
+.voice-sky-touch:hover,
+.voice-sky-touch:focus-visible,
+.voice-sky-touch.selected { opacity: 1; }
+
+.voice-comet-core {
+  position: absolute;
+  right: 7px;
+  top: 18px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 5px white, 0 0 14px 5px var(--voice-color), 0 0 34px 10px color-mix(in srgb, var(--voice-color) 40%, transparent);
+  opacity: 0;
+}
+
+.voice-comet-tail {
+  position: absolute;
+  right: 12px;
+  top: 21px;
+  width: 56px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--voice-color) 28%, transparent), var(--voice-color));
+  filter: blur(.4px);
+  transform-origin: right center;
+  opacity: 0;
+}
+
+.voice-sky-touch:hover .voice-comet-core,
+.voice-sky-touch:focus-visible .voice-comet-core,
+.voice-sky-touch.sounding .voice-comet-core { opacity: .32; }
+.voice-sky-touch:hover .voice-comet-tail,
+.voice-sky-touch:focus-visible .voice-comet-tail,
+.voice-sky-touch.sounding .voice-comet-tail { opacity: .18; }
+
+.voice-sky-touch.sounding .voice-comet-core {
+  animation: voice-speaking .38s ease-in-out infinite alternate;
+}
+
+.voice-sky-touch.sounding .voice-comet-tail {
+  animation: voice-tail-speaking .42s ease-in-out infinite alternate;
+}
+
+@keyframes voice-comet-drift {
+  0%, 100% { margin: 0 0 0 -7px; }
+  50% { margin: -9px 0 0 8px; }
+}
+
+@keyframes voice-speaking {
+  to { transform: scale(1.7); filter: brightness(1.35); }
+}
+
+@keyframes voice-tail-speaking {
+  to { transform: scaleX(1.18); opacity: .62; }
+}
+
+.voice-beacon {
+  position: absolute;
+  right: clamp(1.1rem, 4vw, 4rem);
+  top: clamp(3.5rem, 7vh, 5.5rem);
+  display: grid;
+  grid-template-columns: 15px auto;
+  column-gap: 9px;
+  align-items: center;
+  padding: .55rem .2rem;
+  border: 0;
+  background: transparent;
+  color: rgba(242, 241, 240, .78);
+  font: inherit;
+  text-align: left;
+  text-shadow: 0 2px 18px #02040a;
+}
+
+.voice-beacon:hover { color: white; }
+.voice-beacon small { grid-column: 2; color: rgba(196, 211, 230, .5); font-size: .62rem; letter-spacing: .09em; }
+.voice-beacon-mark {
+  grid-row: 1 / 3;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px #fff, 0 0 22px 7px #9dcdf0;
+  animation: voice-speaking 1.8s ease-in-out infinite alternate;
+}
+
+.voice-dock {
+  position: absolute;
+  right: clamp(1rem, 4vw, 4rem);
+  top: clamp(3.5rem, 7vh, 5.5rem);
+  width: min(25rem, calc(100vw - 2rem));
+  max-height: min(76vh, 42rem);
+  overflow: auto;
+  padding: 1.35rem 1.3rem 1.15rem;
+  pointer-events: auto;
+  background:
+    radial-gradient(circle at 75% 8%, rgba(117, 172, 220, .12), transparent 35%),
+    linear-gradient(155deg, rgba(6, 10, 22, .9), rgba(10, 14, 28, .72));
+  border: 1px solid rgba(191, 215, 239, .12);
+  border-radius: 1.7rem 1.7rem .45rem 1.7rem;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .52), inset 0 1px rgba(255,255,255,.04);
+  backdrop-filter: blur(22px) saturate(1.15);
+}
+
+.voice-dock header { display: flex; justify-content: space-between; align-items: flex-start; }
+.voice-dock header p,
+.voice-constellations p { margin: 0 0 .3rem; color: rgba(196, 213, 235, .48); font-size: .63rem; letter-spacing: .16em; text-transform: uppercase; }
+.voice-dock h2 { margin: 0; font: 400 1.55rem/1.1 var(--serif); letter-spacing: .03em; }
+.voice-close { border: 0; background: none; color: rgba(235,242,250,.55); font-size: 1.5rem; line-height: 1; padding: .1rem .2rem; }
+
+.voice-constellations { display: grid; gap: 1.1rem; margin-top: 1.35rem; }
+.voice-slots { display: flex; gap: .72rem; flex-wrap: wrap; }
+.voice-slots button {
+  min-width: 3.4rem;
+  padding: .3rem .2rem;
+  border: 0;
+  background: none;
+  color: rgba(218,225,235,.36);
+  font: inherit;
+  font-size: .66rem;
+}
+.voice-slots button i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin: 0 auto .55rem;
+  border: 1px solid rgba(255, 215, 157, .36);
+  border-radius: 50%;
+}
+.voice-slots button.filled { color: rgba(255,236,205,.78); }
+.voice-slots button.filled i { background: #fff5dc; box-shadow: 0 0 9px #fff, 0 0 22px 6px rgba(255,184,105,.47); border: 0; }
+.voice-slots.theirs button i { border-color: rgba(158, 211, 255, .38); }
+.voice-slots.theirs button.filled { color: rgba(205,232,255,.78); }
+.voice-slots.theirs button.filled i { background: #e7f6ff; box-shadow: 0 0 9px #fff, 0 0 22px 6px rgba(100,183,255,.48); }
+.voice-slots button:disabled { cursor: default; }
+
+.voice-law { margin: 1.2rem 0 .8rem; color: rgba(224,228,235,.5); font: italic .78rem/1.5 var(--serif); }
+.voice-record,
+.voice-actions button,
+.voice-hear {
+  border: 0;
+  background: none;
+  color: #f5ead8;
+  font: inherit;
+  padding: .45rem 0;
+  border-bottom: 1px solid rgba(255,218,164,.28);
+}
+.voice-record { letter-spacing: .06em; }
+
+.voice-listening { margin: 1.15rem 0 .5rem; padding: .8rem 0; border-block: 1px solid rgba(190,214,239,.09); }
+.voice-hear { display: flex; align-items: baseline; gap: .5rem; width: 100%; text-align: left; }
+.voice-hear span { color: rgba(201,215,232,.52); font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; }
+.voice-hear b { font: 400 1.08rem var(--serif); }
+.voice-hear small { margin-left: auto; opacity: .5; }
+.voice-wave { height: 2.25rem; display: flex; gap: 2px; align-items: center; margin: .8rem 0; }
+.voice-wave i { flex: 1; max-width: 5px; min-height: 2px; border-radius: 2px; background: linear-gradient(#eaf7ff, rgba(118,184,234,.22)); opacity: .62; }
+.voice-listening.warm .voice-wave i,
+.voice-review .voice-wave i { background: linear-gradient(#fff3d8, rgba(241,173,99,.2)); }
+.voice-remove { border: 0; background: none; padding: 0; color: rgba(205,212,222,.38); font: inherit; font-size: .68rem; }
+
+.voice-recording,
+.voice-review { padding: 1.7rem 0 .4rem; text-align: center; }
+.voice-record-orbit {
+  --record-progress: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 7.6rem;
+  height: 7.6rem;
+  margin: 0 auto 1.25rem;
+  border-radius: 50%;
+  background: conic-gradient(#f2c486 calc(var(--record-progress) * 1turn), rgba(184,204,229,.1) 0);
+  box-shadow: 0 0 45px rgba(173,205,239,.12);
+}
+.voice-record-orbit::after { content: ''; position: absolute; inset: 2px; border-radius: inherit; background: #09101e; }
+.voice-record-orbit i { z-index: 1; width: 9px; height: 9px; border-radius: 50%; background: #fff; box-shadow: 0 0 18px 7px #efb36d; animation: voice-speaking .35s ease-in-out infinite alternate; }
+.voice-record-orbit strong { position: absolute; z-index: 2; bottom: 1.7rem; font: 400 .7rem var(--sans); color: rgba(238,235,230,.55); }
+.voice-recording > p { color: rgba(218,225,235,.5); font: italic .8rem var(--serif); }
+.voice-actions { display: flex; justify-content: center; gap: 1.4rem; margin-top: 1rem; }
+.voice-actions button:last-child { color: rgba(213,221,232,.44); border-color: rgba(180,200,224,.12); }
+.voice-review audio { width: 100%; height: 2.2rem; margin-top: .8rem; opacity: .72; }
+.voice-review-time { color: rgba(236,223,203,.7); font: 400 1.1rem var(--serif); }
+
+@media (max-width: 650px) {
+  .voice-sky-touch { width: 58px; }
+  .voice-beacon { right: 1rem; top: auto; bottom: 5.1rem; }
+  .voice-dock { right: .65rem; top: auto; bottom: .65rem; width: calc(100vw - 1.3rem); max-height: 72vh; border-radius: 1.35rem; }
+  .voice-slots { gap: .25rem; }
+  .voice-slots button { min-width: 3rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-sky-touch,
+  .voice-beacon-mark,
+  .voice-record-orbit i { animation: none; }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -474,6 +706,57 @@ canvas {
 .threshold > button:hover::after,
 .threshold > button:focus-visible::after {
   transform: scaleX(1);
+}
+
+.tree-turn-guide {
+  display: block;
+  margin-top: 0.85rem;
+  color: rgba(242, 239, 230, 0.58);
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.13em;
+  line-height: 1.45;
+  text-transform: uppercase;
+}
+
+.tree-turn-touch { display: none; }
+
+/*
+  The Tree has two rituals, but only one large verb. Questions sit below it as
+  small root-notes so they do not turn the meadow into a menu.
+*/
+.tree-rituals {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.45rem 1.15rem;
+  margin-top: 0.65rem;
+}
+
+.tree-rituals button {
+  border: 0;
+  padding: 0.28rem 0.15rem;
+  background: none;
+  color: rgba(242, 239, 230, 0.86);
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 0.7rem rgba(7, 12, 8, 0.9), var(--lift);
+  cursor: pointer;
+  transition: color 0.25s ease, transform 0.25s ease;
+}
+
+.tree-rituals button:hover,
+.tree-rituals button:focus-visible {
+  color: var(--ink);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+@media (pointer: coarse) {
+  .tree-turn-pointer { display: none; }
+  .tree-turn-touch { display: inline; }
 }
 
 .game-choices {
@@ -1176,6 +1459,11 @@ canvas {
   outline: none;
 }
 
+.duel-actions .put-back.is-selected {
+  color: var(--warm);
+  text-shadow: 0 0 0.9rem rgba(224, 145, 70, 0.42), var(--lift);
+}
+
 .put-back:disabled {
   opacity: 0.3;
   cursor: default;
@@ -1208,6 +1496,136 @@ canvas {
   flex-wrap: wrap;
   justify-content: center;
   animation: drift-in 0.4s cubic-bezier(0.2, 0.7, 0.25, 1) 0.42s both;
+}
+
+/* --- the question under the bark --------------------------------------- */
+
+.question-sheet {
+  background-color: #e3d7bb;
+  background-image:
+    radial-gradient(ellipse at 50% 110%, rgba(78, 94, 54, 0.2), transparent 52%),
+    radial-gradient(ellipse at 12% 8%, rgba(146, 108, 58, 0.2), transparent 42%),
+    linear-gradient(to bottom, rgba(255, 250, 236, 0.52), rgba(214, 198, 163, 0.48)),
+    repeating-linear-gradient(to bottom, rgba(120, 96, 60, 0.045) 0 1px, transparent 1px 4px);
+}
+
+.question-prompt {
+  max-width: 35rem;
+  margin: 0 auto clamp(2rem, 6vh, 3.8rem);
+  color: #302519;
+  font-family: 'Garden Hand', 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: clamp(1.65rem, 5vw, 2.5rem);
+  font-weight: 400;
+  line-height: 1.55;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.question-writing {
+  width: 100%;
+  min-height: 14rem;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  caret-color: #2f2418;
+}
+
+.question-writing::placeholder {
+  color: rgba(47, 36, 24, 0.28);
+}
+
+.question-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: auto 0;
+}
+
+.question-answer {
+  min-height: 12rem;
+  padding: 0.4rem clamp(1rem, 4vw, 2.2rem);
+}
+
+.question-answer + .question-answer {
+  border-left: 1px solid rgba(74, 58, 38, 0.18);
+}
+
+.question-answer-warm .addressed { color: rgba(150, 84, 40, 0.7); }
+.question-answer-cool .addressed { color: rgba(72, 84, 145, 0.7); }
+
+.question-waiting {
+  display: flex;
+  min-height: 14rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(47, 36, 24, 0.68);
+  font-family: var(--sans);
+  text-align: center;
+}
+
+.question-waiting p { margin: 0.8rem 0 0.25rem; }
+.question-waiting small { color: rgba(47, 36, 24, 0.48); }
+
+.question-seal {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 34%, rgba(255, 232, 183, 0.55), transparent 24%),
+    linear-gradient(135deg, #b96742, #71402f);
+  box-shadow: 0 2px 5px rgba(68, 42, 25, 0.34);
+}
+
+.question-private {
+  max-width: 30rem;
+  margin: auto auto 0;
+  color: rgba(47, 36, 24, 0.52);
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.question-earned {
+  position: fixed;
+  z-index: 12;
+  left: 50%;
+  bottom: max(2rem, calc(env(safe-area-inset-bottom) + 1rem));
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: min(25rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(232, 192, 112, 0.25);
+  border-radius: 999px;
+  background: rgba(12, 18, 13, 0.82);
+  color: #ead8ac;
+  font-family: var(--sans);
+  box-shadow: 0 0.8rem 2.5rem rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+  animation: drift-in 0.55s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+  pointer-events: none;
+}
+
+.question-earned > span { color: #e1a05b; }
+.question-earned p { margin: 0; }
+.question-earned b,
+.question-earned small { display: block; font-weight: 400; }
+.question-earned b { font-size: 0.76rem; letter-spacing: 0.04em; }
+.question-earned small { margin-top: 0.15rem; color: rgba(234, 216, 172, 0.58); font-size: 0.63rem; }
+
+@media (max-width: 600px) {
+  .question-answers { grid-template-columns: 1fr; }
+  .question-answer { min-height: auto; padding: 1rem 0; }
+  .question-answer + .question-answer {
+    border-top: 1px solid rgba(74, 58, 38, 0.18);
+    border-left: 0;
+  }
+  .question-prompt { margin-bottom: 1.4rem; }
+  .question-writing { min-height: 11rem; }
 }
 
 /* --- the hollow --- */
@@ -2164,6 +2582,319 @@ canvas {
   cursor: default;
 }
 
+.rally-actions button.is-selected {
+  color: #ffd29a;
+  text-shadow: 0 0 1.1rem rgba(255, 142, 54, 0.48), var(--lift);
+}
+
+.rally-actions button.is-selected::after { width: 100%; }
+
+.rally-menu-keys {
+  margin: 0.7rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  color: rgba(242, 239, 230, 0.3);
+}
+
+/* --------------------------------------------------------------------------
+   Choosing a road
+
+   Three thresholds, not cards. The top of each button is a tiny rendering
+   made from the same shapes the road uses; its words sit below the horizon and
+   never cover it. On a phone they stack, because two narrow postcards would
+   make both places look smaller precisely where the choice needs to feel big.
+   -------------------------------------------------------------------------- */
+
+.rally-courses {
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1rem, 2.5vh, 2rem);
+  overflow-y: auto;
+  padding: max(2.4rem, env(safe-area-inset-top)) 1.3rem
+    max(1.5rem, env(safe-area-inset-bottom));
+  text-align: center;
+  background:
+    radial-gradient(circle at 24% 44%, rgba(174, 91, 38, 0.13), transparent 34%),
+    radial-gradient(circle at 76% 35%, rgba(105, 141, 190, 0.16), transparent 38%),
+    linear-gradient(115deg, rgba(9, 6, 5, 0.86), rgba(8, 12, 19, 0.9));
+  animation: reader-in 0.65s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.rally-course-heading {
+  display: grid;
+  justify-items: center;
+}
+
+.rally-course-heading .rally-kicker {
+  margin-bottom: 0.45rem;
+}
+
+.rally-course-heading h1 {
+  font-size: clamp(1.8rem, 4.6vw, 3.35rem);
+}
+
+.rally-course-doors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(13rem, 23rem));
+  gap: clamp(1rem, 2.4vw, 2.4rem);
+  width: min(100%, 76rem);
+}
+
+.rally-course {
+  display: grid;
+  justify-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+  padding: 0 0 0.8rem;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.16);
+  color: var(--ink);
+  background: none;
+  font: inherit;
+  text-shadow: var(--lift);
+  cursor: pointer;
+  transition: border-color 0.35s ease, translate 0.45s cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+
+.rally-course:hover,
+.rally-course:focus-visible,
+.rally-course.is-selected {
+  border-bottom-color: rgba(242, 239, 230, 0.48);
+  outline: none;
+  translate: 0 -0.22rem;
+}
+
+.rally-course.is-selected {
+  box-shadow: 0 1.2rem 2.8rem rgba(0, 0, 0, 0.3), 0 0 2.4rem rgba(208, 121, 58, 0.12);
+}
+
+.rally-course-scene {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: clamp(10rem, 27vh, 15rem);
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  background: #080706;
+  isolation: isolate;
+}
+
+.rally-course.rootway .rally-course-scene {
+  border-radius: 48% 48% 0 0 / 34% 34% 0 0;
+  background:
+    radial-gradient(circle at 50% 76%, rgba(205, 112, 42, 0.2), transparent 24%),
+    linear-gradient(#090706, #17100b 70%, #080605);
+}
+
+.course-vault {
+  position: absolute;
+  left: 50%;
+  bottom: 19%;
+  border: 1px solid rgba(144, 109, 82, 0.48);
+  border-bottom: 0;
+  border-radius: 50% 50% 0 0 / 42% 42% 0 0;
+  translate: -50% 0;
+}
+
+.course-vault.one { width: 82%; height: 70%; }
+.course-vault.two { width: 48%; height: 48%; opacity: 0.6; }
+
+.rally-course .course-road {
+  position: absolute;
+  z-index: 2;
+  bottom: 0;
+  left: 50%;
+  width: 92%;
+  height: 46%;
+  translate: -50% 0;
+  clip-path: polygon(43% 0, 57% 0, 100% 100%, 0 100%);
+  background:
+    linear-gradient(90deg, transparent 49.6%, rgba(229, 190, 143, 0.25) 50%, transparent 50.4%),
+    linear-gradient(#31261e, #17100c);
+}
+
+.course-lamps {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 27%;
+  display: flex;
+  gap: 0.55rem;
+  translate: -50% 0;
+}
+
+.course-lamps b {
+  width: 0.42rem;
+  height: 0.24rem;
+  border-radius: 50%;
+  background: #ffd39c;
+  box-shadow: 0 0 1rem 0.34rem rgba(229, 111, 42, 0.58);
+}
+
+.rally-course.moonbreak .rally-course-scene {
+  background:
+    linear-gradient(to bottom, #151d34 0%, #34435a 58%, #132b32 59%, #07181e 100%);
+}
+
+.rally-course.moonbreak .course-moon {
+  position: absolute;
+  z-index: 1;
+  top: 10%;
+  right: 12%;
+  width: clamp(2.8rem, 7vw, 4.8rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #dbe1d8;
+  box-shadow: 0 0 2.6rem rgba(210, 224, 226, 0.34);
+}
+
+.rally-course.moonbreak .course-water {
+  position: absolute;
+  inset: 59% 0 0;
+  background:
+    repeating-linear-gradient(to bottom, rgba(174, 207, 215, 0.16) 0 1px, transparent 1px 1.15rem),
+    linear-gradient(#17373f, #07181e);
+}
+
+.rally-course.moonbreak .course-road {
+  z-index: 4;
+  width: 88%;
+  height: 52%;
+  background:
+    linear-gradient(90deg, transparent 49.6%, rgba(216, 226, 220, 0.3) 50%, transparent 50.4%),
+    linear-gradient(#8c908c, #3d4645);
+}
+
+.course-arch {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: 22%;
+  border: 2px solid rgba(221, 226, 216, 0.68);
+  border-bottom: 0;
+  border-radius: 50% 50% 0 0 / 74% 74% 0 0;
+  translate: -50% 0;
+  box-shadow: 0 0 1rem rgba(171, 203, 213, 0.14);
+}
+
+.course-arch.one { width: 55%; height: 51%; }
+.course-arch.two { width: 31%; height: 34%; bottom: 28%; opacity: 0.62; }
+
+.rally-course.stormcrown .rally-course-scene {
+  background:
+    radial-gradient(circle at 61% 24%, rgba(190, 220, 224, 0.18), transparent 9%),
+    linear-gradient(to bottom, #101a21 0%, #27363b 56%, #111b1d 57%, #08100f 100%);
+}
+
+.rally-course.stormcrown .course-peak {
+  position: absolute;
+  z-index: 1;
+  bottom: 28%;
+  width: 58%;
+  height: 58%;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  background: linear-gradient(115deg, #28363a 0 48%, #141f22 49% 100%);
+}
+
+.rally-course.stormcrown .course-peak.one { left: -8%; height: 48%; opacity: 0.76; }
+.rally-course.stormcrown .course-peak.two { left: 25%; height: 72%; }
+.rally-course.stormcrown .course-peak.three { right: -9%; height: 53%; opacity: 0.84; }
+
+.rally-course.stormcrown .course-road {
+  z-index: 4;
+  width: 78%;
+  height: 58%;
+  clip-path: polygon(46% 0, 56% 0, 92% 34%, 68% 55%, 100% 100%, 0 100%, 39% 53%, 18% 32%);
+  background:
+    linear-gradient(90deg, transparent 49.5%, rgba(205, 221, 218, 0.26) 50%, transparent 50.5%),
+    linear-gradient(#596060, #262e2e);
+}
+
+.rally-course.stormcrown .course-lightning {
+  position: absolute;
+  z-index: 5;
+  top: 7%;
+  left: 63%;
+  width: 0.2rem;
+  height: 41%;
+  background: #d9f3f5;
+  box-shadow: 0 0 1.4rem 0.26rem rgba(184, 225, 231, 0.4);
+  clip-path: polygon(46% 0, 100% 0, 62% 42%, 100% 42%, 0 100%, 32% 54%, 0 54%);
+  rotate: 12deg;
+}
+
+.rally-course.stormcrown .course-rain {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  opacity: 0.34;
+  background: repeating-linear-gradient(103deg, transparent 0 0.8rem, rgba(197, 220, 222, 0.48) 0.84rem 0.89rem, transparent 0.93rem 1.8rem);
+  animation: storm-course-rain 1.4s linear infinite;
+}
+
+@keyframes storm-course-rain {
+  to { background-position: 1.8rem 3.6rem; }
+}
+
+.rally-course-name {
+  font-family: var(--serif);
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.rally-course-copy {
+  max-width: 29ch;
+  min-height: 3em;
+  color: var(--ink-dim);
+  font-size: 0.86rem;
+  line-height: 1.48;
+}
+
+.rally-course-enter,
+.rally-course-leave {
+  color: var(--ink-faint);
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  text-transform: lowercase;
+}
+
+.rally-course-enter {
+  margin-top: 0.25rem;
+  transition: color 0.3s ease;
+}
+
+.rally-course:hover .rally-course-enter,
+.rally-course:focus-visible .rally-course-enter,
+.rally-course.is-selected .rally-course-enter {
+  color: var(--ink);
+}
+
+@media (pointer: coarse) {
+  .rally-menu-keys { display: none; }
+}
+
+.rally-course-leave {
+  border: 0;
+  border-bottom: 1px solid transparent;
+  padding: 0.35rem 0;
+  background: none;
+  cursor: pointer;
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+
+.rally-course-leave:hover,
+.rally-course-leave:focus-visible {
+  border-bottom-color: rgba(242, 239, 230, 0.32);
+  color: var(--ink);
+  outline: none;
+}
+
 /* --------------------------------------------------------------------------
    On the road
 
@@ -2179,6 +2910,131 @@ canvas {
 
 .rally-running {
   overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   The start gantry
+
+   Large enough to read in peripheral vision, but made of iron and light rather
+   than a boxed countdown. The three amber lenses latch in sequence; the green
+   is a separate lamp across a physical gap, so the final change reads before
+   the word underneath does.
+   -------------------------------------------------------------------------- */
+
+.rally-start {
+  position: absolute;
+  z-index: 5;
+  top: max(13vh, calc(env(safe-area-inset-top) + 4.5rem));
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 0.7rem;
+  translate: -50% 0;
+  pointer-events: none;
+  filter: drop-shadow(0 0.65rem 1rem rgba(0, 0, 0, 0.72));
+}
+
+.rally-start-rail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.48rem, 1.5vw, 0.76rem);
+  padding: 0.56rem 0.72rem;
+  border-block: 1px solid rgba(203, 170, 127, 0.26);
+  background: linear-gradient(90deg, transparent, rgba(16, 13, 11, 0.88) 12% 88%, transparent);
+}
+
+.rally-start-rail::before,
+.rally-start-rail::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 1.8rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(203, 170, 127, 0.45));
+}
+
+.rally-start-rail::before { right: 100%; }
+.rally-start-rail::after { left: 100%; rotate: 180deg; }
+
+.rally-start-rail i {
+  display: block;
+  width: clamp(1.15rem, 3.5vw, 1.65rem);
+  aspect-ratio: 1;
+  border: 2px solid rgba(148, 126, 101, 0.48);
+  border-radius: 50%;
+  background: #17120f;
+  box-shadow:
+    inset 0 0.18rem 0.32rem rgba(0, 0, 0, 0.86),
+    0 1px 0 rgba(255, 239, 211, 0.08);
+}
+
+.rally-start-rail b {
+  width: 1px;
+  height: 1.9rem;
+  margin-inline: 0.16rem;
+  background: rgba(203, 170, 127, 0.28);
+}
+
+.rally-start.ready .amber {
+  animation: rally-lamp-arm 0.16s ease-out both;
+}
+
+.rally-start.ready .amber.two { animation-delay: 1s; }
+.rally-start.ready .amber.three { animation-delay: 2s; }
+
+@keyframes rally-lamp-arm {
+  to {
+    border-color: rgba(255, 122, 47, 0.82);
+    background: #ff6e24;
+    box-shadow:
+      inset 0 0 0.25rem rgba(255, 235, 196, 0.7),
+      0 0 0.8rem rgba(255, 93, 24, 0.9),
+      0 0 2rem rgba(255, 74, 18, 0.42);
+  }
+}
+
+.rally-start.running .amber {
+  background: #211510;
+  box-shadow: inset 0 0.18rem 0.32rem rgba(0, 0, 0, 0.86);
+}
+
+.rally-start.running .green {
+  border-color: rgba(179, 255, 204, 0.9);
+  background: #71f2a4;
+  box-shadow:
+    inset 0 0 0.25rem rgba(242, 255, 235, 0.85),
+    0 0 1rem rgba(86, 255, 155, 0.95),
+    0 0 2.8rem rgba(62, 237, 132, 0.52);
+}
+
+.rally-start-cue {
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.72);
+  text-shadow: var(--lift);
+}
+
+.rally-start.running {
+  animation: rally-start-clear 0.85s ease-in 0.55s both;
+}
+
+.rally-start.running .rally-start-cue {
+  color: #baf4cc;
+  font-family: var(--serif);
+  font-size: 1rem;
+  letter-spacing: 0.28em;
+}
+
+.rally-start.paused,
+.rally-start.paused * {
+  animation-play-state: paused !important;
+}
+
+@keyframes rally-start-clear {
+  to { opacity: 0; translate: -50% -1rem; }
 }
 
 /*
@@ -2522,6 +3378,28 @@ canvas {
 .rally-replay-names span:last-child { color: var(--cool); }
 
 @media (max-width: 600px) {
+  .rally-courses {
+    justify-content: flex-start;
+    padding-top: max(6.4rem, calc(env(safe-area-inset-top) + 5.8rem));
+  }
+
+  .rally-course-heading h1 {
+    font-size: clamp(1.75rem, 8vw, 2.35rem);
+  }
+
+  .rally-course-doors {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.35rem;
+  }
+
+  .rally-course-scene {
+    height: 9.5rem;
+  }
+
+  .rally-course-copy {
+    min-height: 0;
+  }
+
   .rally-centre {
     justify-content: flex-end;
     padding-bottom: max(4.5rem, calc(env(safe-area-inset-bottom) + 3rem));
@@ -4093,6 +4971,532 @@ canvas {
 .game-marks button.on {
   background: var(--warm);
   transform: scale(1.35);
+}
+
+/* --------------------------------------------------------------------------
+   Hallow game forge
+
+   The old threshold was one paragraph at a time in a narrow carousel. This is
+   a ring of playable objects around the fire: every game is visible, the one
+   in front opens into a lit threshold, and its way in sits directly beneath
+   it. The cave remains the background; these surfaces only catch its light.
+   -------------------------------------------------------------------------- */
+
+.hollow-selector {
+  bottom: max(1.3rem, calc(env(safe-area-inset-bottom) + 0.8rem));
+  width: min(78rem, calc(100vw - 2rem));
+  max-height: calc(100vh - max(6.5rem, env(safe-area-inset-top)));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  touch-action: pan-y;
+}
+
+.hollow-selector::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  bottom: -2rem;
+  width: min(78rem, 100vw);
+  height: min(31rem, 68vh);
+  translate: -50% 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 80%, rgba(224, 117, 45, 0.2), transparent 42%),
+    radial-gradient(ellipse at 50% 58%, rgba(7, 5, 4, 0.58), transparent 72%);
+  filter: blur(0.3px);
+}
+
+.hollow-game-heading {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  margin-bottom: clamp(0.45rem, 1.4vh, 0.9rem);
+}
+
+.hollow-game-heading .threshold-whisper {
+  margin-bottom: 0.28rem;
+  color: rgba(242, 239, 230, 0.5);
+}
+
+.hollow-game-heading h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(1.75rem, 4vw, 3rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.hollow-game-count {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 1.1rem);
+  min-width: 4rem;
+  font-family: var(--sans);
+  font-size: 0.54rem;
+  letter-spacing: 0.17em;
+  color: rgba(242, 239, 230, 0.35);
+  translate: 0 -50%;
+}
+
+.hollow-selector .game-showcase {
+  position: relative;
+  width: 100%;
+  /* The row is a page now, and a page eight hundred pixels wide is a banner.
+     Held to something a card can fill without becoming a letterbox. */
+  max-width: 44rem;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: 2.3rem minmax(0, 1fr) 2.3rem;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/*
+  One game to a page, with the next one showing at the edge.
+
+  ---------------------------------------------------------------------------
+  The row used to fit three to five cards on the screen at once, which is a
+  *menu*: five things competing, none of them larger than a postcard, and the
+  one you are on distinguished only by being a little brighter than its
+  neighbours. A game deserves better than a tile in a grid.
+
+  So the card is now most of the width and the row is paged. What is left
+  either side is deliberate and is the whole reason this is a row rather than
+  a stack of pages: **you can see that there is another one, and roughly what
+  it looks like, without being able to read it.** That sliver is what makes the
+  next arrow worth pressing — a page with nothing at its edges gives you no
+  reason to think there is anything beyond it.
+
+  `--card` is what does it, and the padding is derived from it rather than
+  guessed: half the row minus half a card is exactly the inset that lets the
+  *first* and *last* cards reach the middle of the screen. Without that the two
+  ends can never centre, and the row quietly refuses to snap to either of them.
+  ---------------------------------------------------------------------------
+*/
+.hollow-selector .game-row {
+  /*
+     A proportion of the row, not of the window.
+
+     As a width in rem it capped out, and on a wide screen the card stopped
+     growing while the row kept going — so the 'peek' became most of the next
+     card, name and all, and the page was two games again. As a percentage the
+     edge is the same fraction of the row at every size, which is what makes it
+     read as one page everywhere.
+  */
+  /*
+     An absolute width, and it has to be absolute.
+
+     This was a percentage, which looked right and was subtly wrong: a grid's
+     auto-columns resolve against the *content* box, and the padding either
+     side of this row is what makes the first and last card able to reach the
+     middle of the screen. So the card was seventy-six per cent of (the row
+     less the padding), the padding was derived from the card, and the two
+     chased each other down to a card a hundred and twenty pixels narrower
+     than intended — sitting visibly left of centre, because the arithmetic
+     that centred it no longer described its width.
+
+     Sized off the viewport with a ceiling instead. Percentage *padding*
+     resolves against the containing block rather than the content box, so
+     with an absolute card there is no loop left to close.
+  */
+  --card: min(64vw, 30rem);
+  --edge: calc(50% - var(--card) / 2);
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--card);
+  align-items: stretch;
+  gap: clamp(0.7rem, 2.2vw, 1.5rem);
+  width: 100%;
+  padding: 0.9rem 0 1.15rem;
+  padding-inline: var(--edge);
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--edge);
+  scrollbar-width: none;
+  /* Softer than it was, because the thing being faded is now a card you are
+     meant to notice rather than the tail of a list. */
+  /* Tight to the edges. Faded at 12% the slivers disappeared entirely and the
+     row became a stack of pages with nothing beyond them, which is the thing
+     the peek exists to prevent. */
+  mask-image: linear-gradient(90deg, transparent, black 7%, black 93%, transparent);
+}
+
+.hollow-selector .game-row::-webkit-scrollbar { display: none; }
+
+.hollow-selector .game-card {
+  position: relative;
+  flex: none;
+  min-width: 0;
+  min-height: clamp(13.5rem, 34vh, 19rem);
+  display: grid;
+  grid-template-rows: auto minmax(5.5rem, 1fr) auto auto auto auto;
+  place-items: center;
+  align-content: center;
+  gap: 0.36rem;
+  padding: 1rem 1.4rem 1.05rem;
+  border: 1px solid rgba(220, 181, 129, 0.08);
+  border-block-color: rgba(220, 181, 129, 0.2);
+  border-radius: 48% 48% 0.3rem 0.3rem / 12% 12% 0.3rem 0.3rem;
+  background:
+    radial-gradient(ellipse at 50% 67%, rgba(214, 113, 42, 0.1), transparent 52%),
+    linear-gradient(180deg, rgba(22, 17, 13, 0.2), rgba(9, 7, 6, 0.5));
+  color: var(--ink);
+  font: inherit;
+  text-shadow: var(--lift);
+  cursor: pointer;
+  /* Further back than before: at this size a neighbour at 0.92 and 0.46 is
+     a second card competing for the page rather than an edge you can see past. */
+  opacity: 0.44;
+  translate: none;
+  scale: 0.86;
+  scroll-snap-align: center;
+  box-shadow: inset 0 -1px 0 rgba(255, 181, 101, 0.08);
+  transition:
+    opacity 0.35s ease,
+    scale 0.5s cubic-bezier(0.2, 0.75, 0.25, 1),
+    border-color 0.35s ease,
+    background 0.45s ease,
+    box-shadow 0.45s ease;
+}
+
+.hollow-selector .game-card:hover,
+.hollow-selector .game-card:focus-visible {
+  opacity: 0.78;
+  outline: none;
+  border-block-color: rgba(244, 190, 125, 0.48);
+}
+
+.hollow-selector .game-card.is-selected {
+  opacity: 1;
+  scale: 1;
+  border-color: rgba(238, 184, 116, 0.2);
+  border-block-color: rgba(255, 188, 104, 0.62);
+  background:
+    radial-gradient(ellipse at 50% 68%, rgba(255, 139, 52, 0.24), transparent 52%),
+    linear-gradient(180deg, rgba(33, 23, 16, 0.28), rgba(11, 7, 5, 0.7));
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 213, 157, 0.18),
+    0 1.2rem 2.5rem rgba(0, 0, 0, 0.32),
+    0 0 2.5rem rgba(220, 111, 39, 0.1);
+}
+
+.hollow-selector .game-card-number {
+  justify-self: start;
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  color: rgba(242, 239, 230, 0.3);
+}
+
+.hollow-selector .game-card-object {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  transition: filter 0.4s ease, scale 0.4s ease;
+}
+
+.hollow-selector .game-card.is-selected .game-card-object {
+  scale: 1.12;
+  filter: drop-shadow(0 0 1.25rem rgba(255, 147, 66, 0.22));
+}
+
+.hollow-selector .game-card .emblem {
+  width: min(100%, 11.5rem);
+  height: clamp(3.7rem, 9vh, 5.4rem);
+}
+
+.hollow-selector .game-card strong {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.18rem, 2.2vw, 1.6rem);
+  line-height: 1.05;
+}
+
+.hollow-selector .game-card small {
+  max-width: 25ch;
+  margin: 0.24rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity 0.35s ease, max-height 0.45s ease;
+}
+
+.hollow-selector .game-card.is-selected small {
+  opacity: 1;
+  max-height: 4.5rem;
+}
+
+.game-card-command {
+  margin-top: 0.35rem;
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: transparent;
+  transition: color 0.3s ease;
+}
+
+.game-card.is-selected .game-card-command { color: rgba(255, 194, 125, 0.66); }
+
+.hollow-selector .game-card-coming { filter: saturate(0.35); }
+
+.hollow-selector .game-step {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid rgba(242, 239, 230, 0.13);
+  border-radius: 50%;
+  background: rgba(7, 5, 4, 0.32);
+  color: rgba(242, 239, 230, 0.72);
+  font-family: var(--serif);
+  font-size: 1.65rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.25s ease, border-color 0.25s ease, scale 0.25s ease;
+}
+
+.hollow-selector .game-step:hover,
+.hollow-selector .game-step:focus-visible {
+  color: var(--warm);
+  border-color: rgba(255, 181, 99, 0.5);
+  outline: none;
+  scale: 1.08;
+}
+
+.hollow-selector .game-step:disabled { opacity: 0.16; cursor: default; scale: 1; }
+
+.hollow-selector .game-ways {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(10rem, auto) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem 1.2rem;
+  min-width: min(31rem, 90vw);
+  margin-top: 0.15rem;
+  padding: 0.65rem 1.2rem 0.7rem;
+  border-block: 1px solid rgba(242, 239, 230, 0.1);
+  background: linear-gradient(90deg, transparent, rgba(8, 6, 5, 0.46), transparent);
+}
+
+.game-way-label {
+  grid-column: 1 / -1;
+  font-family: var(--sans);
+  font-size: 0.48rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.34);
+}
+
+.hollow-selector .game-go {
+  position: relative;
+  justify-self: end;
+  min-width: 10rem;
+  padding: 0.34rem 0.8rem;
+  font-size: clamp(1.02rem, 2vw, 1.25rem);
+  transition: color 0.25s ease, text-shadow 0.25s ease;
+}
+
+.hollow-selector .game-go::before,
+.hollow-selector .game-else button::before {
+  content: '';
+  position: absolute;
+  inset: 50% -0.55rem auto;
+  z-index: -1;
+  height: 1.9rem;
+  translate: 0 -50%;
+  background: radial-gradient(ellipse, rgba(255, 137, 49, 0.2), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.hollow-selector .game-go.is-selected,
+.hollow-selector .game-else button.is-selected {
+  color: #ffd49f;
+  text-shadow: 0 0 1rem rgba(255, 137, 49, 0.5), var(--lift);
+}
+
+.hollow-selector .game-go.is-selected::before,
+.hollow-selector .game-else button.is-selected::before { opacity: 1; }
+
+.hollow-selector .game-else {
+  justify-content: flex-start;
+  gap: 1.1rem;
+}
+
+.hollow-selector .game-else button { position: relative; }
+
+.hollow-selector .game-marks { margin-top: 0.55rem; }
+
+.game-key-guide {
+  margin: 0.38rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.49rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.28);
+}
+
+.hollow-selector .to-waiting {
+  margin-top: 0.45rem;
+  padding-top: 0.65rem;
+}
+
+/* A game is chosen before a way into it is chosen. This second threshold is
+   deliberately smaller and quieter than the gallery: the cave and the game
+   object remain visible, while the only decisions left are the actual modes. */
+.hollow-way-threshold {
+  width: min(44rem, calc(100vw - 2rem));
+  min-height: min(31rem, 72vh);
+  justify-content: center;
+  gap: clamp(0.8rem, 2.2vh, 1.35rem);
+}
+
+.hollow-way-threshold::before {
+  height: min(36rem, 78vh);
+  background:
+    radial-gradient(ellipse at 50% 62%, rgba(224, 117, 45, 0.24), transparent 46%),
+    radial-gradient(ellipse at 50% 64%, rgba(7, 5, 4, 0.72), transparent 74%);
+}
+
+.hollow-threshold .hollow-way-back {
+  align-self: flex-start;
+  padding: 0.35rem 0;
+  color: rgba(242, 239, 230, 0.52);
+  font-family: var(--sans);
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: color 0.25s ease;
+}
+
+.hollow-threshold .hollow-way-back:hover,
+.hollow-threshold .hollow-way-back:focus-visible {
+  color: #ffd09a;
+  outline: none;
+}
+
+.hollow-threshold .hollow-way-back::after { display: none; }
+
+.hollow-way-heading {
+  display: grid;
+  place-items: center;
+  gap: 0.42rem;
+  width: min(31rem, 92vw);
+}
+
+.hollow-way-emblem {
+  display: grid;
+  place-items: center;
+  width: min(15rem, 48vw);
+  height: clamp(5.5rem, 14vh, 8rem);
+  margin: 0.2rem 0 0.3rem;
+  filter: drop-shadow(0 0 1.8rem rgba(255, 139, 52, 0.3));
+}
+
+.hollow-way-emblem .emblem {
+  width: 100%;
+  height: 100%;
+}
+
+.hollow-way-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  text-shadow: var(--lift);
+}
+
+.hollow-way-heading p {
+  max-width: 34ch;
+  margin: 0.25rem 0 0;
+  color: rgba(242, 239, 230, 0.68);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.hollow-way-heading small {
+  color: rgba(242, 239, 230, 0.34);
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.hollow-way-threshold .game-ways {
+  margin-top: 0.35rem;
+  padding-block: 0.9rem;
+}
+
+.challenges-list > .is-selected .standing {
+  color: #ffd09a;
+  text-shadow: 0 0 1rem rgba(255, 137, 49, 0.38), var(--lift);
+}
+
+@media (max-width: 680px) {
+  .hollow-selector {
+    bottom: max(0.55rem, env(safe-area-inset-bottom));
+    width: 100vw;
+    max-height: calc(100vh - 4.2rem);
+  }
+
+  .hollow-game-heading h2 { font-size: clamp(1.65rem, 8vw, 2.2rem); }
+  .hollow-game-count { display: none; }
+
+  .hollow-selector .game-showcase {
+    grid-template-columns: 1.85rem minmax(0, 1fr) 1.85rem;
+    gap: 0;
+  }
+
+  .hollow-selector .game-row {
+    grid-auto-columns: 74vw;
+    padding-block: 0.65rem 0.85rem;
+    scroll-padding-inline: 13vw;
+  }
+
+  .hollow-selector .game-card {
+    min-height: min(15.5rem, 39vh);
+    scale: 0.94;
+  }
+
+  .hollow-selector .game-card.is-selected { scale: 1; }
+
+  .hollow-selector .game-step {
+    width: 1.8rem;
+    border-color: transparent;
+    background: none;
+  }
+
+  .hollow-selector .game-ways {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    width: min(88vw, 28rem);
+    padding-block: 0.5rem;
+  }
+
+  .game-way-label { grid-column: 1; }
+  .hollow-selector .game-go { justify-self: center; }
+  .hollow-selector .game-else { justify-content: center; }
+  .game-key-guide { display: none; }
+  .hollow-selector .to-waiting { margin-top: 0.25rem; }
+}
+
+@media (pointer: coarse) {
+  .game-key-guide { display: none; }
 }
 
 /* --------------------------------------------------------------------------
@@ -6420,3 +7824,414 @@ canvas {
   color: var(--ink-dim);
   text-shadow: var(--lift);
 }
+
+/* ---------------------------------------------------------------------------
+   The control room — /dev7731.
+
+   Deliberately ugly, in the specific sense that it obeys none of the design
+   law the rest of this file exists to enforce. It has boxes, borders, a
+   monospace face and a scrollbar. That is the point: everything else here is
+   text on a landscape, so the one screen that is *machinery* has to be
+   unmistakably machinery. The moment this starts looking like the garden,
+   somebody will wonder whether it is part of it.
+--------------------------------------------------------------------------- */
+
+.admin {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow-y: auto;
+  padding: 1.2rem 1.2rem 4rem;
+  background: #0f1113;
+  color: #cfd4d8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+
+.admin-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid #262b30;
+}
+
+.admin-head h1 {
+  margin: 0;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #7fd6a8;
+}
+
+.admin section {
+  max-width: 46rem;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid #1c2126;
+}
+
+.admin h2 {
+  margin: 0 0 0.6rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8f989f;
+}
+
+.admin-note {
+  margin: 0.35rem 0;
+  color: #8b939a;
+}
+
+.admin-note b {
+  color: #cfd4d8;
+  font-weight: 600;
+}
+
+.admin label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.45rem 0;
+}
+
+.admin .k {
+  flex: 0 0 100%;
+  color: #8f989f;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.admin input[type='text'],
+.admin select,
+.admin textarea {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  padding: 0.34rem 0.45rem;
+  background: #171a1e;
+  color: #cfd4d8;
+  border: 1px solid #2b3238;
+  border-radius: 2px;
+  font: inherit;
+}
+
+.admin textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.admin input[type='range'] {
+  flex: 1 1 100%;
+  accent-color: #7fd6a8;
+}
+
+.admin input:focus,
+.admin select:focus,
+.admin textarea:focus {
+  outline: none;
+  border-color: #7fd6a8;
+}
+
+.admin .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.admin button {
+  padding: 0.42rem 0.7rem;
+  background: #1b2025;
+  color: #cfd4d8;
+  border: 1px solid #2b3238;
+  border-radius: 2px;
+  font: inherit;
+  cursor: pointer;
+  /* A thumb, not a mouse pointer — this gets used on a phone too. */
+  min-height: 2.1rem;
+}
+
+.admin button:hover,
+.admin button:focus-visible {
+  border-color: #46525c;
+  outline: none;
+}
+
+/* Which one is currently in force. There is always exactly one. */
+.admin button.on {
+  background: #163023;
+  border-color: #7fd6a8;
+  color: #a8e8c6;
+}
+
+.admin-head button {
+  background: none;
+  border-color: #2b3238;
+}
+
+/*
+  The one section that can lose something.
+
+  Red, boxed and set apart, because everything else on this page is reversible
+  by pressing a different button and this is not. The confirm is in the handler
+  as well — this is only the part you can see.
+*/
+.admin-danger {
+  margin-top: 0.6rem;
+  padding: 1rem;
+  border: 1px solid #4a2226;
+  border-radius: 3px;
+  background: #17100f;
+}
+
+.admin-danger h2 {
+  color: #d98a86;
+}
+
+.admin-danger button {
+  background: #2a1416;
+  border-color: #5c2c30;
+  color: #e8b0ab;
+}
+
+/*
+  Asking twice, before a photograph is deleted.
+
+  Set below the ways out rather than replacing them, so the picture is still
+  on screen while the question is being read — the whole point of the second
+  ask is that you are looking at what you are about to lose.
+*/
+.opened-taking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  max-width: 28rem;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: 0.94rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  text-shadow: var(--lift);
+  animation: drift-in 0.3s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.opened-taking-ways {
+  display: flex;
+  align-items: baseline;
+  gap: 1.4rem;
+}
+
+/* ---------------------------------------------------------------------------
+   An open memory is a place you walked to, not a panel over a stopped world.
+
+   The Glasshouse turns the building square to the pane and glides the aisle to
+   its bay; `.opened-laid` is the real photograph, positioned every frame onto
+   the rectangle that pane projects to. So everything here has to *stay out of
+   the way of the room* — the old version dimmed the world to a dark wash and
+   stacked a picture and two captions in the middle of it, which is a lightbox
+   however good the picture is.
+--------------------------------------------------------------------------- */
+
+/*
+   Almost nothing behind it now.
+
+   It was a heavy radial scrim, which made sense when the world was static
+   behind a modal and makes none when the world is the thing you are looking
+   at. What is left is a breath of the picture's own colour at the edges — the
+   room taking the photograph's light, which is what the pools on the floor and
+   the glass itself are already doing.
+*/
+.opened {
+  background:
+    radial-gradient(
+      ellipse 80% 70% at 50% 46%,
+      color-mix(in srgb, var(--memory-tint) 18%, transparent),
+      transparent 72%
+    ),
+    /* Enough dark under the words to read them over a bright picture, and
+       nothing above it — the room stays the room. */
+    linear-gradient(180deg, transparent 52%, rgba(4, 6, 8, 0.5) 78%, rgba(4, 6, 8, 0.88) 100%);
+  /* The words at the bottom, the picture wherever the pane is. */
+  justify-content: flex-end;
+  gap: 0.7rem;
+  /* Taps go to the controls; everything else belongs to the room behind. */
+  pointer-events: none;
+}
+
+.opened > * {
+  pointer-events: auto;
+}
+
+/*
+   The photograph, on the glass.
+
+   Every one of these numbers is written by the animation frame in
+   ui/Glasshouse — left, top, width, height and opacity — so the CSS only says
+   what kind of thing it is. `position: fixed` because the rectangle is in
+   viewport pixels, straight off the projection.
+*/
+.opened-laid {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  /*
+    Clipped to itself.
+
+    The blurred preview underneath is scaled up and blurred by eighteen pixels,
+    which without this spreads a soft halo of the picture right across the
+    building — and when the photograph is missing entirely, that halo *is* what
+    you see: a coloured smear the size of a wall. A photograph has edges.
+  */
+  overflow: hidden;
+  /*
+    A dropped shadow, so it sits *in front of* the pane rather than being
+    pasted onto the wall. Small — this is a picture in a frame, not a card.
+  */
+  filter: drop-shadow(0 6px 26px rgba(0, 0, 0, 0.55));
+}
+
+.opened-laid .opened-blur,
+.opened-laid .opened-picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Never cropped here: the frame in the wall crops to three by two, and this
+     is where the rest of the photograph comes back. */
+  object-fit: fill;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+}
+
+.opened-laid .opened-blur {
+  filter: blur(18px);
+  transform: scale(1.06);
+  /* Fully opaque: it is underneath the photograph so it never shows in the
+     ordinary case, and when the photograph is missing this is what is left —
+     which should be a picture of its colours, not a translucent one. */
+  opacity: 1;
+}
+
+.opened.together .opened-laid {
+  filter:
+    drop-shadow(0 6px 26px rgba(0, 0, 0, 0.55))
+    drop-shadow(-3px 0 18px rgba(240, 169, 75, 0.55))
+    drop-shadow(3px 0 18px rgba(159, 182, 232, 0.55));
+}
+
+/*
+   The back of the glass keeps the middle of the screen, because turning a pane
+   over is the one moment the photograph is deliberately not what you are
+   looking at.
+*/
+.opened-glass {
+  width: min(26rem, 92vw);
+  margin-inline: auto;
+}
+
+.opened-glass:not(.turned) {
+  /* Nothing to show on the front any more — the picture is on the pane. */
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.opened-said {
+  margin-bottom: 0.2rem;
+}
+
+/* ---- a phone ---- */
+
+@media (max-width: 34rem) {
+  .opened {
+    padding-bottom: max(1.1rem, calc(env(safe-area-inset-bottom) + 0.6rem));
+    gap: 0.5rem;
+  }
+
+  /* One row, wrapping. Three short labels stacked is three lines of screen
+     taken from the photograph, which is the thing they are labels for. */
+  .opened .opened-ways {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.2rem 1.1rem;
+  }
+}
+
+/*
+  The road takes the screen.
+
+  ---------------------------------------------------------------------------
+  The garden's own two pieces of furniture — who is here, and what is playing —
+  sit in the top corners of every screen in the world, and that is right
+  everywhere except on a road. A race is a takeover: it has its own camera, its
+  own field of view, its own idea of what "lit" means, and its own two readouts
+  in those same two corners. Left alone they overlap, and on a phone they
+  overlap *badly*: at a hundred and three kilometres an hour the speed is three
+  digits wide and lands directly on top of "nothing playing".
+
+  Which of the two should move was not really a question. One of them is the
+  number you are steering by.
+
+  Hidden rather than nudged, because nudging leaves them there — and something
+  half-legible behind a speedometer is worse than nothing at all: it reads as a
+  layout fault rather than as a thing you could look at if you wanted it. They
+  come straight back the moment the road closes.
+
+  Done in CSS with `:has` rather than in React, because it is a fact about
+  what is on the screen and neither of those components should have to learn
+  that racing exists.
+  ---------------------------------------------------------------------------
+*/
+body:has(.rally-running) .people,
+body:has(.rally-running) .corner:not(:has(.whisper.open)),
+body:has(.rally-running) .player {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+
+/*
+  What is next, in words.
+
+  The peeking card says *that* there is another one; this says which. Both are
+  wanted and they are not the same thing — the sliver is what makes you reach
+  for the arrow, and the name is what tells you whether to bother. It is set
+  small and quiet in the sans, like every other piece of machinery in the
+  garden, because it is a signpost and not an invitation.
+
+  It holds its height when there is nothing next, so the row does not jump by a
+  line as you reach the end of it.
+*/
+.hollow-selector .game-next {
+  margin: 0.1rem 0 0;
+  min-height: 1.1rem;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: lowercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+  transition: opacity 0.3s ease;
+}
+
+.hollow-selector .game-next em {
+  font-style: normal;
+  color: var(--ink-dim);
+}
+

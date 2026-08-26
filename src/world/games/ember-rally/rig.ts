@@ -24,7 +24,7 @@ import {
 } from './car'
 import { basisAt, roadPoint, type RoadBasis } from './geometry'
 import type { CarState } from './physics'
-import { emptyRoad, roadAt, type Track } from './track'
+import { emptyRoad, roadAtRoute, type Track } from './track'
 
 /** Everything `poseWheels` needs. The studio has no physics behind it. */
 export type Posture = Pick<CarState, 'wheels' | 'roll' | 'pitch' | 'heave'>
@@ -100,6 +100,8 @@ export interface CarRig {
   /** Turns. */
   spinners: Group[]
   springs: Group[]
+  /** Twin, body-mounted exhaust plumes. Hidden unless boost is burning. */
+  boostJets: Group
   spin: number[]
 }
 
@@ -108,6 +110,8 @@ export function useCarRig(
   wheelMaterials: Material[],
   beamGeometry: BufferGeometry,
   beamMaterial: Material,
+  boostOuter?: Material,
+  boostCore?: Material,
 ): CarRig {
   const { shell, wheel, spring } = carGeometry()
 
@@ -208,8 +212,41 @@ export function useCarRig(
     shaft.renderOrder = 4
     body.add(shaft)
 
-    return { root, ground, body, hubs, cambers, spinners, springs, spin: [0, 0, 0, 0] }
-  }, [shell, wheel, spring, material, wheelMaterials, beamGeometry, beamMaterial])
+    /*
+      Nitro belongs to the exhaust, not to the air around the camera.
+
+      The old effect was loose ash spawned behind the car, which looked like a
+      particle preset because it had no visible source. These are two narrow
+      physical columns rooted exactly in the two pipes. The existing beam
+      geometry already has the soft near/far fade a hot jet needs; turned
+      around and nested in blue and white, it reads as pressure rather than
+      glitter and costs no new geometry.
+    */
+    const boostJets = new Group()
+    boostJets.visible = false
+    if (boostOuter) {
+      for (const side of [-0.3, 0.3]) {
+        const outer = new Mesh(beamGeometry, boostOuter)
+        outer.position.set(side, 0.26, -1.86)
+        outer.rotation.y = Math.PI
+        outer.scale.set(0.055, 0.052, 0.13)
+        outer.frustumCulled = false
+        outer.renderOrder = 7
+        boostJets.add(outer)
+
+        const core = new Mesh(beamGeometry, boostCore ?? boostOuter)
+        core.position.set(side, 0.26, -1.865)
+        core.rotation.y = Math.PI
+        core.scale.set(0.024, 0.021, 0.082)
+        core.frustumCulled = false
+        core.renderOrder = 8
+        boostJets.add(core)
+      }
+    }
+    body.add(boostJets)
+
+    return { root, ground, body, hubs, cambers, spinners, springs, boostJets, spin: [0, 0, 0, 0] }
+  }, [shell, wheel, spring, material, wheelMaterials, beamGeometry, beamMaterial, boostOuter, boostCore])
 }
 
 /**
@@ -347,11 +384,16 @@ export function placeCar(
   roll: number,
   pitch: number,
   heave = 0,
+  drop = 0,
+  shortcut = false,
 ) {
-  const road = roadAt(track, s, placeRoad)
+  const road = roadAtRoute(track, s, shortcut, placeRoad)
   const basis = basisAt(road, placeBasis)
   roadPoint(road, n, 0, placePoint, basis)
   rig.root.position.copy(placePoint)
+  rig.root.position.x += basis.ux * drop
+  rig.root.position.y += basis.uy * drop
+  rig.root.position.z += basis.uz * drop
   rig.root.rotation.set(0, road.heading - psi, 0)
   /*
     Two tilts, and they belong to different things.
@@ -367,4 +409,3 @@ export function placeCar(
   rig.body.rotation.set(pitch, 0, roll)
   rig.body.position.y = heave
 }
-

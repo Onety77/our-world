@@ -27,6 +27,9 @@ import {
   Vector3,
 } from 'three'
 import { Fire } from '@/world/Fire'
+import { useWorldSlice } from '@/data/provider'
+import { seasonedBy } from '@/systems/seasoned'
+import { theRoom } from '@/systems/waiting'
 
 /** Radius of the room, metres. */
 const ROOM = 14
@@ -98,12 +101,47 @@ const ROCK_FRAG = /* glsl */ `
 
   uniform vec3 uFires[HEARTHS];
   uniform float uFlickers[HEARTHS];
+  /**
+   * How much of itself this room has earned, 0 to 1. See systems/seasoned.
+   *
+   * Every other place in the garden keeps what happens in it and the Hollow
+   * kept nothing, which quietly said that none of it counted. Now ember runs
+   * through the rock, and there is more of it than there was.
+   *
+   * Two things stop it being a score. It is desperately slow — half lit is
+   * most of a season of daily rounds — and it is lit *by the fires* rather
+   * than glowing on its own, so what spreads is not a bar filling up but the
+   * amount of the room that has something in it to catch the light. Walk away
+   * from the hearths and the veins go dark like everything else.
+   */
+  uniform float uSeasoned;
   varying vec3 vWorld;
   varying vec3 vNormal;
+
+  /**
+   * Ore in the stone: ridges where a couple of folded sine fields cross zero.
+   *
+   * Ridged rather than blobby: one minus the absolute value puts it at its highest
+   * along a thin line instead of over a patch, which is the difference between
+   * a vein and a stain. Two octaves is enough at this scale; the rock is seen
+   * from a few metres away in firelight and never in daylight.
+   */
+  float oreAt(vec3 p) {
+    float a = sin(p.x * 1.42 + sin(p.z * 1.83) * 1.9);
+    float b = sin(p.z * 1.17 + sin(p.y * 2.31) * 1.4);
+    float c = sin((p.x + p.y) * 0.67 - sin(p.z * 1.39) * 1.1);
+    float n = (a + b + c) * 0.333;
+    // Raised to a high power so what is left is a *thread*. At the first
+    // attempt this was the bare ridge, and sixty rounds of an evening game
+    // painted metre-wide amber ribbons across the ceiling: a lava lamp, not a
+    // cave with ore in it.
+    return pow(max(0.0, 1.0 - abs(n)), 16.0);
+  }
 
   void main() {
     vec3 rock = vec3(0.23, 0.19, 0.16);
     vec3 fire = vec3(1.0, 0.62, 0.3);
+    float nearFire = 0.0;
 
     // a whisper of cool from above, so the shadowed side is blue-dark rather
     // than void — pure black reads as "nothing drawn here"
@@ -127,6 +165,23 @@ const ROCK_FRAG = /* glsl */ `
       */
       float fall = 1.0 / (1.0 + d * d * 0.28);
       col += rock * fire * lambert * fall * 4.6 * uFlickers[i];
+      nearFire += fall * uFlickers[i];
+    }
+
+    /*
+      The ore, where there is any, catching whatever firelight reaches it.
+
+      The threshold comes down as the room earns it, so early on only the
+      sharpest ridges show and there is more and more of the field above the
+      line as the years go by. Multiplied by the same falloff the rock itself
+      uses, so a vein twelve metres from any fire is as dark as the stone
+      around it — which is what keeps this a property of the room rather than a
+      light source of its own.
+    */
+    if (uSeasoned > 0.001) {
+      float ore = oreAt(vWorld);
+      float shows = smoothstep(0.74 - uSeasoned * 0.42, 0.985, ore);
+      col += vec3(1.0, 0.44, 0.13) * shows * min(nearFire, 1.4) * 0.4;
     }
 
     // grain, from the world position, so it doesn't swim when the camera moves
@@ -140,6 +195,16 @@ const ROCK_FRAG = /* glsl */ `
 `
 
 function useRockMaterial(side: Side = FrontSide) {
+  /*
+    How much of itself the room has earned.
+
+    Read once here rather than watched every frame: it moves about once a day
+    at the very fastest, and a shader uniform that could have been set on mount
+    has no business being written sixty times a second. See `seasonedBy`.
+  */
+  const pollen = useWorldSlice((world) => world.pollen.total)
+  const seasoned = useMemo(() => seasonedBy(pollen), [pollen])
+
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -147,6 +212,7 @@ function useRockMaterial(side: Side = FrontSide) {
         fragmentShader: ROCK_FRAG,
         side,
         uniforms: {
+          uSeasoned: { value: 0 },
           uFires: { value: HEARTHS.map((h) => new Vector3(...h.at)) },
           uFlickers: { value: HEARTHS.map(() => 1) },
         },
@@ -155,6 +221,9 @@ function useRockMaterial(side: Side = FrontSide) {
     [],
   )
   useEffect(() => () => material.dispose(), [material])
+  useEffect(() => {
+    material.uniforms.uSeasoned.value = seasoned
+  }, [material, seasoned])
 
   const t = useRef(Math.random() * 10)
   useFrame((_, delta) => {
@@ -237,15 +306,40 @@ function Room() {
 // Embers
 // ---------------------------------------------------------------------------
 
-const EMBER_COUNT = 42
+/**
+ * How many embers the fire has, and how many of them it is using.
+ *
+ * Sized for the busy case and *held back* the rest of the time rather than
+ * grown when wanted, because an instanced buffer cannot change size without
+ * being rebuilt — and rebuilding the fire because somebody took their turn is
+ * the kind of thing that shows up as a hitch on a phone. The extra ones are
+ * always allocated and simply do not light. See uWaiting.
+ */
+const EMBER_COUNT = 54
+/** The share of them a quiet room burns. The rest are the ones that mean something. */
+const EMBER_QUIET = 0.72
 
 const EMBER_VERT = /* glsl */ `
   attribute float iPhase;
   attribute float iDrift;
   uniform float uTime;
+  /**
+   * How awake the room is: EMBER_QUIET when nothing is waiting, 1 when
+   * something is.
+   *
+   * The extra embers are the ones whose own phase sits above the quiet share,
+   * so they arrive spread through the fire rather than in a clump, and they
+   * fade in over about a second and a half rather than appearing. Nobody
+   * should ever catch the room changing — you should only notice, later, that
+   * it is livelier than you remember.
+   */
+  uniform float uWaiting;
   varying float vLife;
+  varying float vLit;
 
   void main() {
+    // The ones above the quiet share only burn when a turn is waiting.
+    vLit = smoothstep(iPhase - 0.06, iPhase, uWaiting);
     // each ember loops its own climb; vLife runs 0 at the coals to 1 gone
     float t = fract(uTime * 0.09 + iPhase);
     vLife = t;
@@ -269,8 +363,10 @@ const EMBER_VERT = /* glsl */ `
 const EMBER_FRAG = /* glsl */ `
   precision mediump float;
   varying float vLife;
+  varying float vLit;
   void main() {
-    float a = (1.0 - vLife) * (1.0 - vLife) * 0.85;
+    // See uWaiting: the ones that only burn when a turn is waiting.
+    float a = (1.0 - vLife) * (1.0 - vLife) * 0.85 * vLit;
     if (a < 0.02) discard;
     vec3 col = mix(vec3(1.0, 0.75, 0.35), vec3(0.8, 0.25, 0.08), vLife);
     gl_FragColor = vec4(col, a);
@@ -307,7 +403,7 @@ function Embers({ at }: { at: [number, number, number] }) {
         transparent: true,
         depthWrite: false,
         blending: AdditiveBlending,
-        uniforms: { uTime: { value: 0 } },
+        uniforms: { uTime: { value: 0 }, uWaiting: { value: EMBER_QUIET } },
       }),
     [],
   )
@@ -319,6 +415,17 @@ function Embers({ at }: { at: [number, number, number] }) {
   useFrame((_, delta) => {
     t.current += delta
     material.uniforms.uTime.value = t.current
+    /*
+      And how awake the room is, eased.
+
+      Slowly — about a second and a half — so that a turn arriving while you
+      are standing in the room does not make the fire visibly flare. Nobody
+      should catch this changing. You should only notice, later, that the
+      cave is livelier than you remember it.
+    */
+    const want = theRoom.waitingForYou > 0 ? 1 : EMBER_QUIET
+    const u = material.uniforms.uWaiting
+    u.value += (want - u.value) * (1 - Math.exp(-0.7 * delta))
   })
 
   return (

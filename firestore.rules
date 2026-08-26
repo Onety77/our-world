@@ -52,6 +52,27 @@ service cloud.firestore {
       return email() == warmEmail() ? 'warm' : 'cool';
     }
 
+    function voiceLightLimit() {
+      return exists(/databases/$(database)/documents/voiceLightConfig/ours)
+        ? get(/databases/$(database)/documents/voiceLightConfig/ours).data.limit
+        : 3;
+    }
+
+    function isVoiceSlot(id, slot) {
+      return (slot == 0 && id == me() + '-0')
+        || (slot == 1 && id == me() + '-1')
+        || (slot == 2 && id == me() + '-2')
+        || (slot == 3 && id == me() + '-3')
+        || (slot == 4 && id == me() + '-4')
+        || (slot == 5 && id == me() + '-5')
+        || (slot == 6 && id == me() + '-6')
+        || (slot == 7 && id == me() + '-7')
+        || (slot == 8 && id == me() + '-8')
+        || (slot == 9 && id == me() + '-9')
+        || (slot == 10 && id == me() + '-10')
+        || (slot == 11 && id == me() + '-11');
+    }
+
     // ---- the world ------------------------------------------------------
     // Small and singular: the pot's currency and goal, the pollen, the moment
     // you were first here together. Either of you may set a goal.
@@ -243,6 +264,51 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- the rare voice-lights -----------------------------------------
+    // One numbered place per person, overwritten deliberately rather than an
+    // audio feed that grows forever. The binary is separately owned in
+    // storage.rules; this is its small, drawable pulse-map.
+    match /voiceLights/{id} {
+      allow read: if isOneOfUs();
+
+      allow create, update: if isOneOfUs()
+        && isVoiceSlot(id, request.resource.data.slot)
+        && request.resource.data.by == me()
+        && request.resource.data.slot is int
+        && request.resource.data.slot >= 0
+        && request.resource.data.slot < voiceLightLimit()
+        && request.resource.data.at is number
+        && request.resource.data.duration is number
+        && request.resource.data.duration > 0
+        && request.resource.data.duration <= 30.5
+        && request.resource.data.path is string
+        && request.resource.data.path.matches('voice-lights/' + me() + '/.*')
+        && request.resource.data.mime is string
+        && request.resource.data.waveform is list
+        && request.resource.data.waveform.size() <= 48
+        && request.resource.data.keys().hasOnly([
+          'by', 'slot', 'at', 'duration', 'path', 'mime', 'waveform'
+        ])
+        && (
+          !exists(/databases/$(database)/documents/voiceLights/$(id))
+          || resource.data.by == me()
+        );
+
+      allow delete: if isOneOfUs() && resource.data.by == me();
+    }
+
+    match /voiceLightConfig/{id} {
+      allow read: if isOneOfUs() && id == 'ours';
+      allow create, update: if isOneOfUs()
+        && me() == 'warm'
+        && id == 'ours'
+        && request.resource.data.limit is int
+        && request.resource.data.limit >= 1
+        && request.resource.data.limit <= 12
+        && request.resource.data.keys().hasOnly(['limit']);
+      allow delete: if false;
+    }
+
     /*
       The Glasshouse.
 
@@ -318,13 +384,43 @@ service cloud.firestore {
         );
 
       /*
-        Nothing is ever taken down.
+        Taking one out of the glass — and it is an *update*, never a delete.
+
+        A pane's place in the building is this document's index in the
+        oldest-first list, so removing the document would slide every memory
+        after it one bay down the Glasshouse. What happens instead is that the
+        picture is deleted from the bucket for real and this document is
+        emptied: `path` cleared, the colours blanked, both lines and any reply
+        deleted, and a `removed` stamp left behind. What survives is a few
+        bytes that say *there was a number here*.
+
+        Only the one who hung it, which is the same shape as `theirs` and the
+        opposite side of it: she may add a line to yours and never take it
+        down; you may take yours down and never write the line.
+      */
+      allow update: if isOneOfUs()
+        && resource.data.by == me()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['removed', 'path', 'tint', 'blur', 'when', 'why', 'theirs'])
+        && request.resource.data.removed.by == me()
+        && request.resource.data.removed.at is number
+        // The emptying is part of the rule, not a courtesy of the client: a
+        // "removed" memory that still had its path would be a pane claiming to
+        // be gone while its photograph sat in the bucket.
+        && request.resource.data.path == ''
+        // And it cannot be un-removed, which is what stops this rule being a
+        // way to edit a memory in place by removing and rewriting it.
+        && !('removed' in resource.data.keys());
+
+      /*
+        Nothing is ever *deleted*.
 
         The rest of the garden works this way — letters do not come down,
         flowers are never removed — and it matters more here than anywhere
         else, because this is the one collection whose contents cannot be made
-        again. A delete rule is a way to lose a photograph forever at three in
-        the morning, and there is no version of this world that needs one.
+        again. A delete rule on the documents would take the building's
+        numbering with it.
       */
       allow delete: if false;
     }
@@ -364,9 +460,152 @@ service cloud.firestore {
       }
     }
 
+    // ---- the question vine ---------------------------------------------
+    /*
+      A question round is shared, but its two answers are separate documents.
+      That shape is the seal: her answer cannot be read until the parent says
+      both exist. There is no author/source field on a round, so a question
+      that came out of either private seed pool becomes simply something the
+      Tree is asking.
+    */
+    match /questionRounds/{roundId} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.prompt is string
+        && request.resource.data.prompt.size() > 0
+        && request.resource.data.prompt.size() <= 600
+        && request.resource.data.openedAt is number
+        && request.resource.data.answeredWarm == false
+        && request.resource.data.answeredCool == false
+        && request.resource.data.keys().hasOnly([
+          'prompt', 'openedAt', 'answeredWarm', 'answeredCool'
+        ]);
+
+      // Answering is the only mutation. Each caller may raise only their own
+      // flag, exactly once; the second one also seals the completion time.
+      allow update: if isOneOfUs() && (
+        (
+          me() == 'warm'
+          && resource.data.answeredWarm == false
+          && request.resource.data.answeredWarm == true
+          && request.resource.data.answeredCool == resource.data.answeredCool
+          && existsAfter(
+            /databases/$(database)/documents/questionRounds/$(roundId)/answers/warm
+          )
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['answeredWarm', 'completedAt'])
+          && (
+            (resource.data.answeredCool == true
+              && request.resource.data.completedAt is number)
+            ||
+            (resource.data.answeredCool == false
+              && request.resource.data.get('completedAt', null)
+                   == resource.data.get('completedAt', null))
+          )
+        )
+        ||
+        (
+          me() == 'cool'
+          && resource.data.answeredCool == false
+          && request.resource.data.answeredCool == true
+          && request.resource.data.answeredWarm == resource.data.answeredWarm
+          && existsAfter(
+            /databases/$(database)/documents/questionRounds/$(roundId)/answers/cool
+          )
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['answeredCool', 'completedAt'])
+          && (
+            (resource.data.answeredWarm == true
+              && request.resource.data.completedAt is number)
+            ||
+            (resource.data.answeredWarm == false
+              && request.resource.data.get('completedAt', null)
+                   == resource.data.get('completedAt', null))
+          )
+        )
+      );
+
+      allow delete: if false;
+
+      match /answers/{who} {
+        // Mine is readable while it waits. Hers exists but is server-sealed
+        // until the two public flags on the parent are both true.
+        allow read: if isOneOfUs() && (
+          who == me()
+          || (
+            get(/databases/$(database)/documents/questionRounds/$(roundId))
+              .data.answeredWarm == true
+            && get(/databases/$(database)/documents/questionRounds/$(roundId))
+              .data.answeredCool == true
+          )
+        );
+
+        allow create: if isOneOfUs()
+          && who == me()
+          && request.resource.data.by == me()
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 8000
+          && request.resource.data.at is number
+          // The answer and its public flag must land atomically.
+          && (
+            (me() == 'warm'
+              && getAfter(/databases/$(database)/documents/questionRounds/$(roundId))
+                   .data.answeredWarm == true)
+            ||
+            (me() == 'cool'
+              && getAfter(/databases/$(database)/documents/questionRounds/$(roundId))
+                   .data.answeredCool == true)
+          );
+
+        allow update, delete: if false;
+      }
+    }
+
+    /*
+      A planted question stays private to its planter. The other person's
+      client cannot query or read it. A contribution seed is named by the
+      immutable contribution it spends, which makes "one saving entry, one
+      question" enforceable without a second credit ledger. The hidden admin
+      door belongs to warm and uses an `admin-` id instead.
+    */
+    match /questionSeeds/{id} {
+      allow read: if isOneOfUs() && resource.data.by == me();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && request.resource.data.prompt is string
+        && request.resource.data.prompt.size() > 0
+        && request.resource.data.prompt.size() <= 600
+        && request.resource.data.plantedAt is number
+        && request.resource.data.availableAfter is number
+        && (
+          (
+            request.resource.data.get('contributionId', '') == id
+            && get(/databases/$(database)/documents/contributions/$(id)).data.by == me()
+            && get(/databases/$(database)/documents/contributions/$(id))
+                 .data.inPotCurrency.minor > 0
+          )
+          ||
+          (
+            me() == 'warm'
+            && id.matches('admin-.*')
+            && request.resource.data.get('admin', false) == true
+          )
+        );
+
+      allow update: if isOneOfUs()
+        && resource.data.by == me()
+        && !resource.data.keys().hasAny(['usedAt'])
+        && request.resource.data.usedAt is number
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedAt']);
+
+      allow delete: if false;
+    }
+
     // ---- everything else ------------------------------------------------
-    // Plants, the daily question, and whatever comes next are not built yet.
-    // Until they are, they are closed rather than open-by-omission.
+    // Whatever comes next is closed rather than open-by-omission.
     match /{document=**} {
       allow read, write: if false;
     }

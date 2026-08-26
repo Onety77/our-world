@@ -17,7 +17,7 @@ import { CylinderGeometry } from 'three'
 import type { SkyPalette } from '@/systems/palette'
 import { makeRng, range, seedFrom } from '@/systems/rng'
 import { groundHeight } from '@/systems/terrain'
-import { buildInstanced, useFormMaterial, type FormInstance } from './forms'
+import { buildTiles, useFormMaterial, type FormInstance } from './forms'
 import { growTree, leafGeometry, speciesFor } from './tree'
 
 export interface TreesProps {
@@ -53,6 +53,17 @@ export interface TreesProps {
    * and not the tree. This alone was a third of everything the garden drew.
    */
   leafDetail?: number
+  /**
+   * How much of the *branchwork* to draw — see `woodDetail` in `world/tree`.
+   *
+   * The companion to `leafDetail`, and the one that was missing. A wood is
+   * exactly the place to turn it down, and further than feels reasonable: at
+   * these distances a branch is about a pixel across and the outermost limbs
+   * are *inside* their own leaves. Nothing about the tree moves — the tips,
+   * the splits and the sprays are identical — so what goes is triangles and
+   * not shape.
+   */
+  woodDetail?: number
 }
 
 export function Trees({
@@ -67,6 +78,7 @@ export function Trees({
   gapWidth = 0.2,
   heights = [5.2, 11.4],
   leafDetail = 1,
+  woodDetail = 1,
 }: TreesProps) {
   const openingKey = openings.map((o) => o.toFixed(3)).join(',')
   const centreKey = `${centre[0]},${centre[1]}`
@@ -100,6 +112,7 @@ export function Trees({
         species: speciesFor(rng),
         rng,
         leafDetail,
+        woodDetail,
       })
       woodItems.push(...parts.wood)
       leafItems.push(...parts.leaves)
@@ -122,9 +135,20 @@ export function Trees({
     woodBase.translate(0, 0.5, 0) // foot at the origin, not the middle
     const leafBase = leafGeometry()
 
+    /*
+      Cut into tiles so the wood behind you is not drawn.
+
+      A treeline is a *ring*, which is the shape this helps most: whatever you
+      are looking at, the far side of the ring is directly behind your head.
+      Twenty-four metres to a tile puts a hundred and thirty trees into roughly
+      a dozen pieces — a dozen draw calls where there was one, against a place
+      that renders in eighteen — and the frustum then throws away the two
+      thirds of them that are behind and beside you before a single vertex is
+      transformed.
+    */
     const built = {
-      wood: buildInstanced(woodBase, woodItems),
-      leaves: buildInstanced(leafBase, leafItems),
+      wood: buildTiles(woodBase, woodItems, { tile: 24, sway: 2 }),
+      leaves: buildTiles(leafBase, leafItems, { tile: 24, sway: 3 }),
     }
     woodBase.dispose()
     leafBase.dispose()
@@ -142,12 +166,13 @@ export function Trees({
     gapWidth,
     heights,
     leafDetail,
+    woodDetail,
   ])
 
   useEffect(
     () => () => {
-      wood.dispose()
-      leaves.dispose()
+      for (const tile of wood) tile.dispose()
+      for (const tile of leaves) tile.dispose()
     },
     [wood, leaves],
   )
@@ -164,10 +189,22 @@ export function Trees({
     leafMat.uniforms.uTime.value = t.current
   })
 
+  /*
+    Culled, at last — no `frustumCulled={false}` on either of these.
+
+    That flag was on every field in the garden and it is what this whole change
+    is about: it does not mean "do not cull this", it means "this cannot be
+    culled correctly", and it was true right up until the tiles above got real
+    bounding volumes. See `buildTiles`.
+  */
   return (
     <>
-      <mesh geometry={wood} material={woodMat} frustumCulled={false} />
-      <mesh geometry={leaves} material={leafMat} frustumCulled={false} />
+      {wood.map((tile, i) => (
+        <mesh key={`w${i}`} geometry={tile} material={woodMat} />
+      ))}
+      {leaves.map((tile, i) => (
+        <mesh key={`l${i}`} geometry={tile} material={leafMat} />
+      ))}
     </>
   )
 }

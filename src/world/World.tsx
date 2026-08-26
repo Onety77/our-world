@@ -10,13 +10,14 @@
  * anything more than one section away is wasted work.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ACESFilmicToneMapping, Group } from 'three'
 import { useData, useWorldSlice } from '@/data/provider'
 import { paletteAt } from '@/systems/palette'
+import { warmWhenIdle } from '@/systems/later'
 import { createFrameWatchdog, useQuality } from '@/systems/quality'
-import { localHourIn } from '@/systems/time'
+import { skyHour, useWhoseHour } from '@/systems/whoseHour'
 import { SECTIONS } from '@/sections/registry'
 import { FADE_MS, useSections } from '@/systems/sections'
 import { usePlaying } from '@/systems/playing'
@@ -56,6 +57,128 @@ function Surrounds({ children }: { children: React.ReactNode }) {
   return <group ref={group}>{children}</group>
 }
 
+/**
+ * What the frame actually costs, on `window.__frame`, under `?shot=1`.
+ *
+ * ---------------------------------------------------------------------------
+ * The third of the garden's telemetry hooks, and the broadest: `__glass` says
+ * where one pane lands and `__rally` says what one car is doing, and this says
+ * what the *whole renderer* is being asked to do — draw calls, triangles,
+ * compiled programs, live geometries and textures, and how long a frame is
+ * taking.
+ *
+ * It exists because "the world feels heavy" is not a fact anybody can act on.
+ * Six places, two roads and a game each grew on their own budget, and the only
+ * way to know which of them is spending the frame is to stand in each one and
+ * ask. Every performance decision in this garden that was made by reasoning
+ * about what *ought* to be expensive has been wrong at least once — the
+ * Drowned Mile turned out to be the cheapest kilometre on either road, and the
+ * Glasshouse's standoff was a fix for a problem that never existed.
+ *
+ * Under `?shot=1` only, and written once a second rather than once a frame:
+ * this is a diagnostic, and a diagnostic that shows up in a profile is
+ * measuring itself.
+ * ---------------------------------------------------------------------------
+ */
+function FrameCost() {
+  const { gl, scene } = useThree()
+  const since = useRef(0)
+  const frames = useRef(0)
+  const worst = useRef(0)
+  useFrame((_, delta) => {
+    frames.current++
+    worst.current = Math.max(worst.current, delta)
+    since.current += delta
+    if (since.current < 1) return
+    /*
+      And *which* meshes are spending it, which is the only part you can act on.
+
+      A frame that costs seven hundred thousand triangles is a fact you cannot
+      do anything with; "the grass is six hundred thousand of them" is a
+      decision. Walked once a second, over a scene of a few dozen objects, and
+      only under ?shot=1.
+    */
+    const heavy: [string, number][] = []
+    scene.traverse((node) => {
+      const mesh = node as unknown as {
+        visible?: boolean
+        geometry?: {
+          index?: { count: number } | null
+          instanceCount?: number
+          attributes?: { position?: { count: number } }
+        }
+        count?: number
+        isInstancedMesh?: boolean
+        name?: string
+        type?: string
+      }
+      const geometry = mesh.geometry
+      if (!geometry || node.visible === false) return
+      const verts = geometry.index ? geometry.index.count : geometry.attributes?.position?.count ?? 0
+      /*
+        Instances count, and most of this garden is instances.
+
+        Nearly nothing here is an InstancedMesh — the grass, the flowers, the
+        panes and the lanterns are all plain meshes carrying an
+        InstancedBufferGeometry, because they are drawn by their own shaders
+        rather than by three's. Counting only `isInstancedMesh` found forty-six
+        thousand triangles in a frame the renderer said was seven hundred
+        thousand, which is the kind of wrong that sends you optimising the
+        wrong thing.
+      */
+      const instances =
+        mesh.geometry?.instanceCount && mesh.geometry.instanceCount !== Infinity
+          ? mesh.geometry.instanceCount
+          : undefined
+      const copies = instances ?? (mesh.isInstancedMesh ? mesh.count ?? 1 : 1)
+      const tris = Math.round((verts / 3) * copies)
+      if (tris > 500) heavy.push([`${mesh.name || 'mesh'}:${Math.round(verts / 3)}x${copies}`, tris])
+    })
+    heavy.sort((a, b) => b[1] - a[1])
+
+    const info = gl.info
+    ;(window as unknown as Record<string, unknown>).__frame = {
+      calls: info.render.calls,
+      tris: info.render.triangles,
+      programs: info.programs?.length ?? -1,
+      geometries: info.memory.geometries,
+      textures: info.memory.textures,
+      fps: Math.round(frames.current / since.current),
+      worstMs: Math.round(worst.current * 1000),
+      heaviest: heavy.slice(0, 8),
+    }
+    since.current = 0
+    frames.current = 0
+    worst.current = 0
+  })
+  return null
+}
+
+/**
+ * Fetches every place and both games while nobody is asking for anything.
+ *
+ * The whole point of deferring them is that the *first* screen should not wait
+ * on the fifth place. It is not that the fifth place should arrive late — so
+ * once the garden is up and the first frames are through, the rest of the
+ * world is quietly pulled down behind it. See `warmWhenIdle`.
+ *
+ * Deliberately a couple of seconds after mount, and on the idle callback where
+ * there is one. This competes with the opening frames of a 3D scene for one
+ * main thread, and a garden that stutters on arrival to prefetch somewhere you
+ * have not asked for has spent its saving in the worst place it could.
+ */
+function WarmTheRest() {
+  useEffect(
+    () =>
+      warmWhenIdle([
+        ...SECTIONS.map((section) => section.Scene),
+        ...GAMES.flatMap((game) => [game.Component, game.Stage].filter(Boolean) as { warm(): void }[]),
+      ]),
+    [],
+  )
+  return null
+}
+
 /** Steps quality down once if the device is clearly struggling. */
 function FrameWatchdog() {
   const watch = useMemo(() => createFrameWatchdog(), [])
@@ -80,6 +203,26 @@ function useShownWorld(): { entered: boolean; section: number } {
   const index = useSections((s) => s.index)
   const entered = useSections((s) => s.entered)
   const [shown, setShown] = useState({ entered, section: index })
+
+  /*
+    Fetch the place you are heading for, the moment you decide to go there.
+
+    This is the best hint in the garden and it is free: `index` moves as soon
+    as a swipe or an arrow picks a destination, while the world below does not
+    swap until half a fade later — see the timeout underneath. That gap is the
+    whole window a deferred place needs, and it is there on every single
+    journey, including the very first one.
+
+    The neighbours too, because the next flick is faster than a network and the
+    row is built to be flicked. Warming is idempotent and costs a resolved
+    promise once the code is here — see `later` — so this can be as eager as it
+    likes.
+  */
+  useEffect(() => {
+    for (const near of [index, index - 1, index + 1]) {
+      SECTIONS[near]?.Scene.warm()
+    }
+  }, [index])
 
   useEffect(() => {
     if (entered === shown.entered && (!entered || index === shown.section)) return
@@ -112,15 +255,20 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
   const flowerCount = useQuality((q) => q.flowerCount)
   const dpr = useQuality((q) => q.dpr)
 
-  // The world runs on *your* clock: you come here in your evening and it is
-  // evening here.
+  /*
+    The world runs on *her* clock by default — see systems/whoseHour.
+
+    You already know what time it is where you are; a sky that agreed with your
+    window was telling you nothing. This one puts you in the hour she is in.
+  */
   const [nowTick, setNowTick] = useState(() => Date.now())
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000)
     return () => clearInterval(id)
   }, [])
 
-  const myHour = hourOverride ?? localHourIn(profiles[me].timeZone, nowTick)
+  const whose = useWhoseHour((w) => w.whose)
+  const myHour = hourOverride ?? skyHour(profiles, me, whose, nowTick)
   const palette = useMemo(() => paletteAt(myHour), [myHour])
 
   const env = useMemo(
@@ -150,6 +298,8 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
   return (
     <>
       <FrameWatchdog />
+      <WarmTheRest />
+      {SHOTS ? <FrameCost /> : null}
       {shown.entered && !Stage ? <SlideCamera /> : null}
 
       <SceneEnvProvider value={env}>
@@ -169,10 +319,40 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
           </>
         )}
 
-        {Stage ? <Stage /> : shown.entered ? (() => {
-          const Current = SECTIONS[shown.section].Scene
-          return <Current key={SECTIONS[shown.section].id} />
-        })() : <GardenHub />}
+        {/*
+          One boundary around both, and the fallback is the garden itself.
+
+          -------------------------------------------------------------------
+          Places and games are fetched rather than shipped now — see `later` —
+          which introduces exactly one way for this to go wrong: arriving
+          somewhere before its code does, and standing in an empty world for a
+          beat. That would be a worse thing than the loading time it bought.
+
+          Two answers, and it needs both.
+
+          The first is that nothing should ever *have* to wait: every place is
+          warmed a couple of seconds after the garden settles, and the one a
+          slide is heading for is warmed again the moment the slide starts. On
+          any real visit the code is already here long before you are.
+
+          The second is this, for the visit that is not real — a cold cache, a
+          slow morning, a phone that dropped to one bar between the door and
+          the first swipe. The fallback is the hub: the meadow, the treeline,
+          the landmarks, the sky. So the worst case is not an empty world, it
+          is *the garden you were already standing in*, held for a moment
+          longer while the place you asked for arrives. Which is the same thing
+          the fade between places was already doing.
+
+          Never a spinner, and never nothing. Both would be the world admitting
+          it is a website.
+          -------------------------------------------------------------------
+        */}
+        <Suspense fallback={<GardenHub />}>
+          {Stage ? <Stage /> : shown.entered ? (() => {
+            const Current = SECTIONS[shown.section].Scene
+            return <Current key={SECTIONS[shown.section].id} />
+          })() : <GardenHub />}
+        </Suspense>
       </SceneEnvProvider>
     </>
   )

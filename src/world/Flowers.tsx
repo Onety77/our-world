@@ -35,6 +35,7 @@ const VERT = /* glsl */ `
   uniform float uTime;
   uniform float uWind;
   uniform vec2 uCentre;
+  uniform vec2 uFacing;
   uniform float uTile;
   uniform float uFadeStart;
   uniform float uFadeEnd;
@@ -49,7 +50,8 @@ const VERT = /* glsl */ `
     vec2 world = tileAround(iPos, uCentre, uTile);
     // Nothing grows in the water. Flowers used to ignore this and the meadow
     // put blooms straight down the middle of the river.
-    float fade = (1.0 - smoothstep(uFadeStart, uFadeEnd, distance(world, uCentre)))
+    float fade = inTheView(world, uCentre, uFacing)
+      * (1.0 - smoothstep(uFadeStart, uFadeEnd, distance(world, uCentre)))
                * dryLand(world);
 
     float gust = sin(uTime * 0.42 + world.x * 0.055 + world.y * 0.041) * 0.5 + 0.5;
@@ -172,7 +174,8 @@ export function Flowers({
           uTime: { value: 0 },
           uWind: { value: 1 },
           uCentre: { value: new Vector2() },
-          uTile: { value: tile },
+      uFacing: { value: new Vector2(0, 1) },
+                    uTile: { value: tile },
           uFadeStart: { value: radius * 0.7 },
           uFadeEnd: { value: radius * 0.96 },
           uFogColor: { value: new Color('#c3cebe') },
@@ -205,6 +208,19 @@ export function Flowers({
     t.current += delta
     material.uniforms.uTime.value = t.current
     material.uniforms.uCentre.value.set(camera.position.x, camera.position.z)
+    /*
+      Which way the camera is looking, flattened onto the ground.
+
+      The third column of a camera's world matrix is the direction it is
+      looking *away* from, so this is negated. Taken from the matrix rather
+      than from the rotation because the camera is aimed with lookAt and its
+      Euler angles are a derived thing that has been wrong before.
+    */
+    const m = camera.matrixWorld.elements
+    const fx = -m[8]
+    const fz = -m[10]
+    const len = Math.hypot(fx, fz) || 1
+    material.uniforms.uFacing.value.set(fx / len, fz / len)
   })
 
   return <mesh geometry={geometry} material={material} frustumCulled={false} />

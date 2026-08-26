@@ -138,6 +138,34 @@ export const useRace = create<RaceSession>((set) => ({
   resume: () => set({ paused: false }),
   finish: () => set({ phase: 'finished' }),
 
+  /*
+    Closing a road puts the *race* away. It does not touch the three nodes.
+
+    ---------------------------------------------------------------------------
+    **This used to clear them, and it killed the meters on every attempt after
+    the first.**
+
+    `surface`, `emberBar` and `speedo` are not race state. They are live DOM
+    nodes, registered by the effects of the components that render them, and
+    the rule those components follow is the ordinary React one: the effect that
+    sets a thing is the cleanup that clears it. Clearing them from here broke
+    that rule, and the way it broke was invisible.
+
+    `Road` re-runs its effect whenever the attempt changes — that is how "run
+    it again" restarts the road without rebuilding a kilometre of scenery — and
+    the cleanup half of that re-run called this. `EmberBar` and `Speed` mount
+    once with `[]` and do not remount, so nothing ever put their nodes back:
+    the machine went on writing to `null` and the two meters froze at whatever
+    they happened to be showing when the last go ended. Which reads as random —
+    zero if you restarted from the line, fifty-four if you restarted from
+    fifty-four — and only clears when you leave to the menu, because that
+    unmounts the components and their effects run again.
+
+    The steering kept working through all of it, and that asymmetry is the
+    whole diagnosis: `Road`'s effect *re-sets* the surface a line later, so the
+    one node that was put back was the one that never appeared broken.
+    ---------------------------------------------------------------------------
+  */
   close: () =>
     set({
       phase: 'off',
@@ -147,8 +175,5 @@ export const useRace = create<RaceSession>((set) => ({
       ghostName: '',
       replay: null,
       onFinish: null,
-      surface: null,
-      emberBar: null,
-      speedo: null,
     }),
 }))

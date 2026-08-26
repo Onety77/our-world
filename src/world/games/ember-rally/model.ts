@@ -11,11 +11,11 @@
 export const SAMPLE_MS = 100
 
 /**
- * Which road. One for now; the others in the notebook are the Understream,
- * the Moonbreak, the Ember Vault and the Old Garden, and each is a different
- * weighting of the same authored pieces — see `track.ts`.
+ * Which road. Kept on every move as well as the setup: one daily Ember round
+ * can now hold a line through each place without a Moonbreak run ever being
+ * mistaken for a Rootway run recorded against different geometry.
  */
-export type StageId = 'rootway'
+export type StageId = 'rootway' | 'moonbreak' | 'stormcrown'
 
 export interface RallySetup {
   seed: number
@@ -79,10 +79,12 @@ export const SAMPLE_BOOST = 1 << 4
 export const SAMPLE_ROUGH = 1 << 5
 export const SAMPLE_BRAKE = 1 << 6
 export const SAMPLE_SLIDE = 1 << 7
+/** The car is inside the Rootwake's independent tunnel. Old runs read false. */
+export const SAMPLE_SHORTCUT = 1 << 8
 
 export type RallyMove =
-  | { kind: 'qualifying'; run: RallyRun }
-  | { kind: 'chase'; run: RallyRun }
+  | { kind: 'qualifying'; stage?: StageId; run: RallyRun }
+  | { kind: 'chase'; stage?: StageId; run: RallyRun }
 
 export interface RunSample {
   /** Metres off the middle of the road. */
@@ -99,11 +101,13 @@ export interface RunSample {
   braking: boolean
   /** Her rear wheels spinning up. Smoke, and wheels that outrun the road. */
   spinning: boolean
+  shortcut: boolean
 }
 
 const NOWHERE: RunSample = {
   n: 0, s: 0, yaw: 0, drift: 0, boost: false, rough: false,
   braking: false, spinning: false,
+  shortcut: false,
 }
 
 /** Where a recorded run was at a given moment. Interpolated, never stepped. */
@@ -132,6 +136,7 @@ export function runAt(run: RallyRun, elapsedMs: number): RunSample {
     rough: (state & SAMPLE_ROUGH) !== 0,
     braking: (state & SAMPLE_BRAKE) !== 0,
     spinning: (state & SAMPLE_SLIDE) !== 0,
+    shortcut: (state & SAMPLE_SHORTCUT) !== 0,
   }
 }
 
@@ -166,9 +171,16 @@ export function isRun(value: unknown): value is RallyRun {
 export function moveRun(
   moves: RallyMove[],
   kind: RallyMove['kind'],
+  stage: StageId = 'rootway',
   last = false,
 ): RallyRun | null {
-  const found = moves.filter((move) => move?.kind === kind && isRun(move.run))
+  const found = moves.filter(
+    (move) =>
+      move?.kind === kind &&
+      // Runs written before there was a second road belong to the Rootway.
+      (move.stage ?? 'rootway') === stage &&
+      isRun(move.run),
+  )
   return (last ? found.at(-1) : found[0])?.run ?? null
 }
 

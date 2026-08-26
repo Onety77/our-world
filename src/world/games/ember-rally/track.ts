@@ -145,6 +145,12 @@ export interface Track {
    */
   finishAt: number
   lanterns: Lantern[]
+  /**
+   * The Rootwake fork, if this road has one. The Rootway always does; the Moonbreak
+   * never does — its one big idea is already the Drowned Mile, and a road with
+   * two things to discover in it has neither.
+   */
+  split: RootSplit | null
   roots: Root[]
   boulders: Boulder[]
   spikes: Spike[]
@@ -290,8 +296,17 @@ const LIBRARY: Entry[] = [
   { name: 'chamber', make: chamber, weight: 1.6 },
 ]
 
-/** Roughly how long the whole road should be, metres. */
-const TARGET = 1520
+/**
+ * Roughly how long the whole road should be, metres.
+ *
+ * Fifteen hundred was a minute, and a minute turned out to be the length at
+ * which the Rootway is a *lap* rather than a road: you learn the whole of it in
+ * three goes, and after that the only thing left to find is tenths. Half as
+ * long again is enough that the middle of it is somewhere you arrive rather
+ * than somewhere you are already leaving — which is also what makes room for
+ * the Rootwake, and for its fork to be a decision you have time to make.
+ */
+const TARGET = 2300
 /**
  * Metres of road after the finish, for rolling to a stop by the fire.
  *
@@ -404,7 +419,67 @@ function smooth(values: Float32Array, radius: number, passes = 2): Float32Array 
   return source
 }
 
-function bandsFor(seed: number): Band[] {
+/**
+ * The Rootwake — a complete second tunnel inside the Rootway.
+ *
+ * Both roads share `s` only so timing, recordings and the finish remain simple.
+ * Spatially they are unrelated after the mouth: Rootwake owns its centreline,
+ * stone shell, width, corners and physical road metric. Solid rock and a deep
+ * vertical offset keep the ordinary road completely out of view.
+ */
+export interface RootSplit {
+  /** Shared progress coordinates where the hidden road leaves and returns. */
+  from: number
+  to: number
+  shortcut: { from: number; to: number }
+  commitAt: number
+  rejoinAt: number
+  /** A deliberate move to the right through the mouth chooses the Rootwake. */
+  portalN: number
+  /** Measured centreline lengths, used by checks rather than by the physics. */
+  mainLength: number
+  shortcutLength: number
+  hardAt: number
+  veryHardAt: number
+  x: Float32Array
+  y: Float32Array
+  z: Float32Array
+  heading: Float32Array
+  curv: Float32Array
+  width: Float32Array
+  ceiling: Float32Array
+  room: Float32Array
+  wet: Float32Array
+  grade: Float32Array
+  bank: Float32Array
+  line: Float32Array
+  /** World metres travelled for one metre of shared progress. */
+  metric: Float32Array
+}
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
+
+export function shortcutProgress(split: RootSplit, s: number): number {
+  return clamp01((s - split.shortcut.from) / (split.shortcut.to - split.shortcut.from))
+}
+
+/** The mouth on the main road. Beyond it, the two roads share no geometry. */
+function splitBands(): Band[] {
+  return [
+    band({ length: 34, width: 4.4, ceiling: 5.4, room: 0.25, curv: 0.002, wet: 0.34 }),
+    // One chamber, just long enough to notice the low right-hand throat.
+    band({ length: 58, width: 7.4, ceiling: 9.2, room: 0.82, curv: -0.003, wet: 0.25 }),
+    // The ordinary road turns away. The hidden road does not follow it.
+    band({ length: 72, width: 5.1, ceiling: 6.1, room: 0.38, curv: -0.012, wet: 0.2 }),
+    band({ length: 58, width: 4.8, ceiling: 5.4, room: 0.22, curv: 0.008, wet: 0.38 }),
+    band({ length: 34, width: 4.5, ceiling: 5.1, room: 0.18, curv: 0.002, wet: 0.42 }),
+  ]
+}
+
+/** Filled in by `rootwayBands`; the independent road is built after sampling. */
+let dealtMouth: number | null = null
+
+function rootwayBands(seed: number): Band[] {
   const rng = random(seed ^ 0x51f2a3)
   const bands: Band[] = []
 
@@ -419,7 +494,27 @@ function bandsFor(seed: number): Band[] {
   let dir = rng() < 0.5 ? -1 : 1
   let length = bands.reduce((sum, b) => sum + b.length, 0)
 
+  /* The Rootwake mouth goes in once, early enough to reach within thirty
+     dealt piece so the procedural road is never cut in half around it. */
+  const splitAfter = 480
+  let laid = false
+  dealtMouth = null
+
   while (length < TARGET - 120) {
+    if (!laid && length >= splitAfter) {
+      laid = true
+      const made = splitBands()
+      const from = length
+      bands.push(...made)
+      length += made.reduce((sum, b) => sum + b.length, 0)
+      dealtMouth = from + 34
+      // The cavern is a room, and the grammar's "do not follow a room with a
+      // room" rule applies to this one too.
+      history.push('chamber')
+      sinceChamber = 0
+      continue
+    }
+
     const entry = choose(rng, history, sinceChamber)
     // Alternate handedness most of the time. Always alternating reads as a
     // slalom; never alternating reads as a spiral.
@@ -458,8 +553,361 @@ function bandsFor(seed: number): Band[] {
   return bands
 }
 
+/**
+ * The Moonbreak is authored as one remembered road, not dealt from a bag.
+ *
+ * The Rootway changes its order because discovering what is behind the next
+ * wall is part of being underground. The Moonbreak is open to the horizon:
+ * its pleasure is learning that the narrow bridge follows the orchard esses,
+ * that the long fall ends in one severe left, and eventually carrying one
+ * unbroken drift through the two moon arches. Decorations still take the
+ * shared round seed, so the garden breathes without moving the racing line.
+ */
+/**
+ * Fixed distances used by both the racing line and the Moonbreak scenery.
+ * Keeping these here means an arch, a braking pearl and the corner it warns
+ * about can never quietly drift apart during another course edit.
+ */
+export const MOONBREAK = {
+  arches: [68, 420, 658, 904, 2010, 2290, 2580, 3040, 3256],
+  orchard: { from: 285, to: 470 },
+  hard: { approach: 658, apex: 779, exit: 904 },
+  /**
+   * The Drowned Mile: where the causeway stops going over the water and goes
+   * under it.
+   *
+   * -------------------------------------------------------------------------
+   * Every one of these is used by three separate things that have to agree —
+   * the road's own grade, the glass tube and its portals in `Moonbreak`, and
+   * the light, which is driven off the car's depth in `Race`. A tube whose
+   * mouth sits forty metres from where the road actually goes under is a car
+   * driving through open air inside a lit tunnel, and there is no number
+   * anywhere that would show it.
+   *
+   * `under` is the waterline crossing in both directions, worked out from the
+   * grades below rather than guessed: the deck is at zero at `from`, tips over
+   * a lip, and passes the surface at -1.08 about a hundred and ten metres in.
+   */
+  deep: {
+    from: 904,
+    to: 1958,
+    /** Where the deck passes the waterline, going down and coming back up. */
+    under: { in: 1016, out: 1940 },
+    /** The flat bottom of it, and how far down that is. */
+    floor: { from: 1234, to: 1732, y: -18.6 },
+  },
+  mirror: { from: 1234, to: 1560 },
+  reeds: { from: 1958, to: 2290 },
+  stair: { from: 2290, to: 2580 },
+  veryHard: { approach: 2580, apex: 2887, exit: 3040 },
+} as const
+
+/**
+ * Where the water is, in metres. The Moonbreak's one horizontal plane.
+ *
+ * Everything about the Drowned Mile is measured from this: the road's own dive,
+ * the mouths of the tube, how green the light goes, and how far you can see.
+ * It is exported because four files need it and a plane that four files each
+ * remember separately is a plane that ends up in four places.
+ */
+export const WATER_Y = -1.08
+
+/**
+ * How far under the water you are, 0 to 1.
+ *
+ * ---------------------------------------------------------------------------
+ * One number, read by everything that has to change when the causeway goes
+ * under: the fog and the ambient in `Race`, the sky and the surface and the
+ * glass in `Moonbreak`, and the sound. Driven off the road's own height rather
+ * than off a pair of distances along it, which matters more than it sounds —
+ * it means the light and the water can never disagree with the geometry,
+ * because they are all reading the thing that actually put the road down there.
+ *
+ * Full at eight metres under. That is roughly the depth at which the surface
+ * stops being a thing above you and starts being a ceiling, and it lands
+ * comfortably inside the dive rather than at the bottom of it, so the change
+ * happens *while you are falling* — which is the point of diving at all.
+ * ---------------------------------------------------------------------------
+ */
+export function sunkAt(track: Track, s: number): number {
+  if (track.stage !== 'moonbreak') return 0
+  const i = Math.max(0, Math.min(track.y.length - 1, Math.round(s / STEP)))
+  return Math.max(0, Math.min(1, (WATER_Y - track.y[i]) / 8))
+}
+
+function moonbreakBands(): Band[] {
+  const open = (shape: Partial<Band> & { length: number }) =>
+    band({ width: 5.9, ceiling: 18, room: 0.82, wet: 0.38, ...shape })
+
+  return [
+    // The moonwell terrace: enough road to see sky, water and the first gate
+    // before the car is asked to turn.
+    open({ length: 62, width: 7.2, ceiling: 24, room: 1, curv: 0 }),
+    open({ length: 34, width: 6.4, ceiling: 21, room: 0.9, curv: -0.002 }),
+
+    // Windward sweep. Fast enough to take flat once it has been learned.
+    open({ length: 30, curv: -0.0035 }),
+    open({ length: 86, curv: -0.0105, width: 6.1 }),
+    open({ length: 30, curv: -0.003 }),
+    open({ length: 78, curv: 0.001, width: 5.7, wet: 0.28 }),
+
+    // The drowned orchard: a deliberate left-right rhythm between trunks.
+    open({ length: 42, curv: 0.021, width: 5.7, room: 0.72, wet: 0.56 }),
+    open({ length: 16, curv: 0, width: 5.2, room: 0.62, wet: 0.68 }),
+    open({ length: 42, curv: -0.021, width: 5.7, room: 0.72, wet: 0.56 }),
+
+    // Up through the first broken arch, then light over the crest.
+    open({ length: 56, curv: -0.004, grade: 0.052, width: 5.8 }),
+    open({ length: 30, curv: 0.003, grade: 0, width: 5.1, room: 0.55 }),
+    open({ length: 56, curv: 0.006, grade: -0.052, width: 5.6 }),
+
+    // Glasswater bridge. Narrow, straight, and visibly exposed on both sides.
+    open({ length: 96, curv: 0, width: 4.65, room: 0.34, wet: 0.82, ceiling: 28 }),
+
+    // Tidecut — the hard corner. Its long, widening approach asks for one
+    // proper brake, then gives the driver enough road to choose a late apex.
+    // At about 120 degrees it is serious without stealing the Moonhook's role.
+    open({ length: 46, curv: 0, width: 5.8, wet: 0.3 }),
+    open({ length: 30, curv: 0.004, width: 6.2 }),
+    open({ length: 20, curv: 0.012, width: 6.8, room: 1 }),
+    open({ length: 50, curv: 0.03, width: 7.25, room: 1, wet: 0.42 }),
+    open({ length: 20, curv: 0.014, width: 6.8, room: 1 }),
+    open({ length: 18, curv: 0.004, width: 6.2 }),
+    open({ length: 62, curv: 0, width: 5.9, wet: 0.24 }),
+
+    /*
+      ======================================================================
+      THE DROWNED MILE
+      ======================================================================
+
+      A kilometre of causeway that goes *under* the water instead of over it,
+      and the one place on either road where the sky is not the ceiling.
+
+      It replaces the Mirror Flats and the Falling Garden and it deliberately
+      keeps their driving: the long fast straight, the pair of opposing
+      sweeps, the changes of weight. That is not laziness — those bands were
+      already the right shapes in the right order, and the reason this is a
+      dive rather than a new sequence of corners is that **what changes here
+      is where you are, not what you are doing**. A set piece that also asks
+      you to learn six new corners is two things at once, and the driver ends
+      up looking at the road instead of at the water.
+
+      The vertical profile is the whole design, and it is written as five acts:
+
+        the approach   level and wide, with the mouth visible a long way off,
+                       so going under is something you watch arrive
+        the lip        a gentle tip-in — the horizon drops out of the frame
+                       before the water closes over, which is what sells it
+        the dive       a hundred and thirty metres at ten per cent, straight,
+                       so it is fast and reads as *falling* rather than as a
+                       corner that happens to be descending
+        the deep       level, the fast bands, nineteen metres down
+        the climb      the mirror of the dive, ending level at the old height
+
+      Nineteen metres down is chosen, not arbitrary: enough water overhead to
+      be properly dark and to hold something large moving in it, shallow
+      enough that the surface is still a lit ceiling with the moon in it.
+      Past about twenty-five the surface stops reading at all and this becomes
+      a cave, which is the other road's job and it does it better.
+
+      The grades are steep by this game's standards — everything else on the
+      Moonbreak is inside five per cent — and cost about a metre a second
+      squared each way, which the car has in hand.
+    */
+
+    // The approach. Wide and level, and the last of the open sky.
+    open({ length: 90, curv: 0, width: 6.2, room: 0.6, wet: 0.62, ceiling: 30 }),
+    // The lip.
+    open({ length: 55, curv: 0, width: 5.9, room: 0.5, grade: -0.05, wet: 0.7 }),
+    // The dive. Straight on purpose — a corner here would be read as a corner.
+    open({ length: 130, curv: 0, width: 5.6, room: 0.42, grade: -0.105, wet: 0.24 }),
+    // Levelling out on the bottom.
+    open({ length: 55, curv: -0.002, width: 5.6, room: 0.46, grade: -0.04, wet: 0.18 }),
+
+    // The long deep straight — the Mirror Flats' speed, with a roof of water.
+    open({ length: 130, curv: 0, width: 5.5, room: 0.48, wet: 0.16, ceiling: 30 }),
+    // The two opposing sweeps, kept.
+    open({ length: 88, curv: -0.006, width: 5.9, room: 0.66, wet: 0.16 }),
+    open({ length: 88, curv: 0.006, width: 5.9, room: 0.66, wet: 0.16 }),
+    open({ length: 84, curv: 0, width: 5.35, room: 0.42, wet: 0.16, ceiling: 30 }),
+
+    // The deep garden: the Falling Garden's changes of weight, at the bottom.
+    open({ length: 62, curv: -0.014, width: 5.8, room: 0.78, wet: 0.2 }),
+    open({ length: 46, curv: 0.016, width: 5.9, room: 0.8, wet: 0.2 }),
+
+    // And back up, ending exactly level with where it went down.
+    open({ length: 56, curv: -0.004, width: 5.7, room: 0.6, grade: 0.045, wet: 0.2 }),
+    open({ length: 130, curv: 0, width: 5.7, room: 0.5, grade: 0.105, wet: 0.3 }),
+    open({ length: 40, curv: 0, width: 6, room: 0.62, grade: 0.061, wet: 0.5 }),
+
+    // Reedwater — a lower, quieter rhythm. The two bends are deliberately
+    // medium-speed: this is the composure test between the two braking tests.
+    open({ length: 110, curv: 0, width: 5.1, room: 0.4, wet: 0.9 }),
+    open({ length: 54, curv: 0.012, width: 5.75, room: 0.7, wet: 0.72 }),
+    open({ length: 24, curv: 0, width: 5.25, room: 0.5, wet: 0.82 }),
+    open({ length: 54, curv: -0.013, width: 5.8, room: 0.72, wet: 0.74 }),
+    open({ length: 90, curv: 0, width: 5.25, room: 0.44, wet: 0.84 }),
+
+    // The Sky Stair climbs out of the reeds, crests between two broken ribs,
+    // and drops the moon into view above the longest braking approach.
+    open({ length: 92, curv: 0.006, grade: 0.045, width: 5.8, room: 0.72, wet: 0.3 }),
+    open({ length: 54, curv: -0.004, grade: 0.02, width: 5.5, room: 0.58 }),
+    open({ length: 78, curv: -0.009, grade: -0.052, width: 5.9, room: 0.76, wet: 0.38 }),
+    open({ length: 66, curv: 0.003, grade: 0, width: 5.6, room: 0.62 }),
+
+    // The Moonhook — the one very hard corner. The road opens before turn-in,
+    // gives 216 metres to get the car settled, then turns almost 180 degrees.
+    // It is wide and clearly marked, but it cannot be taken by lifting alone.
+    open({ length: 216, curv: 0, width: 5.7, room: 0.64, wet: 0.2, ceiling: 30 }),
+    open({ length: 40, curv: 0.004, width: 6.3, room: 0.9 }),
+    open({ length: 22, curv: 0.012, width: 7, room: 1 }),
+    open({ length: 58, curv: 0.038, width: 8.1, room: 1, wet: 0.36 }),
+    open({ length: 22, curv: 0.015, width: 7.3, room: 1 }),
+    open({ length: 40, curv: 0.004, width: 6.5, room: 0.95 }),
+    open({ length: 62, curv: 0, width: 5.9, room: 0.7 }),
+
+    // Homeward gates: an easy left-right release after the hairpin, then a
+    // broad moonwell terrace that lets the finish breathe instead of arriving
+    // immediately after the hardest thing on the road.
+    open({ length: 88, curv: 0, width: 5.8, wet: 0.24 }),
+    open({ length: 56, curv: -0.012, width: 6, room: 0.78 }),
+    open({ length: 18, curv: 0, width: 5.5, room: 0.58 }),
+    open({ length: 54, curv: 0.012, width: 6, room: 0.78 }),
+    open({ length: 30, curv: 0, width: 5.6 }),
+    open({ length: 112, curv: 0, width: 7.8, room: 1, ceiling: 30, wet: 0.5 }),
+    open({ length: 26, curv: 0, width: 6.2, room: 0.75, ceiling: 22 }),
+  ]
+}
+
+/**
+ * Fixed geography for the Stormcrown.
+ *
+ * These distances are shared by the road, its scenery, its weather and the
+ * verification script. A warning beacon cannot drift away from the corner it
+ * is warning about just because somebody lengthened the cedar road later.
+ */
+export const STORMCROWN = {
+  rainwood: { from: 0, to: 500 },
+  climb: { from: 500, to: 1030 },
+  galeBend: { approach: 1030, apex: 1280, exit: 1386 },
+  cloudShelf: { from: 1386, to: 1936 },
+  thunderStair: {
+    approach: 1936,
+    first: 2116,
+    second: 2375,
+    third: 2633,
+    exit: 2903,
+  },
+  eye: { from: 2903, to: 3483 },
+  stormfall: { from: 3483, to: 4078 },
+  lastRun: { from: 4078, to: 4792 },
+  lightningRods: [492, 1018, 1390, 1930, 2098, 2320, 2580, 2895, 3290, 3480, 4074, 4668],
+  waterfalls: [3595, 3812, 4028],
+} as const
+
+/**
+ * The Stormcrown is one authored climb rather than a bag of interchangeable
+ * pieces. It is deliberately the long road: 4.79 km including the quiet
+ * roll-in, with its severity concentrated into landmarks a driver can learn.
+ */
+function stormcrownBands(): Band[] {
+  const high = (shape: Partial<Band> & { length: number }) =>
+    band({ width: 5.45, ceiling: 34, room: 0.72, wet: 0.72, ...shape })
+
+  return [
+    // Stormfire terrace and Rainwood: quick, legible esses among close cedars.
+    high({ length: 80, width: 7.4, room: 1, wet: 0.5 }),
+    high({ length: 42, width: 6.3, curv: -0.003 }),
+    high({ length: 90, width: 5.7, curv: -0.010 }),
+    high({ length: 26, width: 5.25, curv: 0.002, wet: 0.9 }),
+    high({ length: 80, width: 5.7, curv: 0.014, wet: 0.82 }),
+    high({ length: 24, width: 5.1, curv: 0 }),
+    high({ length: 88, width: 5.65, curv: -0.013, wet: 0.86 }),
+    high({ length: 70, width: 5.35, curv: 0.003 }),
+
+    // The long cedar ascent. Its steady grade makes the summit feel earned.
+    high({ length: 80, grade: 0.055, curv: 0.003, width: 5.5 }),
+    high({ length: 70, grade: 0.07, curv: 0.011, width: 5.8 }),
+    high({ length: 30, grade: 0.045, curv: 0, width: 5.25 }),
+    high({ length: 80, grade: 0.075, curv: -0.013, width: 5.9 }),
+    high({ length: 30, grade: 0.05, curv: 0, width: 5.2 }),
+    high({ length: 95, grade: 0.085, curv: 0.002, width: 5.25 }),
+    high({ length: 60, grade: 0.065, curv: 0.014, width: 5.85 }),
+    high({ length: 85, grade: 0.07, curv: 0, width: 5.35 }),
+
+    // Gale Bend: the first proper brake, a broad 120-degree mountain corner.
+    high({ length: 160, grade: 0.025, curv: 0, width: 5.55, wet: 0.56 }),
+    high({ length: 40, grade: 0.015, curv: -0.004, width: 6.1 }),
+    high({ length: 20, curv: -0.013, width: 6.8, room: 0.95 }),
+    high({ length: 62, curv: -0.032, width: 7.45, room: 1, wet: 0.7 }),
+    high({ length: 24, curv: -0.014, width: 6.85, room: 0.95 }),
+    high({ length: 50, curv: -0.003, width: 6.1, room: 0.82 }),
+
+    // Cloud Shelf: fast opposing sweeps and the first exposed narrow ribbon.
+    high({ length: 120, grade: 0.018, curv: 0, width: 5.6, wet: 0.48 }),
+    high({ length: 105, grade: 0.02, curv: 0.008, width: 5.8, wet: 0.52 }),
+    high({ length: 80, grade: 0.012, curv: 0, width: 5.25 }),
+    high({ length: 105, grade: 0.018, curv: -0.009, width: 5.75, wet: 0.58 }),
+    high({ length: 140, grade: 0.024, curv: 0.001, width: 4.55, room: 0.3, wet: 0.78 }),
+
+    // A long sightline gives the Thunder Stair away before it asks anything.
+    high({ length: 180, grade: 0.035, curv: 0, width: 5.4, wet: 0.46 }),
+
+    // Thunder Stair I. Each landing changes handedness and continues upward.
+    high({ length: 30, grade: 0.025, curv: 0.005, width: 6.1 }),
+    high({ length: 18, grade: 0.015, curv: 0.015, width: 7 }),
+    high({ length: 58, grade: 0.012, curv: 0.039, width: 8.15, room: 1, wet: 0.63 }),
+    high({ length: 18, grade: 0.025, curv: 0.014, width: 7 }),
+    high({ length: 45, grade: 0.055, curv: 0.003, width: 5.8 }),
+    high({ length: 90, grade: 0.065, curv: -0.002, width: 5.15, wet: 0.78 }),
+
+    // Thunder Stair II, tighter on entry and wet at the apex.
+    high({ length: 30, grade: 0.03, curv: -0.006, width: 6.15 }),
+    high({ length: 18, grade: 0.015, curv: -0.016, width: 7 }),
+    high({ length: 58, grade: 0.012, curv: -0.041, width: 8.25, room: 1, wet: 0.82 }),
+    high({ length: 20, grade: 0.03, curv: -0.015, width: 7 }),
+    high({ length: 52, grade: 0.06, curv: -0.003, width: 5.65 }),
+    high({ length: 80, grade: 0.07, curv: 0.002, width: 5.05, wet: 0.75 }),
+
+    // Thunder Stair III: the very hard crown corner, nearly a half-turn.
+    high({ length: 32, grade: 0.025, curv: 0.006, width: 6.2 }),
+    high({ length: 20, grade: 0.012, curv: 0.018, width: 7.2 }),
+    high({ length: 62, grade: 0.008, curv: 0.043, width: 8.45, room: 1, wet: 0.72 }),
+    high({ length: 20, grade: 0.02, curv: 0.016, width: 7.2 }),
+    high({ length: 46, grade: 0.045, curv: 0.003, width: 5.8 }),
+    high({ length: 90, grade: 0.055, curv: 0, width: 5.45, wet: 0.54 }),
+
+    // The eye of the storm: quiet, high and fast after the concentration test.
+    high({ length: 180, grade: 0.012, curv: 0, width: 5.2, room: 0.45, wet: 0.36 }),
+    high({ length: 120, grade: 0, curv: -0.007, width: 5.7, wet: 0.3 }),
+    high({ length: 120, grade: -0.008, curv: 0.008, width: 5.7, wet: 0.4 }),
+    high({ length: 160, grade: -0.018, curv: 0, width: 4.45, room: 0.24, wet: 0.68 }),
+
+    // Stormfall: the elevation is paid back through spray and long braking.
+    high({ length: 100, grade: -0.075, curv: 0.002, width: 5.25, wet: 0.88 }),
+    high({ length: 110, grade: -0.085, curv: -0.014, width: 5.75, wet: 0.92 }),
+    high({ length: 70, grade: -0.065, curv: 0, width: 5.05, wet: 0.95 }),
+    high({ length: 105, grade: -0.09, curv: 0.017, width: 5.9, wet: 0.96 }),
+    high({ length: 90, grade: -0.075, curv: -0.004, width: 5.1, wet: 0.9 }),
+    high({ length: 120, grade: -0.085, curv: -0.012, width: 5.75, wet: 0.88 }),
+
+    // The lower mountain: one sharp chicane, then space to use everything.
+    high({ length: 60, grade: -0.035, curv: 0.023, width: 5.9, wet: 0.82 }),
+    high({ length: 24, grade: -0.02, curv: 0, width: 5.05, wet: 0.86 }),
+    high({ length: 60, grade: -0.035, curv: -0.023, width: 5.9, wet: 0.82 }),
+    high({ length: 180, grade: -0.018, curv: 0, width: 5.2, wet: 0.64 }),
+    high({ length: 120, grade: -0.012, curv: 0.011, width: 5.85, wet: 0.58 }),
+    high({ length: 160, grade: 0, curv: 0, width: 7.5, room: 1, wet: 0.5 }),
+    high({ length: 110, grade: 0, curv: 0, width: 7.8, room: 1, wet: 0.46 }),
+  ]
+}
+
 export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
-  const bands = bandsFor(seed)
+  const bands = stage === 'moonbreak'
+    ? moonbreakBands()
+    : stage === 'stormcrown'
+      ? stormcrownBands()
+      : rootwayBands(seed)
   const total = bands.reduce((sum, b) => sum + b.length, 0)
   const count = Math.floor(total / STEP) + 1
 
@@ -546,6 +994,9 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     const usable = Math.max(0, width[i] - 1.35)
     rawLine[i] = Math.sign(curv[i]) * usable * Math.min(1, Math.abs(curv[i]) * 46)
   }
+  /* Through the Rootwake the learned line stays on the broad left road. The
+     spirit and the tyre marks never reveal the narrow branch or stray across
+     the gap; finding and mastering that route belongs to a person. */
   const line = smooth(rawLine, 26, 2)
 
   const track: Track = {
@@ -579,7 +1030,10 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       metres up the road you launch past it, and the last thing that leaves
       the frame as the road opens is the fire you were sitting at.
     */
-    hearths: [
+    hearths: stage !== 'rootway' ? [
+      { s: START + 7, n: -5.4 },
+      { s: (count - 1) * STEP - 8, n: 0 },
+    ] : [
       { s: START + 8, n: -4.6 },
       /*
         And the one you come back to, dead ahead on the centreline.
@@ -595,15 +1049,276 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       { s: (count - 1) * STEP - 8, n: 0 },
     ],
     gate: [],
+    split: null,
   }
 
-  dressTrack(track, random(seed ^ 0x9c31d7))
+  if (stage === 'rootway' && dealtMouth !== null) {
+    track.split = makeRootSplit(track, dealtMouth)
+  }
+
+  if (stage === 'moonbreak') dressMoonbreak(track, random(seed ^ 0x6d2b79))
+  else if (stage === 'stormcrown') dressStormcrown(track, random(seed ^ 0x7a36c1))
+  else dressTrack(track, random(seed ^ 0x9c31d7))
   return track
+}
+
+/**
+ * The Stormcrown's light is a driving language. Cold rods keep time through
+ * rain; amber cairns count down braking distance. Nothing sits on the stone.
+ */
+function dressStormcrown(track: Track, rng: () => number) {
+  const count = track.x.length
+  let since = 0
+  for (let i = 12; i < count - 12; i++) {
+    const s = i * STEP
+    since += STEP
+    const turning = Math.abs(track.curv[i]) > 0.006
+    if (since < (turning ? 14 : 27)) continue
+    since = 0
+    const side = turning ? -Math.sign(track.curv[i]) : rng() < 0.5 ? -1 : 1
+    track.lanterns.push({
+      s,
+      n: side * (track.width[i] + 1.15 + rng() * 0.45),
+      y: 0.65 + rng() * 0.3,
+      size: 0.58 + rng() * 0.2,
+      warm: 0,
+    })
+  }
+
+  // Three amber cairns say hard; five say the Stair demands a real brake.
+  const warnings = [
+    { from: STORMCROWN.galeBend.approach + 38, count: 3, gap: 34, side: -1 },
+    { from: STORMCROWN.thunderStair.approach + 32, count: 5, gap: 28, side: 1 },
+    { from: STORMCROWN.thunderStair.second - 118, count: 4, gap: 25, side: -1 },
+    { from: STORMCROWN.thunderStair.third - 116, count: 5, gap: 23, side: 1 },
+  ]
+  for (const warning of warnings) {
+    for (let marker = 0; marker < warning.count; marker++) {
+      const s = warning.from + marker * warning.gap
+      const i = Math.min(count - 1, Math.round(s / STEP))
+      track.lanterns.push({
+        s,
+        n: warning.side * (track.width[i] + 1.7),
+        y: 0.95 + marker * 0.27,
+        size: 0.75 + marker * 0.09,
+        warm: 1,
+      })
+    }
+  }
+
+  // Gate pairs make the summit acts readable at speed and carry the finish.
+  for (const s of [STORMCROWN.cloudShelf.from, STORMCROWN.eye.from, track.finishAt]) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    const out = track.width[i] + 1.25
+    for (const side of [-1, 1]) {
+      track.gate.push({ s, n: side * out })
+      track.lanterns.push({
+        s,
+        n: side * out,
+        y: 3.35,
+        size: s === track.finishAt ? 1.2 : 0.86,
+        warm: s === track.finishAt ? 1 : 0,
+      })
+    }
+  }
+
+  for (let s = 72; s < track.finishAt - 35; s += 31 + rng() * 43) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    track.puddles.push({
+      s,
+      n: (rng() * 2 - 1) * track.width[i] * 0.72,
+      radius: 0.75 + rng() * 1.75,
+    })
+  }
+
+  // A quiet paired avenue after timing stops, ending at the stormfire.
+  for (let s = track.finishAt + 17; s < track.length - 18; s += 17) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    for (const side of [-1, 1]) {
+      track.lanterns.push({
+        s,
+        n: side * (track.width[i] + 1),
+        y: 0.55,
+        size: 0.68,
+        warm: 0.55,
+      })
+    }
+  }
+
+  track.lanterns.sort((a, b) => a.s - b.s)
 }
 
 // ---------------------------------------------------------------------------
 // What is on the road, and what is growing through it
 // ---------------------------------------------------------------------------
+
+/**
+ * Light and obstacles for the open road.
+ *
+ * The same lantern structure becomes a moon pearl here: cold, steady and low
+ * beside the causeway. Paired pearls announce the broken arches. Amber is
+ * reserved for braking: two at Tidecut, four before the Moonhook, then the
+ * finish pair. Nothing hangs from a ceiling because there is no ceiling, and
+ * boulders stay outside the timed stone as pieces of a drowned garden rather
+ * than hazards dropped in the line.
+ */
+function dressMoonbreak(track: Track, rng: () => number) {
+  const count = track.x.length
+  let since = 0
+
+  for (let i = 8; i < count - 8; i++) {
+    since += STEP
+    const turning = Math.abs(track.curv[i]) > 0.006
+    const spacing = turning ? 12 : 24
+    if (since < spacing) continue
+    since = 0
+    const outside = Math.sign(track.curv[i] || (rng() - 0.5)) || 1
+    // Not inside the Drowned Mile: the tube hangs its own, in pairs, below.
+    if (i * STEP > MOONBREAK.deep.from + 12 && i * STEP < MOONBREAK.deep.to - 12) continue
+    track.lanterns.push({
+      s: i * STEP,
+      n: outside * (track.width[i] + 1.05 + rng() * 0.45),
+      y: 0.42 + rng() * 0.18,
+      size: 0.56 + rng() * 0.24,
+      warm: 0,
+    })
+  }
+
+  /*
+    And the tube's own lamps, in pairs, which are a different kind of light.
+
+    -------------------------------------------------------------------------
+    Above water the lanterns are corner guidance: one at a time, on the outside
+    of the bend, telling you where the road goes. Under it they cannot be, and
+    trying would be a lie — the road down there is a glass tube and you can see
+    the whole of it. So they change job. Paired, evenly spaced, set high on the
+    ribs, they stop being *information* and become **rhythm**: the one thing
+    that tells you how fast you are going when there is no scenery close enough
+    to stream past, and the thing that makes the tube read as built rather than
+    as a hole in the dark.
+
+    Every eighteen metres, which at Drowned-Mile speeds is a beat about every
+    two thirds of a second — fast enough to feel like travelling, slow enough
+    that a phone is not drawing forty glows at once.
+
+    Their colour is the vein colour, which the Moonbreak sets to a cold cyan,
+    and that is deliberate: the only warm thing under the water is your own
+    car. See `uVeinColor` in `Race`.
+    -------------------------------------------------------------------------
+  */
+  {
+    const { from, to } = MOONBREAK.deep
+    for (let s = from + 26; s < to - 26; s += 18) {
+      const i = Math.min(count - 1, Math.round(s / STEP))
+      for (const side of [-1, 1]) {
+        track.lanterns.push({
+          s,
+          n: side * (track.width[i] + 1.15),
+          y: 2.42,
+          size: 0.5,
+          warm: 0,
+        })
+      }
+    }
+  }
+
+  // The paired arches: equal lights are a landmark, never ordinary corner
+  // guidance.
+  for (const s of MOONBREAK.arches.slice(1)) {
+    if (s >= track.finishAt - 20) continue
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    for (const side of [-1, 1]) {
+      track.lanterns.push({
+        s,
+        n: side * (track.width[i] + 1.4),
+        y: 3.1,
+        size: 0.72,
+        warm: 0,
+      })
+    }
+  }
+
+  // Braking pearls are the course's wordless difficulty language. Tidecut
+  // gets two; the much faster Moonhook approach gets four, growing taller and
+  // warmer toward turn-in. Both sit on the outside of their positive-radius
+  // corner, where a driver naturally looks while choosing the braking point.
+  const warnings = [
+    { from: MOONBREAK.hard.approach + 12, count: 2, gap: 18, warm: 0.72 },
+    { from: MOONBREAK.veryHard.approach + 80, count: 4, gap: 32, warm: 1 },
+  ]
+  for (const warning of warnings) {
+    for (let marker = 0; marker < warning.count; marker++) {
+      const s = warning.from + marker * warning.gap
+      const i = Math.min(count - 1, Math.round(s / STEP))
+      track.lanterns.push({
+        s,
+        n: track.width[i] + 1.7,
+        y: 1.05 + marker * 0.34,
+        size: 0.78 + marker * 0.1,
+        warm: warning.warm,
+      })
+    }
+  }
+
+  for (let s = 54; s < track.finishAt - 30; s += 29 + rng() * 31) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    const side = rng() < 0.5 ? -1 : 1
+    track.boulders.push({
+      s,
+      n: side * (track.width[i] + vergeWidth(track.room[i]) + 0.8 + rng() * 2.4),
+      size: 0.45 + rng() * 0.9,
+      seed: Math.floor(rng() * 0x7fffffff),
+    })
+  }
+
+  for (let s = 90; s < track.finishAt - 25; s += 20 + rng() * 42) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    if (track.wet[i] < 0.45) continue
+    track.puddles.push({
+      s,
+      n: (rng() * 2 - 1) * track.width[i] * 0.7,
+      radius: 0.8 + rng() * 2.2,
+    })
+  }
+
+  const gateIndex = Math.min(count - 1, Math.round(track.finishAt / STEP))
+  const gateOut = track.width[gateIndex] + 1.15
+  for (const side of [-1, 1]) {
+    track.gate.push({ s: track.finishAt, n: side * gateOut })
+    track.lanterns.push({
+      s: track.finishAt,
+      n: side * gateOut,
+      y: 3.4,
+      size: 1.12,
+      warm: 1,
+    })
+  }
+
+  // After the timed arch, paired pearls draw a quiet avenue to the moonwell.
+  // The last one is central and larger: the place the car comes to rest, not
+  // another instruction about where the road turns.
+  for (let s = track.finishAt + 18; s < track.length - 24; s += 18) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    for (const side of [-1, 1]) {
+      track.lanterns.push({
+        s,
+        n: side * (track.width[i] + 1.05),
+        y: 0.52,
+        size: 0.68,
+        warm: 0,
+      })
+    }
+  }
+  track.lanterns.push({
+    s: track.length - 20,
+    n: 0,
+    y: 1.25,
+    size: 1.7,
+    warm: 0,
+  })
+
+  track.lanterns.sort((a, b) => a.s - b.s)
+}
 
 /**
  * Everything you can see that is not rock.
@@ -628,9 +1343,15 @@ function dressTrack(track: Track, rng: () => number) {
     const building = Math.abs(track.curv[i + 3]) > Math.abs(k) + 0.0004
     const spacing = turning ? 11 : track.room[i] > 0.7 ? 15 : 21
 
+    /* Every ambient light in the Rootwake cavern stays on the ordinary left
+       road. The branch's mouth has its own few markers below; after those, the
+       right-hand ledge is lit only by the car. */
+    const inTheSplit =
+      track.split !== null && s > track.split.from - 10 && s < track.split.commitAt + 26
+
     if (sinceLantern >= spacing) {
       sinceLantern = 0
-      const outside = turning ? -Math.sign(k) : rng() < 0.5 ? -1 : 1
+      const outside = inTheSplit ? -1 : turning ? -Math.sign(k) : rng() < 0.5 ? -1 : 1
       const edge = track.width[i] + 0.55 + rng() * 0.5
       track.lanterns.push({
         s,
@@ -646,7 +1367,8 @@ function dressTrack(track: Track, rng: () => number) {
     // A chamber gets a scatter of its own, high up, so the room has a ceiling
     // you can see rather than a black lid.
     if (track.room[i] > 0.85 && i % 9 === 0) {
-      const side = rng() < 0.5 ? -1 : 1
+      // Left only, inside the Split. See above.
+      const side = inTheSplit ? -1 : rng() < 0.5 ? -1 : 1
       track.lanterns.push({
         s,
         n: side * (track.width[i] + 1.6 + rng() * 2.6),
@@ -737,12 +1459,32 @@ function dressTrack(track: Track, rng: () => number) {
     const side = rng() < 0.5 ? -1 : 1
     const n = side * (half * (0.72 + rng() * 0.5))
     if (Math.abs(track.line[i] - n) < 2.2) continue
+    /* The fork is authored. Ordinary width-relative scatter would move rocks
+       across either route with the seed and turn precision into luck. */
     track.boulders.push({
       s,
       n,
       size: 0.32 + rng() * 0.72,
       seed: Math.floor(rng() * 65536),
     })
+  }
+
+  /* Edge stone, sparse enough to remain natural, then the mouth lights. The
+     interior receives no route lighting: its gates are found by headlamp. */
+  if (track.split) {
+    const split = track.split
+    /* Three low amber lights make the mouth noticeable without naming it;
+       after the third, the headlamps are all the route lighting there is. */
+    for (let marker = 0; marker < 3; marker++) {
+      const s = split.from + 4 + marker * 10
+      track.lanterns.push({
+        s,
+        n: split.portalN + 1.05,
+        y: 0.72 + marker * 0.24,
+        size: 0.95 + marker * 0.16,
+        warm: 1,
+      })
+    }
   }
 
   /*
@@ -893,12 +1635,14 @@ export interface RoadAt {
   bank: number
   grade: number
   line: number
+  /** World metres represented by one metre of shared race progress. */
+  metric: number
 }
 
 export function emptyRoad(): RoadAt {
   return {
     x: 0, y: 0, z: 0, heading: 0, curv: 0, width: 4.6,
-    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, line: 0,
+    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, line: 0, metric: 1,
   }
 }
 
@@ -925,11 +1669,219 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
   r.bank = lerpAt(track.bank, i, j, mix)
   r.grade = lerpAt(track.grade, i, j, mix)
   r.line = lerpAt(track.line, i, j, mix)
+  r.metric = 1
 
   // Headings are integrated and monotonic here, so a plain lerp is safe and
   // there is no wrap to unwind.
   r.heading = lerpAt(track.heading, i, j, mix)
   return r
+}
+
+/**
+ * Build the hidden road as a real second centreline.
+ *
+ * Short alignment throats inherit only the two portal headings. Between them,
+ * an authored transverse route supplies a hard S and a tighter blind reverse.
+ * The road then drops more than thirty metres below the ordinary cave and is
+ * sampled into the same physical quantities understood by tyres and cameras.
+ */
+function makeRootSplit(track: Track, from: number): RootSplit {
+  const to = Math.max(from + 900, track.finishAt - 285)
+  const span = to - from
+  const count = Math.floor(span / STEP) + 1
+  const x = new Float32Array(count)
+  const y = new Float32Array(count)
+  const z = new Float32Array(count)
+  const heading = new Float32Array(count)
+  const curv = new Float32Array(count)
+  const width = new Float32Array(count)
+  const ceiling = new Float32Array(count)
+  const room = new Float32Array(count)
+  const wet = new Float32Array(count)
+  const grade = new Float32Array(count)
+  const bank = new Float32Array(count)
+  const metric = new Float32Array(count)
+  const start = roadAt(track, from)
+  const end = roadAt(track, to)
+  const chordX = end.x - start.x
+  const chordZ = end.z - start.z
+  const chord = Math.max(1, Math.hypot(chordX, chordZ))
+  const sideX = -chordZ / chord
+  const sideZ = chordX / chord
+  // Hermite derivatives are expressed per normalized route, so a value of
+  // `span` means one world metre per shared progress metre at both portals.
+  // That keeps entry/rejoin speed continuous instead of catapulting the car
+  // through a compressed endpoint.
+  const throat = span
+  const startGrade = Math.max(-0.12, Math.min(0.12, start.grade))
+  const endGrade = Math.max(-0.12, Math.min(0.12, end.grade))
+
+  const point = (t: number, amplitude: number) => {
+    const startDX = Math.sin(start.heading) * throat
+    const startDZ = Math.cos(start.heading) * throat
+    const endDX = Math.sin(end.heading) * throat
+    const endDZ = Math.cos(end.heading) * throat
+    // These basis functions have a derivative of one at only their own end.
+    // Unlike a whole-span Hermite bend, they align each short portal throat
+    // without letting a random endpoint heading distort the road's middle.
+    const startAlign = t * (1 - t) ** 4
+    const endAlign = -(1 - t) * t ** 4
+    const fade = Math.sin(Math.PI * t) ** 2
+    // One broad hard S, followed by a tighter blind reverse. Their unequal
+    // weights stop the hidden road from feeling like a procedural slalom.
+    const hardGate = -18 * Math.exp(-(((t - 0.37) / 0.075) ** 2))
+    const blindReverse = 30 * Math.exp(-(((t - 0.69) / 0.055) ** 2))
+    const transverse = amplitude * fade * (
+      0.7 * Math.sin(Math.PI * 2 * t) +
+      0.24 * Math.sin(Math.PI * 4 * t) -
+      0.1 * Math.sin(Math.PI * 6 * t)
+    ) + hardGate + blindReverse
+    const depth = fade * (-34 - 7 * Math.sin(Math.PI * 3 * t) ** 2)
+    return {
+      x: start.x + chordX * t + (startDX - chordX) * startAlign + (endDX - chordX) * endAlign + sideX * transverse,
+      y: start.y + (end.y - start.y) * t +
+        (startGrade * throat - (end.y - start.y)) * startAlign +
+        (endGrade * throat - (end.y - start.y)) * endAlign + depth,
+      z: start.z + chordZ * t + (startDZ - chordZ) * startAlign + (endDZ - chordZ) * endAlign + sideZ * transverse,
+    }
+  }
+
+  const curveLength = (amplitude: number) => {
+    let total = 0
+    let previous = point(0, amplitude)
+    for (let i = 1; i < count; i++) {
+      const next = point(i / (count - 1), amplitude)
+      total += Math.hypot(next.x - previous.x, next.y - previous.y, next.z - previous.z)
+      previous = next
+    }
+    return total
+  }
+
+  // The road is physically shorter, but not by so much that simply finding it
+  // wins. Its hard S and blind reverse still have to be learned to earn the
+  // intended ten seconds.
+  const targetLength = Math.max(curveLength(0), span - 330)
+  let low = 0
+  let high = 220
+  while (curveLength(high) < targetLength && high < 900) high *= 1.45
+  for (let pass = 0; pass < 22; pass++) {
+    const middle = (low + high) * 0.5
+    if (curveLength(middle) < targetLength) low = middle
+    else high = middle
+  }
+  const amplitude = (low + high) * 0.5
+
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1)
+    const sample = point(t, amplitude)
+    x[i] = sample.x
+    y[i] = sample.y
+    z[i] = sample.z
+    width[i] = 4.05
+    ceiling[i] = 3.62 + Math.sin(t * Math.PI * 7) * 0.24
+    room[i] = 0.035
+    wet[i] = 0.45 + Math.sin(t * 13.1) * 0.16
+  }
+
+  let previousHeading = 0
+  for (let i = 0; i < count; i++) {
+    const a = Math.max(0, i - 1)
+    const b = Math.min(count - 1, i + 1)
+    const dx = x[b] - x[a]
+    const dy = y[b] - y[a]
+    const dz = z[b] - z[a]
+    let angle = Math.atan2(dx, dz)
+    if (i > 0) {
+      while (angle - previousHeading > Math.PI) angle -= Math.PI * 2
+      while (angle - previousHeading < -Math.PI) angle += Math.PI * 2
+    }
+    heading[i] = angle
+    previousHeading = angle
+    const ds = Math.max(1, b - a)
+    const world = Math.max(0.25, Math.hypot(dx, dy, dz) / ds)
+    metric[i] = world
+    grade[i] = (dy / ds) / world
+  }
+
+  const rawLine = new Float32Array(count)
+  for (let i = 0; i < count; i++) {
+    const a = Math.max(0, i - 2)
+    const b = Math.min(count - 1, i + 2)
+    const distance = Math.max(0.5, ((metric[a] + metric[b]) * (b - a)) * 0.5)
+    curv[i] = -(heading[b] - heading[a]) / distance
+    // A little apex room prevents mathematically correct driving from being
+    // punished while every straight remains substantially tighter than Rootway.
+    width[i] += Math.min(0.82, Math.abs(curv[i]) * 22)
+    bank[i] = Math.max(-0.16, Math.min(0.16, -curv[i] * 4.4))
+    const usable = Math.max(0, width[i] - 1.25)
+    // The tunnel is too narrow for the broad road's full edge-to-apex line.
+    // A restrained apex still teaches the faster path without putting a
+    // correct wheel on the rock when the corner reverses.
+    rawLine[i] = Math.sign(curv[i]) * usable * Math.min(0.52, Math.abs(curv[i]) * 25)
+  }
+  const line = smooth(rawLine, 19, 2)
+
+  let shortcutLength = 0
+  for (let i = 1; i < count; i++) {
+    shortcutLength += Math.hypot(x[i] - x[i - 1], y[i] - y[i - 1], z[i] - z[i - 1])
+  }
+  const hardest = (fromFraction: number, toFraction: number) => {
+    let best = Math.floor(count * fromFraction)
+    for (let i = best + 1; i < count * toFraction; i++) {
+      if (Math.abs(curv[i]) > Math.abs(curv[best])) best = i
+    }
+    return from + best * STEP
+  }
+
+  return {
+    from,
+    to,
+    shortcut: { from, to },
+    commitAt: from + 34,
+    rejoinAt: to - 2,
+    portalN: 2.3,
+    mainLength: span,
+    shortcutLength,
+    hardAt: hardest(0.2, 0.52),
+    veryHardAt: hardest(0.52, 0.84),
+    x, y, z, heading, curv, width, ceiling, room, wet, grade, bank, line, metric,
+  }
+}
+
+/** Read the hidden tunnel, whose arrays begin at `split.from`. */
+export function shortcutRoadAt(split: RootSplit, s: number, out?: RoadAt): RoadAt {
+  const last = split.x.length - 1
+  const exact = Math.max(0, Math.min(last, (s - split.from) / STEP))
+  const i = Math.floor(exact)
+  const j = Math.min(last, i + 1)
+  const mix = exact - i
+  const r = out ?? emptyRoad()
+  r.x = lerpAt(split.x, i, j, mix)
+  r.y = lerpAt(split.y, i, j, mix)
+  r.z = lerpAt(split.z, i, j, mix)
+  r.heading = lerpAt(split.heading, i, j, mix)
+  r.curv = lerpAt(split.curv, i, j, mix)
+  r.width = lerpAt(split.width, i, j, mix)
+  r.ceiling = lerpAt(split.ceiling, i, j, mix)
+  r.room = lerpAt(split.room, i, j, mix)
+  r.wet = lerpAt(split.wet, i, j, mix)
+  r.grade = lerpAt(split.grade, i, j, mix)
+  r.bank = lerpAt(split.bank, i, j, mix)
+  r.line = lerpAt(split.line, i, j, mix)
+  r.metric = lerpAt(split.metric, i, j, mix)
+  return r
+}
+
+/** One call for every consumer that can follow either Rootway route. */
+export function roadAtRoute(
+  track: Track,
+  s: number,
+  shortcut: boolean,
+  out?: RoadAt,
+): RoadAt {
+  return shortcut && track.split && s >= track.split.from && s <= track.split.to
+    ? shortcutRoadAt(track.split, s, out)
+    : roadAt(track, s, out)
 }
 
 /**

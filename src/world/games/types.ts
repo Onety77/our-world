@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import type { Later } from '@/systems/later'
 import type { Round, UserId } from '@/data/types'
 
 /**
@@ -182,7 +183,27 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
    */
   Emblem?: ComponentType
 
-  Component: ComponentType<GameProps<Setup, MoveData>>
+  /*
+    ------------------------------------------------------------------------
+    `Component` and `Stage` are the only two things in a game definition that
+    are fetched rather than shipped — see `later` in `systems/later`.
+
+    Everything above them stays eager, and the line between the two is not
+    about size, it is about *when it is read*. The Hollow draws a row of games
+    before you have chosen one: their names, what they cost you in minutes,
+    what the two ways in are called, and the little emblem on the card. A name
+    you have to download is a name that is not there. But only one game is ever
+    played, and Ember Rally alone — its physics, both roads, the car, the
+    materials, the audio — is a quarter of everything this garden's own code
+    weighs. It has no business being downloaded by somebody walking to the
+    river.
+
+    `Emblem` stays eager despite being a component, because it is drawn *on*
+    the card, in the row, before any choice is made. It is a few lines of SVG.
+    ------------------------------------------------------------------------
+  */
+
+  Component: Later<GameProps<Setup, MoveData>>
 
   /**
    * A place, mounted inside the world's own Canvas.
@@ -199,7 +220,7 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
    * whether it currently owns the screen, and `ember-rally/session.ts` for the
    * shape of the handover.
    */
-  Stage?: ComponentType
+  Stage?: Later
 }
 
 /**

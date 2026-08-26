@@ -20,6 +20,7 @@ import { Vector3 } from 'three'
 import { SECTIONS } from '@/sections/registry'
 import { SLIDE_DISTANCE, slide, slidePosition, useSections } from '@/systems/sections'
 import { eased, gaze, stepPointerLook } from '@/systems/pointerLook'
+import { stepTreeOrbit, treeOrbit } from '@/systems/treeOrbit'
 
 /** How quickly the camera settles onto the place you asked for, per second. */
 const FOLLOW = 4.2
@@ -80,8 +81,11 @@ export function SlideCamera() {
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 20)
+    const section = SECTIONS[index]
+    const circlingTree = entered && section.id === 'tree'
     drift.current += delta
     stepPointerLook(delta, PLACE_TURN)
+    stepTreeOrbit(delta, circlingTree)
     browse.current += ((entered ? 0 : 1) - browse.current) *
       (1 - Math.exp(-3.2 * delta))
 
@@ -96,8 +100,6 @@ export function SlideCamera() {
     if (!slide.grabbing) {
       slide.at += (index - slide.at) * (1 - Math.exp(-FOLLOW * delta))
     }
-
-    const section = SECTIONS[index]
 
     /*
       How far this place is from being centred, in index space. Non-zero only
@@ -123,16 +125,27 @@ export function SlideCamera() {
     // Stand further off on a narrow screen, along the line the place was
     // framed from — so the composition is the authored one, just smaller.
     const back = backOffFor(size.width / Math.max(1, size.height))
+    const baseX = (section.camera.position[0] - section.camera.target[0]) * back
+    const baseZ = (section.camera.position[2] - section.camera.target[2]) * back
+    const orbitCos = Math.cos(circlingTree ? treeOrbit.current : 0)
+    const orbitSin = Math.sin(circlingTree ? treeOrbit.current : 0)
+    const orbitX = baseX * orbitCos + baseZ * orbitSin
+    const orbitZ = -baseX * orbitSin + baseZ * orbitCos
     const from: [number, number, number] = [
-      section.camera.target[0] + (section.camera.position[0] - section.camera.target[0]) * back,
+      section.camera.target[0] + orbitX,
       section.camera.target[1] + (section.camera.position[1] - section.camera.target[1]) * back,
-      section.camera.target[2] + (section.camera.position[2] - section.camera.target[2]) * back,
+      section.camera.target[2] + orbitZ,
     ]
 
+    const parallax = (eased.x * 1.6 + idleX) * sway
+    const orbitRadius = Math.hypot(orbitX, orbitZ) || 1
+    const parallaxX = circlingTree ? (orbitZ / orbitRadius) * parallax : parallax
+    const parallaxZ = circlingTree ? (-orbitX / orbitRadius) * parallax : 0
+
     here.current.set(
-      from[0] + shove + (eased.x * 1.6 + idleX) * sway,
+      from[0] + shove + parallaxX,
       from[1] + browseLift + (-eased.y * 0.9 + idleY) * sway,
-      from[2] + browseBack,
+      from[2] + browseBack + parallaxZ,
     )
     /*
       The resting aim, turned by the gaze.

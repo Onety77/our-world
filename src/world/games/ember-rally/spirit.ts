@@ -29,7 +29,7 @@ import {
   type CarInput,
   type CarState,
 } from './physics'
-import { roadAt, type Track } from './track'
+import { roadAtRoute, type Track } from './track'
 
 interface Brain {
   /** How hard it is willing to lean on the tyres. Sets its corner speeds. */
@@ -48,9 +48,11 @@ interface Brain {
   brakeHold: number
   /** Seconds of handbrake still owed, for the same reason. */
   yankHold: number
+  /** Repeatable validation line with the companion's deliberate errors off. */
+  precision: boolean
 }
 
-function makeBrain(seed: number, skill: number): Brain {
+function makeBrain(seed: number, skill: number, precision = false): Brain {
   const rng = random(seed ^ 0x3ab17f)
   const slips = new Set<number>()
   // Two or three moments of carelessness per run, chosen up front so the run
@@ -67,6 +69,7 @@ function makeBrain(seed: number, skill: number): Brain {
     boostCooldown: 0,
     brakeHold: 0,
     yankHold: 0,
+    precision,
   }
 }
 
@@ -79,20 +82,29 @@ function makeBrain(seed: number, skill: number): Brain {
  */
 function think(track: Track, car: CarState, brain: Brain, dt: number): CarInput {
   const v = speedOf(car)
-  const scan = roadAt(track, car.s)
+  const scan = roadAtRoute(track, car.s, car.shortcut)
+  // On Rootwake one shared progress metre is deliberately not always one
+  // physical road metre. The driver's vision and braking distances must stay
+  // physical or it will turn and brake late precisely where the tunnel bends.
+  const progressForMetres = (metres: number) =>
+    metres / Math.max(0.32, scan.metric)
 
   // --- where it wants to be ------------------------------------------------
   const ahead = 7 + v * brain.vision
-  const target = roadAt(track, car.s + ahead)
-  const wobble =
+  const target = roadAtRoute(track, car.s + progressForMetres(ahead), car.shortcut)
+  const precise = car.shortcut || brain.precision
+  const wobble = precise ? 0 :
     Math.sin(car.s * 0.031 + brain.bias * 20) * brain.drift * 0.55 +
     Math.sin(car.s * 0.0117) * brain.drift * 0.35
-  const wantN = target.line + brain.bias * target.width + wobble
+  // Rootwake is the learned precision route. The ordinary spirit never takes
+  // it, but ride-mode and repeatable checks should demonstrate the mastered
+  // line rather than importing the spirit's deliberate little mistakes.
+  const wantN = target.line + (precise ? 0 : brain.bias * target.width) + wobble
 
   const toward = Math.atan2(wantN - car.n, Math.max(4, ahead)) - car.psi
   const steer = Math.max(
     -1,
-    Math.min(1, toward * 2.7 + target.curv * 26 - car.yaw * 0.22),
+    Math.min(1, toward * (precise ? 3.15 : 2.7) + target.curv * 26 - car.yaw * 0.22),
   )
 
   // --- whether it is going to make the next corner -------------------------
@@ -101,15 +113,17 @@ function think(track: Track, car: CarState, brain: Brain, dt: number): CarInput 
   // difference in the distance remaining.
   let brake = false
   const corner = Math.floor(car.s / 40)
-  const bravery = brain.slips.has(corner % 40) ? brain.bravery * 0.62 : brain.bravery
+  const bravery = precise
+    ? Math.min(brain.bravery, 12.9)
+    : brain.slips.has(corner % 40) ? brain.bravery * 0.62 : brain.bravery
   for (let d = 14; d < 120; d += 6) {
-    const at = roadAt(track, car.s + d)
+    const at = roadAtRoute(track, car.s + progressForMetres(d), car.shortcut)
     const kappa = Math.abs(at.curv)
     if (kappa < 0.004) continue
     const limit = Math.sqrt(bravery / kappa)
     if (limit >= v) continue
     const needed = (v * v - limit * limit) / (2 * d)
-    if (needed > 6.6) {
+    if (needed > (precise ? 3.8 : 6.6)) {
       brake = true
       break
     }
@@ -162,7 +176,7 @@ function think(track: Track, car: CarState, brain: Brain, dt: number): CarInput 
   ) {
     brain.yankHold = 0.34
   }
-  const handbrake = brain.yankHold > 0
+  const handbrake = !precise && brain.yankHold > 0
   if (brain.yankHold > 0) brain.yankHold -= dt
 
   // --- the ember -----------------------------------------------------------
@@ -172,7 +186,7 @@ function think(track: Track, car: CarState, brain: Brain, dt: number): CarInput 
     // Only where it can use it: a hundred metres of nothing much ahead.
     let clear = true
     for (let d = 10; d < 95; d += 10) {
-      if (Math.abs(roadAt(track, car.s + d).curv) > 0.011) {
+      if (Math.abs(roadAtRoute(track, car.s + progressForMetres(d), car.shortcut).curv) > 0.011) {
         clear = false
         break
       }
@@ -226,8 +240,8 @@ function think(track: Track, car: CarState, brain: Brain, dt: number): CarInput 
  * the game. The second is the same argument as `?hour=` and `?section=` in the
  * garden — a check nobody can repeat is not a check.
  */
-export function spiritDriver(track: Track, seed: number, skill = 0.55) {
-  const brain = makeBrain(seed, skill)
+export function spiritDriver(track: Track, seed: number, skill = 0.55, precision = false) {
+  const brain = makeBrain(seed, skill, precision)
   return (car: CarState, dt: number): CarInput => think(track, car, brain, dt)
 }
 

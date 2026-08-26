@@ -77,6 +77,137 @@ export function buildingZ(): number {
   return -aisleAt()
 }
 
+/**
+ * Which wall the pane you are nearest is on, and how far to lean toward it.
+ *
+ * ---------------------------------------------------------------------------
+ * **The single biggest thing wrong with this place was that it was a corridor
+ * first and a photograph second.**
+ *
+ * Standing in the middle of an aisle, both walls are at the edge of the frame
+ * — worse on a phone, where the horizontal field of view is about twenty-seven
+ * degrees and a pane measured twenty-eight pixels across. It was on screen,
+ * it was tappable, and it was not *looked at*. The architecture had all the
+ * middle of the frame and the memories had the margins, in a place that exists
+ * for the memories.
+ *
+ * So the building slides sideways. Not the camera — `SlideCamera` owns that,
+ * and two things steering one camera is the fight the racer had to stand it
+ * down to avoid. Moving the building the other way is the same picture and
+ * costs one number.
+ *
+ * It reads as leaning toward the wall you are looking at, which is what a
+ * person does in a gallery. The far end of the aisle stays visible past your
+ * shoulder, so it is still a corridor you are in — it is just no longer the
+ * subject.
+ * ---------------------------------------------------------------------------
+ */
+export const LEAN = 1.45
+
+/*
+   How far from the pane you stand once a memory is open lives in `layout`,
+   as `standFor` — it is a fact about the size of a pane and the shape of a
+   screen, not about easing. It started life here as a bigger lean, on the
+   reasoning that leaning harder walks you closer to the wall. That is true
+   while you are walking and completely false once you have turned, and the
+   reason why is worth keeping: after a quarter turn the building's local X
+   *is* the depth axis, so how far back down the aisle the camera happens to
+   be standing becomes how far across the building it is standing. The lean
+   was cancelling about half of that and leaving the camera a metre outside
+   the far glazing, looking in through grey glass at a pane on the opposite
+   wall — perfectly centred, perfectly sized, and with no room around it,
+   because the room was behind the camera.
+*/
+
+/**
+ * And it has to *turn*, which is the part that actually matters.
+ *
+ * ---------------------------------------------------------------------------
+ * **A pane on a corridor wall is seen almost edge-on.** Its two and a bit
+ * metres of width run *down the aisle* — which is the direction you are
+ * looking — so almost all of it is depth and almost none of it is screen. That
+ * is the arithmetic behind "the focused pane measured twenty-eight pixels":
+ * not distance, and not size. Angle.
+ *
+ * Moving closer cannot fix it; the foreshortening is the same at any range.
+ * Sliding sideways barely touches it either. The only thing that turns a wall
+ * into a picture is *facing* it, which is why this exists and why the lean
+ * above is now the smaller half of the pair.
+ *
+ * Twenty-two degrees. Enough that the near pane opens up to something you are
+ * looking at rather than past, and little enough that the aisle still recedes
+ * — diagonally now, across the frame, which is what a room does when you turn
+ * to something on its wall.
+ * ---------------------------------------------------------------------------
+ */
+export const TURN = 0.38
+
+/**
+ * And all the way round, when you open one.
+ *
+ * ---------------------------------------------------------------------------
+ * **Opening a memory is the same turn, continued.** Twenty-two degrees is
+ * glancing at the wall; ninety is standing square in front of it, which is
+ * what a person does when they stop to look at a picture. So there is no
+ * second mechanism and no separate camera move: `open` runs 0 to 1 and the
+ * turn runs from a glance to face-on along with it, with the aisle walking to
+ * the pane's own bay at the same time.
+ *
+ * The arithmetic falls out unreasonably well. At exactly ninety degrees the
+ * pane's own width maps onto world *x* and its height onto world *y*, so it
+ * lands dead centre of the aisle — and the existing sideways lean, which was
+ * chosen for something else entirely, happens to leave it about five and a
+ * half metres from the camera. That is eighty-odd per cent of a phone screen.
+ *
+ * And being exactly perpendicular is what lets the photograph align to it:
+ * a face-on rectangle projects to an axis-aligned rectangle on screen, which
+ * a DOM element can be placed on precisely. One degree of tilt and none of
+ * this would be possible — see the note on `slotFor`.
+ * ---------------------------------------------------------------------------
+ */
+const FACING = Math.PI / 2
+
+/** Live, eased. Written by the scene, read by the two groups. */
+export const lean = { shift: 0, turn: 0 }
+
+/** How far into looking at one, 0..1. Read by the drag and by the DOM. */
+export const focus = { open: 0 }
+
+/**
+ * Step the lean, the turn and the opening together.
+ *
+ * `toward` is the wall being attended to — the nearest pane while walking, the
+ * open one while looking. `opening` is 1 once a memory has been tapped.
+ */
+export function stepLean(delta: number, toward: -1 | 0 | 1, opening: boolean): void {
+  const ease = 1 - Math.exp(-2.4 * delta)
+  // Slower than the lean: this is a whole body turning rather than a glance,
+  // and at this size a fast one reads as the room being yanked.
+  focus.open += ((opening ? 1 : 0) - focus.open) * (1 - Math.exp(-2.9 * delta))
+
+  const want = toward * (TURN + (FACING - TURN) * focus.open)
+  // Facing a wall means the building turns the other way about the point in
+  // front of you — see the nested groups in the scene.
+  /*
+    The lean is now only the walking one — a glance toward the wall you are
+    passing. The open state does not lean at all; it is placed, by the solve in
+    the scene, and easing a lean underneath that solve only gives it more to
+    cancel.
+  */
+  lean.shift += (-toward * LEAN - lean.shift) * ease
+  lean.turn += (want - lean.turn) * ease
+}
+
+/** Where the building sits across the aisle. */
+export function buildingX(): number {
+  return lean.shift
+}
+
+/** How far the building is turned, in radians. */
+export function buildingTurn(): number {
+  return lean.turn
+}
+
 /** Step the easing. Called once a frame by the scene, before anything reads it. */
 export function stepAisle(delta: number): void {
   aisle.to = Math.max(0, Math.min(aisle.deepest, aisle.to))
@@ -130,6 +261,10 @@ export function alongTheAisle(target: HTMLElement): () => void {
 
   const move = (e: PointerEvent) => {
     if (from === null) return
+    // Not while a memory is open: you are standing in front of a picture, and
+    // the building sliding under the thumb that is trying to read it is the
+    // gesture fighting the moment.
+    if (focus.open > 0.02) return
     const dy = e.clientY - from
     moved = Math.max(moved, Math.abs(dy))
     if (moved < SLOP) return

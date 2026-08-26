@@ -247,10 +247,18 @@ export function wallGlazing(length: number, taken: ReadonlySet<string>): FormIns
   for (let b = 0; b < bays; b++) {
     for (const side of [-1, 1] as const) {
       if (taken.has(panelKey(b, side))) continue
-      // Rather more than half still glazed, so the building is enclosed and
-      // the gaps are events. Fixed by bay, so they never move.
+      /*
+        Mostly glazed, and it was not.
+
+        Two panels in five missing was chosen when the camera looked straight
+        down the middle and the walls were seen edge-on. Now that it turns to
+        face them you are looking *at* a wall — and a wall that is forty per
+        cent holes reads as a building site rather than as an old conservatory.
+        One in six keeps the gaps as events: somewhere the meadow gets in,
+        somewhere a vine came through. Fixed by bay, so they never move.
+      */
       const gone = makeRng(seedFrom(`glasshouse:wallgone:${b}:${side}`))
-      if (gone() < 0.42) continue
+      if (gone() < 0.17) continue
 
       out.push({
         offset: [side * HALF, DWARF + high / 2, b * BAY + BAY / 2],

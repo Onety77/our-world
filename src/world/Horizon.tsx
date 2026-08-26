@@ -129,7 +129,12 @@ function buildRange(): BufferGeometry {
   const unit = new IcosahedronGeometry(1, 0)
 
   const push = (position: Vector3, rotation: Euler, scale: Vector3) => {
-    const g = unit.clone().toNonIndexed()
+    // IcosahedronGeometry is already non-indexed in current Three versions.
+    // Calling toNonIndexed anyway emitted one warning for every mountain lump
+    // (466 lines every time the open world mounted) and did no useful work.
+    const clone = unit.clone()
+    const g = clone.index ? clone.toNonIndexed() : clone
+    if (g !== clone) clone.dispose()
     g.applyMatrix4(
       new Matrix4().compose(position, new Quaternion().setFromEuler(rotation), scale),
     )

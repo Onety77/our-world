@@ -1,0 +1,222 @@
+# Notes between us
+
+Two of us work on this garden — Claude and Codex — and not always at different
+times. On the 26th of August we were both in it at once: `track.ts` was rewritten
+seventeen seconds before the other one read it, the project stopped compiling for
+about a minute, and it came back on its own. Nothing was lost, but only because
+the collision happened to be in a file one of us had finished with.
+
+**This file is a log, not an instruction.** Neither of us should tell the other
+what to do here — the plan lives in `PLAN.md` and the person whose garden this is
+decides what happens. What this is for is the thing that is genuinely expensive
+to discover twice: *what just changed, and what was learned doing it.*
+
+## The other side of this
+
+Codex keeps `CODEX_NOTES.md`. The arrangement, as written in both files: **each
+of us reads the other's before starting**, and neither writes in the other's.
+This one is Claude's.
+
+## How to use it
+
+Add an entry when you finish something. Newest at the top. Say what moved, what
+it cost, and — the useful part — anything you measured, because a measurement is
+the one thing the next reader cannot cheaply repeat.
+
+Keep entries short. The reasoning belongs in the code, next to the thing it
+explains, the way everything else in this project does. This is an index, not a
+second copy of the truth.
+
+If you are about to work somewhere the other has just been, that is fine. Read
+their entry first.
+
+---
+
+> **For Codex, before the Stormcrown:** `GameDefinition.Component` and
+> `.Stage` are no longer plain components — they are `Later`, from
+> `systems/later.ts`, so a third road's stage wants
+> `Stage: later(() => import('./Race').then((m) => ({ default: m.YourStage })))`
+> rather than a direct import. Everything else in a game definition is
+> unchanged and still eager. Nothing else of yours was touched: the rally's
+> model, sampler, physics, checks and README are as you left them.
+
+## 26 Aug · Claude · signs that she has been here, and a room that remembers
+
+Codex's two ideas, both built. The counters in the corners **stay** — that was
+the owner's call and it is the right one: a number is the only thing that can
+say *how many*. What the world says is the other half — *which one, and where*.
+The two read the same source, so they cannot disagree.
+
+`systems/newness.ts` is the seam. Each place remembers when you last stood in
+*it* (not one mark for the whole garden, or a glance at the Tree would silently
+clear the other four), the mark is **frozen on arrival and written on the way
+out** (or you would clear the very thing you came to see, on the frame you
+arrived), and it lives in `localStorage` — "have I seen this" is a fact about a
+person looking at a screen, and keeping it local means no collection, no rule
+change and nothing to deploy.
+
+- **Tree** — already did this, via `Letter.readAt`. Left alone.
+- **Glasshouse** — a memory of hers you have not seen throws a stronger pool of
+  its own colour across the flagstones, breathing on about a seven-second
+  clock. The pools already existed; they just do it harder.
+- **Stars** — `uUnread` was declared in the shader, used in the fragment stage
+  and **never written by anything**. It was also the wrong shape — one number
+  brightens the whole sky, including your own lights. Replaced with a per-light
+  `iFresh` attribute, so the light that burns larger is *hers*.
+- **Wellspring** — one band of brighter water runs down the channel, over and
+  over. A river carrying something rather than a pin on a map.
+- **Hollow** — the fire throws a few more embers. The extra ones are always
+  allocated and simply do not light (`EMBER_QUIET`), because rebuilding an
+  instanced buffer because somebody took their turn is a hitch. The count comes
+  from `theRoom`, written by the interface that already has those three
+  listeners open — see the note in `systems/waiting.ts` for why the cave must
+  not open them again.
+
+And the Hollow now keeps what happens in it: ember veins spread through the
+rock as the two of you accumulate. `systems/seasoned.ts` — slow (half lit is
+most of a season of daily rounds) and **monotonic**, because pollen is a shared
+pool that gets spent and a room that dims the day you buy something is a room
+punishing you for using it. The high-water mark is local; the larger of the two
+wins.
+
+### Two traps, both of which have now bitten twice
+
+- **Precision.** Adding `uniform float uTime` to the water's *fragment* stage
+  linked nothing and drew nothing: the vertex stage has no `precision`
+  directive, so it is highp there and mediump here — *"Precisions of uniform
+  'uTime' differ between VERTEX and FRAGMENT shaders"*, logged to the console
+  and nowhere else. The river was simply a dry valley. Anything time-varying
+  is computed in the vertex stage and handed down as a varying, which is what
+  the note at the top of `water.ts` already said.
+- **Backticks in shaders**, twice more. `npm run shaders` catches it in about a
+  second; run it after touching any `/* glsl */` block, not at the end.
+
+### The tuning that mattered
+
+The veins were built once and were metre-wide amber ribbons across the ceiling
+after sixty rounds — a lava lamp. The fix was raising the ridge to a high power
+so what survives is a *thread*, roughly tripling the frequencies, and halving
+the brightness. Screenshots at 0, 60 and 300 rounds: bare rock, a hint, and
+threads of ore catching the firelight.
+
+## 26 Aug · Claude · nothing is downloaded until it is wanted
+
+This one was Codex's idea and it was the right one. Both registries collected
+their folders with `import.meta.glob(..., { eager: true })` and every folder's
+`index.ts` reached straight into the thing it described, so every place, all
+three games, the racer's physics and both of its roads, the admin page and the
+whole Firebase SDK were downloaded before the first blade of grass.
+
+**Before first paint: 696 KB gzipped. Now: 404 KB.** A further 89 KB arrives
+quietly afterwards, and on the local backend Firebase's 214 KB is never fetched
+at all.
+
+- `systems/later.ts` is the new seam: `later(() => import('./X'))` returns a
+  lazy component with a `warm()` hung on it, and `warmWhenIdle` pulls a list of
+  them down once the garden has settled.
+- `SectionDefinition.Scene` and `GameDefinition.Component` / `.Stage` are now
+  `Later`. Everything else in both definitions stays eager, and the line is not
+  about size: the row of places and the row of games are drawn *before* you
+  choose, so names, blurbs, durations, cameras and the little card emblems have
+  to be there. Only the worlds behind them are deferred.
+- Firebase is fetched inside the effect `RealProvider` already had, behind the
+  `'connecting'` state it was already showing. `Door` imports `signIn` inside
+  its submit handler. `import type` stays — it is erased anyway.
+- The admin page loads at its own hidden route and nowhere else.
+
+**The wait is the part that would have been felt, and it is handled in three
+places rather than one.** Everything is warmed a couple of seconds after the
+garden settles; a place is warmed again the moment a slide picks it, which is
+half a fade before the world swaps; and a game is warmed when its card becomes
+the selected one in the Hollow. The Suspense fallback for a place is
+`<GardenHub />` — so the worst case is not an empty world, it is *the garden you
+were already standing in*, held a moment longer.
+
+Verified by entering all five places in turn and sampling triangles **mid-fade**,
+both normally and with every chunk delayed two seconds: the count never drops
+below about 730,000 at the moment of the swap, because that is the garden
+standing in. Never zero, never a spinner. Screenshots in both conditions show
+the destination fully drawn.
+
+Three.js is now over half of what is left (227 KB gzipped of the 404) and it is
+irreducible — the first frame is 3D. That is the floor.
+
+### If you are picking this up
+
+- Nothing else is worth deferring. I looked: the next largest thing after
+  three.js is the app's own core at 94 KB, and it is core.
+- `window.__frame` under `?shot=1` reports draw calls, triangles, programs,
+  geometries, textures, fps and the eight heaviest meshes. It is how both of
+  the last two pieces of work were decided.
+- The racer's geometry is **not** streamed and should not be: the whole 3.4 km
+  Moonbreak builds in 53 ms, once, behind a 3.1-second countdown.
+
+## 26 Aug · Claude · the frame is about half what it was
+
+**Measured first.** Added `window.__frame` under `?shot=1` (in `world/World`):
+draw calls, triangles, programs, geometries, textures, fps, and the eight
+heaviest meshes in the scene. It overturned the assumption the work started from
+— the Glasshouse felt heavy, and 83% of what it drew was the ring of trees
+*around* it. The building was 3%. Draw calls (18) and textures (0) were never a
+problem anywhere; the garden is vertex-bound.
+
+Three changes, none of which alter a pixel:
+
+- **`woodDetail`** in `world/tree`, the companion to `leafDetail` that never
+  existed. A tree was 113 limb boxes against 250 leaf cards, and the limbs cost
+  *more*. Background woods now draw a limb as one box instead of two and skip
+  the outermost ring, which sits inside its own leaf spray. The rng is consumed
+  in the same order at every detail level, so a thinned wood is the same wood —
+  same tips, same splits, same hang points. The Tree of Letters is untouched at
+  1, and must stay there: a letter is keyed to a hang point by index.
+- **`buildTiles`** in `world/forms`. Every field in the garden carried
+  `frustumCulled={false}`, for a real reason — an instanced geometry's bounding
+  sphere comes from the base shape, which is one leaf at the origin. Fields are
+  now cut into tiles with honest bounds and the ordinary frustum test does its
+  ordinary job. Draw calls 18 → ~45, which is nothing.
+- **`inTheView`** in `world/terrainShader`. The meadow and the flowers have no
+  world positions in any buffer — they are wrapped around the camera in the
+  vertex shader — so they are culled *there*, by the same `fade` that already
+  softened the rim of the disc.
+
+| | before | after |
+|---|---|---|
+| Glasshouse, phone | 334,272 | **55,276** |
+| Glasshouse, desktop | 334,272 | **91,044** |
+| Garden / Tree, phone | 471,758 | **305,840** |
+| Garden / Tree, desktop | 723,358 | **625,506** |
+
+Verified by rendering the Glasshouse with culling on and off — 218,622 against
+91,044 triangles, and the two images are identical — and by inverting
+`inTheView`, which made all the grass *in front* of the camera vanish.
+
+`npm run tris` had gone stale and was reporting the treeline at its old figure;
+it is corrected, and now says out loud that it counts what the garden *builds*
+rather than what it draws.
+
+### Numbers that may save someone else the measuring
+
+- The whole Moonbreak — 3.4 km, 69 chunks, 68k triangles — builds in **53 ms**.
+  The Rootway, 154k triangles, in 58 ms. Both happen once, behind a 3.1-second
+  countdown. Streaming them would be a lot of machinery for a hitch that is
+  already hidden.
+- The bundle is **2.31 MB minified, 674 KB gzipped, in one chunk.** With
+  comments stripped the app's own code is about 850 KB of that, and Ember Rally
+  is a quarter of it. Firebase — app, auth, firestore, storage and database —
+  is statically imported and is likely the largest single deferrable thing in
+  the download.
+- Headless is in slow motion. Frame delta is clamped to 1/20 s and SwiftShader
+  manages one or two frames a second, so four seconds of wall clock can be under
+  one second of eased time. Wait on state, never on the clock.
+
+## 26 Aug · Claude · the racer
+
+The Split (a shortcut on a longer Rootway), the Drowned Mile (a glass tunnel
+under the Moonbreak), a drift that holds its line, and the frozen speedometer.
+All four are written up in `src/world/games/ember-rally/README.md` and in
+`PLAN.md`; the measurements live in `npm run rally`.
+
+`npm run shaders` is new and worth knowing about: it sweeps every
+`/* glsl */` template for a backtick inside a shader, which ends the shader and
+is reported as a parse error several hundred lines away, usually in a file
+nobody touched. It has cost real time four times.

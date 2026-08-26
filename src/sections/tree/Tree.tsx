@@ -29,6 +29,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { useReading } from '@/systems/reading'
 import { raySphere } from '@/systems/terrain'
 import { grabbed } from '@/systems/swipe'
+import { treeGestureUsed } from '@/systems/treeOrbit'
 import { useWorldSlice } from '@/data/provider'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { ambientLightLevel } from '@/world/forms'
@@ -42,6 +43,8 @@ import type { Letter } from '@/data/types'
 import { MEADOW_X, MEADOW_Z, thoughtSpot } from './layout'
 import { greatTree, hangDrop, hangSpot } from './greatTree'
 import { useSections } from '@/systems/sections'
+import { takenOverNow } from '@/systems/attention'
+import { QuestionVine } from './QuestionVine'
 
 /**
  * One thought as the tree hangs it: a knot on a branch, and the length of
@@ -218,7 +221,8 @@ function Blooms() {
   useEffect(() => {
     const onUp = (e: PointerEvent) => {
       if (!useSections.getState().entered) return
-      if (grabbed()) return
+      if (takenOverNow()) return
+      if (grabbed() || treeGestureUsed()) return
       const target = e.target as HTMLElement | null
       if (target?.closest('button, input, textarea, select, a')) return
 
@@ -319,6 +323,9 @@ export default function Tree() {
         /* Thirty metres off at the closest, behind the thing the place is
            named for. Half the cards, the same crown — see `leafDetail`. */
         leafDetail={0.5}
+        /* The wood around the clearing, not the tree in it — that one keeps
+            every limb, because a letter hangs from one by index. */
+        woodDetail={0.3}
       />
 
       {/* The y here is an offset *above* the ground, not an absolute height —
@@ -327,6 +334,7 @@ export default function Tree() {
       <TreeOfLetters parts={greatTree} palette={palette} />
       <Hanging />
       <Blooms />
+      <QuestionVine />
     </>
   )
 }

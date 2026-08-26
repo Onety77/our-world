@@ -44,7 +44,10 @@ import {
   type CarRig,
 } from './rig'
 import { CarStudio, STUDIO } from './Studio'
-import { basisAt, buildTrail, buildTunnel, roadPoint } from './geometry'
+import { basisAt, buildRootwakeVeil, buildTrail, buildTunnel, roadPoint } from './geometry'
+import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
+import { buildStormcrown, StormcrownWorld } from './Stormcrown'
+import { deep } from './depth'
 import {
   LAMP_SLOTS,
   createLights,
@@ -74,21 +77,23 @@ import {
   type CarState,
 } from './physics'
 import {
-  ASH,
   BLUE_SPARK,
   GHOST_GRIT,
   GRIT,
   HOT_SPARK,
   DRIP,
+  DRY_LEAF,
   MOTE,
+  OLD_WEB,
   Particles,
+  ROOT_FIBER,
   SMOKE,
   SPARK,
   WET_GRIT,
 } from './particles'
 import { MARK_LIFE, Marks } from './marks'
 import { useRace } from './session'
-import { emptyRoad, roadAt, type Track } from './track'
+import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt } from './track'
 
 /** Seconds of lamps coming up before the road opens. */
 const COUNTDOWN = 3.1
@@ -103,6 +108,15 @@ const COUNTDOWN = 3.1
 const RIDE =
   typeof location !== 'undefined' &&
   new URLSearchParams(location.search).get('rally') === 'ride'
+const ROOTWAKE_RIDE =
+  typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('shortcut') === '1'
+const ROOTWAKE_VEIL_HOLD =
+  typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('veil') === 'hold'
+const ROOTWAKE_EXIT_HOLD =
+  typeof location !== 'undefined' &&
+  new URLSearchParams(location.search).get('veil') === 'exit'
 
 /**
  * `?from=<metres>` stands the car that far up the road before the flag drops.
@@ -152,17 +166,37 @@ export function RootwayStage() {
   // `?rally=studio` never builds the tunnel at all — see `Studio.tsx`.
   if (STUDIO) return <CarStudio />
   const mode = phase === 'replay' ? 'replay' : 'race'
-  return <Rootway key={`${track.seed}-${mode}`} track={track} mode={mode} />
+  return <RallyCourse key={`${track.stage}-${track.seed}-${mode}`} track={track} mode={mode} />
 }
 
-function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
+function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
   const { camera } = useThree()
   const tier = useQuality((q) => q.tier)
   const surface = useRace((s) => s.surface)
   const ghostRun = useRace((s) => s.ghost)
   const replay = useRace((s) => s.replay)
 
-  const lights = useMemo(() => createLights(), [])
+  const lights = useMemo(() => {
+    const next = createLights()
+    if (track.stage === 'moonbreak') {
+      next.uniforms.uAmbient.value.set('#a3b2c4')
+      next.uniforms.uVeinColor.value.set('#8bcfc4')
+      next.uniforms.uFogColor.value.set('#172131')
+      next.uniforms.uFogNear.value = 62
+      next.uniforms.uFogFar.value = 235
+      next.uniforms.uHeadColor.value.set('#ffe2b8')
+      next.uniforms.uSpotColor.value.set('#e8f2ff')
+    } else if (track.stage === 'stormcrown') {
+      next.uniforms.uAmbient.value.set('#86999d')
+      next.uniforms.uVeinColor.value.set('#bdd9dc')
+      next.uniforms.uFogColor.value.set('#172126')
+      next.uniforms.uFogNear.value = 48
+      next.uniforms.uFogFar.value = 205
+      next.uniforms.uHeadColor.value.set('#ffe0b2')
+      next.uniforms.uSpotColor.value.set('#dcecef')
+    }
+    return next
+  }, [track.stage])
   const rockMaterial = useRockMaterial(lights)
   const mineMaterial = useCarMaterial(lights, false)
   const theirsMaterial = useCarMaterial(lights, true)
@@ -172,15 +206,27 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
   const glowMaterial = useGlowMaterial(lights)
   const beamMaterial = useBeamMaterial(lights, '#ffcf96')
   const ghostBeamMaterial = useBeamMaterial(lights, '#9fb6e8')
+  const boostOuterMaterial = useBeamMaterial(lights, '#61bfff')
+  const boostCoreMaterial = useBeamMaterial(lights, '#fff2cf')
   const dustMaterial = useDustMaterial(lights, false)
   const sparkMaterial = useDustMaterial(lights, true)
   const trailMaterial = useTrailMaterial(lights)
   const markMaterial = useMarkMaterial(lights)
 
   // --- the road ------------------------------------------------------------
-  const chunks = useMemo(() => buildTunnel(track), [track])
+  const chunks = useMemo(
+    () => track.stage === 'moonbreak'
+      ? buildMoonbreak(track)
+      : track.stage === 'stormcrown'
+        ? buildStormcrown(track)
+        : buildTunnel(track),
+    [track],
+  )
   useEffect(() => () => chunks.forEach((chunk) => chunk.geometry.dispose()), [chunks])
   const chunkMeshes = useRef<Mesh[]>([])
+  const rootwakeVeil = useMemo(() => buildRootwakeVeil(track), [track])
+  const rootwakeVeilMesh = useRef<Mesh | null>(null)
+  useEffect(() => () => rootwakeVeil?.geometry.dispose(), [rootwakeVeil])
 
   // --- the lamps -----------------------------------------------------------
   const lanterns = useMemo(() => buildLanterns(track), [track])
@@ -210,8 +256,22 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
   }, [])
   useEffect(() => () => beamGeometry.dispose(), [beamGeometry])
 
-  const mine = useCarRig(mineMaterial, mineWheels, beamGeometry, beamMaterial)
-  const theirs = useCarRig(theirsMaterial, theirsWheels, beamGeometry, ghostBeamMaterial)
+  const mine = useCarRig(
+    mineMaterial,
+    mineWheels,
+    beamGeometry,
+    beamMaterial,
+    boostOuterMaterial,
+    boostCoreMaterial,
+  )
+  const theirs = useCarRig(
+    theirsMaterial,
+    theirsWheels,
+    beamGeometry,
+    ghostBeamMaterial,
+    boostOuterMaterial,
+    boostCoreMaterial,
+  )
 
   // --- what the tyres throw ------------------------------------------------
   const budget = tier === 'low' ? 0.45 : tier === 'medium' ? 0.72 : 1
@@ -274,6 +334,8 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
       track,
       chunks: chunkMeshes.current,
       chunkRanges: chunks,
+      rootwakeVeil: rootwakeVeilMesh.current,
+      rootwakeVeilAt: rootwakeVeil?.atS ?? -1,
       mine,
       theirs,
       dust,
@@ -294,7 +356,13 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
 
   return (
     <>
-      <color attach="background" args={['#050403']} />
+      <color
+        attach="background"
+        args={[track.stage === 'moonbreak' ? '#172131' : track.stage === 'stormcrown' ? '#172126' : '#050403']}
+      />
+
+      {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
+      {track.stage === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
 
       {chunks.map((chunk, i) => (
         <mesh
@@ -306,6 +374,15 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
           material={rockMaterial}
         />
       ))}
+
+      {rootwakeVeil ? (
+        <mesh
+          ref={rootwakeVeilMesh}
+          geometry={rootwakeVeil.geometry}
+          material={rockMaterial}
+          renderOrder={2}
+        />
+      ) : null}
 
       <mesh
         geometry={lanterns.geometry}
@@ -325,7 +402,7 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
         lit by scene lights — the rock takes its firelight from the lantern
         window instead, and these two are in it.
       */}
-      {hearths.map((at, i) => {
+      {track.stage === 'rootway' ? hearths.map((at, i) => {
         const arriving = i === hearths.length - 1
         return (
           <Fire
@@ -337,7 +414,7 @@ function Rootway({ track, mode }: { track: Track; mode: 'race' | 'replay' }) {
             night={0}
           />
         )
-      })}
+      }) : null}
 
       {trailGeometry ? (
         <mesh
@@ -436,7 +513,9 @@ interface FrameArgs {
   lanternAt: Float32Array
   track: Track
   chunks: Mesh[]
-  chunkRanges: { from: number; to: number }[]
+  chunkRanges: { from: number; to: number; shortcut?: boolean }[]
+  rootwakeVeil: Mesh | null
+  rootwakeVeilAt: number
   mine: CarRig
   theirs: CarRig
   dust: Particles
@@ -489,6 +568,7 @@ class Driving {
   private speedFlat = false
   private gritDue = 0
   private smokeDue = 0
+  private rootwakeBroken = false
   /**
    * What was asked of the car this frame.
    *
@@ -500,10 +580,12 @@ class Driving {
   private input: CarInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false }
   /** Eases to 1 once the run is over — see ChaseCamera. */
   private settle = 0
+  /** How far under the water, eased. See the drive in `frame`. */
+  private sunk = 0
 
   private readonly ghost: RunSample = {
     n: 0, s: 0, yaw: 0, drift: 0,
-    boost: false, rough: false, braking: false, spinning: false,
+    boost: false, rough: false, braking: false, spinning: false, shortcut: false,
   }
   private readonly point = new Vector3()
   private readonly forward = new Vector3()
@@ -519,8 +601,16 @@ class Driving {
 
   constructor(private readonly track: Track) {
     this.car = createCar(track)
-    if (FROM > 0) this.car.s = Math.min(track.length - 2, FROM)
+    if (ROOTWAKE_EXIT_HOLD && track.split) {
+      this.car.s = track.split.rejoinAt - 32
+      this.car.shortcut = true
+    } else if (ROOTWAKE_VEIL_HOLD && track.split) {
+      this.car.s = track.split.from + 10
+      this.car.shortcut = true
+    } else if (ROOTWAKE_RIDE && track.split) this.car.s = track.split.from + 2
+    else if (FROM > 0) this.car.s = Math.min(track.length - 2, FROM)
     this.autopilot = RIDE ? spiritDriver(track, track.seed ^ 0x1234) : null
+    if (ROOTWAKE_EXIT_HOLD) this.rootwakeBroken = true
   }
 
   attach(surface: HTMLElement | null) {
@@ -546,7 +636,14 @@ class Driving {
   private restart(attempt: number) {
     this.attempt = attempt
     Object.assign(this.car, createCar(this.track))
-    if (FROM > 0) this.car.s = Math.min(this.track.length - 2, FROM)
+    if (ROOTWAKE_EXIT_HOLD && this.track.split) {
+      this.car.s = this.track.split.rejoinAt - 32
+      this.car.shortcut = true
+    } else if (ROOTWAKE_VEIL_HOLD && this.track.split) {
+      this.car.s = this.track.split.from + 10
+      this.car.shortcut = true
+    } else if (ROOTWAKE_RIDE && this.track.split) this.car.s = this.track.split.from + 2
+    else if (FROM > 0) this.car.s = Math.min(this.track.length - 2, FROM)
     this.recorder = new Recorder()
     this.countdown = COUNTDOWN
     this.clock = 0
@@ -558,6 +655,7 @@ class Driving {
     this.lastGhostS = 0
     this.chase.reset()
     this.cleared = false
+    this.rootwakeBroken = ROOTWAKE_EXIT_HOLD
   }
 
   frame(args: FrameArgs) {
@@ -588,9 +686,44 @@ class Driving {
     this.clock += args.delta
     args.lights.uniforms.uTime.value = this.clock
 
+    /*
+      And how far under the water we are, which moves the light itself.
+
+      Off the road's own height — see `sunkAt` — so the light can never
+      disagree with the geometry that put the car down there. Read from where
+      the *camera* is rather than where the car is, and a little ahead of it:
+      the chase camera trails the car by several metres, so keying this to the
+      car alone would turn the world green while the surface was still visibly
+      over the driver's shoulder, and back again the same way on the climb out.
+      Eight metres up the road is about where the eye is actually looking.
+
+      Eased rather than set, because `sunkAt` is a ramp along the road and the
+      car crosses it at forty metres a second: at the top of the dive that is a
+      ramp about a fifth of a second wide, which is a cut. Half a second of
+      exponential either side turns it into water closing over.
+    */
+    if (this.track.stage === 'moonbreak') {
+      const want = sunkAt(this.track, this.car.s + 8)
+      this.sunk += (want - this.sunk) * (1 - Math.exp(-3.2 * args.delta))
+      const t = this.sunk
+      const u = args.lights.uniforms
+      u.uAmbient.value.copy(ABOVE.ambient).lerp(UNDER.ambient, t)
+      u.uVeinColor.value.copy(ABOVE.vein).lerp(UNDER.vein, t)
+      u.uFogColor.value.copy(ABOVE.fog).lerp(UNDER.fog, t)
+      u.uFogNear.value = ABOVE.near + (UNDER.near - ABOVE.near) * t
+      u.uFogFar.value = ABOVE.far + (UNDER.far - ABOVE.far) * t
+      deep.at = t
+      deep.s = this.car.s
+      // And out to whatever is not lit by the shared block — see `depth`.
+      deep.fog.copy(u.uFogColor.value)
+      deep.near = u.uFogNear.value
+      deep.far = u.uFogFar.value
+    }
+
     if (session.phase === 'replay') this.stepReplay(args)
     else this.stepRace(args)
 
+    this.updateRootwakeVeil(args)
     this.updateChunks(args)
     this.updateLamps(args)
     // The marks fade in the shader, so all they need is the clock and a push
@@ -611,9 +744,25 @@ class Driving {
     const phase = session.phase
 
     if (phase === 'ready') {
-      this.countdown -= delta
+      // The start line listens before it moves. Holding the throttle can raise
+      // the engine against the lamps, but physics stays locked until begin().
+      // Previously the countdown invented three rev blips with no input.
+      this.input = this.autopilot
+        ? IDLE
+        : (this.controls?.read(0) ?? IDLE)
+      if (!ROOTWAKE_VEIL_HOLD && !ROOTWAKE_EXIT_HOLD) this.countdown -= delta
       if (this.countdown <= 0) session.begin()
     } else if (phase === 'running') {
+      if (
+        ROOTWAKE_RIDE &&
+        track.split &&
+        !car.shortcut &&
+        car.s >= track.split.from + 5 &&
+        car.s < track.split.rejoinAt
+      ) {
+        car.shortcut = true
+        car.n = 0
+      }
       // The controls are told how fast the car is going, because how quickly
       // the hands may move the wheel depends on it — see `controls.ts`.
       const input = this.autopilot
@@ -699,6 +848,8 @@ class Driving {
         boostLeft: car.boostLeft,
         driftAngle: car.driftAngle,
         touching: car.touching,
+        shortcut: car.shortcut,
+        veilBroken: this.rootwakeBroken,
         strikes: car.strikes,
         /*
           Which way the *drawn* front wheel is actually pointing, as an angle
@@ -724,7 +875,18 @@ class Driving {
       is compressed, so the body cannot lean one way while the tyres are
       working the other.
     */
-    placeCar(args.mine, track, car.s, car.n, car.psi, car.roll, car.pitch, car.heave)
+    placeCar(
+      args.mine,
+      track,
+      car.s,
+      car.n,
+      car.psi,
+      car.roll,
+      car.pitch,
+      car.heave,
+      0,
+      car.shortcut,
+    )
     poseWheels(args.mine, car)
 
     // What the car is telling you about itself: the meter, the brake lamps,
@@ -798,16 +960,15 @@ class Driving {
       if (material) material.uniforms.uDisc.value = car.wheels[i].heat
     }
     this.updateLightsFrom(args, args.mine, car.ember)
+    this.updateBoostJets(args.mine, car.boostLeft > 0)
 
     /*
       The countdown is the lamps.
 
-      Three beats, and each one is the headlights swelling up and dying back
-      while the engine blips underneath — so the thing counting you down is the
-      car itself, and what it shows you each time is a little more of the road
-      you are about to be on. There is no "3 2 1" drawn anywhere, because a
-      number in a serif face over a cave is the single most arcade thing this
-      game could possibly do.
+      Three beats, and each one is the headlights swelling up and dying back.
+      The engine deliberately does not answer those beats: before the green it
+      only rises when the driver holds the throttle, while the car itself stays
+      locked. The gantry in EmberRally.tsx makes the same three beats legible.
     */
     let rev = phase === 'finished' ? 0 : car.boostLeft > 0 ? 1 : speed / TOP_SPEED
     if (phase === 'ready') {
@@ -817,7 +978,9 @@ class Driving {
       args.lights.uniforms.uHeadPower.value = power
       args.lights.uniforms.uSpotPower.value = power
       args.materials.beam.uniforms.uPower.value = power * 0.9
-      rev = rise * 0.85
+      // Full throttle holds roughly 4,700 rpm. The car is still physically
+      // locked; this is only the driver's foot loading the engine for launch.
+      rev = this.input.throttle * (0.56 + Math.sin(this.clock * 11) * 0.018)
     } else {
       args.lights.uniforms.uHeadPower.value = 1
       // The pod comes up with the ember, so a boost lights the far end of the
@@ -840,11 +1003,11 @@ class Driving {
     */
     const room = car.road.width + vergeWidth(car.road.room)
     this.engine?.set({
-      speed: phase === 'ready' ? rev * 14 : speed,
+      speed: phase === 'ready' ? 0 : speed,
       revs: phase === 'ready' ? rev : car.revs,
       gear: car.gear,
       shifting: car.shiftLeft > 0 ? 1 : 0,
-      throttle: phase === 'ready' ? rev : car.throttle,
+      throttle: phase === 'ready' ? this.input.throttle : car.throttle,
       brake: car.braking,
       /*
         A drift counts as the handbrake for as long as it lasts.
@@ -874,7 +1037,9 @@ class Driving {
       args.theirs.root.visible = phase !== 'ready'
       const grid = Math.max(0, 1 - car.elapsed / 2.4) * -1.9
       this.showGhost(args, ghost, phase === 'ready' ? 0 : car.elapsed * 1000, grid)
-      const near = Math.max(0, 1 - Math.abs(this.ghost.s - car.s) / 26)
+      const near = this.ghost.shortcut === car.shortcut
+        ? Math.max(0, 1 - Math.abs(this.ghost.s - car.s) / 26)
+        : 0
       this.engine?.pressure(near * near)
     } else {
       args.lights.uniforms.uGhostPower.value = 0
@@ -918,6 +1083,14 @@ class Driving {
     lights.uniforms.uEmberPower.value = 1.15 + ember * 1.3
   }
 
+  /** A continuous exhaust jet with pressure in it, never loose screen glitter. */
+  private updateBoostJets(rig: CarRig, burning: boolean) {
+    rig.boostJets.visible = burning
+    if (!burning) return
+    const pulse = 1 + Math.sin(this.clock * 43) * 0.07 + Math.sin(this.clock * 71) * 0.035
+    rig.boostJets.scale.set(0.94 + pulse * 0.06, 0.94 + pulse * 0.06, pulse)
+  }
+
   private showGhost(args: FrameArgs, run: RallyRun, elapsedMs: number, grid = 0) {
     const rig = args.theirs
     const sample = runAt(run, elapsedMs)
@@ -933,7 +1106,7 @@ class Driving {
       back onto her real line — which is a starting grid, and is both prettier
       and more honest than two cars occupying one piece of road.
     */
-    placeCar(rig, args.track, sample.s, sample.n + grid, sample.yaw, roll, 0)
+    placeCar(rig, args.track, sample.s, sample.n + grid, sample.yaw, roll, 0, 0, 0, sample.shortcut)
 
     // Nothing recorded her speed, so the wheels turn at however fast she just
     // moved. Same number, and it stays right if the replay is ever scrubbed.
@@ -954,6 +1127,7 @@ class Driving {
     // driving — you can see her braking point before you reach your own.
     args.materials.theirs.uniforms.uBrake.value = sample.braking ? 1 : 0
     args.materials.theirs.uniforms.uPipe.value = sample.boost ? 1 : 0
+    this.updateBoostJets(rig, sample.boost)
     for (const material of args.materials.theirsWheels) {
       material.uniforms.uDisc.value = sample.braking ? 0.55 : 0
     }
@@ -1010,11 +1184,12 @@ class Driving {
     me.n += split * side
     them.n -= split * side
 
-    placeCar(args.mine, track, me.s, me.n, me.yaw, me.drift * 0.14, 0)
+    placeCar(args.mine, track, me.s, me.n, me.yaw, me.drift * 0.14, 0, 0, 0, me.shortcut)
     poseGhostWheels(args.mine, 30, me.drift, me.yaw, me.spinning, delta)
     args.materials.mine.uniforms.uGlow.value = me.boost ? 1 : 0.4
     args.materials.mine.uniforms.uBrake.value = me.braking ? 1 : 0
     args.materials.mine.uniforms.uPipe.value = me.boost ? 1 : 0
+    this.updateBoostJets(args.mine, me.boost)
     for (const material of args.materials.mineWheels) {
       material.uniforms.uDisc.value = me.braking ? 0.55 : 0
     }
@@ -1036,6 +1211,7 @@ class Driving {
     this.car.vn = Math.tan(me.drift * 0.6) * 30
     this.car.rough = me.rough
     this.car.boostLeft = me.boost ? 1 : 0
+    this.car.shortcut = me.shortcut
 
     this.directShot(args, me)
   }
@@ -1082,7 +1258,7 @@ class Driving {
       with no way to tell what went wrong.
     */
     const place = (along: number, n: number, y: number) => {
-      const road = roadAt(track, Math.max(0, along), shotRoad)
+      const road = roadAtRoute(track, Math.max(0, along), subject.shortcut, shotRoad)
       const basis = basisAt(road, shotBasis)
       const inside = road.width + vergeWidth(road.room) - 0.7
       roadPoint(
@@ -1116,7 +1292,7 @@ class Driving {
         break
     }
 
-    const road = roadAt(track, subject.s, shotRoad)
+    const road = roadAtRoute(track, subject.s, subject.shortcut, shotRoad)
     roadPoint(road, subject.n, 0.75, this.point, basisAt(road, shotBasis))
     camera.lookAt(this.point)
     if (Math.abs(camera.fov - 56) > 0.05) {
@@ -1126,6 +1302,53 @@ class Driving {
   }
 
   // --- dust, sparks, ash ---------------------------------------------------
+
+  /** Tear through the growth concealing Rootwake, once per attempt. */
+  private updateRootwakeVeil(args: FrameArgs) {
+    const mesh = args.rootwakeVeil
+    if (!mesh) return
+    mesh.visible = !this.rootwakeBroken
+    if (
+      this.rootwakeBroken ||
+      !this.car.shortcut ||
+      args.rootwakeVeilAt < 0 ||
+      this.car.s < args.rootwakeVeilAt - 0.8
+    ) return
+
+    this.rootwakeBroken = true
+    mesh.visible = false
+    const road = roadAtRoute(this.track, args.rootwakeVeilAt, true, shotRoad)
+    const basis = basisAt(road, shotBasis)
+    const speed = speedOf(this.car)
+    const force = Math.min(1, 0.35 + speed / 34)
+    this.engine?.brush(force)
+    this.chase.jolt(0.1 + force * 0.08)
+
+    // The curtain itself disappears cleanly; these fragments sell where it
+    // went. They are thrown down the tunnel and outward, never back into the
+    // camera as a full-screen cloud.
+    for (let i = 0; i < 58; i++) {
+      const web = i % 7 === 0
+      const leaf = !web && i % 3 === 0
+      const n = (Math.random() * 2 - 1) * road.width * 0.84
+      const y = 0.28 + Math.random() * road.ceiling * 0.78
+      roadPoint(road, n, y, this.point, basis)
+      const outward = Math.sign(n || Math.random() - 0.5) * (0.6 + Math.random() * 2.5)
+      const forward = 3.5 + speed * 0.18 + Math.random() * 5.5
+      const lift = leaf ? 1.2 + Math.random() * 2.6 : 0.35 + Math.random() * 2
+      const colour = web ? OLD_WEB : leaf ? DRY_LEAF : ROOT_FIBER
+      args.dust.spawn(
+        this.point.x, this.point.y, this.point.z,
+        basis.fx * forward + basis.rx * outward + basis.ux * lift,
+        basis.fy * forward + basis.ry * outward + basis.uy * lift,
+        basis.fz * forward + basis.rz * outward + basis.uz * lift,
+        0.8 + Math.random() * 1.25,
+        web ? 0.045 + Math.random() * 0.04 : leaf ? 0.1 + Math.random() * 0.12 : 0.065 + Math.random() * 0.09,
+        web ? 0.35 : leaf ? 0.12 : 0.2,
+        colour,
+      )
+    }
+  }
 
   private throwDust(args: FrameArgs, car: CarState, speed: number, slip: number) {
     const { delta } = args
@@ -1206,10 +1429,6 @@ class Driving {
           0,
         )
       }
-    }
-
-    if (car.boostLeft > 0) {
-      for (let i = 0; i < 3; i++) this.spitOne(args.sparks, args.mine, ASH, 0.13, 2.4, 0.4)
     }
 
     /*
@@ -1452,7 +1671,19 @@ class Driving {
       const mesh = args.chunks[i]
       if (!mesh) continue
       const range = args.chunkRanges[i]
-      mesh.visible = range.to > here - 70 && range.from < here + 150
+      const ahead = this.track.stage === 'rootway' ? 150 : this.track.stage === 'moonbreak' ? 230 : 205
+      const close = range.to > here - 70 && range.from < here + ahead
+      if (!close) {
+        mesh.visible = false
+        continue
+      }
+      const split = this.track.split
+      if (!split || range.shortcut === undefined) {
+        mesh.visible = true
+        continue
+      }
+      const atJunction = here < split.from + 5 || here > split.rejoinAt - 80
+      mesh.visible = range.shortcut === this.car.shortcut || atJunction
     }
   }
 
@@ -1557,4 +1788,46 @@ const SILENT = {
   wet: 0,
   tight: 0,
   boost: false,
+}/**
+ * What the light is like above the water, and what it is like underneath.
+ *
+ * ---------------------------------------------------------------------------
+ * **Going under is a change to the light, not a thing drawn on top of one.**
+ *
+ * Every material in this game — road, rock, car, wheels, dust, sparks, tyre
+ * marks, the ghost, the glow of the lanterns — reads the same handful of
+ * uniforms. That was built so the tunnel and the car could never be lit by two
+ * different ideas of "lit", and it turns out to be exactly what a dive needs:
+ * move these five numbers and the whole world goes under together, including
+ * the parts of it nobody thought about. Anything else — a blue pane over the
+ * camera, a second fog — would put the car in one world and the water in
+ * another, and that is the version of this that looks like a filter.
+ *
+ * The fog does most of the work and it does two jobs at once. Pulling it in
+ * from 62–235 metres to 15–95 is what water *is* — the far end of a straight
+ * dissolves and the tube ahead of you fades into green — and it also means the
+ * heaviest part of the road to draw is the part you can no longer see. The
+ * Drowned Mile is the cheapest kilometre on the Moonbreak, which is a good
+ * thing to be true of the one place where there are also fish.
+ *
+ * The ambient stays higher than the fog would suggest. Under water everything
+ * is lit from *everywhere* — there is no shadow side to a fish — and a low
+ * ambient with a tight fog reads as a cave with green mist rather than as
+ * being submerged. It is the one number here that is chosen against realism.
+ * ---------------------------------------------------------------------------
+ */
+const ABOVE = {
+  ambient: new Color('#a3b2c4'),
+  vein: new Color('#8bcfc4'),
+  fog: new Color('#172131'),
+  near: 62,
+  far: 235,
+}
+
+const UNDER = {
+  ambient: new Color('#2b5763'),
+  vein: new Color('#9fe6dc'),
+  fog: new Color('#04161c'),
+  near: 12,
+  far: 78,
 }

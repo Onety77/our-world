@@ -13,7 +13,8 @@ section of `../README.md` for how a game takes the world's Canvas.
 | `physics.ts` | the car: four wheels, four tyres, a gearbox and a handbrake |
 | `controls.ts` | a thumb and a keyboard, driving the same machine |
 | `spirit.ts` | who you race when there is nobody to race |
-| `geometry.ts` | the road turned into rock |
+| `geometry.ts` | the Rootway turned into rock |
+| `Moonbreak.tsx` | the high causeway, drowned orchard, sky and water |
 | `materials.ts` | how any of it is lit, which is: by your own headlamps |
 | `car.ts` | the machine, lofted from a table of cross-sections |
 | `rig.ts` | one car as a hierarchy of groups, and what may move |
@@ -38,6 +39,12 @@ cover more road per metre driven, exactly as you do in a real car.
 of pieces — chamber, throat, sweep, hairpin, chicane, descent, rise — under a
 grammar with four rules in it. Fully procedural roads are how you get a racer
 whose every bend is the same bend.
+
+The Moonbreak is the deliberate exception. It is a road to learn: the orchard
+esses always lead to the glasswater bridge, the bridge always spends its speed
+at the wide hairpin, and the two moon arches can eventually be taken as one
+drift. Its seed moves trees, stones, puddles and moon pearls without moving the
+racing line.
 
 **The light comes from the car.** There is no sun down here and no scene
 lights: two headlamp cones, a warm pool travelling with the car, and a sliding
@@ -231,6 +238,39 @@ the tyres could, which is what makes a drift genuinely quicker through a tight
 corner — and it scrubs speed, which is what stops it being quicker through
 everything.
 
+### The arrows ask for a line, not for a force
+
+**A held stick holds an arc.** Which sounds like the same sentence as the one
+above and is not, and getting it the wrong way round made long corners
+impossible in a way that took a measurement to see.
+
+The command used to be a yaw rate capped in *g*, on the reasoning that a flat
+cap in radians a second would be a gentle curve at 20 m/s and a pirouette at
+45. True, and the cure was worse. A constant lateral g is a constant *force*,
+and the arc a constant force draws is `v² / a` — it opens up with the square of
+the speed. So holding the stick still through a corner while the car gained
+speed made the car turn **less** every second, while the corner needed it to
+turn **more** every second, and the two gaps added.
+
+Measured through a 53-metre corner, holding one command:
+
+| | 1s | 2s | 3s | 4s |
+|---|---|---|---|---|
+| the corner asks for | 0.38 | 0.42 | 0.45 | 0.47 rad/s |
+| the drift gave | 0.33 | 0.30 | 0.28 | 0.26 rad/s |
+
+The car tucked to the inside for the first two seconds, then washed out across
+the road and into the wall — and no timing on the entry could prevent it,
+because the fault accumulated *after* the entry. It only ever showed in one
+place: a corner long enough for the speed to change while the drift was held,
+which is exactly the kind of corner a drift is for.
+
+So `DRIFT_RADIUS` is a curvature and the g cap is a ceiling on top of it rather
+than the control itself. The same test now shows the gap flat at zero for four
+seconds at every corner tried. **A constant that happens to be right on the one
+corner you are looking at is not a fix**; the way to tell is to publish the
+number and try a second corner.
+
 Two things it must not do, both of which it did first time round. The model's
 own anti-spin — `CATCH` and the `MAX_SLIP` leash — is disabled while drifting,
 because a hand on the wheel and a deliberate drift pulling opposite ways is an
@@ -245,6 +285,13 @@ smoke and the tyre marks still know the tyre is sliding.
 actually swapped sides and how much speed a long drift keeps.
 
 ## The road, and what is on it
+
+There are two now. The Rootway closes around the car and derives its speed from
+walls and headlamps. **The Moonbreak** opens everything the other road closes:
+a pale raised causeway over black water, low edge stones passing in rhythm,
+wind-bent orchard trees, ruined arches and one moon held over the horizon. The
+same `Track`, car, tyre model, controls, camera and ghost cross both; only the
+authored bands, dressing and rendered place change.
 
 **The light comes from the car, and almost nothing else glows.** That is the
 rule the whole tunnel is composed against, so every addition has to justify
@@ -301,6 +348,106 @@ texture the road is drawn into, nothing kept between runs. A ring buffer of
 flat quads, the same shape as `particles.ts`. They are short-lived, so the road
 always looks freshly driven and never accumulates a lap's worth of scribble.
 
+### The Rootwake
+
+The choice appears about twenty to twenty-five seconds after the start. The
+normal Rootway bends left through its broad, lit cave; three low amber lights on
+the right mark a smaller throat. Once that throat is entered, Rootway is gone.
+Rootwake drops more than thirty metres through solid rock and follows its own
+centreline, closed stone shell, camera path, collision walls and road metric.
+It is not a second strip visible beside the main road.
+
+The hidden tunnel is roughly 1.1 km of physical road and takes about 38–44
+seconds in the repeatable precision drive. Its narrowest deck is 8.1 m, with a
+hard S and a blind reverse whose tightest radius lands around 26–39 m across
+the tested seeds. The corner width includes enough apex room that a car centred
+on sound stone never triggers a false fall or an invisible edge. The two roads
+join again about 285 m—roughly ten seconds—before the finish.
+
+The shared progress coordinate is now only a timing and recording index. Every
+consumer that needs the car's actual place—tyres, body, camera, headlights,
+ghosts, replays, tyre trails and chunk culling—reads the selected route. The
+recording packs that route choice as a state bit, so a ghost cannot appear in
+the wrong cave. `npm run rally` measures both routes at equal curvature-limited
+pace: mastering Rootwake saves 9.7–11.2 seconds on the tested daily seeds.
+
+Only the mouth is announced. Thin curved roots, an off-centre old spider web and
+a few caught leaves conceal the actual threshold without reading as a built
+door. Fourteen metres after committing, the car tears through it without a
+collision or speed penalty: the veil disappears once, bark/leaves/fibres are
+thrown down the tunnel, the camera takes a small shove, and a dry brush sound
+passes over the body. The dual-shell entrance overlap ends immediately behind
+it instead of exposing intersecting road and wall geometry.
+
+After that threshold there is no route lighting and the ordinary road cannot
+be seen. Headlamps pick out worn stone, an ochre scar before the hard S, and a
+cold quartz rib at the blind reverse. The fire-spirit stays on the normal road;
+learning the dark tunnel belongs to the player.
+
+### The Drowned Mile
+
+A kilometre of the Moonbreak's middle goes **under** the water instead of over
+it — about half a minute of glass tunnel nineteen metres down, and the one
+place on either road where the sky is not the ceiling.
+
+It replaces the Mirror Flats and the Falling Garden and deliberately keeps
+their driving: the long fast straight, the pair of opposing sweeps, the changes
+of weight. Not laziness — those were already the right shapes in the right
+order, and **what changes here is where you are, not what you are doing**. A set
+piece that also asks you to learn six new corners is two things at once, and
+the driver ends up looking at the road instead of at the water.
+
+The vertical profile is the whole design, and it is written as five acts: an
+approach, level and wide, with the mouth in sight a long way off; a lip that
+tips the horizon out of the frame before the water closes over; a hundred and
+thirty metres of straight ten-per-cent dive, so it reads as *falling*; the
+deep, level, with the fast bands intact; and the mirror of the dive on the way
+out. Nineteen metres is chosen — deep enough to be dark and to hold something
+large moving in it, shallow enough that the surface is still a lit ceiling with
+the moon in it. Past about twenty-five it stops reading as water at all and
+becomes a cave, which is the other road's job.
+
+**Going under is a change to the light, not a thing drawn on top of one.** Every
+material in this game reads the same handful of uniforms — that was built so
+the tunnel and the car could never be lit by two different ideas of "lit", and
+it turns out to be exactly what a dive needs. Move those five numbers and the
+whole world goes under together, including the parts nobody thought about.
+Anything else — a blue pane over the camera, a second fog — puts the car in one
+world and the water in another, which is the version that looks like a filter.
+
+The fog does most of it, and does two jobs at once. Pulling it from 62–235
+metres in to 12–78 is what water *is*, and it also means the heaviest part of
+the road to draw is the part you can no longer see. **The Drowned Mile is the
+cheapest kilometre on the Moonbreak** — the one place with fish in it draws less
+than the one place with trees.
+
+Three things learned building it, all of them the same lesson from different
+directions:
+
+- **Anything that draws itself must fog itself.** The glass, the shoals and the
+  silt are the only things on either road that do not go through the shared
+  materials, and the first version of the tube proved what that costs: nine
+  hundred metres of it stayed the same brightness to the vanishing point, which
+  read as a lit plastic pipe. The fog numbers now travel on `deep` for exactly
+  those four shaders, and there is still only one set of them.
+- **The sky under the water can only be the fog colour.** It was a hand-picked
+  dark teal for ten minutes and drew a hard horizontal seam across the middle
+  of the frame, where the underside of the surface stopped and the dome behind
+  it began. Everything fades to `uFogColor`; the dome does not fade to
+  anything, because it *is* the distance.
+- **Water is a mirror at grazing angles, and the surface has to be opaque with
+  range.** It faded *out* with distance at first, so the far half of the lake
+  was a window and the drowned avenue nineteen metres below came through as a
+  dark lump on the horizon — which gave away the dive before you reached the
+  mouth.
+
+`Deepwater.tsx` owns everything down there that moves, and it is kept apart
+from `Moonbreak.tsx` for one reason: everything in that file is built once into
+the road's chunks and never thinks again, and everything in this one has to be
+counted. A shark, two shoals and a couple of hundred grains of falling silt is
+a budget, and a budget wants a wall around it. Four extra draw calls, and the
+whole lot is switched off above the water rather than drawn at zero opacity.
+
 ## Switches
 
 `?rally=car` parks the camera beside the car and circles it in the tunnel.
@@ -322,6 +469,15 @@ The road is fifteen hundred metres long and the software renderer that
 screenshots run on takes seconds a frame, so looking at the *end* of it by
 driving there is not a plan. Same argument as `&at=` on the turntable.
 
+`?stage=moonbreak` opens that road and skips the course picker and the menu,
+which is the fourth of these and exists for the same reason as the other three:
+there are two roads now, one of them is two minutes long, and the interesting
+part of it is nine hundred metres in. With `?rally=ride&from=1250` that is one
+URL instead of four screens and a minute of driving. It deliberately skips only
+the *menus* — not the countdown, not where the car starts, not how anything
+drives. A hook that quietly alters what it is showing you is worse than no hook,
+because you cannot tell.
+
 `?shot=1` publishes what the car is doing to `window.__rally` once a frame —
 including `drawnSteer`, the angle the *rendered* front wheels make with the
 rendered car, which is how the mirrored-wheel bug was finally settled — and
@@ -336,6 +492,42 @@ handbrake will rotate it and whether it
 comes back, and five real roads driven end to end looking for spins, stalls and
 anything gone NaN. Tuning a tyre model by driving it is how you get a car that
 is right on one machine.
+
+## What the checks cover
+
+`npm run rally` drives the physics in Node, which answers every question about
+the *model* and none about the wiring. It now also drives both roads end to end
+— the Moonbreak was added the day it stopped being the only new thing anybody
+was looking at, on the grounds that a road nothing drives in Node is a road
+whose corners have never been proved to have a line through them.
+
+Three of its sections are there because of a specific bug that nothing else
+could have caught:
+
+- **A long drift, held on one side** measures the gap between what the drift
+  turns and what the corner asks for, second by second, at a constant command.
+  Not where the car ends up — a constant command holds an *arc*, so it can hold
+  a wrong one perfectly, and the entry angle would swamp the signal. The fault
+  was that the gap itself grew; a gap that stays put is a drift you can hold.
+- **The Drowned Mile** checks the one thing about the dive that is a number
+  rather than a picture: how long you are under. It also checks that the road
+  comes back to the height it left from, and that the waterline crossings the
+  tube and the light are told about are where the road actually goes under.
+- **The meters survive a restart** is a store test rather than a car test, and
+  it guards a rule rather than a value: *the effect that sets a DOM node is the
+  cleanup that clears it, and no other code may*. Breaking that froze the
+  speedometer and the ember bar on every attempt after the first, which looked
+  random, moved nothing in the physics, threw nothing, and could not appear in
+  a screenshot.
+
+`npm run shaders` sweeps every `/* glsl */` template for the one mistake this
+codebase keeps making: a backtick inside a shader, which ends the shader. It is
+never reported as a shader error, because the shader is never compiled — it is
+a parse error several hundred lines away, often in a file nobody touched, and
+it has cost real time four times now. The check cannot look for a backtick
+*inside* the template, because by definition there is never one there; it looks
+for the symptom instead. GLSL ends on a brace or a semicolon and prose ends on
+a word, so a shader that ends on a word closed itself in a comment.
 
 ## What is not built yet
 

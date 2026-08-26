@@ -87,7 +87,24 @@ export async function pictureFromStore(key: string): Promise<string> {
   return url
 }
 
-/** For the dev panel's "start again", which wipes the rest of the mock too. */
+/**
+ * Delete one, for good.
+ *
+ * The object URL goes with it — a revoked URL in an `<img>` that is still on
+ * screen becomes a broken image with no error anywhere, so this is only ever
+ * called for a memory that is being taken out of the building in the same
+ * breath.
+ */
+export async function forgetPicture(key: string): Promise<void> {
+  const had = urls.get(key)
+  if (had) {
+    URL.revokeObjectURL(had)
+    urls.delete(key)
+  }
+  await run('readwrite', (store) => store.delete(key))
+}
+
+/** For the control room's "start again", which wipes the rest of the mock too. */
 export async function forgetPictures(): Promise<void> {
   for (const url of urls.values()) URL.revokeObjectURL(url)
   urls.clear()

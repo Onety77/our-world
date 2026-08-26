@@ -1,16 +1,15 @@
+import { later } from '@/systems/later'
 import type { GameDefinition } from '../types'
-import EmberRally from './EmberRally'
 import EmberRallyEmblem from './emblem'
-import { RootwayStage } from './Race'
 import type { RallyMove, RallySetup } from './model'
 
 export default {
   id: 'ember-rally',
   name: 'Ember Rally',
-  blurb: 'Set a line through the Rootway, then chase hers through fire and stone.',
+  blurb: 'Choose a road, set a line, then chase hers through fire, moonlight, or storm.',
   mode: 'async',
   cadence: 'daily',
-  duration: 'under a minute, twice',
+  duration: 'one long road, twice',
   order: 1,
   /*
     Not a "time challenge", which is what the Hollow used to call every live
@@ -46,11 +45,20 @@ export default {
    * pollen before the race had happened.
    */
   isSettled({ mine, theirs, solo }) {
-    const chased = (moves: RallyMove[]) => moves.some((move) => move?.kind === 'chase')
-    return chased(mine) && (solo || chased(theirs))
+    const chased = (moves: RallyMove[], stage: RallySetup['stage']) =>
+      moves.some((move) => move?.kind === 'chase' && (move.stage ?? 'rootway') === stage)
+    return (['rootway', 'moonbreak', 'stormcrown'] as const).some(
+      (stage) => chased(mine, stage) && (solo || chased(theirs, stage)),
+    )
   },
 
   Emblem: EmberRallyEmblem,
-  Component: EmberRally,
-  Stage: RootwayStage,
+  /*
+    Both halves fetched, and this is the folder that most needed it: the road
+    itself, the tyre model, the two courses, the car, the materials and the
+    sound are a quarter of the garden's own code, and none of it has anything
+    to say to somebody who never comes down here.
+  */
+  Component: later(() => import('./EmberRally')),
+  Stage: later(() => import('./Race').then((m) => ({ default: m.RootwayStage }))),
 } satisfies GameDefinition<RallySetup, RallyMove>

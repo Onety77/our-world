@@ -9,12 +9,25 @@ import {
 } from 'react'
 import { DATA_BACKEND, missingLightEmails } from '@/config'
 import { createLocalDataLayer, type LocalDataLayer } from './local'
-import {
-  createFirebaseDataLayer,
-  ensureWorldExists,
-  watchSignIn,
-  type FirebaseDataLayer,
-} from './firebase'
+/*
+  Types only, and that is the entire point of this line.
+
+  ---------------------------------------------------------------------------
+  `import type` is erased at build time, so naming the shape of the Firebase
+  layer here costs nothing. Naming the *functions* cost 224 kilobytes, zipped —
+  a third of everything the garden downloaded, handed to every visitor before
+  the first blade of grass, **including the ones running on the local mock who
+  will never make a single request.**
+
+  The backend is chosen by `DATA_BACKEND` and defaults to 'local'. Only
+  `RealProvider` has ever needed any of this, and it fetches it below, inside
+  the effect it already had, behind the 'connecting' state it was already
+  showing. So on the mock the SDK is not downloaded at all, and on the real
+  backend it arrives during a moment the interface had already set aside for
+  waiting.
+  ---------------------------------------------------------------------------
+*/
+import type { FirebaseDataLayer } from './firebase'
 import type { DataLayer, UserId, WorldState } from './types'
 
 const ME_KEY = 'garden:me'
@@ -115,38 +128,58 @@ function RealProvider({
 
     let current: FirebaseDataLayer | null = null
     let live = true
+    let stop: (() => void) | null = null
 
-    const stop = watchSignIn((user) => {
-      current?.dispose()
-      current = null
-      setLayer(null)
+    /*
+      Fetch the SDK, then start watching.
 
-      if (!user) {
-        if (live) setConnection({ status: 'signed-out' })
-        return
-      }
+      Asynchronous where it used to be immediate, which changes one thing worth
+      naming: the cleanup can now run *before* the import resolves — a strict
+      double-mount in development does exactly that, every time. Hence `live`
+      guarding the subscription itself and not only the state it sets, and
+      hence `stop` being reachable from the cleanup whether or not it exists
+      yet. Without both, development leaves a second auth listener running
+      against the real project and the garden gets every change twice.
+    */
+    void import('./firebase').then(({ createFirebaseDataLayer, ensureWorldExists, watchSignIn }) => {
+      if (!live) return
+      stop = watchSignIn((user) => {
+        current?.dispose()
+        current = null
+        setLayer(null)
 
-      try {
-        const next = createFirebaseDataLayer(user)
-        current = next
-        // Seed the world on the very first run. Deliberately not awaited: the
-        // listeners are already live, so whatever it writes arrives the normal
-        // way and the garden doesn't wait on a round trip to open.
-        void ensureWorldExists(next.me).catch(() => {})
-        if (live) {
-          setLayer(next)
-          setConnection({ status: 'ready' })
+        if (!user) {
+          if (live) setConnection({ status: 'signed-out' })
+          return
         }
-      } catch (error) {
-        if (live) {
-          setConnection({ status: 'refused', error: error as Error })
+
+        try {
+          const next = createFirebaseDataLayer(user)
+          current = next
+          // Seed the world on the very first run. Deliberately not awaited: the
+          // listeners are already live, so whatever it writes arrives the normal
+          // way and the garden doesn't wait on a round trip to open.
+          void ensureWorldExists(next.me).catch(() => {})
+          if (live) {
+            setLayer(next)
+            setConnection({ status: 'ready' })
+          }
+        } catch (error) {
+          if (live) {
+            setConnection({ status: 'refused', error: error as Error })
+          }
         }
+      })
+      // The listener may have been torn down while the import was in flight.
+      if (!live) {
+        stop()
+        stop = null
       }
     })
 
     return () => {
       live = false
-      stop()
+      stop?.()
       current?.dispose()
     }
   }, [])

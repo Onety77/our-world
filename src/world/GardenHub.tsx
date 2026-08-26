@@ -99,6 +99,9 @@ export function GardenHub() {
         /* Seventy-four metres away at the very nearest, and the fog is
            finished with them by a hundred and fifty. See `leafDetail`. */
         leafDetail={0.34}
+        /* And the branches, which cost more than the leaves did. Nothing in
+            this wood is nearer than eighty metres. See woodDetail. */
+        woodDetail={0.3}
       />
       <Rocks
         palette={palette}
