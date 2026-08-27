@@ -674,7 +674,6 @@ export function Threshold() {
     const both = Boolean(current?.answered.warm && current?.answered.cool)
     return (
       <div className="threshold tree-threshold">
-        <span className="threshold-whisper">one thought, one flower</span>
         <button type="button" onClick={write}>plant a thought</button>
         <div className="tree-rituals">
           {current ? (
@@ -699,8 +698,8 @@ export function Threshold() {
           ) : null}
         </div>
         <span className="tree-turn-guide">
-          <span className="tree-turn-pointer">drag or scroll to circle · ← → turn · home returns</span>
-          <span className="tree-turn-touch">drag sideways to circle the tree</span>
+          <span className="tree-turn-pointer">drag / scroll to turn · home resets</span>
+          <span className="tree-turn-touch">drag sideways to turn</span>
         </span>
       </div>
     )

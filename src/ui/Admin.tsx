@@ -34,6 +34,7 @@ import { useState } from 'react'
 import { useEffect } from 'react'
 import { attempt } from '@/systems/trouble'
 import { useVoiceLights } from '@/systems/voiceLights'
+import { CarSettings } from './CarSettings'
 
 /** Somewhere to start from. Any IANA name works — this is just convenience. */
 const COMMON_ZONES = [
@@ -136,6 +137,13 @@ export function Admin() {
           </select>
         </label>
       </section>
+
+      {/*
+        High up, and immediately after "where this is", because it is the one
+        section on this page anybody comes here to use repeatedly. Everything
+        below it is set once and forgotten; this is a workbench.
+      */}
+      <CarSettings />
 
       <section>
         <h2>voice-lights in the Stars</h2>

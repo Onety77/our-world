@@ -4,6 +4,29 @@ This is Codex's side of the hand-off log. Claude can read it before touching the
 same area; I read `NOTES.md` before beginning work. Entries record finished work,
 shared-file changes, measurements, and anything another agent should preserve.
 
+## 27 August 2026 - Codex - Rootwake entrance rebuilt as a real two-way fork
+
+- Removed the added lintel, jambs and rubble mouth. The broken entrance was two
+  complete swept cave shells beginning on the same centreline, plus route
+  culling that hid the unchosen road only 5 m into a much longer junction.
+- Rootwake now peels right with a restrained entrance offset while the ordinary
+  Rootway remains untouched and continues left. The common chamber supplies the
+  early floor; the shortcut draws only a warm outer half-shell during the fork
+  and closes into a complete tunnel after the roads are 12.4-21.0 m apart.
+- Both route meshes remain visible until 18 m beyond physical separation. The
+  three mouth lights now trace the choice: one shared marker and two positioned
+  on Rootwake's actual centreline. No veil, breakable barrier, or hanging roof
+  remains.
+- Route commitment preserves the car's world-space position and heading when
+  moving from the shared main-road frame to the independent shortcut frame.
+- Added fork-separation reporting to `npm run rally`. Seeds 1, 42 and 90210 keep
+  8.1 m of deck, 26-39 m signature corner radii, zero/near-zero wall time, and
+  9.0-10.5 s mastered advantage. A live straight ride stayed on the main road;
+  a Rootwake ride entered the branch and completed the race.
+- Validation: typecheck, rally checks, shader sweep, production build and live
+  browser screenshots pass with no Vite overlay. Preserve `separateAt`, the
+  full-junction visibility window, and route-aware lantern placement.
+
 ## 26 August 2026 · Codex · in progress — Ember Rally's third road
 
 - Working name: **The Stormcrown**.
@@ -68,3 +91,117 @@ shared-file changes, measurements, and anything another agent should preserve.
   and Enter confirms it. Escape still resumes immediately.
 - Live browser checks confirmed resume, restart (speed reset near zero), and
   return-to-menu. Browser errors were empty; typecheck and production build pass.
+
+## 26 August 2026 - Codex - Tree interaction area cleared
+
+- Removed the ornamental `one thought, one flower` line and shortened the
+  permanent turn instruction.
+- Moved the Tree's writing, question, archive, and turn controls out of the
+  centre projection into a narrow lower-left ritual rail above the place name.
+  This is scoped to the Tree; other section thresholds retain their layouts.
+- Added a compact phone treatment. At both 1837x872 and 390x844, the tree and
+  its lower buds remain central while the controls stay against the edge.
+- Browser hit-layer checks confirmed representative letter/bud coordinates now
+  resolve to the 3D `surface`, not the threshold overlay. Browser errors were
+  empty and the production build passes.
+
+## 26 August 2026 - Codex - Mobile garden and Tree composition
+
+- Rebuilt the narrow-screen browsing header as three non-overlapping bands:
+  garden identity, compact shared presence, then one music/messages utility
+  shelf. `Warm (you)` can no longer print through the garden title.
+- The folded conversation no longer lays the newest message across the world on
+  phones. It shows `messages` or an unread count, while its full accessible
+  label still names the sender and unread total; opening it preserves the full
+  conversation.
+- Tightened the mobile place invitation into a bottom composition with a soft
+  ground vignette, restrained type, and a 44px enter target. The five visible
+  dots stay small but each now has a measured 44x44 tap target.
+- Inside the Tree, the 44px back control and utility shelf have a 6px minimum
+  measured gap at 390px width. The tree threshold stays at the lower edge and a
+  centre hit-layer sample still resolves to the 3D surface.
+- Verified at 504x894 and 390x844, including the expanded message composer.
+  Browser errors were empty and the production build passes.
+
+## 26 August 2026 - Codex - Garden header simplified and Wellspring aligned
+
+- Removed the garden name/subtitle from `Places` entirely. The name remains on
+  the arrival page, but no longer repeats after entering the browsable world on
+  either desktop or mobile.
+- Presence now shows the profile names without a visible `(you)`. The current
+  profile name uses its own warm/cool colour, and the existing spark plus away
+  opacity continue to communicate live presence. Screen readers still receive
+  `name, you, online/away` on the editable profile button.
+- With branding gone, the mobile presence row moved to the top edge and the
+  compact messages/music shelf moved to 60px, reducing persistent top UI to
+  98px at 504px width.
+- The entered Wellspring threshold is now a lower-left mobile ritual rail like
+  the Tree: measured x=16px, width=288px at both tested sizes, with the central
+  river still resolving to the 3D surface.
+- Verified mobile at 504x894 and 390x844 and the title-free desktop at 1365x768.
+  React review found no new state/effects or duplicate markup; browser errors
+  were empty and the production build passes.
+
+## 26 August 2026 - Codex - Hollow mobile composition rebuilt
+
+- Reworked the closed game takeover utility UI into the same single-line
+  messages/music shelf used elsewhere. Full latest-message text no longer lies
+  over Word Duel or Ember Rally, while both controls remain available and can
+  still expand.
+- Rebuilt the Hollow selector for one deliberate mobile decision: one compact
+  game page, 44px previous/next and page targets, a single status line, and no
+  repeated next-game or keyboard furniture on touch-sized screens.
+- Compacted the chosen-game view so the emblem, identity, description and all
+  play modes fit together without the former blank middle of the screen.
+- Reflowed Word Duel as one instrument instead of a board floating above a
+  floor-pinned keyboard. The board, 44px-height letter targets, feedback and
+  actions remain together at both 482x850 and 375x667.
+- Changed Ember Rally's phone course picker from three vertically stacked roads
+  into a native horizontal snap horizon. Dots, arrows and swipe keep the visible
+  road in sync; Enter opens the selected road. All three road cards and the way
+  back fit inside one short-phone viewport.
+- Shared files changed for this pass: `src/styles.css` and
+  `src/world/games/ember-rally/EmberRally.tsx`. Desktop rules and game logic were
+  intentionally left intact.
+- Browser-checked selector, mode choice, Word Duel, all three Rally roads and
+  Rally ArrowRight/Enter at 482x850 and 375x667. Browser errors were empty,
+  `git diff --check` is clean apart from existing line-ending notices, and the
+  production build passes with only the established Firebase chunk warning.
+
+## 26 August 2026 - Codex - Stars mobile conversation lane
+
+- Rebuilt the phone Stars around a protected reading lane. `Talking` measures
+  the actual back/music controls above and the writing/voice controls below;
+  each drifting message now fades before any part of its laid-out height enters
+  either control zone. Safe areas, long wrapped messages, player expansion and
+  composer height therefore do not rely on guessed pixel offsets.
+- Moved the newest-message origin slightly upward on phones and widened the
+  usable conversation column without changing the desktop sky or the 3D
+  message-light field.
+- Joined `say something` and voice-lights into one bottom speaking rail. The
+  voice entry is now a restrained three-point constellation instead of a large
+  glowing orb floating beside whichever message happened to be there.
+- Opening voice-lights now creates a full-width lower Stars drawer. It dims the
+  conversation, removes the writing invitation, disables the sky-comet hit
+  layers behind it, and gives close/slot controls phone-sized targets. Opening
+  the text composer similarly removes the voice entry and carries the writing
+  field on its own low light pool.
+- Shared files changed: `src/ui/Talking.tsx` and `src/styles.css`. The per-frame
+  lane uses cached message heights and control geometry, so it adds no React
+  frame updates and no per-message layout reads during animation.
+- Browser-checked closed conversation, composer and voice drawer at 450x892 and
+  375x667. Interactive snapshots retained accessible labels for writing,
+  recording slots and closing. Browser errors were empty and the production
+  build passes with only the established bundle warning.
+
+## 26 August 2026 - Codex - Voice-lights are desktop-only
+
+- Supersedes the mobile voice-light drawer work above at the owner's request.
+  At 544px and below the beacon, drawer, accessible comet hit areas and all
+  voice-light UI are absent; the text composer takes the full lower width.
+- The 3D `VoiceComets` mesh is also invisible on mobile and skips its per-frame
+  pulse/projection work there. The two permanent warm/cool Stars lights remain;
+  they are part of the place, not recordings.
+- Desktop is unchanged and still exposes the full voice-light experience.
+  Verified at 375x667 (no voice-light controls in the interactive tree) and
+  1200x800 (voice-lights present). Browser errors were empty and build passes.

@@ -303,11 +303,58 @@ export function Talking() {
   useEffect(() => {
     if (!here) return
     let raf = 0
+    let laneTop = -Infinity
+    let laneBottom = Infinity
+    let heights: number[] = []
+    let columnTop = 0
     // Measured once a layout, not once a frame: reading `offsetHeight` sixty
     // times a second for every line is a forced reflow per line per frame.
     let up: number[] = []
     const remeasure = () => {
-      if (column.current) up = ladder(column.current)
+      if (column.current) {
+        up = ladder(column.current)
+        heights = Array.from(column.current.children, (kid) => (kid as HTMLElement).offsetHeight)
+        columnTop = column.current.getBoundingClientRect().top
+      }
+
+      /*
+        A phone has two pieces of furniture the desktop sky does not have to
+        negotiate: the way out plus music above, and writing plus voice-lights
+        below. Their heights are not constants (safe areas, an opened player,
+        and the composer all change them), so measure the real controls and
+        make the conversation live between them.
+
+        This is intentionally only a narrow-screen rule. On desktop those
+        controls sit in corners and the wide conversation never meets them.
+      */
+      if (window.innerWidth <= 544) {
+        const leave = document.querySelector<HTMLElement>('.leave-place')
+        const corner = document.querySelector<HTMLElement>('.corner')
+        const writer = document.querySelector<HTMLElement>('.start-saying, .saying')
+        const voices = document.querySelector<HTMLElement>('.voice-beacon')
+        const visibleBox = (element: HTMLElement | null) => {
+          if (!element) return null
+          const box = element.getBoundingClientRect()
+          return box.width > 0 && box.height > 0 ? box : null
+        }
+        const leaveBox = visibleBox(leave)
+        const cornerBox = visibleBox(corner)
+        const writerBox = visibleBox(writer)
+        const voiceBox = visibleBox(voices)
+        laneTop = Math.max(
+          0,
+          leaveBox?.bottom ?? 0,
+          cornerBox?.bottom ?? 0,
+        ) + 14
+        laneBottom = Math.min(
+          window.innerHeight,
+          writerBox?.top ?? window.innerHeight,
+          voiceBox?.top ?? window.innerHeight,
+        ) - 14
+      } else {
+        laneTop = -Infinity
+        laneBottom = Infinity
+      }
     }
     remeasure()
     // A rotated phone, a font that arrived late, or a quote that wrapped
@@ -317,6 +364,12 @@ export function Talking() {
       watch.observe(column.current)
       for (const kid of column.current.children) watch.observe(kid)
     }
+    for (const control of document.querySelectorAll<HTMLElement>(
+      '.leave-place, .corner, .start-saying, .saying, .voice-beacon',
+    )) {
+      watch.observe(control)
+    }
+    window.addEventListener('resize', remeasure)
 
     const tick = () => {
       raf = requestAnimationFrame(tick)
@@ -350,13 +403,33 @@ export function Talking() {
         // sky and the one above it starts where it ends.
         const lift = -(rung(up, own) - head)
         const shrink = Math.max(0.42, 1 - Math.max(0, age) * 0.055)
-        const fade =
+        let fade =
           age < -0.9
             ? // Below the read head is the future you have scrolled away from.
               // It has to be gone before it reaches the composer, or a ghost
               // line sits on top of the invitation to write the next one.
               Math.max(0, 1 + (age + 0.9) * 2.2)
             : Math.max(0, 1 - Math.max(0, age - 4.5) / 4)
+
+        /*
+          Fade at the reading lane, not at the viewport.
+
+          The old column happily kept drawing through the music, the back
+          control, the voice-light beacon and the composer. Hiding overflow is
+          impossible here because the column itself has no height—its children
+          are absolutely positioned—so the honest boundary belongs in the
+          same frame calculation that places those children. A full line is
+          considered, not merely its centre, which keeps even a three-line
+          message out of the controls.
+        */
+        if (Number.isFinite(laneTop) && Number.isFinite(laneBottom)) {
+          const height = heights[i] ?? 0
+          const centre = columnTop + lift + gaze.pitch * 90 + height / 2
+          const half = height * shrink / 2
+          const intoTop = Math.max(0, Math.min(1, (centre - half - laneTop) / 30))
+          const intoBottom = Math.max(0, Math.min(1, (laneBottom - centre - half) / 30))
+          fade *= Math.min(intoTop, intoBottom)
+        }
 
         el.style.transform =
           `translate3d(${side + gaze.yaw * -150 + Math.sin(own * 1.7) * 6}px,` +
@@ -372,8 +445,9 @@ export function Talking() {
     return () => {
       cancelAnimationFrame(raf)
       watch.disconnect()
+      window.removeEventListener('resize', remeasure)
     }
-  }, [here, messages])
+  }, [here, messages, composing])
 
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')

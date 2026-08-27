@@ -752,6 +752,33 @@ export interface DataLayer {
   /** Hidden control-room setting. The real layer accepts this only for warm. */
   setVoiceLightLimit(limit: number): Promise<void>
 
+  // ---- how the rally car drives --------------------------------------------
+
+  /**
+   * Watch the published set of car-handling numbers.
+   *
+   * One document holding only the dials that have been moved away from what
+   * the code says — see `world/games/ember-rally/tuning.ts`. Absent, empty, or
+   * never written all mean the same thing: drive what the code says.
+   *
+   * Deliberately a plain bag of numbers rather than a typed shape at this
+   * seam. The dials are a tuning surface that will gain and lose entries all
+   * the way through this being built, and a provider that had to be edited
+   * every time one was renamed would quietly become the reason not to rename
+   * one. The reader validates against the dial list it knows about and drops
+   * anything it does not recognise, which is the right place for that check.
+   */
+  watchRallyTuning(listener: (values: Record<string, number>) => void): () => void
+
+  /**
+   * Send a set of handling numbers to both devices.
+   *
+   * The one write in the garden whose whole point is to change something under
+   * somebody else, so the real layer accepts it only from warm — and the
+   * control room drafts locally until this is pressed deliberately.
+   */
+  setRallyTuning(values: Record<string, number>): Promise<void>
+
   // ---- the Glasshouse ------------------------------------------------------
 
   /**

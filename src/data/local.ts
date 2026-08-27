@@ -189,6 +189,7 @@ const MESSAGES_KEY = 'garden:messages:v1'
 const QUESTIONS_KEY = 'garden:questions:v1'
 const VOICE_LIGHTS_KEY = 'garden:voice-lights:v1'
 const VOICE_LIGHT_LIMIT_KEY = 'garden:voice-light-limit:v1'
+const RALLY_TUNING_KEY = 'garden:rally-tuning:v1'
 
 interface StoredQuestionSeed {
   id: string
@@ -406,6 +407,30 @@ function loadVoiceLights(): VoiceLight[] {
   }
 }
 
+/**
+ * The published set of car-handling numbers.
+ *
+ * In local mode "published" means nothing more than "saved on this device
+ * under a different key from the draft" — there is no second person for it to
+ * reach. It is still worth being a separate layer, because the whole point of
+ * the control room is rehearsing the send, and a send that quietly did nothing
+ * in local mode would be untested until the one time it mattered.
+ */
+function loadRallyTuning(): Record<string, number> {
+  if (typeof localStorage === 'undefined') return {}
+  try {
+    const raw = JSON.parse(localStorage.getItem(RALLY_TUNING_KEY) ?? '{}') as unknown
+    if (raw === null || typeof raw !== 'object') return {}
+    const out: Record<string, number> = {}
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof value === 'number' && Number.isFinite(value)) out[key] = value
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
 function loadVoiceLightLimit(): number {
   if (typeof localStorage === 'undefined') return 3
   const value = Number(localStorage.getItem(VOICE_LIGHT_LIMIT_KEY) ?? 3)
@@ -544,6 +569,9 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
     const garden = voiceGarden()
     for (const watcher of voiceLightWatchers) watcher(garden)
   }
+
+  let rallyTuning = loadRallyTuning()
+  const rallyTuningWatchers = new Set<(values: Record<string, number>) => void>()
 
   function saveVoiceLights() {
     if (typeof localStorage === 'undefined') return
@@ -1137,6 +1165,26 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       tellVoiceLightWatchers()
     },
 
+    watchRallyTuning(listener) {
+      rallyTuningWatchers.add(listener)
+      listener(rallyTuning)
+      return () => rallyTuningWatchers.delete(listener)
+    },
+
+    async setRallyTuning(values) {
+      const clean: Record<string, number> = {}
+      for (const [key, value] of Object.entries(values)) {
+        if (typeof value === 'number' && Number.isFinite(value)) clean[key] = value
+      }
+      // Replaced whole, like the real layer: a dial left out of the set is a
+      // dial going back to what the code says, not one keeping its old value.
+      rallyTuning = clean
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(RALLY_TUNING_KEY, JSON.stringify(rallyTuning))
+      }
+      for (const watcher of rallyTuningWatchers) watcher(rallyTuning)
+    },
+
     sayAs(id, body) {
       const text = body.trim()
       if (text === '') return
@@ -1167,6 +1215,17 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         localStorage.removeItem(QUESTIONS_KEY)
         localStorage.removeItem(VOICE_LIGHTS_KEY)
         localStorage.removeItem(VOICE_LIGHT_LIMIT_KEY)
+        /*
+          `RALLY_TUNING_KEY` is deliberately not in this list.
+
+          This button wipes what the two of you have *made* — thoughts,
+          messages, rounds, memories, photographs. How the car drives is not
+          one of those; it is a setting, arrived at over an afternoon of
+          driving, and losing it as a side effect of clearing test data would
+          be a genuinely miserable surprise. The control room has its own
+          button for putting the car back to what the code says, and that one
+          says so on the tin.
+        */
       } catch {
         /* ignore */
       }

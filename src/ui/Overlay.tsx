@@ -64,9 +64,11 @@ export function Overlay() {
         <span className="clock">
           {localTimeLabel(p.timeZone, tick)} · {p.city}
         </span>
-        <span className="name">
+        <span
+          className="name"
+          style={id === me ? { color: LIGHT_COLORS[id] } : undefined}
+        >
           {p.name}
-          {id === me ? ' (you)' : ''}
         </span>
         <span className="spark" style={{ background: LIGHT_COLORS[id] }} />
       </>
@@ -82,6 +84,7 @@ export function Overlay() {
           className={online ? 'person mine' : 'person mine away'}
           onClick={showProfile}
           title="where you are"
+          aria-label={`${p.name}, you, ${online ? 'online' : 'away'}`}
         >
           {inside}
         </button>

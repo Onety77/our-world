@@ -21,7 +21,6 @@
 import {
   BOOST_COST,
   Recorder,
-  TOP_SPEED,
   advanceCar,
   createCar,
   scrubOf,
@@ -31,6 +30,7 @@ import {
   type CarInput,
   type CarState,
 } from '../src/world/games/ember-rally/physics'
+import { TUNE } from '../src/world/games/ember-rally/tuning'
 import {
   MOONBREAK,
   STORMCROWN,
@@ -70,7 +70,7 @@ function windUpTo(track: Track, car: CarState, target: number): void {
   throw new Error(
     `rally-check: cannot wind the car up to ${target} m/s — it tops out at ` +
       `${speedOf(car).toFixed(1)}. Either the car has got slower than this test ` +
-      `expects, or the target needs lowering. Top speed is TOP_SPEED in physics.ts.`,
+      `expects, or the target needs lowering. Top speed is the topSpeed dial in tuning.ts.`,
   )
 }
 
@@ -169,7 +169,7 @@ function straightLine() {
   return [
     `  0–100 km/h      ${fixed(to100)} s`,
     `  0–160 km/h      ${to160 < 0 ? 'never' : fixed(to160) + ' s'}`,
-    `  top speed       ${fixed(top)} m/s  (${fixed(top * 3.6, 0)} km/h, stated ${TOP_SPEED})`,
+    `  top speed       ${fixed(top)} m/s  (${fixed(top * 3.6, 0)} km/h, stated ${TUNE.topSpeed})`,
     `  on the ember    ${fixed(boostTop)} m/s  (${fixed(boostTop * 3.6, 0)} km/h)`,
     `  launch spin     ${fixed(spinPeak)}   peak wheelspin off the line`,
     `  gears used      ${gears.join(' → ')}`,
@@ -1253,6 +1253,12 @@ function theSplit(): string {
     const masteredAdvantage = mainPace - hiddenPace
     const hardRoad = shortcutRoadAt(split, split.hardAt)
     const veryHardRoad = shortcutRoadAt(split, split.veryHardAt)
+    const forkSeparation = [split.from + 12, split.commitAt, split.separateAt]
+      .map((at) => {
+        const main = roadAt(track, at)
+        const hidden = shortcutRoadAt(split, at)
+        return Math.hypot(main.x - hidden.x, main.y - hidden.y, main.z - hidden.z)
+      })
 
     const mainCar = createCar(track)
     const mainDrive = spiritDriver(track, seed ^ 0x1927, 0.82, true)
@@ -1310,6 +1316,10 @@ function theSplit(): string {
     rows.push(
       `               mouth at ${mouthAt.toFixed(1)}s · ${separation.toFixed(1)}m minimum rock separation · ` +
         `solid walls agree with the tyres`,
+    )
+    rows.push(
+      `               fork opens ${forkSeparation.map((value) => value.toFixed(1)).join(' → ')}m ` +
+        `(shared floor → choice → separate tunnels)`,
     )
     rows.push(
       `               spirit stays ${mainCar.shortcut ? 'INSIDE THE SECRET ROAD' : 'on the ordinary road'} · ` +

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import {
   AdditiveBlending,
   Color,
@@ -71,6 +71,7 @@ const FRAG = /* glsl */ `
 /** The recordings themselves, each with a long enough tail to read as an event. */
 export function VoiceComets() {
   const lights = useVoiceLights((state) => state.lights)
+  const desktop = useThree((state) => state.size.width > 544)
   const ids = useRef<string[]>([])
 
   const geometry = useMemo(() => {
@@ -128,6 +129,9 @@ export function VoiceComets() {
 
   const projected = useMemo(() => new Vector3(), [])
   useFrame((state) => {
+    // Voice notes are deliberately a desktop-only part of the Stars. Skip the
+    // animation and projection work as well as the pixels on a phone.
+    if (state.size.width <= 544) return
     material.uniforms.uTime.value = state.clock.elapsedTime
     const attr = geometry.getAttribute('iPulse') as InstancedBufferAttribute | undefined
     if (!attr) return
@@ -155,5 +159,13 @@ export function VoiceComets() {
     attr.needsUpdate = true
   })
 
-  return <mesh geometry={geometry} material={material} frustumCulled={false} renderOrder={5} />
+  return (
+    <mesh
+      geometry={geometry}
+      material={material}
+      visible={desktop}
+      frustumCulled={false}
+      renderOrder={5}
+    />
+  )
 }

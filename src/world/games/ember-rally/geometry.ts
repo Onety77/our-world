@@ -166,13 +166,10 @@ const ROOT_BARK = new Color('#4e3722')
 const ROOT_TIP = new Color('#6d5231')
 const CAIRN = new Color('#4a4239')
 const SHORTCUT_STONE = new Color('#4b4238')
+const ROOTWAKE_MOUTH = new Color('#71583f')
 const CHASM_WALL = new Color('#171310')
 const ROOTWAKE_OCHRE = new Color('#6e452d')
 const ROOTWAKE_QUARTZ = new Color('#736b5d')
-const VEIL_ROOT = new Color('#241a12')
-const VEIL_ROOT_TIP = new Color('#49321f')
-const VEIL_WEB = new Color('#5f5b52')
-const VEIL_LEAF = new Color('#303a22')
 
 const scratchColor = new Color()
 const scratchPoint = new Vector3()
@@ -617,12 +614,12 @@ export function buildTunnel(track: Track): TunnelChunk[] {
         for (let k = 0; k < PROFILE; k++) {
           const k2 = (k + 1) % PROFILE
           const junctionOpen = track.split && (
-            (s >= track.split.from - 5 && s <= track.split.from + 24) ||
+            (s >= track.split.from + 34 && s <= track.split.separateAt + 12) ||
             (s >= track.split.rejoinAt - 48 && s <= track.split.to + 5)
           )
           // The right wall opens twice: into the hidden throat and where that
           // throat returns. Everywhere between, this remains a closed cave.
-          if (junctionOpen && k >= 9 && k <= 14) continue
+          if (junctionOpen && k >= 9 && k <= 13) continue
           mesh.quad(previous + k, previous + k2, base + k2, base + k)
         }
       }
@@ -663,10 +660,13 @@ export function buildTunnel(track: Track): TunnelChunk[] {
           let rough = 0.95
           if (k < ROAD_POINTS) {
             const edge = Math.min(1, Math.max(0, (Math.abs(n) / road.width - 0.62) / 0.38))
-            scratchColor.copy(SHORTCUT_STONE).lerp(EARTH, edge * 0.52)
+            const inMouth = s < split.separateAt
+            scratchColor.copy(inMouth ? ROOTWAKE_MOUTH : SHORTCUT_STONE).lerp(EARTH, edge * 0.52)
             const worn = Math.max(0, 1 - Math.abs(n - road.line) / 1.25)
             scratchColor.lerp(STONE_WORN, worn * 0.38)
-            scratchColor.multiplyScalar(0.74 + hash3(Math.round(s), k, 91) * 0.22)
+            scratchColor.multiplyScalar(
+              (inMouth ? 0.92 : 0.74) + hash3(Math.round(s), k, 91) * (inMouth ? 0.12 : 0.22),
+            )
             colour = scratchColor
             wet = road.wet
             rough = 0.42
@@ -674,7 +674,10 @@ export function buildTunnel(track: Track): TunnelChunk[] {
             scratchColor.copy(EARTH).multiplyScalar(0.58 + hash3(Math.round(s), k, 72) * 0.2)
             colour = scratchColor
           } else {
-            scratchColor.copy(CHASM_WALL).lerp(ROCK_LOW, hash3(Math.round(s / 2), k, 63) * 0.38)
+            const inMouth = s < split.separateAt
+            scratchColor
+              .copy(inMouth ? ROCK_LOW : CHASM_WALL)
+              .lerp(ROCK_MID, hash3(Math.round(s / 2), k, 63) * (inMouth ? 0.52 : 0.38))
             // Headlights catch two natural scars before the demanding bends:
             // ochre through the hard S, one cold quartz rib at the blind
             // reverse. They are landmarks, not a luminous racing line.
@@ -688,10 +691,33 @@ export function buildTunnel(track: Track): TunnelChunk[] {
         if (previous >= 0) {
           for (let k = 0; k < PROFILE; k++) {
             const k2 = (k + 1) % PROFILE
-            const junctionOpen =
-              s <= split.from + 24 || s >= split.rejoinAt - 48
-            // Its left wall is the other half of each natural junction.
-            if (junctionOpen && k >= 16 && k <= 21) continue
+            const intoFork = s - split.from
+            // The broad main chamber is the only floor until the right-hand
+            // lane has actually moved beyond its edge.
+            if (intoFork < 36) continue
+            const entranceOpen = s < split.separateAt
+            const exitOpen = s >= split.rejoinAt - 48
+            /*
+              While the lane is leaving the chamber, draw only its outer half:
+              half a worn deck and the outside wall. The inner half is still
+              the common floor, and drawing it twice is the overlap that made
+              flat black polygons appear across the road.
+
+              Once the centres are thirteen metres apart the full tunnel closes
+              around Rootwake, with its inside wall left open briefly to make a
+              natural junction rather than a capped tube.
+            */
+            // Only the outer half-shell exists in the open chamber: half the
+            // worn deck, its wall, and the roof up to the shared centre seam.
+            // The missing inner half is supplied by the main cave.
+            if (entranceOpen && (k < 4 || k >= 16)) continue
+            if (
+              s >= split.separateAt &&
+              s < split.separateAt + 14 &&
+              k >= 16 && k <= 21
+            ) continue
+            // At the far merge only the branch's inside half needs to open.
+            if (exitOpen && k >= 16 && k <= 21) continue
             mesh.quad(previous + k, previous + k2, base + k2, base + k)
           }
         }
@@ -815,6 +841,10 @@ export function buildTunnel(track: Track): TunnelChunk[] {
   // --- something under every lantern that sits on the ground ----------------
   for (const lantern of track.lanterns) {
     if (lantern.y > 1.1) continue
+    // Rootwake's mouth markers are luminous stones in the wall. Their sprites
+    // and light use the hidden centreline; a base added to a main-road chunk
+    // would disappear as soon as route culling closes the junction.
+    if (lantern.shortcut) continue
     const mesh = meshes[chunkOf(lantern.s)]
     roadAt(track, lantern.s, road)
     basisAt(road, basis)
@@ -841,137 +871,6 @@ export function buildTunnel(track: Track): TunnelChunk[] {
   return [...mainChunks, ...shortcutChunks]
 }
 
-export interface RootwakeVeil {
-  geometry: BufferGeometry
-  atS: number
-}
-
-/**
- * The thing hiding Rootwake's mouth.
- *
- * It is deliberately not a door: roots have grown across a forgotten opening,
- * old web has accumulated between them, and a few dead leaves are caught in
- * it. The gaps are large enough for headlights to suggest depth without giving
- * the shortcut away as an authored portal. `Race.tsx` removes this geometry on
- * impact and throws the same colours forward as fragments.
- */
-export function buildRootwakeVeil(track: Track): RootwakeVeil | null {
-  const split = track.split
-  if (!split) return null
-
-  const atS = split.from + 18
-  const road = shortcutRoadAt(split, atS)
-  const basis = basisAt(road)
-  const mesh = new Mesh()
-  const point = new Vector3()
-
-  const vertex = (n: number, y: number, colour: Color, wet = 0.2, rough = 0.8) => {
-    roadPoint(road, n, y, point, basis)
-    mesh.vertex(point.x, point.y, point.z, colour, wet, rough)
-  }
-
-  const ribbon = (
-    fromN: number,
-    fromY: number,
-    toN: number,
-    toY: number,
-    width: number,
-    colour: Color,
-    rough = 0.8,
-  ) => {
-    const dn = toN - fromN
-    const dy = toY - fromY
-    const length = Math.max(0.001, Math.hypot(dn, dy))
-    const acrossN = (-dy / length) * width
-    const acrossY = (dn / length) * width
-    const base = mesh.count
-    vertex(fromN + acrossN, fromY + acrossY, colour, 0.16, rough)
-    vertex(fromN - acrossN, fromY - acrossY, colour, 0.16, rough)
-    vertex(toN - acrossN, toY - acrossY, colour, 0.16, rough)
-    vertex(toN + acrossN, toY + acrossY, colour, 0.16, rough)
-    mesh.quad(base, base + 1, base + 2, base + 3)
-    mesh.quad(base + 3, base + 2, base + 1, base)
-  }
-
-  const root = (points: Array<[number, number]>, width: number) => {
-    for (let i = 1; i < points.length; i++) {
-      scratchColor.copy(VEIL_ROOT).lerp(VEIL_ROOT_TIP, i / points.length * 0.42)
-      ribbon(
-        points[i - 1][0], points[i - 1][1], points[i][0], points[i][1],
-        width * (1 - (i / points.length) * 0.58),
-        scratchColor,
-      )
-    }
-  }
-
-  const half = Math.min(road.width * 0.92, 3.75)
-  const top = Math.min(road.ceiling * 0.92, 3.35)
-  root([
-    [-half, top * 0.9], [-3.0, 2.73], [-2.55, 2.46], [-2.18, 2.06],
-    [-1.62, 1.77], [-1.08, 1.63], [-0.48, 1.12], [0.05, 0.42],
-  ], 0.065)
-  root([
-    [half, top * 0.84], [3.1, 2.62], [2.68, 2.36], [2.32, 2.02],
-    [1.76, 1.82], [1.24, 1.48], [0.72, 0.92], [0.28, 0.34],
-  ], 0.058)
-  root([
-    [-0.72, top], [-0.64, 2.82], [-0.77, 2.5], [-0.58, 2.14],
-    [-0.66, 1.78], [-0.4, 1.42], [-0.48, 0.96], [-0.28, 0.5],
-  ], 0.043)
-
-  // Old web catches between the roots. Thin, incomplete, and uneven: enough
-  // to soften the darkness behind it, never enough to look like a gate.
-  const webCentre: [number, number] = [0.38, 1.72]
-  const anchors: Array<[number, number]> = [
-    [-2.85, 0.82], [-2.72, 2.32], [-1.35, 3.03], [0.72, 3.18],
-    [2.82, 2.54], [3.02, 1.14], [1.92, 0.5], [-0.62, 0.46],
-  ]
-  for (const anchor of anchors) {
-    ribbon(webCentre[0], webCentre[1], anchor[0], anchor[1], 0.0055, VEIL_WEB, 0.18)
-  }
-  for (const radius of [0.34, 0.58, 0.82]) {
-    let previous: [number, number] | null = null
-    for (let i = 0; i <= anchors.length; i++) {
-      const anchor = anchors[i % anchors.length]
-      const pointN = webCentre[0] + (anchor[0] - webCentre[0]) * radius
-      const pointY = webCentre[1] + (anchor[1] - webCentre[1]) * radius
-      if (previous) ribbon(previous[0], previous[1], pointN, pointY, 0.0045, VEIL_WEB, 0.18)
-      previous = [pointN, pointY]
-    }
-  }
-
-  // Small crossed ribbons become leaf-shaped diamonds under the rock shader.
-  const leaves: Array<[number, number, number]> = [
-    [-2.4, 1.38, -0.45], [-1.5, 2.26, 0.7], [-0.42, 1.14, -0.2],
-    [0.82, 2.34, 0.35], [2.35, 1.28, -0.7], [1.18, 2.86, 0.55],
-    [2.03, 2.05, -0.3], [-2.08, 2.58, 0.2],
-  ]
-  for (const [n, y, angle] of leaves) {
-    const dx = Math.cos(angle) * 0.22
-    const dy = Math.sin(angle) * 0.22
-    ribbon(n - dx, y - dy, n + dx, y + dy, 0.065, VEIL_LEAF, 0.7)
-  }
-
-  return { geometry: mesh.build(), atS }
-}
-
-// ---------------------------------------------------------------------------
-// The line of pale fire
-// ---------------------------------------------------------------------------
-
-/**
- * A ribbon along a recorded run.
- *
- * She is seven timezones away and her car is a document, so most of the time
- * she is somewhere far up the road and completely invisible — which would make
- * "chase her" an instruction with nothing to chase. The trail is the fix, and
- * it is the honest one: it is exactly where she went, so following it is
- * following her line, and where it disappears round a corner is where she is.
- *
- * Built once from the whole run and revealed by time in the shader — see
- * `useTrailMaterial`. Drawing it a segment at a time on the CPU would mean
- * rebuilding a buffer every frame for something that never changes.
- */
 export function buildTrail(track: Track, run: RallyRun, halfWidth = 0.26): BufferGeometry {
   const samples = Math.floor(run.path.length / 4)
   const position = new Float32Array(samples * 6)

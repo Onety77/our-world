@@ -44,10 +44,11 @@ import {
   type CarRig,
 } from './rig'
 import { CarStudio, STUDIO } from './Studio'
-import { basisAt, buildRootwakeVeil, buildTrail, buildTunnel, roadPoint } from './geometry'
+import { basisAt, buildTrail, buildTunnel, roadPoint } from './geometry'
 import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { deep } from './depth'
+import { storm } from './weather'
 import {
   LAMP_SLOTS,
   createLights,
@@ -64,7 +65,6 @@ import {
 import { runAt, runDurationMs, type RallyRun, type RunSample } from './model'
 import {
   Recorder,
-  TOP_SPEED,
   advanceCar,
   createCar,
   lockupOf,
@@ -76,24 +76,22 @@ import {
   type CarInput,
   type CarState,
 } from './physics'
+import { TUNE } from './tuning'
 import {
   BLUE_SPARK,
   GHOST_GRIT,
   GRIT,
   HOT_SPARK,
   DRIP,
-  DRY_LEAF,
   MOTE,
-  OLD_WEB,
   Particles,
-  ROOT_FIBER,
   SMOKE,
   SPARK,
   WET_GRIT,
 } from './particles'
 import { MARK_LIFE, Marks } from './marks'
 import { useRace } from './session'
-import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt } from './track'
+import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
 
 /** Seconds of lamps coming up before the road opens. */
 const COUNTDOWN = 3.1
@@ -111,12 +109,18 @@ const RIDE =
 const ROOTWAKE_RIDE =
   typeof location !== 'undefined' &&
   new URLSearchParams(location.search).get('shortcut') === '1'
-const ROOTWAKE_VEIL_HOLD =
+/**
+ * `?rootwake=mouth` and `?rootwake=exit` hold the car at either end of the
+ * hidden road, engine off, so both joins can be looked at without driving to
+ * them. They were called `?veil=` when there was something growing across the
+ * entrance; there is not any more — see the note on the mouth in `geometry`.
+ */
+const ROOTWAKE_MOUTH_HOLD =
   typeof location !== 'undefined' &&
-  new URLSearchParams(location.search).get('veil') === 'hold'
+  new URLSearchParams(location.search).get('rootwake') === 'mouth'
 const ROOTWAKE_EXIT_HOLD =
   typeof location !== 'undefined' &&
-  new URLSearchParams(location.search).get('veil') === 'exit'
+  new URLSearchParams(location.search).get('rootwake') === 'exit'
 
 /**
  * `?from=<metres>` stands the car that far up the road before the flag drops.
@@ -224,9 +228,6 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
   )
   useEffect(() => () => chunks.forEach((chunk) => chunk.geometry.dispose()), [chunks])
   const chunkMeshes = useRef<Mesh[]>([])
-  const rootwakeVeil = useMemo(() => buildRootwakeVeil(track), [track])
-  const rootwakeVeilMesh = useRef<Mesh | null>(null)
-  useEffect(() => () => rootwakeVeil?.geometry.dispose(), [rootwakeVeil])
 
   // --- the lamps -----------------------------------------------------------
   const lanterns = useMemo(() => buildLanterns(track), [track])
@@ -334,8 +335,6 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       track,
       chunks: chunkMeshes.current,
       chunkRanges: chunks,
-      rootwakeVeil: rootwakeVeilMesh.current,
-      rootwakeVeilAt: rootwakeVeil?.atS ?? -1,
       mine,
       theirs,
       dust,
@@ -375,14 +374,6 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
         />
       ))}
 
-      {rootwakeVeil ? (
-        <mesh
-          ref={rootwakeVeilMesh}
-          geometry={rootwakeVeil.geometry}
-          material={rockMaterial}
-          renderOrder={2}
-        />
-      ) : null}
 
       <mesh
         geometry={lanterns.geometry}
@@ -480,7 +471,7 @@ function buildLanterns(track: Track) {
   const colour = new Color()
 
   track.lanterns.forEach((lantern, i) => {
-    roadAt(track, lantern.s, road)
+    roadAtRoute(track, lantern.s, lantern.shortcut ?? false, road)
     basisAt(road, basis)
     roadPoint(road, lantern.n, lantern.y, point, basis)
     at[i * 3] = point.x
@@ -514,8 +505,6 @@ interface FrameArgs {
   track: Track
   chunks: Mesh[]
   chunkRanges: { from: number; to: number; shortcut?: boolean }[]
-  rootwakeVeil: Mesh | null
-  rootwakeVeilAt: number
   mine: CarRig
   theirs: CarRig
   dust: Particles
@@ -568,7 +557,6 @@ class Driving {
   private speedFlat = false
   private gritDue = 0
   private smokeDue = 0
-  private rootwakeBroken = false
   /**
    * What was asked of the car this frame.
    *
@@ -582,6 +570,11 @@ class Driving {
   private settle = 0
   /** How far under the water, eased. See the drive in `frame`. */
   private sunk = 0
+  /** And how deep into Rootwake, eased the same way. See ROOTWAKE_DARK. */
+  private hidden = 0
+  /** Seconds until the next stroke, and how many are left in this flash. */
+  private nextStrike = 2
+  private strokesLeft = 1
 
   private readonly ghost: RunSample = {
     n: 0, s: 0, yaw: 0, drift: 0,
@@ -604,13 +597,12 @@ class Driving {
     if (ROOTWAKE_EXIT_HOLD && track.split) {
       this.car.s = track.split.rejoinAt - 32
       this.car.shortcut = true
-    } else if (ROOTWAKE_VEIL_HOLD && track.split) {
+    } else if (ROOTWAKE_MOUTH_HOLD && track.split) {
       this.car.s = track.split.from + 10
       this.car.shortcut = true
     } else if (ROOTWAKE_RIDE && track.split) this.car.s = track.split.from + 2
     else if (FROM > 0) this.car.s = Math.min(track.length - 2, FROM)
     this.autopilot = RIDE ? spiritDriver(track, track.seed ^ 0x1234) : null
-    if (ROOTWAKE_EXIT_HOLD) this.rootwakeBroken = true
   }
 
   attach(surface: HTMLElement | null) {
@@ -639,7 +631,7 @@ class Driving {
     if (ROOTWAKE_EXIT_HOLD && this.track.split) {
       this.car.s = this.track.split.rejoinAt - 32
       this.car.shortcut = true
-    } else if (ROOTWAKE_VEIL_HOLD && this.track.split) {
+    } else if (ROOTWAKE_MOUTH_HOLD && this.track.split) {
       this.car.s = this.track.split.from + 10
       this.car.shortcut = true
     } else if (ROOTWAKE_RIDE && this.track.split) this.car.s = this.track.split.from + 2
@@ -655,7 +647,6 @@ class Driving {
     this.lastGhostS = 0
     this.chase.reset()
     this.cleared = false
-    this.rootwakeBroken = ROOTWAKE_EXIT_HOLD
   }
 
   frame(args: FrameArgs) {
@@ -685,6 +676,62 @@ class Driving {
 
     this.clock += args.delta
     args.lights.uniforms.uTime.value = this.clock
+
+    /*
+      The Stormcrown's weather, off the height of the road under the car.
+
+      Eased, but not much: two seconds. Coming out of the top of the cloud
+      should be quick enough to be an event and slow enough that no single
+      frame is the one it happened on.
+    */
+    if (this.track.stage === 'stormcrown') {
+      const want = stormAt(this.track, this.car.s + 20)
+      const ease = 1 - Math.exp(-1.6 * args.delta)
+      storm.inCloud += (want.inCloud - storm.inCloud) * ease
+      storm.above += (want.above - storm.above) * ease
+      this.strike(args.delta)
+
+      const u = args.lights.uniforms
+      const cloud = storm.inCloud
+      const high = storm.above
+      // Low, then cloud over the top of it, then clear air over the top of
+      // that. Applied in that order because they overlap: you are briefly both
+      // leaving the cloud and above it, and the second should win.
+      u.uAmbient.value.copy(STORM_LOW.ambient).lerp(STORM_CLOUD.ambient, cloud).lerp(STORM_HIGH.ambient, high)
+      u.uFogColor.value.copy(STORM_LOW.fog).lerp(STORM_CLOUD.fog, cloud).lerp(STORM_HIGH.fog, high)
+      const mix = (a: number, b: number, c: number) => (a + (b - a) * cloud) * (1 - high) + c * high
+      u.uFogNear.value = mix(STORM_LOW.near, STORM_CLOUD.near, STORM_HIGH.near)
+      u.uFogFar.value = mix(STORM_LOW.far, STORM_CLOUD.far, STORM_HIGH.far)
+
+      /*
+        And the strike itself, on the ambient.
+
+        Through the shared block, so the rock, the road, the cedars and the car
+        all take it together. A flash that lights the sky and not the ground is
+        a screen effect; one that lights everything is weather.
+      */
+      if (storm.flash > 0.001) {
+        u.uAmbient.value.lerp(FLASH, storm.flash * (0.55 + high * 0.25))
+      }
+    }
+
+    /*
+      And how deep into Rootwake we are, which moves the light itself.
+
+      Three seconds of easing either way. Off the car's own route flag rather
+      than off a pair of distances, so it can never disagree with which road
+      the car is actually on — including on the way back out at the far end,
+      where the same ease runs in reverse and the lanterns come back.
+    */
+    if (this.track.stage === 'rootway' && this.track.split) {
+      const want = this.car.shortcut ? 1 : 0
+      this.hidden += (want - this.hidden) * (1 - Math.exp(-0.9 * args.delta))
+      const t = this.hidden
+      const u = args.lights.uniforms
+      u.uAmbient.value.copy(ROOTWAY_LIT.ambient).lerp(ROOTWAKE_DARK.ambient, t)
+      u.uFogNear.value = ROOTWAY_LIT.fogNear + (ROOTWAKE_DARK.fogNear - ROOTWAY_LIT.fogNear) * t
+      u.uFogFar.value = ROOTWAY_LIT.fogFar + (ROOTWAKE_DARK.fogFar - ROOTWAY_LIT.fogFar) * t
+    }
 
     /*
       And how far under the water we are, which moves the light itself.
@@ -723,7 +770,6 @@ class Driving {
     if (session.phase === 'replay') this.stepReplay(args)
     else this.stepRace(args)
 
-    this.updateRootwakeVeil(args)
     this.updateChunks(args)
     this.updateLamps(args)
     // The marks fade in the shader, so all they need is the clock and a push
@@ -750,7 +796,7 @@ class Driving {
       this.input = this.autopilot
         ? IDLE
         : (this.controls?.read(0) ?? IDLE)
-      if (!ROOTWAKE_VEIL_HOLD && !ROOTWAKE_EXIT_HOLD) this.countdown -= delta
+      if (!ROOTWAKE_MOUTH_HOLD && !ROOTWAKE_EXIT_HOLD) this.countdown -= delta
       if (this.countdown <= 0) session.begin()
     } else if (phase === 'running') {
       if (
@@ -835,6 +881,11 @@ class Driving {
         brake: this.input.brake,
         handbrake: this.input.handbrake,
         drifting: car.drifting,
+        // The Stormcrown's weather, so the three bands can be checked from a
+        // script rather than argued about from a screenshot.
+        inCloud: +storm.inCloud.toFixed(2),
+        above: +storm.above.toFixed(2),
+        flash: +storm.flash.toFixed(2),
         ember: car.ember,
         /*
           Seconds of boost left, so "did the ember key work" is a question a
@@ -849,7 +900,6 @@ class Driving {
         driftAngle: car.driftAngle,
         touching: car.touching,
         shortcut: car.shortcut,
-        veilBroken: this.rootwakeBroken,
         strikes: car.strikes,
         /*
           Which way the *drawn* front wheel is actually pointing, as an angle
@@ -940,8 +990,8 @@ class Driving {
         this.shownKmh = kmh
         speedo.value.textContent = String(kmh)
       }
-      // Against the real top speed, so full means full. See TOP_SPEED.
-      const of = Math.min(1, speed / TOP_SPEED)
+      // Against the real top speed, so full means full. See TUNE.topSpeed.
+      const of = Math.min(1, speed / TUNE.topSpeed)
       speedo.line.style.transform = `scaleX(${of.toFixed(3)})`
       const flat = of > 0.965
       if (flat !== this.speedFlat) {
@@ -970,7 +1020,7 @@ class Driving {
       only rises when the driver holds the throttle, while the car itself stays
       locked. The gantry in EmberRally.tsx makes the same three beats legible.
     */
-    let rev = phase === 'finished' ? 0 : car.boostLeft > 0 ? 1 : speed / TOP_SPEED
+    let rev = phase === 'finished' ? 0 : car.boostLeft > 0 ? 1 : speed / TUNE.topSpeed
     if (phase === 'ready') {
       const beat = this.countdown - Math.floor(this.countdown)
       const rise = Math.pow(1 - beat, 2.2)
@@ -1303,51 +1353,37 @@ class Driving {
 
   // --- dust, sparks, ash ---------------------------------------------------
 
-  /** Tear through the growth concealing Rootwake, once per attempt. */
-  private updateRootwakeVeil(args: FrameArgs) {
-    const mesh = args.rootwakeVeil
-    if (!mesh) return
-    mesh.visible = !this.rootwakeBroken
-    if (
-      this.rootwakeBroken ||
-      !this.car.shortcut ||
-      args.rootwakeVeilAt < 0 ||
-      this.car.s < args.rootwakeVeilAt - 0.8
-    ) return
-
-    this.rootwakeBroken = true
-    mesh.visible = false
-    const road = roadAtRoute(this.track, args.rootwakeVeilAt, true, shotRoad)
-    const basis = basisAt(road, shotBasis)
-    const speed = speedOf(this.car)
-    const force = Math.min(1, 0.35 + speed / 34)
-    this.engine?.brush(force)
-    this.chase.jolt(0.1 + force * 0.08)
-
-    // The curtain itself disappears cleanly; these fragments sell where it
-    // went. They are thrown down the tunnel and outward, never back into the
-    // camera as a full-screen cloud.
-    for (let i = 0; i < 58; i++) {
-      const web = i % 7 === 0
-      const leaf = !web && i % 3 === 0
-      const n = (Math.random() * 2 - 1) * road.width * 0.84
-      const y = 0.28 + Math.random() * road.ceiling * 0.78
-      roadPoint(road, n, y, this.point, basis)
-      const outward = Math.sign(n || Math.random() - 0.5) * (0.6 + Math.random() * 2.5)
-      const forward = 3.5 + speed * 0.18 + Math.random() * 5.5
-      const lift = leaf ? 1.2 + Math.random() * 2.6 : 0.35 + Math.random() * 2
-      const colour = web ? OLD_WEB : leaf ? DRY_LEAF : ROOT_FIBER
-      args.dust.spawn(
-        this.point.x, this.point.y, this.point.z,
-        basis.fx * forward + basis.rx * outward + basis.ux * lift,
-        basis.fy * forward + basis.ry * outward + basis.uy * lift,
-        basis.fz * forward + basis.rz * outward + basis.uz * lift,
-        0.8 + Math.random() * 1.25,
-        web ? 0.045 + Math.random() * 0.04 : leaf ? 0.1 + Math.random() * 0.12 : 0.065 + Math.random() * 0.09,
-        web ? 0.35 : leaf ? 0.12 : 0.2,
-        colour,
-      )
+  /**
+   * Lightning, in strokes rather than a sine.
+   *
+   * -------------------------------------------------------------------------
+   * The sky already had a flash and it was `pow(sin(t), 96)` — perfectly even,
+   * exactly the same every time, and a storm you can set your watch by is not
+   * a storm. Real lightning is a stroke, a gap you could count in, and often
+   * another one down the same channel; it is the *irregularity* that makes it
+   * frightening.
+   *
+   * So: a countdown to the next flash, and a flash that is one, two or three
+   * strokes with a beat between them. Decay is fast — a tenth of a second —
+   * because what makes a flash read as enormously bright is not its brightness,
+   * it is how quickly it is gone.
+   * -------------------------------------------------------------------------
+   */
+  private strike(delta: number) {
+    this.nextStrike -= delta
+    if (this.nextStrike <= 0) {
+      if (this.strokesLeft > 0) {
+        this.strokesLeft--
+        storm.flash = 0.55 + Math.random() * 0.45
+        this.nextStrike = 0.06 + Math.random() * 0.12
+      } else {
+        // Rarer up in the clear air: the storm is behind and below you now.
+        const quiet = 3.2 + storm.above * 5
+        this.nextStrike = quiet + Math.random() * 6
+        this.strokesLeft = Math.random() < 0.45 ? 2 : 1
+      }
     }
+    storm.flash *= Math.exp(-9 * delta)
   }
 
   private throwDust(args: FrameArgs, car: CarState, speed: number, slip: number) {
@@ -1682,7 +1718,15 @@ class Driving {
         mesh.visible = true
         continue
       }
-      const atJunction = here < split.from + 5 || here > split.rejoinAt - 80
+      /*
+        Keep both roads drawn for the whole physical fork.
+
+        This used to stop at `from + 5`, while the route could still be chosen
+        until `commitAt` and the two shells did not finish separating until
+        `separateAt`. The unchosen road therefore vanished in the middle of the
+        decision and the junction visually collapsed back into one tunnel.
+      */
+      const atJunction = here < split.separateAt + 18 || here > split.rejoinAt - 80
       mesh.visible = range.shortcut === this.car.shortcut || atJunction
     }
   }
@@ -1816,6 +1860,105 @@ const SILENT = {
  * being submerged. It is the one number here that is chosen against realism.
  * ---------------------------------------------------------------------------
  */
+/**
+ * What the Rootway's light is on the lit road, and what it is inside Rootwake.
+ *
+ * ---------------------------------------------------------------------------
+ * **Going into the hidden road is a change to the light, not a thing you drive
+ * through.**
+ *
+ * The mouth used to be covered by a curtain of roots and old web that you
+ * smashed. That is the wrong idea twice: it signposts the very thing it is
+ * meant to conceal, and it turns an opening into a barrier. What actually
+ * marks the crossing is the thing that is true about it — **the lanterns
+ * stop.** The main road is hung with them every dozen metres; down here there
+ * are three at the mouth and then nothing at all for a kilometre, and the only
+ * light in the world is the two on the front of your own car.
+ *
+ * So the ambient falls away and the fog closes in, over about three seconds of
+ * driving. Nothing flashes, nothing breaks, and the moment you notice is a
+ * little after the moment it happened — which is exactly how going somewhere
+ * darker actually feels.
+ *
+ * It leans on the same one property everything else in this garden leans on:
+ * every material reads one shared block of uniforms, so moving these numbers
+ * takes the rock, the car, the dust, the tyre marks and the ghost with it. A
+ * darkness applied to some of those and not the others is a filter.
+ * ---------------------------------------------------------------------------
+ */
+/**
+ * The Stormcrown's three weathers, and you climb through all of them.
+ *
+ * ---------------------------------------------------------------------------
+ * The fog is the whole instrument here, and it does the opposite thing in each
+ * band — which is exactly why the road reads as three places rather than one
+ * long grey ribbon:
+ *
+ *   under it   fog pulled in to sixty metres and coloured like wet slate. Rain
+ *              in the headlights, cedars close on both sides. It is not dark
+ *              for atmosphere; it is dark because you are under a storm
+ *   in it      thirty-two metres, and *pale*. This is the only fog in the whole
+ *              garden that is brighter than the thing it hides, because that is
+ *              what cloud is: you are not losing the road to darkness, you are
+ *              losing it to whiteness, which is far worse and much rarer in a
+ *              racing game. The ambient goes right up — inside cloud there is
+ *              no shadow side to anything
+ *   above it   four hundred metres of clear black air, and the stars. The
+ *              relief is the point, and it is measured in fog distance: from
+ *              thirty-two to four hundred over about a hundred metres of road
+ *
+ * A driver who has just come up through the middle band will feel the third
+ * one in their shoulders. That is the whole design.
+ * ---------------------------------------------------------------------------
+ */
+/** What a stroke leaves on everything for a tenth of a second. */
+const FLASH = new Color('#dfe9ef')
+
+const STORM_LOW = {
+  ambient: new Color('#4a565e'),
+  fog: new Color('#1b2327'),
+  near: 14,
+  far: 60,
+}
+
+const STORM_CLOUD = {
+  // Brighter than what it hides. See above.
+  ambient: new Color('#9aa7ab'),
+  fog: new Color('#b9c3c4'),
+  near: 5,
+  far: 32,
+}
+
+const STORM_HIGH = {
+  ambient: new Color('#56657e'),
+  fog: new Color('#0b1220'),
+  /*
+    Nine hundred metres, which is a long way for this garden and the whole
+    point of being up here.
+
+    At four hundred the peaks were fogged to black silhouettes and the snow on
+    them — the one thing that says how high you have climbed — never survived
+    to the screen. Above weather on a clear night you can see for miles; the
+    only ceiling is the camera's own far plane at 2400.
+  */
+  near: 200,
+  far: 900,
+}
+
+const ROOTWAY_LIT = {
+  ambient: new Color('#4a5b72'),
+  fogNear: 22,
+  fogFar: 118,
+}
+
+const ROOTWAKE_DARK = {
+  // Not black: a cave with no ambient at all reads as nothing having been
+  // drawn, which is the note already written against the cave's own shader.
+  ambient: new Color('#232c39'),
+  fogNear: 13,
+  fogFar: 68,
+}
+
 const ABOVE = {
   ambient: new Color('#a3b2c4'),
   vein: new Color('#8bcfc4'),

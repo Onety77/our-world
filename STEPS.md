@@ -352,9 +352,21 @@ one thing in this whole list is going to surprise you, it is that one.
 **The control room is at `/dev7731`.** Nothing in the garden links to it and
 nothing hints at it; the world does not render there at all. It is where you
 check `connected`, pin an hour, set the quality tier, edit either profile,
-puppet the other person in local mode, and choose whose day the world is
-having. Bookmark it. If your host is not rewriting unknown paths to
-`index.html` — see 5.2 — `?dev7731` on the root works as a fallback.
+puppet the other person in local mode, choose whose day the world is having,
+and **tune how the rally car drives**. Bookmark it. If your host is not
+rewriting unknown paths to `index.html` — see 5.2 — `?dev7731` on the root
+works as a fallback.
+
+**How the car drives** is forty-one sliders under *how the car drives*, and the
+only thing about them worth reading before you start: **they are this device
+only until you press "send this car to both of you".** Drag anything for as
+long as you like — her car does not move. The page says which of the two states
+you are in, in a sentence, at the top. "drop my changes" goes back to whatever
+was last sent; "back to the code's numbers" goes back to how it shipped.
+
+That send is a write to `rallyTuning/ours`, from the warm account only, so it
+needs the rules of part 3 published like everything else. If sending fails
+against the real backend and everything else works, that is the rule missing.
 
 There used to be a `dev` panel sitting permanently in the corner of every
 screen. It is gone.

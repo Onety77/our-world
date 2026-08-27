@@ -39,6 +39,8 @@ export interface Band {
 
 export interface Lantern {
   s: number
+  /** Place this light on Rootwake's centreline instead of the ordinary road. */
+  shortcut?: boolean
   /** Metres right of the middle, signed. */
   n: number
   y: number
@@ -433,6 +435,8 @@ export interface RootSplit {
   to: number
   shortcut: { from: number; to: number }
   commitAt: number
+  /** Where the shared chamber has become two fully separate stone shells. */
+  separateAt: number
   rejoinAt: number
   /** A deliberate move to the right through the mouth chooses the Rootwake. */
   portalN: number
@@ -786,6 +790,64 @@ function moonbreakBands(): Band[] {
  * verification script. A warning beacon cannot drift away from the corner it
  * is warning about just because somebody lengthened the cedar road later.
  */
+/**
+ * Where the cloud is on the Stormcrown, in metres above the start.
+ *
+ * ---------------------------------------------------------------------------
+ * **This road's whole identity is that the weather answers to the climb.**
+ *
+ * The Rootway is underground: a cave, lantern-lit, closed. The Moonbreak is
+ * over water: flat, moonlit, open. The third road had the makings of neither —
+ * it had a rain field, a cloud plane, cedars and a sky, all of them the *same
+ * at every height*, so four and a half kilometres of climbing from sea level to
+ * ninety metres looked identical at the bottom and the top and read as the
+ * Moonbreak in grey paint. The one thing this road has that the other two
+ * cannot have was going unspent.
+ *
+ * So it is spent. Three bands, and you drive up through all of them:
+ *
+ *   under it   rain hammering, dark, cedars close on both sides, and the
+ *              headlights doing most of the work
+ *   in it      the cloud itself. Visibility collapses to about thirty metres,
+ *              everything goes pale and blind, cedars loom out of the white
+ *              and are gone, and the lightning is a whiteout rather than a
+ *              fork. This is the frightening part, and it is where the road
+ *              puts its three hairpins
+ *   above it   you come out. A clear black sky, stars, no rain at all — and a
+ *              floor of cloud below you with the storm still going on inside
+ *              it, lighting it from underneath
+ *
+ * The third one is the reward, and it only works because the second one was
+ * unpleasant. Nothing here is authored per-metre: it all falls out of `y`,
+ * which the road already had.
+ * ---------------------------------------------------------------------------
+ */
+export const CLOUD_BASE = 26
+export const CLOUD_TOP = 66
+
+/**
+ * How high the road is through the weather: 0 under the cloud, 1 inside it at
+ * its thickest, and how far above it you have climbed.
+ *
+ * Two numbers rather than one because they are not opposites — the moment that
+ * matters is the *break-out*, where "in the cloud" is falling and "above it" is
+ * rising at once, and a single value could not say that.
+ */
+export function stormAt(track: Track, s: number): { inCloud: number; above: number } {
+  if (track.stage !== 'stormcrown') return { inCloud: 0, above: 0 }
+  const i = Math.max(0, Math.min(track.y.length - 1, Math.round(s / STEP)))
+  const y = track.y[i]
+  const band = CLOUD_TOP - CLOUD_BASE
+  // Rises through the lower half of the band and falls through the upper half,
+  // so the thickest, blindest part is the middle of the climb.
+  const into = Math.max(0, Math.min(1, (y - CLOUD_BASE) / (band * 0.45)))
+  const outOf = Math.max(0, Math.min(1, (y - (CLOUD_TOP - band * 0.3)) / (band * 0.3)))
+  return {
+    inCloud: Math.max(0, into - outOf),
+    above: Math.max(0, Math.min(1, (y - CLOUD_TOP) / 14)),
+  }
+}
+
 export const STORMCROWN = {
   rainwood: { from: 0, to: 500 },
   climb: { from: 500, to: 1030 },
@@ -1473,18 +1535,35 @@ function dressTrack(track: Track, rng: () => number) {
      interior receives no route lighting: its gates are found by headlamp. */
   if (track.split) {
     const split = track.split
-    /* Three low amber lights make the mouth noticeable without naming it;
-       after the third, the headlamps are all the route lighting there is. */
-    for (let marker = 0; marker < 3; marker++) {
-      const s = split.from + 4 + marker * 10
-      track.lanterns.push({
-        s,
-        n: split.portalN + 1.05,
-        y: 0.72 + marker * 0.24,
-        size: 0.95 + marker * 0.16,
-        warm: 1,
-      })
-    }
+    /*
+      Three low amber lights make the mouth noticeable without naming it. The
+      first sits in the shared chamber; the other two belong to Rootwake's own
+      centreline, so their light reveals the right-hand deck and outer rock
+      instead of leaving a black rectangle beside the ordinary road.
+    */
+    track.lanterns.push({
+      s: split.from + 10,
+      n: split.portalN + 1.1,
+      y: 0.75,
+      size: 1,
+      warm: 1,
+    })
+    track.lanterns.push({
+      s: split.from + 42,
+      shortcut: true,
+      n: 2.9,
+      y: 1.28,
+      size: 1.58,
+      warm: 1,
+    })
+    track.lanterns.push({
+      s: split.from + 54,
+      shortcut: true,
+      n: 2.45,
+      y: 1.62,
+      size: 1.72,
+      warm: 1,
+    })
   }
 
   /*
@@ -1715,6 +1794,17 @@ function makeRootSplit(track: Track, from: number): RootSplit {
   const throat = span
   const startGrade = Math.max(-0.12, Math.min(0.12, start.grade))
   const endGrade = Math.max(-0.12, Math.min(0.12, end.grade))
+  const separateAt = from + 58
+  const entryBegins = 12 / span
+  const entrySeparated = (separateAt - from) / span
+  const entrySettled = Math.min(0.19, entrySeparated + 96 / span)
+  const startRightX = -Math.cos(start.heading)
+  const startRightZ = Math.sin(start.heading)
+
+  const smoothstep = (value: number) => {
+    const held = clamp01(value)
+    return held * held * (3 - held * 2)
+  }
 
   const point = (t: number, amplitude: number) => {
     const startDX = Math.sin(start.heading) * throat
@@ -1737,12 +1827,21 @@ function makeRootSplit(track: Track, from: number): RootSplit {
       0.1 * Math.sin(Math.PI * 6 * t)
     ) + hardGate + blindReverse
     const depth = fade * (-34 - 7 * Math.sin(Math.PI * 3 * t) ** 2)
+    /*
+      A readable fork, rather than two tunnels born in the same place. This is
+      deliberately a small correction to the proven hidden route, not a new
+      entrance curve: it gives the right-hand throat room to read, then eases
+      away before the authored hard and very-hard corners.
+    */
+    const peelIn = smoothstep((t - entryBegins) / (entrySeparated - entryBegins))
+    const peelOut = 1 - smoothstep((t - entrySeparated) / (entrySettled - entrySeparated))
+    const entryPeel = 11 * peelIn * peelOut
     return {
-      x: start.x + chordX * t + (startDX - chordX) * startAlign + (endDX - chordX) * endAlign + sideX * transverse,
+      x: start.x + chordX * t + (startDX - chordX) * startAlign + (endDX - chordX) * endAlign + sideX * transverse + startRightX * entryPeel,
       y: start.y + (end.y - start.y) * t +
         (startGrade * throat - (end.y - start.y)) * startAlign +
         (endGrade * throat - (end.y - start.y)) * endAlign + depth,
-      z: start.z + chordZ * t + (startDZ - chordZ) * startAlign + (endDZ - chordZ) * endAlign + sideZ * transverse,
+      z: start.z + chordZ * t + (startDZ - chordZ) * startAlign + (endDZ - chordZ) * endAlign + sideZ * transverse + startRightZ * entryPeel,
     }
   }
 
@@ -1837,7 +1936,10 @@ function makeRootSplit(track: Track, from: number): RootSplit {
     from,
     to,
     shortcut: { from, to },
+    // The choice is made while both cars are still on the common, wide floor.
+    // The branch only starts pulling hard away after this point.
     commitAt: from + 34,
+    separateAt,
     rejoinAt: to - 2,
     portalN: 2.3,
     mainLength: span,

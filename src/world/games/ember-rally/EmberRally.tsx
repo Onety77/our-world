@@ -4,6 +4,7 @@ import { useGameStage } from '../stage'
 import { makeTrack } from './track'
 import { driveSpirit } from './spirit'
 import { useRace } from './session'
+import { usePublishedTuning } from './tuningSync'
 import {
   moveRun,
   timeLabel,
@@ -221,6 +222,15 @@ export default function EmberRally({
   play,
   onLeave,
 }: GameProps<RallySetup, RallyMove>) {
+  /*
+    Whatever the control room has sent, before anybody drives.
+
+    Here rather than anywhere higher up because this whole folder is fetched on
+    demand — somebody who never comes down here should not be holding a
+    listener open for a document about a car they have never seen.
+  */
+  usePublishedTuning()
+
   /*
     On the seed, never on the setup object.
 
@@ -501,6 +511,54 @@ function CoursePicker({
     const stage = STAGES[index]
     if (stage) onChoose(stage)
   })
+  const courseTrack = useRef<HTMLDivElement>(null)
+  const courseDoors = useRef<(HTMLButtonElement | null)[]>([])
+
+  /*
+    The phone turns the three roads into one horizontal horizon. Keep keyboard
+    selection and that horizon looking at the same road; otherwise ArrowRight
+    would change the hidden state while the previous landscape stayed in view.
+  */
+  useEffect(() => {
+    courseDoors.current[selected]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    })
+  }, [selected])
+
+  /* A swipe is also a choice. Once the native snap has settled, find the road
+     nearest the centre and let the marks and keyboard state follow it. Waiting
+     for the scroll to settle avoids fighting a smooth move requested by a dot
+     or an arrow key. */
+  useEffect(() => {
+    const track = courseTrack.current
+    if (!track) return
+    let settle: ReturnType<typeof setTimeout> | undefined
+    const followVisibleRoad = () => {
+      if (settle) clearTimeout(settle)
+      settle = setTimeout(() => {
+        const centre = track.getBoundingClientRect().left + track.clientWidth / 2
+        let nearest = 0
+        let distance = Infinity
+        courseDoors.current.forEach((door, index) => {
+          if (!door) return
+          const box = door.getBoundingClientRect()
+          const next = Math.abs(box.left + box.width / 2 - centre)
+          if (next < distance) {
+            nearest = index
+            distance = next
+          }
+        })
+        setSelected((current) => current === nearest ? current : nearest)
+      }, 90)
+    }
+    track.addEventListener('scroll', followVisibleRoad, { passive: true })
+    return () => {
+      track.removeEventListener('scroll', followVisibleRoad)
+      if (settle) clearTimeout(settle)
+    }
+  }, [setSelected])
 
   return (
     <div className="rally rally-courses">
@@ -509,8 +567,9 @@ function CoursePicker({
         <h1>Where do you want the engine?</h1>
       </div>
 
-      <div className="rally-course-doors">
+      <div ref={courseTrack} className="rally-course-doors">
         <button
+          ref={(node) => { courseDoors.current[0] = node }}
           type="button"
           className={`rally-course rootway${selected === 0 ? ' is-selected' : ''}`}
           aria-current={selected === 0 ? 'true' : undefined}
@@ -529,6 +588,7 @@ function CoursePicker({
         </button>
 
         <button
+          ref={(node) => { courseDoors.current[1] = node }}
           type="button"
           className={`rally-course moonbreak${selected === 1 ? ' is-selected' : ''}`}
           aria-current={selected === 1 ? 'true' : undefined}
@@ -548,6 +608,7 @@ function CoursePicker({
         </button>
 
         <button
+          ref={(node) => { courseDoors.current[2] = node }}
           type="button"
           className={`rally-course stormcrown${selected === 2 ? ' is-selected' : ''}`}
           aria-current={selected === 2 ? 'true' : undefined}
@@ -566,6 +627,25 @@ function CoursePicker({
           <span className="rally-course-copy">{COURSES.stormcrown.short}</span>
           <span className="rally-course-enter">climb into weather</span>
         </button>
+      </div>
+
+      <div className="rally-course-marks" role="group" aria-label="choose a road">
+        {STAGES.map((stage, index) => (
+          <button
+            type="button"
+            key={stage}
+            className={selected === index ? 'on' : ''}
+            aria-label={`show ${COURSES[stage].name}`}
+            aria-pressed={selected === index}
+            onClick={(event) => {
+              setSelected(index)
+              // The mark changes the view; the road itself remains the thing
+              // Enter opens. Do not leave keyboard focus claiming an old dot
+              // after ArrowRight has moved the selected landscape onward.
+              event.currentTarget.blur()
+            }}
+          />
+        ))}
       </div>
 
       <button type="button" className="rally-course-leave" onClick={onLeave}>

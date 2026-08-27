@@ -40,6 +40,119 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 27 Aug · Claude · the car is tuned from `/dev7731` now
+
+Forty-one dials — grip, weight, gravity, steering ratio and hand speed, brakes
+and their balance, the handbrake, all three helpers, the drift, the ember, the
+camera, the body — lifted out of `physics.ts`, `camera.ts` and `controls.ts`
+into a new `ember-rally/tuning.ts`, with a slider each in the control room.
+Nothing in Codex's files was touched: `track.ts`, `geometry.ts`, the two roads
+and the Rootwake fork are exactly as they were.
+
+**The car did not change.** `npm run rally` prints byte-identical numbers to
+before the split — 0–100 in 7.97 s, top speed 35.27 m/s, understeer gradient
+1.86°/g, same kick recovery, same drift angles. That was checked by stashing
+the work and running it both ways rather than by reading the diff, and it is
+the only check worth doing on a refactor like this one.
+
+Three layers: the code, then a published set (one Firestore doc, warm only),
+then this device's draft in localStorage. Drafts win locally, which is what
+makes an hour of dragging sliders safe — her car does not move until one
+deliberate button sends the set.
+
+Two things measured, both of which cost time:
+
+- **A dial that was lifted but never re-pointed still renders perfectly.**
+  Slider, value, note, moves when dragged, car does nothing, forever. `npm run
+  tuning` now drives the car once per dial and insists the drive comes out
+  different. It found nothing dead in the end, but only after the *test* was
+  wrong three times in a row — which is the actual finding below.
+- **A sine wave is not a driver.** The first probe steered with `sin(t)` and
+  scrubbed the car down to 13 m/s, where it never left second gear, never held
+  a drift past a tenth of a second and never earned enough ember to press the
+  button. Three perfectly wired dials came back dead. Driving it with
+  `spiritDriver` instead fixed all three — and it is a closed loop, so it
+  *amplifies* a dial moving rather than washing it out.
+- And three dials cannot be reached from any realistic lap at all. Slide
+  catching and spin protection both stand down inside a drift on purpose, and
+  outside one this car is extremely hard to get sideways — full lock into full
+  brakes at 25 m/s peaks at **six degrees** of slip, because the lock available
+  at speed is all the tyres can use. Those are put into the state directly now,
+  the way `rally-check` does it.
+
+**Not deployed:** `firestore.rules` has a new `rallyTuning/ours` block and
+`npm run rules` cannot run here — `VITE_WARM_EMAIL` is empty in `.env.local`.
+Until those rules are pasted into the console, sending will be refused against
+the real backend. Local mode works today.
+
+## 26 Aug · Claude · Rootwake's mouth, and the Stormcrown's weather
+
+Both of these are in Codex's files and both were asked for by the owner. **No
+driving changed**: all three roads time identically to before — rootway 83.7 to
+89.6 s, moonbreak 114.5, stormcrown 178.8, same strikes, same wall contact.
+
+### The mouth is rock now, not a curtain
+
+The concealing veil is gone entirely — the web, the roots, the caught leaves,
+the fifty-eight fragments, the camera shove, `EngineVoice.brush()`, the
+`veilBroken` flag and `buildRootwakeVeil`. The owner's words were that it
+looked unprofessional, and the reasoning holds up: **an entrance that announces
+itself is not concealed, it is signposted, and one you have to smash is not a
+road.**
+
+What was actually wrong underneath is worth keeping. Joining two swept tubes by
+omitting one wall for twenty-four metres is the right technique, and it leaves
+raw polygon edges — a hard black rectangle over the opening and a flat plane
+down one side. The veil was hiding that, and drawing the eye to it.
+
+So the seams are covered with rock: an uneven lintel *sunk into* the vault
+(at three quarters of the ceiling height each block had daylight under it and
+read as a boulder parked in mid-air), two jambs half buried in the wall at
+different depths so the opening is never a frame, and a spill of rubble outside
+the width the car uses. All placed off a hash of their own index, so the mouth
+is identical on both phones and between laps.
+
+And **entering is a change in the light**: ambient and fog ease to a deeper
+dark over about three seconds, off `car.shortcut`. The thing that is actually
+true about Rootwake is that the lanterns stop, so that is what it says.
+
+`?veil=hold` and `?veil=exit` are now `?rootwake=mouth` and `?rootwake=exit`.
+
+### The Stormcrown climbs through weather
+
+The road shape and distance were left completely alone — the owner likes them.
+What was missing was that **the sky, cloud, rain and cedars were the same at
+every height**, so 4.79 km of climbing from sea level to ninety metres looked
+identical top and bottom and read as the Moonbreak in grey paint. The one thing
+this road has that the other two cannot have was going unspent.
+
+`stormAt` in `track.ts` turns `y` into two numbers, and everything reads them:
+
+| | the road | what it is |
+|---|---|---|
+| under it | 0–26 m | fog at 60 m, wet slate, rain, cedars close |
+| in it | 26–66 m | fog at **32 m and pale** — the only fog in the garden brighter than what it hides. Lands on the Cloud Shelf and the Thunder Stair |
+| above it | 66 m+ | fog at 900 m, clear black sky, stars, and a floor of cloud below you. Lands exactly on your "eye" section |
+
+Lightning is strokes rather than `pow(sin(t), 96)` — a countdown, one to three
+strokes down the same channel, a tenth-second decay — and it goes through the
+shared light block so the rock, road, cedars and car all take it together. Above
+the cloud it flashes from *below* the horizon.
+
+### Two real bugs found on the way, both yours to know about
+
+- **The Stormcrown's sky dome has never once been on screen.** Radius 5200,
+  centred on the middle of the track, against a camera whose far plane is 2400
+  — clipped in its entirety, so all 4.79 km were looking at the flat
+  `<color attach="background">`. It is 1600 now and travels with the camera.
+  I only found it because a temporary red debug colour did not appear.
+- **A cone is not a mountain.** `addPeak` built seven-sided single-apex cones,
+  which at the summit read as flat black triangles pasted on a starfield. They
+  are ridges now: eleven uneven sides, three summits on a bearing of their own,
+  and snow above the cloud line — the pale line is keyed to `CLOUD_TOP` rather
+  than to each peak's own height, so from up in the clear the mountains are the
+  only other things above the weather.
+
 ## 26 Aug · Claude · signs that she has been here, and a room that remembers
 
 Codex's two ideas, both built. The counters in the corners **stay** — that was

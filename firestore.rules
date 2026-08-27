@@ -310,6 +310,34 @@ service cloud.firestore {
     }
 
     /*
+      How the car drives.
+
+      One document of plain numbers — grip, weight, steering, camera — sent
+      from the control room at /dev7731 so both phones drive the same car. Warm
+      only, and for the usual reason: this is the one write in the garden whose
+      entire purpose is to change something under somebody else while they are
+      using it.
+
+      **Deliberately not enumerating the dials here.** Every other rule in this
+      file names its fields, and it is right to; this one cannot without the
+      security model becoming a second copy of a tuning table that gains and
+      loses entries every time the car is worked on — and a rules file that is
+      edited to add a slider is a rules file that eventually gets edited
+      carelessly. What is checked instead is the shape and the blast radius: a
+      small bag of finite numbers, nothing else. The reader on the far side
+      validates each value against the dial it belongs to and clamps it, which
+      is where a range check can actually be kept honest.
+    */
+    match /rallyTuning/{id} {
+      allow read: if isOneOfUs() && id == 'ours';
+      allow create, update: if isOneOfUs()
+        && me() == 'warm'
+        && id == 'ours'
+        && request.resource.data.keys().size() <= 60;
+      allow delete: if false;
+    }
+
+    /*
       The Glasshouse.
 
       A memory is a photograph plus at most two short lines, and the picture

@@ -44,6 +44,7 @@
  */
 
 import type { CarInput } from './physics'
+import { DERIVED } from './tuning'
 
 export interface RallyControls {
   /** Read the current intention, and consume the boost tap if there is one. */
@@ -102,26 +103,22 @@ const PEDAL_HAND = 0.3
 /**
  * How fast the hand moves, in units of full lock per second.
  *
- * Falls with speed. `STEER_RATE` is what you get standing still and
- * `STEER_RATE_FAST` is what is left at the top end; a car that answers a key
- * as fast at a hundred and sixty as at twenty is a car with no weight in the
- * steering, however good the tyre model underneath is.
- */
-const STEER_RATE = 15
-/**
- * And what is left at the top end.
+ * Both dials now, and both live in `tuning.ts`: `DERIVED.steerRate` is what
+ * you get standing still and `DERIVED.steerRateFast` is what is left at the
+ * top end. A car that answers a key as fast at a hundred and sixty as at
+ * twenty is a car with no weight in the steering, however good the tyre model
+ * underneath is — which is why the panel offers the falloff separately, as
+ * "steering weight at speed", rather than one sensitivity number.
  *
- * Raised a long way once the steering *lock* became speed-limited by the tyres
- * rather than by a table. Before that, the rate was doing two jobs — being a
- * hand, and quietly stopping a car that had four times too much lock from
- * being flung sideways — and the second job made it far too slow for the
- * first. At 4.2 it took the better part of a second to wind on full lock at
- * speed, which is twenty-seven metres of tunnel: long enough that pointing the
- * car at a gap felt like asking it to consider the idea.
- *
- * The lock is small at speed now, so the hand can move properly again.
+ * Worth knowing before touching them: the top-end rate was raised a long way
+ * once the steering *lock* became speed-limited by the tyres rather than by a
+ * table. Before that, the rate was doing two jobs — being a hand, and quietly
+ * stopping a car that had four times too much lock from being flung sideways —
+ * and the second job made it far too slow for the first. At the equivalent of
+ * about a quarter of today's value it took the better part of a second to wind
+ * on full lock at speed, which is twenty-seven metres of tunnel: long enough
+ * that pointing the car at a gap felt like asking it to consider the idea.
  */
-const STEER_RATE_FAST = 8.5
 /** Coming *off* lock is always quicker than going on. Hands work that way. */
 const RETURN_BONUS = 1.55
 
@@ -306,7 +303,7 @@ export function attachControls(surface: HTMLElement): RallyControls {
         this is the arms.
       */
       const fast = Math.min(1, speed / 44)
-      let rate = STEER_RATE + (STEER_RATE_FAST - STEER_RATE) * fast
+      let rate = DERIVED.steerRate + (DERIVED.steerRateFast - DERIVED.steerRate) * fast
       // Unwinding is quicker than winding on, which is what makes catching a
       // slide possible at all with a key rather than a wheel.
       if (Math.abs(wanted) < Math.abs(steer) || Math.sign(wanted) !== Math.sign(steer)) {

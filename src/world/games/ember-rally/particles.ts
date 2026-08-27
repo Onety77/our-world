@@ -148,10 +148,6 @@ export const BLUE_SPARK = new Color('#bcd4ff')
 export const ASH = new Color('#ff8a3c')
 export const MOTE = new Color('#a88a63')
 export const GHOST_GRIT = new Color('#9fb6e8')
-/** Rootwake's concealed mouth: bark, caught leaves, and old pale web. */
-export const ROOT_FIBER = new Color('#6b4a2e')
-export const DRY_LEAF = new Color('#657044')
-export const OLD_WEB = new Color('#b0aa9a')
 
 /**
  * Water off the roof.

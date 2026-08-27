@@ -11,6 +11,7 @@ section of `../README.md` for how a game takes the world's Canvas.
 | `model.ts` | what crosses the seam: a run, as four integers a sample |
 | `track.ts` | the road, from authored pieces and a daily seed |
 | `physics.ts` | the car: four wheels, four tyres, a gearbox and a handbrake |
+| `tuning.ts` | the forty-one numbers that decide how it *feels*, and their defaults |
 | `controls.ts` | a thumb and a keyboard, driving the same machine |
 | `spirit.ts` | who you race when there is nobody to race |
 | `geometry.ts` | the Rootway turned into rock |
@@ -23,6 +24,7 @@ section of `../README.md` for how a game takes the world's Canvas.
 | `Studio.tsx` | the car on a turntable, with no tunnel round it |
 | `EmberRally.tsx` | the words: briefings, the seal, the result |
 | `../../../../scripts/rally-check.ts` | the car, measured, with no browser |
+| `../../../../scripts/tuning-check.ts` | proof that every dial still reaches the car |
 
 ## The four decisions everything else follows from
 
@@ -369,15 +371,16 @@ consumer that needs the car's actual place—tyres, body, camera, headlights,
 ghosts, replays, tyre trails and chunk culling—reads the selected route. The
 recording packs that route choice as a state bit, so a ghost cannot appear in
 the wrong cave. `npm run rally` measures both routes at equal curvature-limited
-pace: mastering Rootwake saves 9.7–11.2 seconds on the tested daily seeds.
+pace: mastering Rootwake saves 9.0–10.5 seconds on the tested daily seeds.
 
-Only the mouth is announced. Thin curved roots, an off-centre old spider web and
-a few caught leaves conceal the actual threshold without reading as a built
-door. Fourteen metres after committing, the car tears through it without a
-collision or speed penalty: the veil disappears once, bark/leaves/fibres are
-thrown down the tunnel, the camera takes a small shove, and a dry brush sound
-passes over the body. The dual-shell entrance overlap ends immediately behind
-it instead of exposing intersecting road and wall geometry.
+Only the mouth is announced. The broad chamber remains one floor while the
+ordinary road continues left and a warmer worn deck peels right. One amber stone
+sits in the shared chamber and two belong to Rootwake's own centreline, lighting
+the narrow throat without naming it. The branch draws only the outer half of its
+shell while the roads divide; at 58 m the complete tunnel closes around it.
+There is no veil, breakable door, lintel, or second roof occupying the chamber.
+Both routes remain drawn through the whole physical fork and only cull after
+solid rock genuinely separates them.
 
 After that threshold there is no route lighting and the ordinary road cannot
 be seen. Headlamps pick out worn stone, an ochre scar before the hard S, and a
@@ -448,6 +451,41 @@ counted. A shark, two shoals and a couple of hundred grains of falling silt is
 a budget, and a budget wants a wall around it. Four extra draw calls, and the
 whole lot is switched off above the water rather than drawn at zero opacity.
 
+## The car is tuned from the control room, not from here
+
+**Roughly forty of the numbers that used to be constants in `physics.ts`,
+`camera.ts` and `controls.ts` now live in `tuning.ts`**, and `/dev7731` has a
+slider for each of them. Grip, weight, gravity, the steering ratio and how fast
+your hand moves it, the brakes and their balance, the handbrake, all three
+helpers, the drift, the ember, and where the camera sits.
+
+The defaults in that file are exactly what those constants were, so a device
+that has never opened the control room drives precisely as it did before any of
+this existed. `npm run rally` reports the same numbers it did the day before
+the split, and that is the check that matters when touching it.
+
+Three layers, in order: **the code** (`DEFAULTS`), then **what has been
+published** (one Firestore document, warm only), then **this device's draft**
+(localStorage). So the loop is safe — you drag sliders for an hour on your own
+phone and hers does not move, and one deliberate button sends the set to both.
+
+Two things worth knowing before changing anything there:
+
+- **Some dials are derived rather than stored, because the honest control is
+  not always the raw constant.** Nothing in the model sets a top speed — drag
+  does — so the top-speed dial states a speed and works backwards to the drag
+  that produces it, *including* compensating for the power dial. Without that
+  term, winding the power up would quietly raise the top speed past what the
+  top-speed dial claimed, and the dial would be a label rather than a control.
+- **A dead dial still renders.** It has a slider, a value and a note; it moves
+  when you drag it; the car does nothing. `npm run tuning` exists entirely to
+  catch that: it drives the car once per dial and insists something measurably
+  changed. Three of the forty-one cannot be reached from any realistic lap —
+  slide catching and spin protection stand down inside a drift and the car is
+  otherwise very hard to get sideways, and grip-off-the-line needs a driver bad
+  enough to leave the road — so those are put into the state directly instead,
+  the same way `rally-check` does it.
+
 ## Switches
 
 `?rally=car` parks the camera beside the car and circles it in the tunnel.
@@ -494,6 +532,12 @@ anything gone NaN. Tuning a tyre model by driving it is how you get a car that
 is right on one machine.
 
 ## What the checks cover
+
+`npm run tuning` moves every dial in `tuning.ts` to both ends of its travel and
+drives the car, insisting the drive comes out different. It does not check that
+the change is *correct* — that is what driving it is for — it checks that the
+wire is connected, which is the one thing about a slider you cannot see by
+looking at it.
 
 `npm run rally` drives the physics in Node, which answers every question about
 the *model* and none about the wiring. It now also drives both roads end to end

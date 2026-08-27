@@ -90,11 +90,6 @@ export function Places() {
 
   return (
     <>
-      <div className={entered ? 'garden-name hidden' : 'garden-name'}>
-        <span>The Garden Between Us</span>
-        <small>five places, one world</small>
-      </div>
-
       <div
         className={`${settled ? 'place-name' : 'place-name moving'} ${entered ? 'inside' : 'browsing'}`}
         key={`${here.id}-${entered ? 'inside' : 'outside'}`}

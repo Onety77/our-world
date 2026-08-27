@@ -199,12 +199,20 @@ export function Whisper() {
         type="button"
         className={`whisper-fold ${unread > 0 ? 'waiting' : ''}`}
         onClick={() => setOpen(true)}
+        aria-label={
+          unread > 0
+            ? `${unread} unread ${unread === 1 ? 'message' : 'messages'} from ${them.name}`
+            : `Open messages${recent.at(-1)?.body ? `; latest: ${recent.at(-1)!.body}` : ''}`
+        }
       >
         <span className="whisper-mark" aria-hidden="true" />
         <span className="whisper-fold-words">
           {unread > 0
             ? `${unread} from ${them.name}`
             : (recent.at(-1)?.body ?? `say something to ${them.name}`)}
+        </span>
+        <span className="whisper-fold-mobile" aria-hidden="true">
+          {unread > 0 ? `${unread} new` : 'messages'}
         </span>
       </button>
     )

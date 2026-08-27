@@ -134,6 +134,7 @@ const QUESTION_ANSWERS = 'answers'
 const QUESTION_SEEDS = 'questionSeeds'
 const VOICE_LIGHTS = 'voiceLights'
 const VOICE_LIGHT_CONFIG = 'voiceLightConfig'
+const RALLY_TUNING = 'rallyTuning'
 
 /** Presence is per person, under a path only that person may write. */
 const presencePath = (id: UserId) => `presence/${id}`
@@ -1527,6 +1528,41 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       await setDoc(doc(db, VOICE_LIGHT_CONFIG, 'ours'), {
         limit: Math.max(1, Math.min(12, Math.round(limit))),
       })
+    },
+
+    watchRallyTuning(listener) {
+      return onSnapshot(
+        doc(db, RALLY_TUNING, 'ours'),
+        (snap) => {
+          const raw = (snap.data() ?? {}) as Record<string, unknown>
+          const values: Record<string, number> = {}
+          for (const [key, value] of Object.entries(raw)) {
+            if (typeof value === 'number' && Number.isFinite(value)) values[key] = value
+          }
+          listener(values)
+        },
+        /*
+          A car that stops driving because a settings document could not be
+          read is a far worse failure than a car driving on the numbers in the
+          code, which are known-good by construction. So an error here is an
+          empty set, quietly.
+        */
+        () => listener({}),
+      )
+    },
+
+    async setRallyTuning(values) {
+      if (me !== 'warm') throw new Error('Only the warm account sets how the car drives.')
+      const clean: Record<string, number> = {}
+      for (const [key, value] of Object.entries(values)) {
+        if (typeof value === 'number' && Number.isFinite(value)) clean[key] = value
+      }
+      /*
+        Written whole rather than merged, so sending a set that no longer moves
+        some dial actually puts that dial back to what the code says. A merge
+        would leave a number nobody can see behind on her phone forever.
+      */
+      await setDoc(doc(db, RALLY_TUNING, 'ours'), clean)
     },
 
     watchRound(id, listener) {

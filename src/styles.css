@@ -523,33 +523,6 @@ canvas {
   transition: opacity 0.35s ease;
 }
 
-.garden-name {
-  position: fixed;
-  z-index: 3;
-  top: max(1.25rem, env(safe-area-inset-top));
-  left: max(1.5rem, env(safe-area-inset-left));
-  display: flex;
-  flex-direction: column;
-  text-shadow: var(--lift);
-  transition: opacity 0.45s ease, transform 0.6s ease;
-  pointer-events: none;
-}
-
-.garden-name span {
-  font-size: 1.05rem;
-  letter-spacing: 0.025em;
-}
-
-.garden-name small {
-  margin-top: 0.18rem;
-  font-family: var(--sans);
-  color: var(--ink-faint);
-  font-size: 0.58rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.garden-name.hidden,
 .marks.hidden {
   opacity: 0;
   pointer-events: none;
@@ -722,16 +695,41 @@ canvas {
 .tree-turn-touch { display: none; }
 
 /*
-  The Tree has two rituals, but only one large verb. Questions sit below it as
-  small root-notes so they do not turn the meadow into a menu.
+  Leave the Tree itself free to be touched.
+
+  This used to inherit the garden-wide centred threshold. That put four lines
+  of interface directly over the lowest hanging thoughts and the buds beneath
+  them: exactly where somebody was trying to look and click. The Tree's verbs
+  now share the quiet lower-left edge with its name. It is a narrow ritual rail,
+  not a panel, and no invisible centred box remains to intercept the tree.
 */
+.tree-threshold {
+  left: max(1.5rem, env(safe-area-inset-left));
+  bottom: max(4.35rem, calc(env(safe-area-inset-bottom) + 3.9rem));
+  width: min(21rem, calc(100vw - 3rem));
+  transform: none;
+  text-align: left;
+}
+
+.tree-threshold > button {
+  padding: 0.2rem 0;
+  font-size: clamp(1.2rem, 2.2vw, 1.48rem);
+}
+
+.tree-threshold > button::after {
+  width: 3.2rem;
+  margin: 0.35rem 0 0;
+  background: linear-gradient(to right, currentColor, transparent);
+  transform-origin: left center;
+}
+
 .tree-rituals {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.45rem 1.15rem;
-  margin-top: 0.65rem;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 0.08rem;
+  margin-top: 0.42rem;
 }
 
 .tree-rituals button {
@@ -751,12 +749,35 @@ canvas {
 .tree-rituals button:focus-visible {
   color: var(--ink);
   outline: none;
-  transform: translateY(-1px);
+  transform: translateX(0.18rem);
+}
+
+.tree-threshold .tree-turn-guide {
+  margin-top: 0.48rem;
+  color: rgba(242, 239, 230, 0.46);
+  font-size: 0.52rem;
+  letter-spacing: 0.11em;
 }
 
 @media (pointer: coarse) {
   .tree-turn-pointer { display: none; }
   .tree-turn-touch { display: inline; }
+}
+
+@media (max-width: 600px) {
+  .tree-threshold {
+    left: max(1rem, env(safe-area-inset-left));
+    bottom: max(1.15rem, calc(env(safe-area-inset-bottom) + 0.75rem));
+    width: min(18rem, calc(100vw - 2rem));
+  }
+
+  .tree-threshold > button {
+    font-size: 1.18rem;
+  }
+
+  .tree-rituals button {
+    font-size: 0.58rem;
+  }
 }
 
 .game-choices {
@@ -796,8 +817,94 @@ canvas {
     display: none;
   }
 
+  .people {
+    top: max(1.1rem, env(safe-area-inset-top));
+    right: max(1.25rem, env(safe-area-inset-right));
+    max-width: calc(100vw - 2.5rem);
+    flex-direction: row;
+    align-items: center;
+    gap: 0.8rem;
+    text-align: right;
+  }
+
+  .person {
+    min-width: 0;
+    gap: 0.32rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .person .name {
+    max-width: 7.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .person .spark {
+    width: 0.32rem;
+    height: 0.32rem;
+  }
+
+  .between {
+    display: none;
+  }
+
   .place-name.browsing {
-    right: 1.5rem;
+    left: max(1.25rem, env(safe-area-inset-left));
+    right: max(1.25rem, env(safe-area-inset-right));
+    bottom: max(4.45rem, calc(env(safe-area-inset-bottom) + 4rem));
+    max-width: 24rem;
+    padding-right: 1rem;
+  }
+
+  .place-name.browsing::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: -2.3rem -1.2rem -1.5rem -1.2rem;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse at 12% 62%,
+      rgba(5, 8, 7, 0.5),
+      rgba(5, 8, 7, 0.2) 48%,
+      transparent 76%
+    );
+  }
+
+  .place-name.browsing::before {
+    width: 2.2rem;
+    margin-bottom: 0.62rem;
+  }
+
+  .place-name.browsing .place-count {
+    margin-bottom: 0.4rem;
+    font-size: 0.52rem;
+  }
+
+  .place-name.browsing h1 {
+    max-width: 22ch;
+    margin-bottom: 0.38rem;
+    font-size: clamp(1.72rem, 8vw, 2rem);
+    line-height: 1.03;
+  }
+
+  .place-name.browsing p {
+    max-width: 25ch;
+    font-size: 0.9rem;
+    line-height: 1.42;
+  }
+
+  .place-name.browsing .enter-place {
+    gap: 0.65rem;
+    margin-top: 0.82rem;
+    padding: 0.42rem 0;
+    min-height: 2.75rem;
+    font-size: 0.61rem;
+    letter-spacing: 0.15em;
+  }
+
+  .place-name.browsing .enter-place i {
+    font-size: 1.1rem;
   }
 
   .place-name.inside {
@@ -806,6 +913,85 @@ canvas {
 
   .threshold {
     bottom: max(3.8rem, calc(env(safe-area-inset-bottom) + 3.2rem));
+  }
+
+  .river-threshold {
+    left: max(1rem, env(safe-area-inset-left));
+    width: min(18rem, calc(100vw - 2rem));
+    transform: none;
+    text-align: left;
+  }
+
+  .river-threshold .threshold-whisper {
+    margin-bottom: 0.5rem;
+    font-size: 0.55rem;
+    letter-spacing: 0.13em;
+  }
+
+  .river-threshold > button {
+    font-size: 1.38rem;
+  }
+
+  .river-threshold > button::after {
+    width: 3.2rem;
+    margin: 0.35rem 0 0;
+    background: linear-gradient(to right, currentColor, transparent);
+    transform-origin: left center;
+  }
+
+  /* Large invisible targets around the same tiny five marks. */
+  .marks[role='tablist'] {
+    bottom: max(0.58rem, calc(env(safe-area-inset-bottom) + 0.22rem));
+    gap: 0.08rem;
+    padding: 0.2rem;
+  }
+
+  .marks .mark {
+    position: relative;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .marks .mark::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 50%;
+    background: rgba(242, 239, 230, 0.28);
+    box-shadow: 0 1px 6px rgba(6, 12, 10, 0.7);
+    transform: translate(-50%, -50%);
+    transition: background 0.35s ease, transform 0.35s ease;
+  }
+
+  .marks .mark:hover,
+  .marks .mark:focus-visible,
+  .marks .mark.here {
+    background: transparent;
+    transform: none;
+  }
+
+  .marks .mark:hover::before,
+  .marks .mark:focus-visible::before {
+    background: rgba(242, 239, 230, 0.62);
+  }
+
+  .marks .mark.here::before {
+    background: var(--ink);
+    transform: translate(-50%, -50%) scale(1.5);
+  }
+
+  .leave-place {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    padding-block: 0.5rem;
   }
 }
 
@@ -4605,6 +4791,85 @@ canvas {
   .corner.clear.only {
     top: max(0.9rem, calc(env(safe-area-inset-top) + 0.5rem));
   }
+
+  /*
+    One utility shelf, one line high.
+
+    The old phone layout stacked a full-width music player and the latest
+    message underneath it. That was a floating paragraph across every place,
+    and in the Tree it crossed the canopy. Closed music and closed messages now
+    share a single shelf; opening either one is still allowed to unfold into a
+    column. Taken-over screens keep their existing dedicated arrangement.
+  */
+  .corner:not(.only) {
+    top: max(3.75rem, calc(env(safe-area-inset-top) + 3.35rem));
+    flex-direction: row;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .corner.clear:not(.only) {
+    top: max(4.45rem, calc(env(safe-area-inset-top) + 4.05rem));
+    left: max(1.25rem, env(safe-area-inset-left));
+    right: max(1.25rem, env(safe-area-inset-right));
+    width: auto;
+  }
+
+  .corner:not(.only) .player {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .corner:not(.only) .player-now {
+    max-width: min(8.5rem, 31vw);
+    font-size: 0.68rem;
+  }
+
+  .corner:not(.only) .player-move button {
+    padding-inline: 0.28rem;
+    min-width: 1.85rem;
+    min-height: 2rem;
+  }
+
+  .corner:not(.only) .player-fold,
+  .corner:not(.only) .whisper-fold {
+    min-height: 2rem;
+  }
+
+  .corner:not(.only) .player:not(.open) .player-elapsed {
+    display: none;
+  }
+
+  .corner:not(.only) .whisper-fold {
+    width: auto;
+    min-width: 0;
+    flex: 0 0 auto;
+    padding-block: 0.3rem;
+    font-size: 0.64rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .corner:not(.only) .whisper-fold-words {
+    display: none;
+  }
+
+  .corner:not(.only) .whisper-fold-mobile {
+    display: inline;
+  }
+
+  .corner:not(.only):has(.whisper.open),
+  .corner:not(.only):has(.player.open) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .corner:not(.only):has(.whisper.open) .player,
+  .corner:not(.only):has(.player.open) .player {
+    width: 100%;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -6067,6 +6332,10 @@ canvas {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.whisper-fold-mobile {
+  display: none;
 }
 
 .whisper.open {
@@ -7965,6 +8234,26 @@ canvas {
   outline: none;
 }
 
+/*
+  Unavailable, and it has to look it.
+
+  This page has always had disabled buttons — the voice-light limit, the
+  question pool — and they were indistinguishable from live ones, which is
+  survivable when the only such button is one you press twice a year. The car
+  dials made it a real problem: "send this car to both of you" is disabled
+  precisely when there is nothing new to send, and a button that looks
+  identical whether or not it did anything is the one way to end up believing
+  you have sent a car you have not.
+*/
+.admin button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.admin button:disabled:hover {
+  border-color: #2b3238;
+}
+
 /* Which one is currently in force. There is always exactly one. */
 .admin button.on {
   background: #163023;
@@ -7975,6 +8264,168 @@ canvas {
 .admin-head button {
   background: none;
   border-color: #2b3238;
+}
+
+/* ---------------------------------------------------------------------------
+   The car dials.
+
+   Forty-odd sliders on one page, and the only thing that stops that being a
+   wall is that each one answers three questions without being asked: what am
+   I, what am I set to, and what happens if I push it either way. So the row is
+   three lines — name and value, the slider with a word at each end, then one
+   sentence — and the words at the ends are the part that does the work.
+
+   Touch first. The rows are generous and the reset is a real button rather
+   than a small ✕, because this is used on a phone with one thumb, sitting
+   somewhere else, between goes.
+--------------------------------------------------------------------------- */
+
+.admin-group {
+  margin: 1.1rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #22282e;
+}
+
+.admin-group h3 {
+  margin: 0 0 0.15rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6f7f8c;
+}
+
+.admin-dial {
+  margin: 0.55rem 0 0.75rem;
+  padding: 0.5rem 0.6rem 0.35rem;
+  border: 1px solid #1c2126;
+  border-left: 2px solid #262d34;
+  border-radius: 2px;
+  background: #131619;
+}
+
+/* Moved away from what the code says. The left edge is the whole signal — it
+   reads down the page as a list of what you have actually touched. */
+.admin-dial.moved {
+  border-left-color: #7fd6a8;
+  background: #14191a;
+}
+
+.admin-dial-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-dial-name {
+  flex: 1 1 auto;
+  color: #cfd4d8;
+  font-weight: 600;
+}
+
+.admin-dial-value {
+  color: #7fd6a8;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dial-reset {
+  padding: 0.1rem 0.4rem;
+  min-height: 0;
+  font-size: 0.7rem;
+  color: #8b939a;
+  background: none;
+}
+
+.admin-dial-track {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.3rem 0 0.15rem;
+}
+
+.admin-dial-track input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Bigger than the page default: this is dragged, not nudged. */
+  height: 1.6rem;
+}
+
+/* What each end feels like. Short, lowercase, and the reason the numbers are
+   readable at all — they turn a scale into a question about the car. */
+.admin-dial-end {
+  flex: 0 0 auto;
+  max-width: 6.5rem;
+  color: #6f7f8c;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.admin-dial .admin-note {
+  margin: 0.1rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+/* A combination that will send somebody hunting in the wrong place. Amber
+   rather than red: nothing here is forbidden, it is just worth knowing. */
+.admin-warn {
+  margin: 0.4rem 0;
+  padding: 0.45rem 0.6rem;
+  border-left: 2px solid #d8a55f;
+  background: #1a1611;
+  color: #d8c3a0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+/* The way back onto the road. Not "on", because it is not a state — but it is
+   the one button on this page you press between every other press. */
+.admin-go {
+  border-color: #46525c;
+  color: #a8e8c6;
+}
+
+.admin-sub {
+  margin-top: 0.9rem;
+  color: #6f7f8c;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+}
+
+/* The preset descriptions, one per line rather than a paragraph of them. */
+.admin-legend {
+  display: block;
+  margin: 0.15rem 0;
+}
+
+/* Narrow phones: the end-words stop fitting either side of a slider that also
+   has to be draggable, so they go under it as a pair. */
+@media (max-width: 30rem) {
+  .admin-dial-track {
+    flex-wrap: wrap;
+  }
+
+  .admin-dial-track input[type='range'] {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .admin-dial-end {
+    flex: 1 1 0;
+    max-width: none;
+  }
+
+  .admin-dial-end:first-of-type {
+    text-align: left;
+  }
+
+  .admin-dial-end:last-of-type {
+    text-align: right;
+  }
 }
 
 /*
@@ -8235,3 +8686,725 @@ body:has(.rally-running) .player {
   color: var(--ink-dim);
 }
 
+/* ---------------------------------------------------------------------------
+   The Hollow on a phone
+
+   A narrow screen is not a shortened desktop. It has one small utility shelf,
+   one decision at a time, and one uninterrupted playing surface. The cave is
+   still visible behind all of it; what disappears is repetition and dead air.
+--------------------------------------------------------------------------- */
+
+.rally-course-marks {
+  display: none;
+}
+
+@media (max-width: 34rem) {
+  /* Games take the screen, but messages and music remain reachable as one
+     quiet line. The old `.only` layout stacked both and put a message across
+     the board before play had even begun. */
+  .corner.clear.only {
+    top: max(0.55rem, calc(env(safe-area-inset-top) + 0.35rem));
+    left: max(1rem, env(safe-area-inset-left));
+    right: max(1rem, env(safe-area-inset-right));
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .corner.only .player {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .corner.only .player-now {
+    max-width: min(8.5rem, 30vw);
+    font-size: 0.68rem;
+  }
+
+  .corner.only .player-move button {
+    min-width: 1.9rem;
+    min-height: 2.4rem;
+    padding-inline: 0.25rem;
+  }
+
+  .corner.only .player-fold,
+  .corner.only .whisper-fold {
+    min-height: 2.5rem;
+  }
+
+  .corner.only .player:not(.open) .player-elapsed {
+    display: none;
+  }
+
+  .corner.only .whisper-fold {
+    width: auto;
+    min-width: 0;
+    flex: 0 0 auto;
+    padding-block: 0.3rem;
+    font-size: 0.64rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .corner.only .whisper-fold-words {
+    display: none;
+  }
+
+  .corner.only .whisper-fold-mobile {
+    display: inline;
+  }
+
+  .corner.only:has(.whisper.open),
+  .corner.only:has(.player.open) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .corner.only:has(.whisper.open) .player,
+  .corner.only:has(.player.open) .player {
+    width: 100%;
+  }
+
+  /* One game, not a tall card followed by four separate navigation bands. */
+  .hollow-selector:not(.hollow-way-threshold) {
+    top: max(7.7rem, calc(env(safe-area-inset-top) + 7.2rem));
+    bottom: max(0.35rem, env(safe-area-inset-bottom));
+    width: 100vw;
+    max-height: none;
+    justify-content: flex-start;
+    padding-inline: 0.55rem;
+  }
+
+  .hollow-selector:not(.hollow-way-threshold)::before {
+    bottom: -0.5rem;
+    height: min(28rem, 63dvh);
+  }
+
+  .hollow-game-heading {
+    margin-bottom: 0.2rem;
+  }
+
+  .hollow-game-heading .threshold-whisper,
+  .hollow-game-count {
+    display: none;
+  }
+
+  .hollow-game-heading h2 {
+    font-size: clamp(1.75rem, 7.8vw, 2.15rem);
+  }
+
+  .hollow-selector .game-showcase {
+    grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+    gap: 0;
+  }
+
+  .hollow-selector .game-row {
+    --card: 76vw;
+    --edge: calc(50% - var(--card) / 2);
+    grid-auto-columns: var(--card);
+    padding-block: 0.45rem 0.55rem;
+    padding-inline: var(--edge);
+    scroll-padding-inline: var(--edge);
+    mask-image: linear-gradient(90deg, transparent, black 4%, black 96%, transparent);
+  }
+
+  .hollow-selector .game-card {
+    min-height: clamp(15.25rem, 34dvh, 17.75rem);
+    grid-template-rows: auto minmax(4rem, 1fr) auto auto auto auto;
+    gap: 0.26rem;
+    padding: 0.7rem 1rem 0.72rem;
+    scale: 0.92;
+    border-radius: 45% 45% 0.25rem 0.25rem / 9% 9% 0.25rem 0.25rem;
+  }
+
+  .hollow-selector .game-card.is-selected {
+    scale: 1;
+  }
+
+  .hollow-selector .game-card .emblem {
+    height: clamp(3.6rem, 8.2dvh, 4.7rem);
+  }
+
+  .hollow-selector .game-card strong {
+    font-size: 1.45rem;
+  }
+
+  .hollow-selector .game-card small {
+    margin-top: 0.14rem;
+    font-size: 0.76rem;
+    line-height: 1.34;
+  }
+
+  .hollow-selector .game-step {
+    width: 2.75rem;
+    min-height: 2.75rem;
+    border-color: transparent;
+    background: none;
+  }
+
+  .hollow-selector .game-next,
+  .hollow-selector .game-key-guide {
+    display: none;
+  }
+
+  .hollow-selector .game-marks {
+    min-height: 2.75rem;
+    margin-top: 0;
+    align-items: center;
+  }
+
+  .hollow-selector .game-marks button {
+    position: relative;
+    width: 2.25rem;
+    height: 2.75rem;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .hollow-selector .game-marks button::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 50%;
+    translate: -50% -50%;
+    background: rgba(242, 239, 230, 0.3);
+    transition: background 0.3s ease, scale 0.3s ease;
+  }
+
+  .hollow-selector .game-marks button.on::after {
+    background: var(--warm);
+    scale: 1.25;
+  }
+
+  .hollow-threshold .to-waiting,
+  .hollow-selector .to-waiting {
+    min-height: 2.75rem;
+    margin-top: 0;
+    padding: 0.32rem 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 0.58rem;
+    white-space: nowrap;
+  }
+
+  .hollow-threshold .to-waiting::before {
+    display: none;
+  }
+
+  .hollow-selector .to-waiting-now {
+    display: inline;
+    margin-top: 0;
+    font-size: 0.62rem;
+  }
+
+  /* Once the game is chosen, the title is identification—not a second
+     advertisement. Put the modes directly beneath it. */
+  .hollow-way-threshold {
+    top: max(7.5rem, calc(env(safe-area-inset-top) + 7rem));
+    bottom: max(0.45rem, env(safe-area-inset-bottom));
+    width: 100vw;
+    min-height: 0;
+    max-height: none;
+    justify-content: flex-start;
+    gap: 0.35rem;
+    padding-inline: 1.35rem;
+  }
+
+  .hollow-way-threshold::before {
+    bottom: -0.5rem;
+    height: min(30rem, 68dvh);
+  }
+
+  .hollow-threshold .hollow-way-back {
+    min-height: 2.75rem;
+    padding: 0.6rem 0;
+    font-size: 0.56rem;
+  }
+
+  .hollow-way-heading {
+    width: min(27rem, 92vw);
+    gap: 0.25rem;
+  }
+
+  .hollow-way-heading .threshold-whisper {
+    display: none;
+  }
+
+  .hollow-way-emblem {
+    width: min(11rem, 40vw);
+    height: clamp(4.25rem, 9.5dvh, 5.4rem);
+    margin: 0 0 0.15rem;
+  }
+
+  .hollow-way-heading h2 {
+    font-size: clamp(1.9rem, 8vw, 2.45rem);
+  }
+
+  .hollow-way-heading p {
+    max-width: 31ch;
+    margin-top: 0.15rem;
+    font-size: 0.8rem;
+    line-height: 1.36;
+  }
+
+  .hollow-way-threshold .game-ways {
+    width: min(27rem, 91vw);
+    min-width: 0;
+    margin-top: 0.35rem;
+    padding: 0.5rem 0 0;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 0.15rem;
+    border-bottom: 0;
+  }
+
+  .hollow-way-threshold .game-way-label {
+    grid-column: 1;
+    margin-bottom: 0.1rem;
+  }
+
+  .hollow-way-threshold .game-go {
+    justify-self: stretch;
+    min-width: 0;
+    min-height: 2.9rem;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .hollow-way-threshold .game-else {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.35rem;
+    width: 100%;
+  }
+
+  .hollow-way-threshold .game-else button {
+    min-height: 2.75rem;
+    padding: 0.55rem 0.35rem;
+  }
+
+  /* Word Duel is one instrument. The board no longer floats in a stretchy
+     middle row while its keyboard is pinned to the floor. */
+  .duel {
+    grid-template-rows: auto auto auto;
+    justify-content: center;
+    align-content: center;
+    gap: 0.45rem;
+    padding: max(4.5rem, calc(env(safe-area-inset-top) + 4.1rem)) 0.7rem
+      max(0.65rem, env(safe-area-inset-bottom));
+  }
+
+  .duel-boards {
+    flex: 0 0 auto;
+  }
+
+  .duel .stone {
+    width: clamp(2rem, min(10.2vw, 6.1dvh), 3rem);
+    height: clamp(2rem, min(10.2vw, 6.1dvh), 3rem);
+  }
+
+  .duel .board,
+  .duel .word {
+    gap: clamp(0.2rem, 0.8vw, 0.35rem);
+  }
+
+  .duel-foot {
+    gap: 0.18rem;
+  }
+
+  .duel-say {
+    min-height: 0.9rem;
+    font-size: 0.65rem;
+  }
+
+  .duel .tray {
+    gap: 0.08rem;
+    margin-bottom: 0;
+  }
+
+  .duel .tray-row {
+    gap: clamp(0.05rem, 0.45vw, 0.2rem);
+  }
+
+  .duel .tray-key {
+    min-width: min(8.55vw, 2.5rem);
+    min-height: 2.5rem;
+    padding: 0.38rem 0.04rem;
+    font-size: clamp(0.9rem, 4vw, 1.08rem);
+  }
+
+  .duel .duel-actions {
+    gap: 0.65rem 1.2rem;
+  }
+
+  .duel .duel-actions button {
+    min-height: 2.75rem;
+    padding-block: 0.55rem;
+  }
+
+  .duel .shape {
+    right: 0.15rem;
+  }
+
+  /* The three roads are a horizon to swipe through, not a document to scroll
+     down. A glimpse of the next landscape supplies the invitation. */
+  .rally-courses {
+    justify-content: flex-start;
+    gap: 0.45rem;
+    overflow: hidden;
+    padding: max(4.65rem, calc(env(safe-area-inset-top) + 4.2rem)) 0
+      max(0.45rem, env(safe-area-inset-bottom));
+  }
+
+  .rally-course-heading {
+    width: calc(100vw - 2rem);
+  }
+
+  .rally-course-heading .rally-kicker {
+    margin-bottom: 0.25rem;
+    font-size: 0.56rem;
+  }
+
+  .rally-course-heading h1,
+  .rally-courses .rally-course-heading h1 {
+    max-width: 12ch;
+    font-size: clamp(1.9rem, 8.8vw, 2.5rem);
+    line-height: 0.98;
+  }
+
+  .rally-course-doors {
+    display: grid;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 82vw;
+    gap: 1rem;
+    width: 100vw;
+    padding: 0.35rem 9vw 0.6rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 9vw;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    mask-image: linear-gradient(90deg, transparent, black 4%, black 96%, transparent);
+  }
+
+  .rally-course-doors::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rally-course {
+    min-height: min(25rem, 49dvh);
+    align-content: start;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+    padding-bottom: 0.35rem;
+  }
+
+  .rally-course:hover,
+  .rally-course:focus-visible,
+  .rally-course.is-selected {
+    translate: none;
+  }
+
+  .rally-course-scene {
+    height: clamp(10.5rem, 24dvh, 12.5rem);
+  }
+
+  .rally-course-name {
+    font-size: clamp(1.6rem, 7vw, 2rem);
+  }
+
+  .rally-course-copy {
+    min-height: 2.9em;
+    padding-inline: 0.45rem;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .rally-course-enter {
+    display: grid;
+    place-items: center;
+    min-height: 2.75rem;
+    margin-top: 0;
+  }
+
+  .rally-course-marks {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    margin-top: -0.3rem;
+  }
+
+  .rally-course-marks button {
+    position: relative;
+    width: 2.4rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+
+  .rally-course-marks button::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 50%;
+    translate: -50% -50%;
+    background: rgba(242, 239, 230, 0.28);
+    transition: background 0.25s ease, scale 0.25s ease;
+  }
+
+  .rally-course-marks button.on::after {
+    background: #d89555;
+    scale: 1.35;
+  }
+
+  .rally-course-leave {
+    min-height: 2.75rem;
+    margin-top: -0.4rem;
+    padding-inline: 1rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The Stars on a phone
+
+   The conversation is the page. Everything else is either a thin instrument
+   above it or one of two ways of speaking below it. Nothing floats over a
+   sentence any more, and voice-lights belong to that act of speaking rather
+   than impersonating a notification badge in the middle of the sky.
+--------------------------------------------------------------------------- */
+
+@media (max-width: 34rem) {
+  body:has(.talking) .sky-column {
+    top: 66%;
+    width: min(30rem, 84vw);
+    transition: opacity 0.3s ease;
+  }
+
+  body:has(.talking) .said-body {
+    font-size: clamp(0.96rem, 4.45vw, 1.08rem);
+    line-height: 1.4;
+  }
+
+  body:has(.talking) .said-answering {
+    max-width: 23ch;
+    font-size: 0.75rem;
+    line-height: 1.32;
+  }
+
+  /* The two ways to speak share one baseline. The large invitation stays on
+     the left; the rare audio form is a small constellation on the right. */
+  body:has(.talking) .start-saying {
+    left: max(1.25rem, env(safe-area-inset-left));
+    right: 9.4rem;
+    bottom: max(0.8rem, calc(env(safe-area-inset-bottom) + 0.45rem));
+    width: auto;
+    min-height: 3.4rem;
+    transform: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0.35rem 0;
+    text-align: left;
+  }
+
+  body:has(.talking) .start-saying-name {
+    font-size: clamp(1.22rem, 6vw, 1.48rem);
+  }
+
+  body:has(.talking) .start-saying-name::after {
+    width: 6.2rem;
+    margin-inline: 0;
+    background: linear-gradient(90deg, rgba(242, 239, 230, 0.54), transparent);
+  }
+
+  body:has(.talking) .start-saying-hint {
+    max-width: 23ch;
+    font-size: 0.53rem;
+    line-height: 1.4;
+    letter-spacing: 0.12em;
+  }
+
+  body:has(.talking) .voice-beacon {
+    top: auto;
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(0.8rem, calc(env(safe-area-inset-bottom) + 0.45rem));
+    width: 8.2rem;
+    min-height: 3.4rem;
+    grid-template-columns: 1.65rem minmax(0, 1fr);
+    column-gap: 0.5rem;
+    padding: 0.35rem 0;
+    color: rgba(230, 239, 250, 0.82);
+  }
+
+  body:has(.talking) .voice-beacon > span:not(.voice-beacon-mark) {
+    font-family: var(--serif);
+    font-size: 0.94rem;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  body:has(.talking) .voice-beacon small {
+    font-family: var(--sans);
+    font-size: 0.52rem;
+    line-height: 1.35;
+    letter-spacing: 0.07em;
+    white-space: nowrap;
+  }
+
+  /* Three restrained points, not one oversized white orb that looks as if it
+     has fallen out of the 3D sky and landed beside a menu label. */
+  body:has(.talking) .voice-beacon-mark {
+    grid-row: 1 / 3;
+    width: 1.65rem;
+    height: 1.25rem;
+    border-radius: 0;
+    background:
+      radial-gradient(circle at 18% 72%, #e8f5ff 0 1.2px, transparent 1.8px),
+      radial-gradient(circle at 52% 18%, #fff7df 0 1.5px, transparent 2.1px),
+      radial-gradient(circle at 84% 65%, #d5eaff 0 1px, transparent 1.7px),
+      linear-gradient(151deg, transparent 43%, rgba(179, 213, 241, 0.2) 44% 47%, transparent 48%);
+    box-shadow: none;
+    filter: drop-shadow(0 0 0.35rem rgba(169, 216, 255, 0.72));
+    animation: voice-constellation-breathe 3.8s ease-in-out infinite;
+  }
+
+  @keyframes voice-constellation-breathe {
+    0%, 100% { opacity: 0.58; }
+    50% { opacity: 1; }
+  }
+
+  /* Invisible hit areas follow the actual 3D comets. Keep them large enough
+     for a thumb but no larger than a message line they might pass beside. */
+  body:has(.talking) .voice-sky-touch {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  /* Writing temporarily owns the bottom. The voice action leaves instead of
+     sitting under the textarea, and a soft pool carries the editable words. */
+  body:has(.talking) .saying {
+    left: max(1rem, env(safe-area-inset-left));
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(0.65rem, calc(env(safe-area-inset-bottom) + 0.35rem));
+    width: auto;
+    transform: none;
+    gap: 0.35rem;
+    padding: 0.65rem 0.45rem 0.2rem;
+    background: radial-gradient(ellipse at 50% 100%, rgba(8, 13, 29, 0.88), transparent 76%);
+  }
+
+  body:has(.talking) .saying-field {
+    min-height: 2.9rem;
+    max-height: 28dvh;
+    padding: 0.35rem 0.2rem;
+    font-size: 1.08rem;
+    line-height: 1.45;
+  }
+
+  body:has(.talking) .say-it,
+  body:has(.talking) .say-not,
+  body:has(.talking) .saying-drop {
+    min-height: 2.75rem;
+  }
+
+  body:has(.saying) .voice-beacon {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body:has(.talking:has(.saying)) .sky-column {
+    opacity: 0.48;
+  }
+
+  /* Opening voice-lights is entering a small drawer within the Stars. It is
+     no longer a rounded desktop card hovering at an arbitrary right edge. */
+  body:has(.talking) .voice-dock {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100vw;
+    max-height: min(74dvh, 40rem);
+    padding: 1.15rem max(1.15rem, env(safe-area-inset-right))
+      max(1rem, calc(env(safe-area-inset-bottom) + 0.65rem))
+      max(1.15rem, env(safe-area-inset-left));
+    border-inline: 0;
+    border-bottom: 0;
+    border-radius: 1.35rem 1.35rem 0 0;
+    background:
+      radial-gradient(circle at 76% 5%, rgba(117, 172, 220, 0.17), transparent 32%),
+      linear-gradient(165deg, rgba(6, 10, 22, 0.97), rgba(9, 14, 30, 0.93));
+    box-shadow: 0 -1.5rem 5rem rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+  }
+
+  body:has(.talking) .voice-close {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+  }
+
+  body:has(.talking) .voice-slots button {
+    min-width: 3rem;
+    min-height: 3rem;
+  }
+
+  body:has(.voice-lights-ui.open) .start-saying {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body:has(.voice-lights-ui.open) .sky-column {
+    opacity: 0.16;
+  }
+
+  body:has(.voice-lights-ui.open) .voice-sky-touch {
+    opacity: 0.12;
+    pointer-events: none;
+  }
+}
+
+/* Voice notes belong to the wide Stars only. On a phone the conversation gets
+   the entire lower edge: no beacon, no drawer, no invisible comet hit areas. */
+@media (max-width: 34rem) {
+  .voice-lights-ui {
+    display: none !important;
+  }
+
+  body:has(.talking) .start-saying {
+    right: max(1.25rem, env(safe-area-inset-right));
+    align-items: center;
+    text-align: center;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  body:has(.talking) .start-saying-name::after {
+    margin-inline: auto;
+    background: linear-gradient(90deg, transparent, rgba(242, 239, 230, 0.54), transparent);
+  }
+
+  body:has(.talking) .sky-column {
+    opacity: 1;
+  }
+
+  body:has(.talking:has(.saying)) .sky-column {
+    opacity: 0.48;
+  }
+}

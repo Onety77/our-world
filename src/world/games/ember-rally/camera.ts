@@ -46,7 +46,8 @@
 import type { PerspectiveCamera } from 'three'
 import { Vector3 } from 'three'
 import { basisAt, roadPoint } from './geometry'
-import { TOP_SPEED, slipOf, speedOf, type CarState } from './physics'
+import { slipOf, speedOf, type CarState } from './physics'
+import { TUNE } from './tuning'
 import { emptyRoad, roadAtRoute, type RoadAt, type Track } from './track'
 
 const FOV_STILL = 60
@@ -131,7 +132,7 @@ export class ChaseCamera {
     settle = 0,
   ) {
     const v = speedOf(car)
-    const fast = Math.min(1, v / TOP_SPEED)
+    const fast = Math.min(1, v / TUNE.topSpeed)
     const slip = slipOf(car)
     const ease = (rate: number) => 1 - Math.exp(-rate * dt)
 
@@ -160,7 +161,7 @@ export class ChaseCamera {
       the car shows you a car that is pointing where it is going, which is the
       one thing a drifting car is not doing.
     */
-    const wantLateral = car.n * 0.72 - slip * 2.1
+    const wantLateral = car.n * 0.72 - slip * TUNE.cameraDriftSway
     this.lateral += (wantLateral - this.lateral) * ease(4.6)
 
     /*
@@ -177,7 +178,7 @@ export class ChaseCamera {
       starts being a zoom effect, and in a tunnel this tight it would put the
       lens through the rock behind you.
     */
-    this.surge += (car.accel / 9.81 - this.surge) * ease(3.6)
+    this.surge += (car.accel / 9.81 - this.surge) * ease(3.6 * TUNE.cameraLooseness)
     const lag = Math.max(-1.5, Math.min(1.5, this.surge * 1.7))
 
     // Far enough back to see the whole car and the road under it. Closer than
@@ -185,12 +186,16 @@ export class ChaseCamera {
     // tight around you, which is the entire feeling down here.
     const phone = portraitAmount(camera.aspect)
     const wantBack =
-      (7.6 + fast * 2.2 + (car.boostLeft > 0 ? 1 : 0)) * (1 - phone * 0.38) * (1 + settle * 0.5) +
+      (7.6 + fast * 2.2 + (car.boostLeft > 0 ? 1 : 0)) *
+        TUNE.cameraDistance *
+        (1 - phone * 0.38) *
+        (1 + settle * 0.5) +
       lag
     // And it settles a little on the springs with the car: down as the nose
     // comes up under power, up as the car dives onto its brakes.
     const wantLift =
-      (2.55 - fast * 0.5) * (1 - phone * 0.2) * (1 + settle * 0.75) - lag * 0.16
+      (2.55 - fast * 0.5) * TUNE.cameraHeight * (1 - phone * 0.2) * (1 + settle * 0.75) -
+      lag * 0.16
     /*
       Quick enough to follow, slow enough to be behind.
 
@@ -199,8 +204,16 @@ export class ChaseCamera {
       well, so they have to keep up with it — eased any softer and the lag
       above is smoothed into nothing before it reaches the frame.
     */
-    this.back += (wantBack - this.back) * ease(5.5)
-    this.lift += (wantLift - this.lift) * ease(4.5)
+    /*
+      `TUNE.cameraLooseness` is the dial, and it multiplies the *rate*, so a
+      loose camera is one that answers slowly — which is the same thing as one
+      that lets the car pull away from it. Only these two and the surge above
+      are scaled: the roll, the field of view and the final position smoothing
+      are composition rather than weight, and loosening them only smears.
+    */
+    const grip = TUNE.cameraLooseness
+    this.back += (wantBack - this.back) * ease(5.5 * grip)
+    this.lift += (wantLift - this.lift) * ease(4.5 * grip)
 
     // --- where it sits -------------------------------------------------------
     const behind = Math.max(0, car.s - this.back * (0.4 + engagement * 0.6))
@@ -217,7 +230,13 @@ export class ChaseCamera {
     const aimLateral = car.n * 0.45 + this.road.line * 0.4
     // Aimed higher on a phone, which pushes the car down the frame and gives
     // the tall screen the receding tunnel to fill itself with.
-    roadPoint(this.road, aimLateral, 1.35 + phone * 1.5 - settle * 1.6, this.target, aimBasis)
+    roadPoint(
+      this.road,
+      aimLateral,
+      TUNE.cameraAim + phone * 1.5 - settle * 1.6,
+      this.target,
+      aimBasis,
+    )
 
     if (!this.started) {
       this.started = true
@@ -249,7 +268,7 @@ export class ChaseCamera {
     // Loose ground rumbles continuously; everything else is a hit that decays.
     if (car.rough) this.shake = Math.min(1.4, this.shake + dt * fast * 2.6)
     this.shake *= Math.exp(-4.4 * dt)
-    const amount = this.shake * 0.055
+    const amount = this.shake * 0.055 * TUNE.cameraShake
 
     camera.lookAt(this.target)
     camera.rotateZ(this.roll)
@@ -284,12 +303,13 @@ export class ChaseCamera {
 
     // --- field of view -------------------------------------------------------
     const wantFov =
-      FOV_STILL +
-      (FOV_FLAT_OUT - FOV_STILL) * fast +
-      (car.boostLeft > 0 ? 5 : 0) +
-      // Opened right up on a phone to buy back some horizontal view. It costs
-      // vertical distortion at the edges, and in a tube nobody sees it.
-      phone * 21
+      (FOV_STILL +
+        (FOV_FLAT_OUT - FOV_STILL) * fast +
+        (car.boostLeft > 0 ? 5 : 0) +
+        // Opened right up on a phone to buy back some horizontal view. It costs
+        // vertical distortion at the edges, and in a tube nobody sees it.
+        phone * 21) *
+      TUNE.cameraZoom
     this.fov += (wantFov - this.fov) * ease(2.6)
     if (Math.abs(camera.fov - this.fov) > 0.05) {
       camera.fov = this.fov
