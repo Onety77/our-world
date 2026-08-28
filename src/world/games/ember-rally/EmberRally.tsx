@@ -242,7 +242,43 @@ export default function EmberRally({
   */
   const seed = setup?.seed ?? 1
   const [stage, setStage] = useState<StageId | null>(OPEN_ON)
-  const activeStage = stage ?? setup?.stage ?? 'rootway'
+
+  /*
+    ==========================================================================
+    **Which road is waiting for you**, and why this had to exist.
+
+    A round is not one road. It is all three, each with its own pair of runs,
+    and which one you are looking at was decided entirely by the course picker
+    — a local piece of state that was never written down anywhere.
+
+    So the two of you could not find each other. She set a line on the
+    Moonbreak; you opened the round, got the picker with nothing on it to say
+    so, chose the Rootway, and drove. `moveRun` filters by stage, so from
+    there each of you was looking for the other on a road they had never been
+    on: no ghost, no time, no comparison, and both of you sitting on "nobody
+    sees anybody's road until both first runs are here" — which was true, and
+    was never going to stop being true.
+
+    That is the whole of "she doesn't see my score and I don't see hers". Not
+    the seal, not the rules, not the ghost: two people on different roads.
+
+    So the round now *tells* you. If there is a road she has driven and you
+    have not, that is the road this opens on, and the picker is skipped
+    entirely — she has chosen, and being asked to choose again is being asked
+    to guess.
+    ==========================================================================
+  */
+  const challenged = useMemo(() => {
+    if (solo) return null
+    for (const road of STAGES) {
+      if (moveRun(theirs, 'qualifying', road) && !moveRun(mine, 'qualifying', road)) {
+        return road
+      }
+    }
+    return null
+  }, [solo, theirs, mine])
+
+  const activeStage = stage ?? challenged ?? setup?.stage ?? 'rootway'
   const track = useMemo(() => makeTrack(seed, activeStage), [seed, activeStage])
   // Only when there is nobody to race. Driving a whole lap costs about a tenth
   // of a second, and in a two-player round nothing ever looks at it.
@@ -254,6 +290,22 @@ export default function EmberRally({
   const theirChase = moveRun(theirs, 'chase', activeStage, true)
 
   const [view, setView] = useState<View>(OPEN_ON ? 'road' : 'courses')
+  /*
+    Once, and only before anybody has touched anything.
+
+    The moves arrive a moment after this component does, so the road she is
+    waiting on cannot be known at first render — but hijacking the view later
+    would also mean yanking somebody out of the picker they had deliberately
+    opened. So it fires on the first arrival and never again.
+  */
+  const settled = useRef(false)
+  useEffect(() => {
+    if (settled.current || OPEN_ON) return
+    if (challenged) {
+      settled.current = true
+      setView('menu')
+    }
+  }, [challenged])
   /**
    * Which go this is.
    *
@@ -311,10 +363,19 @@ export default function EmberRally({
   }
 
   if (!setup) {
+    /*
+      A way out of the one screen that had none.
+
+      If the round document is slow, or never arrives at all, this is where you
+      sit — and with no control on it and no Escape key, a phone had no way
+      back to the fire short of reloading the site. A screen that can be
+      reached and not left is a trap whatever else it says.
+    */
     return (
       <div className="rally rally-centre">
         <p className="rally-kicker">ember rally</p>
         <p className="rally-copy">The road is opening.</p>
+        <RallyActions actions={[{ label: 'back to the fire', onChoose: onLeave, quiet: true }]} />
       </div>
     )
   }
@@ -322,7 +383,16 @@ export default function EmberRally({
   const course = COURSES[activeStage]
 
   if (view === 'courses') {
-    return <CoursePicker onChoose={choose} onLeave={onLeave} />
+    return (
+      <CoursePicker
+        onChoose={choose}
+        onLeave={onLeave}
+        mine={mine}
+        theirs={theirs}
+        theirName={theirName}
+        solo={solo}
+      />
+    )
   }
 
   // --- on the road ---------------------------------------------------------
@@ -500,12 +570,59 @@ export default function EmberRally({
  * Rootway closes around two warm lamps; the Moonbreak opens onto water and a
  * broken white arch. The words only say the difference the pictures cannot.
  */
+/**
+ * What each road is holding, in one word.
+ *
+ * The three doors used to be identical whatever had happened on them, which is
+ * how the two of you ended up on different roads without either of you being
+ * able to tell. Now a door says whether somebody is waiting behind it.
+ */
+function CourseState({
+  stage,
+  mine,
+  theirs,
+  theirName,
+  solo,
+}: {
+  stage: StageId
+  mine: RallyMove[]
+  theirs: RallyMove[]
+  theirName: string
+  solo: boolean
+}) {
+  if (solo) return null
+  const myLine = moveRun(mine, 'qualifying', stage)
+  const theirLine = moveRun(theirs, 'qualifying', stage)
+  if (theirLine && !myLine) {
+    return (
+      <span className="rally-course-state waiting">
+        {theirName.toLowerCase()} has driven this · {timeLabel(theirLine.timeMs)}
+      </span>
+    )
+  }
+  if (myLine && !theirLine) {
+    return <span className="rally-course-state">your line is down · waiting for her</span>
+  }
+  if (myLine && theirLine) {
+    return <span className="rally-course-state open">both lines are in · chase it</span>
+  }
+  return null
+}
+
 function CoursePicker({
   onChoose,
   onLeave,
+  mine,
+  theirs,
+  theirName,
+  solo,
 }: {
   onChoose(stage: StageId): void
   onLeave(): void
+  mine: RallyMove[]
+  theirs: RallyMove[]
+  theirName: string
+  solo: boolean
 }) {
   const [selected, setSelected] = useMenuKeys(STAGES.length, (index) => {
     const stage = STAGES[index]
@@ -583,6 +700,7 @@ function CoursePicker({
             <i className="course-lamps"><b /><b /></i>
           </span>
           <span className="rally-course-name">The Rootway</span>
+          <CourseState stage="rootway" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
           <CourseBest stage="rootway" />
           <span className="rally-course-copy">{COURSES.rootway.short}</span>
           <span className="rally-course-enter">go below</span>
@@ -604,6 +722,7 @@ function CoursePicker({
             <i className="course-road" />
           </span>
           <span className="rally-course-name">The Moonbreak</span>
+          <CourseState stage="moonbreak" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
           <CourseBest stage="moonbreak" />
           <span className="rally-course-copy">{COURSES.moonbreak.short}</span>
           <span className="rally-course-enter">take the high road</span>
@@ -626,6 +745,7 @@ function CoursePicker({
             <i className="course-road" />
           </span>
           <span className="rally-course-name">The Stormcrown</span>
+          <CourseState stage="stormcrown" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
           <CourseBest stage="stormcrown" />
           <span className="rally-course-copy">{COURSES.stormcrown.short}</span>
           <span className="rally-course-enter">climb into weather</span>
@@ -991,7 +1111,17 @@ function Pause({
             onChoose: onLeave,
           },
         ]} />
-        <p className="rally-note">escape puts you back on it</p>
+        {/*
+          Only worth saying to somebody who has the key.
+
+          On a phone this line was advice about a button that does not exist,
+          printed underneath three that do. The back gesture is the phone's
+          version and it works now — see `systems/backstop` — so the honest
+          thing is to say nothing rather than name the wrong control.
+        */}
+        {typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? null : (
+          <p className="rally-note">escape puts you back on it</p>
+        )}
       </div>
     </div>
   )

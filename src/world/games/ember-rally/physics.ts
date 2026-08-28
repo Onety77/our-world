@@ -271,6 +271,14 @@ const DRIFT_CEILING_RATE = 1.3
 const DRIFT_AIM = 0.42
 /** How briskly the course is steered onto the aim, per second. */
 const DRIFT_COURSE = 2.6
+/**
+ * Metres of rock a slide keeps in hand, beyond half the car's width.
+ *
+ * Not a safety limit on where the car may *be* — it is a limit on where the
+ * car may be *aimed*. A slide overshoots its aim and comes back, so an aim
+ * with no margin is a wall with a car arriving at it.
+ */
+const DRIFT_ROCK_MARGIN = 1.25
 
 /** Kept so nothing that imported it breaks; any amount is spendable now. */
 export const BOOST_COST = 1
@@ -1353,9 +1361,34 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
       Neutral is the racing line rather than the geometric middle, because the
       middle of a cave is not where a quick car goes and a drift that returns
       to dead centre reads as an autopilot. The arrows move the aim across the
-      usable width from there.
+      road from there.
+
+      ------------------------------------------------------------------------
+      **The margin is the whole of this, and the first version did not have
+      enough of it.** It left half a metre between the aim at full lock and the
+      rock, which sounds like clearance and is not: a car that is *sliding*
+      does not sit on its aim, it swings past it and comes back. So holding a
+      direction through a long corner walked the car steadily onto the inside
+      wall — measured at 25% of the way to the rock, then 36, then 41, then 54
+      and still climbing, which is exactly what it feels like from the seat:
+      the corner slowly eating the car.
+
+      Two changes, and both are about leaving room:
+
+        the margin   a metre and a bit of rock kept in hand rather than half a
+                     metre, because that gap has to absorb the overshoot of a
+                     car travelling sideways
+        the reach    the arrows move it across less of what is left. Full lock
+                     is a decisive change of line, not a request to park
+                     against the wall
+
+      What is deliberately *not* done here is clamping `car.n`. The wall is
+      allowed to be hit — running wide and clouting the rock is a mistake the
+      road is entitled to punish. This only stops the car steering itself into
+      one while you are holding a perfectly reasonable input.
+      ------------------------------------------------------------------------
     */
-    const usable = Math.max(1.2, wallAt(road) - CAR_HALF_WIDTH - 0.5)
+    const usable = Math.max(1, wallAt(road) - CAR_HALF_WIDTH - DRIFT_ROCK_MARGIN)
     const aim = Math.max(
       -usable,
       Math.min(usable, road.line + command * TUNE.driftPlace * usable),

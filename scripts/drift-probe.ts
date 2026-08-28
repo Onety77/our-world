@@ -28,6 +28,8 @@ import {
   speedOf,
   type CarInput,
   type CarState,
+  wallAt,
+  CAR_HALF_WIDTH,
 } from '../src/world/games/ember-rally/physics'
 import { makeTrack, type Track } from '../src/world/games/ember-rally/track'
 
@@ -76,7 +78,9 @@ function drift({ label, steer, handbrake, noWalls = false }: Run, seconds = 7): 
       // Metres down the road in the last second, as km/h, so the two columns
       // are directly comparable — that gap is the whole complaint.
       along.push(`${((car.s - lastS) * KMH).toFixed(0)}`.padStart(3))
-      off.push(`${car.n.toFixed(1)}`.padStart(5))
+      // How much of the way to the rock, as a percentage. 100 is touching.
+      const room = wallAt(car.road) - CAR_HALF_WIDTH
+      off.push(`${Math.round((Math.abs(car.n) / Math.max(0.1, room)) * 100)}%`.padStart(5))
       lastS = car.s
       mark += 1
     }
@@ -86,7 +90,7 @@ function drift({ label, steer, handbrake, noWalls = false }: Run, seconds = 7): 
   console.log(`  ${label}`)
   console.log(`      km/h  ${kmh.join(' ')}`)
   console.log(`     along  ${along.join(' ')}   ${noWalls ? '' : `· on the rock ${rock}% of the time`}`)
-  if (!noWalls) console.log(`         n  ${off.join(' ')}`)
+  if (!noWalls) console.log(`  to the rock  ${off.join(' ')}`)
   console.log('')
 }
 

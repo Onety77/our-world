@@ -9790,3 +9790,30 @@ body:has(.rally-running) .player {
   text-transform: lowercase;
   color: rgba(255, 226, 184, 0.5);
 }
+
+/* --------------------------------------------------------------------------
+   What each road is holding
+
+   Three identical doors is how the two of you ended up driving different roads
+   without either being able to tell. One line per door, and the one that says
+   somebody is waiting is the only one with a colour.
+   -------------------------------------------------------------------------- */
+
+.rally-course-state {
+  display: block;
+  margin-top: 0.25rem;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  color: rgba(255, 226, 184, 0.46);
+}
+
+/* Her line is down and yours is not. This is the one worth walking towards. */
+.rally-course-state.waiting {
+  color: #f0b26a;
+}
+
+.rally-course-state.open {
+  color: #9ad6b0;
+}

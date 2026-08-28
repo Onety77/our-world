@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, Suspense } from 'react'
+import { useBackCloses } from '@/systems/backstop'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { usePlaying } from '@/systems/playing'
@@ -53,6 +54,15 @@ function Runner({
   onClose: () => void
 }) {
   const gameId = game.id
+  /*
+    Escape closes a game, and a phone has no Escape.
+
+    So the system back gesture closes it too — see `systems/backstop`. Without
+    this there were screens inside the rally with no way out at all on a phone:
+    no drawn control, and a back press that left the garden entirely because
+    nothing in this app had ever touched the history stack.
+  */
+  useBackCloses(true, onClose)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement
