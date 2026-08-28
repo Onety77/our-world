@@ -48,8 +48,6 @@ import { basisAt, buildTrail, buildTunnel, roadPoint } from './geometry'
 import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { deep } from './depth'
-import { buildField, forgetAround, senseAround, tell, type RoadField } from './around'
-import { RootwaySound } from './RootwaySound'
 import { storm } from './weather'
 import {
   LAMP_SLOTS,
@@ -233,9 +231,6 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     [track],
   )
   useEffect(() => () => chunks.forEach((chunk) => chunk.geometry.dispose()), [chunks])
-  // A fresh go must not start inside the last one's cave — `around` is a plain
-  // object with no lifetime of its own, so it is cleared with the road.
-  useEffect(() => forgetAround, [track])
   const chunkMeshes = useRef<Mesh[]>([])
 
   // --- the lamps -----------------------------------------------------------
@@ -371,15 +366,6 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {track.stage === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
-      {/*
-        The cave, as a sound. See `systems/rootway.ts`.
-
-        Mounted beside the world rather than inside it because it draws
-        nothing: it is a `useFrame` and a graph of audio nodes, and hanging it
-        off the geometry would tie the tunnel's soundscape to the lifetime of a
-        mesh that gets rebuilt whenever the quality tier changes.
-      */}
-      {track.stage === 'rootway' ? <RootwaySound /> : null}
 
       {chunks.map((chunk, i) => (
         <mesh
@@ -608,14 +594,6 @@ class Driving {
   private sunk = 0
   /** And how deep into Rootwake, eased the same way. See ROOTWAKE_DARK. */
   private hidden = 0
-  /**
-   * Where the roots, the lamps and the water are, binned.
-   *
-   * Built on the first frame rather than in the constructor, because a road
-   * the player backs out of before it ever runs should not have paid for it.
-   * See `around.ts` for why it is binned at all.
-   */
-  private field: RoadField | null = null
   /** Seconds until the next stroke, and how many are left in this flash. */
   private nextStrike = 2
   private strokesLeft = 1
@@ -730,18 +708,6 @@ class Driving {
     if (this.car.boostLeft > this.boostFrom) this.boostFrom = this.car.boostLeft
     if (this.car.boostLeft <= 0) this.boostFrom = 0
 
-    /*
-      What is around the car, for the ear.
-
-      Published rather than passed, and published from *here* rather than
-      worked out again inside the sound: the race is already holding the road,
-      the track and the car, and a soundscape that resamples all three is a
-      second opinion about where the walls are. See `around.ts`.
-    */
-    if (this.track.stage === 'rootway') {
-      if (this.field === null) this.field = buildField(this.track)
-      senseAround(this.track, this.car, this.field, session.phase === 'running')
-    }
 
     /*
       The Stormcrown's weather, off the height of the road under the car.
@@ -757,6 +723,16 @@ class Driving {
       const ease = 1 - Math.exp(-1.6 * args.delta)
       storm.inCloud += (want.inCloud - storm.inCloud) * ease
       storm.above += (want.above - storm.above) * ease
+      /*
+        And how hard it is raining, which is one number for the drops and the
+        noise both — see the note in `weather`.
+
+        Heaviest in the cloud, still real underneath it, and gone once you are
+        properly out of the top: climbing out of the weather is the reward the
+        whole road is built around, and arriving in silence and dry air is most
+        of what makes it one.
+      */
+      storm.rain = Math.max(0, Math.min(1, (0.62 + storm.inCloud * 0.38) * (1 - storm.above)))
       this.strike(args.delta)
 
       const u = args.lights.uniforms
@@ -1531,9 +1507,6 @@ class Driving {
     if (car.slam > 0.02 || car.hitStone) {
       const force = car.hitStone ? 0.7 : car.slam
       this.engine?.hit(force)
-      // The car's own impact is above; this is the tunnel answering it. Two
-      // different sounds on purpose — see `RootwayVoice.crash`.
-      tell({ kind: 'crash', force })
       this.chase.jolt(0.35)
       const many = 8 + Math.round(force * 14)
       for (let i = 0; i < many; i++) {

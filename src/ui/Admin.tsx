@@ -35,6 +35,7 @@ import { useEffect } from 'react'
 import { attempt } from '@/systems/trouble'
 import { useVoiceLights } from '@/systems/voiceLights'
 import { CarSettings } from './CarSettings'
+import { ThumbLayout } from './ThumbLayout'
 import { useRemembered } from './remember'
 
 /** Somewhere to start from. Any IANA name works — this is just convenience. */
@@ -184,6 +185,7 @@ export function Admin() {
       </p>
 
       {tab === 'car' && <CarSettings />}
+      {tab === 'car' && <ThumbLayout />}
 
       {tab === 'device' && (
       <section>

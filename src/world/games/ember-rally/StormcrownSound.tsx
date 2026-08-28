@@ -36,6 +36,7 @@ export function StormcrownSound({ track }: { track: Track }) {
   const state = useRef<StormcrownSoundState>({
     speed: 0,
     s: 0,
+    rain: 0,
     inCloud: 0,
     above: 0,
     forest: 0,
@@ -78,6 +79,7 @@ export function StormcrownSound({ track }: { track: Track }) {
       const frame = state.current
       frame.speed = storm.speed
       frame.s = s
+      frame.rain = storm.rain
       frame.inCloud = storm.inCloud
       frame.above = storm.above
       frame.forest = Math.max(

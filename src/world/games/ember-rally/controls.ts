@@ -8,12 +8,11 @@
  *     space               handbrake. This is the drift
  *     shift, or E         spend a measure of ember. Alt and AltGr also work
  *
- *   a thumb
- *     left half, dragged sideways   steer
- *     right half, held              throttle
- *     right half, dragged down      off the throttle, onto the brake, and
- *                                   further still onto the handbrake
- *     right half, tapped            spend a measure of ember
+ *   two thumbs, on a phone
+ *     left of the screen, held      steer left
+ *     right of the screen, held     steer right
+ *     the throttle                  is not a control; it is always on
+ *     the two buttons               the handbrake, and a measure of ember
  *
  * ---------------------------------------------------------------------------
  * **The car used to drive itself, and now it does not.**
@@ -25,15 +24,19 @@
  * survivable flat out, and the only way to arrange that was to pile assists on
  * top of the tyre model until the car was being driven by the game.
  *
- * The phone keeps its one thumb. It just does more with it: where that thumb
- * sits *vertically* is the pedal, relative to wherever it landed, so one
- * gesture covers throttle, brake and handbrake continuously and none of it
- * needs a second hand.
+ * The keyboard keeps all four. The phone does not, and the reason is that a
+ * phone has two thumbs and no more: one is steering and the other is on the
+ * buttons, so there is nothing left to hold a throttle with. See `touch.ts`
+ * for what replaced it and why the handbrake is the brake.
  * ---------------------------------------------------------------------------
  *
- * **The steering is relative on a phone**, for the same reason it always was:
- * absolute steering is unusable one-handed, because your thumb cannot reach
- * the middle of the screen and the car is therefore permanently turning.
+ * **Steering on a phone is a side, not a drag.** It used to be relative — put
+ * a thumb down anywhere on the left half and slide it — which reads well and
+ * costs the first tenth of a second of every correction, because a drag means
+ * nothing until it has an origin and the origin is wherever you happened to
+ * land. That tenth of a second is the one a corner is decided in. Holding a
+ * side has no origin to find: the moment the finger is down, the wheel is
+ * winding on, at the same hand-speed a key gets.
  *
  * **And the hand has a speed everywhere.** The rate the wheels are *allowed*
  * to move at falls with speed. This is not the lock limit — that is in the
@@ -45,6 +48,7 @@
 
 import type { CarInput } from './physics'
 import { DERIVED } from './tuning'
+import { drivingWithThumbs, releaseThumbs, thumb } from './touch'
 
 export interface RallyControls {
   /** Read the current intention, and consume the boost tap if there is one. */
@@ -82,23 +86,6 @@ export interface RallyControls {
  */
 const BOOST_KEYS = new Set(['shift', 'e', 'alt', 'altgraph'])
 
-/** Full lock, as a fraction of the screen's width. */
-const LOCK_TRAVEL = 0.27
-/** A press shorter and stiller than this is a tap, not a hold. */
-const TAP_MS = 220
-const TAP_SLOP = 16
-
-/**
- * Where the right thumb's travel takes it, in fractions of the screen height.
- *
- * Down from where it landed: nothing for the first little way, so a thumb that
- * drifts while holding the throttle does not start braking; then off the gas
- * and onto the brake; then, at the bottom of the range, the handbrake as well.
- * A hairpin is one long pull downward, which is what it is in a car.
- */
-const PEDAL_DEAD = 0.02
-const PEDAL_BRAKE = 0.16
-const PEDAL_HAND = 0.3
 
 /**
  * How fast the hand moves, in units of full lock per second.
@@ -129,6 +116,14 @@ const BRAKE_ON = 12
 const BRAKE_OFF = 16
 
 export function attachControls(surface: HTMLElement): RallyControls {
+  /*
+    Asked once, when the road opens, rather than every frame.
+
+    It decides whether the throttle exists, and a throttle that could appear
+    and disappear mid-race because a Bluetooth mouse woke up is worse than one
+    that is simply wrong on a machine nobody is using.
+  */
+  const phone = drivingWithThumbs()
   let steer = 0
   let throttle = 0
   let brake = 0
@@ -166,12 +161,8 @@ export function attachControls(surface: HTMLElement): RallyControls {
   // A window that loses focus mid-corner leaves a key stuck down for ever.
   const onBlur = () => {
     held.clear()
-    steerTarget = 0
-    touchGas = 0
-    touchBrake = 0
-    touchHand = false
-    steerPointer = null
-    pedalPointer = null
+    sides.clear()
+    releaseThumbs()
   }
 
   window.addEventListener('keydown', onKeyDown)
@@ -179,99 +170,41 @@ export function attachControls(surface: HTMLElement): RallyControls {
   window.addEventListener('blur', onBlur)
 
   // --- thumbs --------------------------------------------------------------
-  let steerTarget = 0
-  let steerPointer: number | null = null
-  let steerOrigin = 0
-  let pedalPointer: number | null = null
-  let pedalOrigin = 0
-  let pedalAt = 0
-  let pedalFrom = 0
-  let touchGas = 0
-  let touchBrake = 0
-  let touchHand = false
+  /*
+    Which sides are being held, by pointer.
+
+    A map rather than a single id because two fingers on the same side is a
+    thing hands do — a second finger landing must not cancel the first, and
+    lifting either must not cancel the other. Tracking them individually is
+    four lines and removes a whole class of "the car kept turning" bug.
+  */
+  const sides = new Map<number, -1 | 1>()
   let touchBoost = false
 
   const onDown = (event: PointerEvent) => {
     engaged = true
     const rect = surface.getBoundingClientRect()
-    const leftHalf = event.clientX - rect.left < rect.width * 0.5
-    if (leftHalf && steerPointer === null) {
-      steerPointer = event.pointerId
-      steerOrigin = event.clientX
-      surface.setPointerCapture(event.pointerId)
-    } else if (!leftHalf && pedalPointer === null) {
-      pedalPointer = event.pointerId
-      pedalAt = performance.now()
-      pedalFrom = event.clientY
-      pedalOrigin = event.clientY
-      // Landing is the throttle. Everything else is measured down from here.
-      touchGas = 1
-      touchBrake = 0
-      touchHand = false
-      surface.setPointerCapture(event.pointerId)
-    }
+    const side = event.clientX - rect.left < rect.width * 0.5 ? -1 : 1
+    sides.set(event.pointerId, side)
+    surface.setPointerCapture(event.pointerId)
   }
 
+  /*
+    A finger that slides across the middle changes its mind.
+
+    Without this, sweeping a thumb from one side to the other keeps steering
+    the way it started until it is lifted, which is precisely the situation
+    somebody is in when they have oversteered and are trying to catch it — the
+    one moment the control must not argue.
+  */
   const onMove = (event: PointerEvent) => {
+    if (!sides.has(event.pointerId)) return
     const rect = surface.getBoundingClientRect()
-    if (event.pointerId === steerPointer) {
-      const travel = Math.max(40, rect.width * LOCK_TRAVEL)
-      let amount = (event.clientX - steerOrigin) / travel
-      // Past full lock the origin follows, so coming back off the lock responds
-      // immediately instead of after however far you overshot.
-      if (amount > 1) {
-        steerOrigin = event.clientX - travel
-        amount = 1
-      } else if (amount < -1) {
-        steerOrigin = event.clientX + travel
-        amount = -1
-      }
-      // A thumb has much more precision near the middle than at its edge. The
-      // progressive curve keeps a ten-pixel correction a correction, while the
-      // outer part of the travel still reaches full lock for a hairpin.
-      steerTarget = Math.sign(amount) * Math.pow(Math.abs(amount), 1.35)
-      return
-    }
-    if (event.pointerId !== pedalPointer) return
-
-    /*
-      One thumb, both pedals, by how far down it has come.
-
-      Upward is ignored entirely — the throttle is already fully on when the
-      thumb lands, and letting an upward drag do something would mean the
-      pedal depended on where in the frame you happened to touch.
-    */
-    const down = (event.clientY - pedalOrigin) / rect.height
-    if (down <= PEDAL_DEAD) {
-      touchGas = 1
-      touchBrake = 0
-      touchHand = false
-      // The origin follows a thumb that has crept upward, so the *next* pull
-      // downward is measured from where the thumb actually is.
-      if (down < 0) pedalOrigin = event.clientY
-      return
-    }
-    const span = PEDAL_BRAKE - PEDAL_DEAD
-    const onto = Math.min(1, (down - PEDAL_DEAD) / span)
-    touchGas = 1 - onto
-    touchBrake = onto
-    touchHand = down > PEDAL_HAND
+    sides.set(event.pointerId, event.clientX - rect.left < rect.width * 0.5 ? -1 : 1)
   }
 
   const onUp = (event: PointerEvent) => {
-    if (event.pointerId === steerPointer) {
-      steerPointer = null
-      steerTarget = 0
-    }
-    if (event.pointerId === pedalPointer) {
-      const quick = performance.now() - pedalAt < TAP_MS
-      const still = Math.abs(event.clientY - pedalFrom) < TAP_SLOP
-      if (quick && still) touchBoost = true
-      pedalPointer = null
-      touchGas = 0
-      touchBrake = 0
-      touchHand = false
-    }
+    sides.delete(event.pointerId)
   }
 
   surface.addEventListener('pointerdown', onDown)
@@ -292,7 +225,18 @@ export function attachControls(surface: HTMLElement): RallyControls {
       const keyed =
         (held.has('arrowleft') || held.has('a') ? -1 : 0) +
         (held.has('arrowright') || held.has('d') ? 1 : 0)
-      const wanted = keyed !== 0 ? keyed : steerTarget
+      /*
+        Both sides at once is straight ahead, exactly like both arrow keys.
+
+        Summing rather than taking the last one down, because a hand resting a
+        second thumb on the far side of the screen is asking for neither, and
+        a control that picks the most recent would give it a full-lock turn.
+      */
+      let sided = 0
+      for (const side of sides.values()) sided += side
+      const thumbed = Math.max(-1, Math.min(1, sided))
+      thumb.steer = thumbed
+      const wanted = keyed !== 0 ? keyed : thumbed
 
       /*
         Move toward the input at a hand's speed rather than snapping to it.
@@ -321,17 +265,26 @@ export function attachControls(surface: HTMLElement): RallyControls {
         *release*: lifting is something you do over a moment, and lifting is
         how you tighten a line.
       */
-      const gas = Math.max(held.has('arrowup') || held.has('w') ? 1 : 0, touchGas)
+      /*
+        The throttle, which on a phone is not a control at all.
+
+        Still eased rather than pinned to 1, because the same easing is what
+        gives the car its pick-up away from the lights — a throttle that is
+        already fully open on the first frame of the race launches on a wheel
+        of smoke that nobody asked for.
+      */
+      const gas = phone ? 1 : held.has('arrowup') || held.has('w') ? 1 : 0
       throttle += (gas - throttle) * (1 - Math.exp(-(gas > throttle ? GAS_ON : GAS_OFF) * dt))
 
-      const pedal = Math.max(held.has('arrowdown') || held.has('s') ? 1 : 0, touchBrake)
+      const pedal = held.has('arrowdown') || held.has('s') ? 1 : 0
       brake += (pedal - brake) * (1 - Math.exp(-(pedal > brake ? BRAKE_ON : BRAKE_OFF) * dt))
 
-      const handbrake = touchHand || held.has(' ') || held.has('spacebar')
+      const handbrake = thumb.handbrake || held.has(' ') || held.has('spacebar')
 
-      const spend = keyBoost || touchBoost
+      const spend = keyBoost || touchBoost || thumb.boost
       keyBoost = false
       touchBoost = false
+      thumb.boost = false
       return { steer, throttle, brake, handbrake, boost: spend }
     },
 

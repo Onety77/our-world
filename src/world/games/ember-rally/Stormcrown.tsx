@@ -522,22 +522,39 @@ const CLOUD_FRAG = /* glsl */ `
 
 const RAIN_VERT = /* glsl */ `
   uniform float uTime;
+  uniform float uRain;
+  varying float vRain;
   void main() {
     vec3 p = position;
     p.y = mod(p.y - uTime * 31.0 + 26.0, 52.0) - 26.0;
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    gl_PointSize = clamp(145.0 / max(1.0, -mv.z), 1.0, 4.5);
+    /*
+      Thinning rain takes drops *away* rather than making every drop fainter.
+
+      Fading the whole field to 20% opacity is fog, not weather — the drops all
+      stay exactly where they were and simply go grey. Killing them off by a
+      stable per-drop threshold means the ones that remain are as sharp as they
+      ever were and there are visibly fewer of them, which is what easing rain
+      actually looks like. The x of a drop is fixed for its whole life, so a
+      given drop always dies at the same rain level rather than flickering.
+    */
+    float keep = fract(sin(position.x * 91.7 + position.z * 47.3) * 43758.5453);
+    vRain = uRain;
+    gl_PointSize = keep > uRain ? 0.0 : clamp(145.0 / max(1.0, -mv.z), 1.0, 4.5);
     gl_Position = projectionMatrix * mv;
   }
 `
 
 const RAIN_FRAG = /* glsl */ `
   precision mediump float;
+  varying float vRain;
   void main() {
     vec2 p = gl_PointCoord - 0.5;
     float line = 1.0 - smoothstep(0.06, 0.18, abs(p.x));
     float ends = smoothstep(0.5, 0.28, abs(p.y));
-    gl_FragColor = vec4(0.66, 0.78, 0.82, line * ends * 0.46);
+    // A little softer as it eases off, on top of there being fewer of them.
+    float body = 0.30 + vRain * 0.16;
+    gl_FragColor = vec4(0.66, 0.78, 0.82, line * ends * body);
   }
 `
 
@@ -621,7 +638,7 @@ export function StormcrownWorld({ track }: { track: Track }) {
     fragmentShader: RAIN_FRAG,
     transparent: true,
     depthWrite: false,
-    uniforms: { uTime: { value: 0 } },
+    uniforms: { uTime: { value: 0 }, uRain: { value: 0 } },
   }), [])
   const fall = useMemo(() => new ShaderMaterial({
     vertexShader: FALL_VERT,
@@ -681,6 +698,16 @@ export function StormcrownWorld({ track }: { track: Track }) {
       u.uAbove.value = storm.above
       u.uFlash.value = storm.flash
     }
+    /*
+      The rain takes only the one number, and it took none at all before this.
+
+      Its uniforms were `{ uTime }`, so the loop above skipped it on the
+      `uInCloud` guard and every drop on the mountain fell at the same rate
+      from the forest floor to clear air. It is separate from the loop rather
+      than joining it because the drops genuinely do not want the flash: a lit
+      raindrop is a white speck, and a field of them is snow.
+    */
+    rain.uniforms.uRain.value = storm.rain
 
     /*
       The cloud floor sits at the top of the cloud rather than in the middle of

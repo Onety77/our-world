@@ -263,24 +263,14 @@ const DRIFT_TURN = 1.3
 /** How fast the arcade model takes over, and hands back. */
 const DRIFT_BLEND_IN = 7
 const DRIFT_BLEND_OUT = 5
-/**
- * What swinging the car through costs, on top of hanging it out.
- *
- * Per radian per second of pose change, into the same scrub the angle feeds.
- *
- * Without it the scrub is a function of the *pose* alone — and a pose passes
- * through zero every time you swap sides, so the one thing you can do to a set
- * of tyres that ought to cost the most was costing nothing at all. Measured on
- * a straight with the throttle pinned: flicking the car left-right-left ran
- * away to 157 km/h while not drifting at all topped out at 115. Drifting was
- * not a way of getting round a corner, it was the fastest way down a straight.
- * See scripts/drift-probe.ts.
- */
-const DRIFT_SWING_COST = 0.34
 /** How far hanging it right out pulls the ceiling below TUNE.driftTopSpeed. */
 const DRIFT_ANGLE_COST = 0.45
 /** How hard the ceiling pulls, per second. Fast enough to be the entry cost. */
 const DRIFT_CEILING_RATE = 1.3
+/** The most the slide will aim across the road to get back to its line, radians. */
+const DRIFT_AIM = 0.42
+/** How briskly the course is steered onto the aim, per second. */
+const DRIFT_COURSE = 2.6
 
 /** Kept so nothing that imported it breaks; any amount is spendable now. */
 export const BOOST_COST = 1
@@ -1283,7 +1273,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
       ------------------------------------------------------------------------
     */
     const sideways = Math.abs(Math.sin(car.driftAngle))
-    const slide = sideways * sideways + Math.abs(swing) * DRIFT_SWING_COST
+    const slide = sideways * sideways + Math.abs(swing) * TUNE.driftSwingCost
     let kept = speed * (1 - TUNE.driftScrub * slide * dt * car.driftBlend)
     const ceiling = TUNE.driftTopSpeed * (1 - DRIFT_ANGLE_COST * sideways)
     if (kept > ceiling) {
@@ -1301,23 +1291,127 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     kept = Math.max(1, kept)
 
     /*
-      How tightly the path bends — as an arc, not as a force.
+      ========================================================================
+      **Where the slide goes**, which is a different question from how fast it
+      is going and is the one that was wrong.
 
-      See TUNE.driftTightness. The arrows name a curvature, the g ceiling and the
-      rotation ceiling trim it at the top of the speed range, and what comes
-      out is a yaw rate because that is what the rest of this block speaks.
-      The order matters: clamp the *line* first, then convert, or the g cap
-      ends up being the thing the driver is steering with again.
+      This block used to command a curvature and nothing else: the arrows named
+      an arc, the arc was drawn, and where that arc went relative to the *road*
+      was nobody's problem. Hold one direction through a long corner and the
+      car drew a circle of its own — 25 m by default — which is not the corner
+      you are in. So it walked across the tunnel, pinned itself on the rock and
+      the wall scrub took it to nothing. Measured, holding one direction in a
+      long left:
 
-      Set a little tighter than what the tyres can do, which is what makes a
-      drift genuinely quicker through a tight corner than gripping — and paid
-      for by the scrub above, which is what stops it being quicker through
-      everything.
+        n           -5.1 → +6.4 m in two seconds, and stuck there
+        on the rock  77% of the time
+        km/h          108 → 72 → 2, then crawling back to 27
+
+      and that crawl back off the wall is the "boost" it felt like. The
+      speedometer was not lying, either — the car really was doing sixty. None
+      of the sixty was going down the tunnel, because `s` only advances by
+      `speed × cos(course relative to the road)`, and the course had wandered
+      most of the way to sideways-on.
+
+      **What a sustained slide actually does** is keep going where it is
+      already going. The wheels are locked, nothing is driving, and the only
+      reason the car is still moving is that it is sliding — so it holds its
+      line, at its angle, until something changes. That is what is built here,
+      in three terms:
+
+        the road    the course rotates at the rate the road itself turns, so
+                    a held drift follows the corner instead of leaving it.
+                    This is the whole fix
+        the line    a gentle pull back to where it was sliding, so the slide
+                    keeps its lane rather than washing wide
+        the arrows  which now *place* the car across the road rather than
+                    naming a radius — hold a direction and the slide moves
+                    that way across the lane, let go and it holds
+
+      The arc is still capped by what the tyres could pull, which is what stops
+      the line-holding becoming a rail.
+      ========================================================================
     */
-    const asked = (command / TUNE.driftTightness) * car.driftBlend
-    const most = (TUNE.driftGrip * TUNE.gravity) / (kept * kept)
-    const bend = Math.sign(asked) * Math.min(Math.abs(asked), most)
-    const turn = Math.max(-DRIFT_TURN, Math.min(DRIFT_TURN, bend * kept))
+    // Where the course is pointing relative to the road: heading plus how far
+    // the car is hung out. `car.psi` is already road-relative — see the note
+    // on the road frame further down.
+    const courseRel = car.psi + car.driftAngle
+    const downRoad = kept * Math.cos(courseRel)
+
+    /*
+      What the road is doing under it.
+
+      `psi` integrates `yaw − curv × sDot × metric`, so this is exactly the
+      world rotation rate that leaves the car's angle to the road unchanged.
+      Without this one term a held drift is a circle and the road is not.
+    */
+    const roadRate = road.curv * downRoad
+
+    /*
+      Where across the road to aim.
+
+      Neutral is the racing line rather than the geometric middle, because the
+      middle of a cave is not where a quick car goes and a drift that returns
+      to dead centre reads as an autopilot. The arrows move the aim across the
+      usable width from there.
+    */
+    const usable = Math.max(1.2, wallAt(road) - CAR_HALF_WIDTH - 0.5)
+    const aim = Math.max(
+      -usable,
+      Math.min(usable, road.line + command * TUNE.driftPlace * usable),
+    )
+
+    /*
+      And the course that closes on it.
+
+      `dn/dt ≈ speed × courseRel`, so an error of `e` metres closes on a time
+      constant of `1 / driftLineHold` if the course is held at `−e × hold /
+      speed`. Divided by speed rather than fixed, so the correction is an
+      *angle* at any speed instead of a much bigger one when slow. Capped, so a
+      car that has been thrown a long way sideways does not aim itself at the
+      opposite wall trying to get back.
+    */
+    const off = car.n - aim
+    const wantCourse = Math.max(
+      -DRIFT_AIM,
+      Math.min(DRIFT_AIM, (-off * TUNE.driftLineHold) / Math.max(8, kept)),
+    )
+
+    /*
+      The three, added, then held to what the tyres could have pulled.
+
+      The g cap is the same one as before and it still matters: without it the
+      line-holding would be able to ask for a corner no car could take, and a
+      drift that cannot be made to run wide is a slot car.
+    */
+    /*
+      How hard the arrows are allowed to pull it across — and *only* the
+      arrows.
+
+      `TUNE.driftTightness` names the tightest arc a steering input may ask
+      for, as a radius, which is what it has always meant. What is new is that
+      it is applied to the correction alone and never to `roadRate`: following
+      the corner you are in is not steering, it is the floor, and capping it
+      would put the car back in the rock the moment somebody wound this dial
+      towards "long sweep". A tight setting makes the drift dart across the
+      road; a loose one makes it lean across. Neither can stop it following
+      the road.
+    */
+    const steerRate = (wantCourse - courseRel) * DRIFT_COURSE * car.driftBlend
+    const tightest = kept / TUNE.driftTightness
+    const asked = roadRate + Math.sign(steerRate) * Math.min(Math.abs(steerRate), tightest)
+
+    /*
+      And the whole thing held to what the tyres could have pulled.
+
+      Without it the line-holding could ask for a corner no car can take, and a
+      drift that cannot be made to run wide is a slot car.
+    */
+    const most = (TUNE.driftGrip * TUNE.gravity) / Math.max(1, kept)
+    const turn = Math.max(
+      -DRIFT_TURN,
+      Math.min(DRIFT_TURN, Math.sign(asked) * Math.min(Math.abs(asked), most)),
+    )
 
     // Rebuild the velocity from the pose, and rotate the car by however much
     // is needed for the *path* to turn at `turn` while the pose is changing.

@@ -4,6 +4,47 @@ This is Codex's side of the hand-off log. Claude can read it before touching the
 same area; I read `NOTES.md` before beginning work. Entries record finished work,
 shared-file changes, measurements, and anything another agent should preserve.
 
+## 28 August 2026 - Codex - Rootwake lane tightened
+
+- Reduced only Rootwake's generated half-width from 4.05 m to 3.70 m, taking
+  its narrowest full deck from 8.1 m to 7.4 m. The ordinary Rootway, fork
+  separation, centreline, timing, handling and shortcut advantage are unchanged.
+- Reduced signature-corner relief from at most 0.82 m to 0.70 m per side, so the
+  hard S and blind reverse do not swell back toward ordinary-cave proportions.
+  Rendering and collision still consume the same width samples.
+- Across seeds 1, 42 and 90210, mastered advantage remains 9.0-10.5 s, the main
+  spirit stays on Rootway, and the shortcut precision run records only 0.0-0.1 s
+  wall contact. Rally checks, typecheck, all 102 shaders and production build pass.
+
+## 28 August 2026 - Codex - Moonbreak and Stormcrown audible-mix correction
+
+- Corrected a real mix failure rather than adding another nominal sound layer.
+  Live browser metering showed Stormcrown's environment at 0.016 RMS against a
+  0.113 RMS engine (about 17 dB under it), while Moonbreak's open surface was
+  only 0.013-0.025 RMS against a 0.058-0.108 RMS engine. Both systems existed,
+  but normal driving buried them.
+- Stormcrown's visible rain now remains audible through every altitude district.
+  It has a continuous body plus irregular car/glass impacts; wind, cloud wash,
+  cedar, exposed-air buffet, waterfalls and spray were brought into the same
+  foreground world as the engine. Lightning keeps an immediate electrical tear,
+  a delayed direct thunder body and a separate mountain return.
+- Moonbreak now has readable open-water movement above the surface, causeway
+  wind and spray, individual water slaps, orchard/reed texture, and stronger arch
+  passes. The dive, submerged flow and pressure, tube ribs and stress creaks,
+  creature pressure and resurfacing release now form one continuous transition.
+- Added development-only Web Audio analysers to the engine and both environment
+  voices. They publish RMS/peak and authored-state telemetry under
+  `globalThis.__rallySound`, making future mix regressions measurable instead of
+  subjective. They do not drive gameplay or render state.
+- Added a fast final limiter at the shared ambience output. Individual voices
+  already protect themselves; this catches only the combined engine plus close
+  rain/thunder/plunge peaks that could otherwise crack a laptop speaker.
+- Final live readings: Stormcrown weather ranged about 0.033-0.081 RMS against
+  0.066-0.094 RMS engine. Moonbreak measured 0.054 against 0.103 on the open
+  road and 0.067 against 0.064 through the dive transition. Browser console and
+  Vite overlay were clean. Typecheck, all 102 shaders, rally simulation and the
+  production build pass.
+
 ## 28 August 2026 - Codex - Stormcrown environmental soundscape
 
 - Added a fully synthesized Stormcrown voice and an allocation-free frame bridge.
@@ -14,9 +55,9 @@ shared-file changes, measurements, and anything another agent should preserve.
   buffeting. Inside cloud, distant detail collapses into a middle-heavy moving
   wash and restrained pressure mode instead of becoming a cave.
 - Thunder Stair keeps the cloud/mountain return while all three hairpins remain
-  readable from the engine. The eye above the storm is intentionally the quietest
-  district: thin high air and a distant storm floor replace rain. Preserve this
-  negative space; it is the reward for the climb, not an unfinished layer.
+  readable from the engine. The eye changes the weather's colour rather than
+  silencing it: thin high air and the distant storm floor rise in the balance,
+  but rain remains because rain particles remain visibly around the car.
 - Stormfall restores rain and exposed wind as altitude falls. Its three visual
   waterfalls now have approach-shaped low roar and spray, panned to the actual
   authored side of each ribbon. Low cedar texture returns on the last run home.

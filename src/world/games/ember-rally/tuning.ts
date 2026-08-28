@@ -93,7 +93,10 @@ export interface RallyTuning {
   driftTightness: number
   driftGrip: number
   driftScrub: number
+  driftSwingCost: number
   driftTopSpeed: number
+  driftLineHold: number
+  driftPlace: number
   driftEnterSpeed: number
 
   // the ember
@@ -159,7 +162,10 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
   driftTightness: 25,
   driftGrip: 2.05,
   driftScrub: 0.2,
-  driftTopSpeed: 23,
+  driftSwingCost: 0.34,
+  driftTopSpeed: 20,
+  driftLineHold: 0.85,
+  driftPlace: 0.75,
   driftEnterSpeed: 11,
 
   boostPower: 1.38,
@@ -808,9 +814,9 @@ export const DIALS: readonly Dial[] = [
     key: 'driftTightness',
     group: 'drift',
     name: 'Drift tightness',
-    note: 'The tightest arc a held direction can ask for. Small draws a hairpin; large draws a long sweep. Holding a direction holds an arc, whatever the car is doing about speed.',
-    low: 'hairpin',
-    high: 'long sweep',
+    note: 'The tightest arc the arrows can ask a slide for. Small darts across the road; large leans across it. It bounds the steering only — a drift always follows the corner it is in, whatever this says, or turning it up would put the car back in the rock.',
+    low: 'darts across',
+    high: 'leans across',
     min: 8,
     max: 70,
     step: 0.5,
@@ -839,6 +845,42 @@ export const DIALS: readonly Dial[] = [
     max: 0.9,
     step: 0.01,
     show: (v) => `${Math.round(v * 100)}% per second`,
+  },
+  {
+    key: 'driftSwingCost',
+    group: 'drift',
+    name: 'What swapping sides costs',
+    note: 'How much speed is scrubbed by *moving* the car through, on top of what hanging it out costs. At zero a chicane taken flick-flick-flick is free, which quietly makes drifting the fastest way down a straight — it was 157 km/h against 115 not drifting at all. This is the number that stops that.',
+    low: 'free',
+    high: 'brutal',
+    min: 0,
+    max: 1.2,
+    step: 0.01,
+    show: (v) => (v <= 0.001 ? 'free' : `${v.toFixed(2)}× the angle`),
+  },
+  {
+    key: 'driftLineHold',
+    group: 'drift',
+    name: 'Does a slide hold its lane',
+    note: 'How hard a sustained drift steers itself back to the line it was sliding on. At zero the drift draws its own arc and walks off the road into the rock, which is what it used to do. Turned up, the car keeps sliding down the tunnel at its angle and the arrows place it rather than rescue it.',
+    low: 'washes wide',
+    high: 'on rails',
+    min: 0,
+    max: 2.5,
+    step: 0.05,
+    show: (v) => (v <= 0.001 ? 'off — free arc' : `back in ${(1 / v).toFixed(2)} s`),
+  },
+  {
+    key: 'driftPlace',
+    group: 'drift',
+    name: 'How far the arrows move it',
+    note: 'How much of the road the arrows can shift a sustained slide across, as a fraction of the usable width. This is what steering *does* in a long drift now: it places the car on the road rather than naming a radius.',
+    low: 'holds the line',
+    high: 'wall to wall',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    show: (v) => `${Math.round(v * 100)}% of the width`,
   },
   {
     key: 'driftTopSpeed',

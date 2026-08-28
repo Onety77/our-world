@@ -29,6 +29,7 @@ import { otherUser } from '@/data/types'
 import type { Memory } from '@/data/types'
 import { useSections } from '@/systems/sections'
 import { useMemories } from '@/systems/memories'
+import { ambience } from '@/systems/ambience'
 import { isHersAndNew, useStoodIn } from '@/systems/newness'
 import { buildInstanced, useFormMaterial } from '@/world/forms'
 import { useSceneEnv } from '@/world/SceneEnv'
@@ -543,7 +544,10 @@ export default function Glasshouse() {
         in here besides pulling, and it is what makes the coloured panes in the
         distance targets rather than scenery.
       */
-      if (Math.abs(hit.z - aisleAt()) < REACH * 0.6) open(hit.id)
+      if (Math.abs(hit.z - aisleAt()) < REACH * 0.6) {
+        ambience.cue('glass', 0.34)
+        open(hit.id)
+      }
       else walkTo(hit.z)
     }
     window.addEventListener('pointerup', onUp)

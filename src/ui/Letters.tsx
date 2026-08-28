@@ -177,6 +177,7 @@ export function Writing() {
     // The words stay in the box if it failed. Clearing them first would mean a
     // bad connection quietly ate something somebody had just written.
     if (!planted) return
+    ambience.cue('root', 0.85)
     setBody('')
     stopWriting()
     setRising('it took root')

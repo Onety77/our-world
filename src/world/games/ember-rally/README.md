@@ -360,7 +360,7 @@ centreline, closed stone shell, camera path, collision walls and road metric.
 It is not a second strip visible beside the main road.
 
 The hidden tunnel is roughly 1.1 km of physical road and takes about 38–44
-seconds in the repeatable precision drive. Its narrowest deck is 8.1 m, with a
+seconds in the repeatable precision drive. Its narrowest deck is 7.4 m, with a
 hard S and a blind reverse whose tightest radius lands around 26–39 m across
 the tested seeds. The corner width includes enough apex room that a car centred
 on sound stone never triggers a false fall or an invisible edge. The two roads

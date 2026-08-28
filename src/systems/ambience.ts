@@ -68,6 +68,21 @@ export interface SynthesisBus {
  */
 export type Place = 'garden' | 'tree' | 'river' | 'hollow' | 'stars' | 'glasshouse'
 
+/** Short physical events that belong to the world rather than to interface chrome. */
+export type WorldCue = 'root' | 'seal' | 'water' | 'glass' | 'ember' | 'paper'
+
+/** Development evidence that world cues reached the shared Web Audio graph. */
+export const worldSoundTelemetry = {
+  rms: 0,
+  peak: 0,
+  last: '' as WorldCue | '',
+  cues: 0,
+}
+if (import.meta.env.DEV) {
+  const host = globalThis as typeof globalThis & { __gardenSound?: typeof worldSoundTelemetry }
+  host.__gardenSound = worldSoundTelemetry
+}
+
 export interface AmbienceHandle {
   start(): Promise<void>
   stop(): void
@@ -107,6 +122,8 @@ export interface AmbienceHandle {
    * being looked at as often as when it is.
    */
   said(mine: boolean): void
+  /** A quiet, physical response to a meaningful act in one of the places. */
+  cue(kind: WorldCue, weight?: number): void
   /** The shared graph for a self-contained, short-lived place soundscape. */
   synthesisBus(): SynthesisBus | null
   /**
@@ -175,6 +192,7 @@ const SHIMMER_TONES = [
 export function createAmbience(): AmbienceHandle {
   let ctx: AudioContext | null = null
   let master: GainNode | null = null
+  let limiter: DynamicsCompressorNode | null = null
   let running = false
 
   /** One gain per layer, kept so the place and the wind can steer them. */
@@ -212,27 +230,73 @@ export function createAmbience(): AmbienceHandle {
   let grain: AudioBuffer | null = null
   /** Pen strokes bypass the wind's master so they stay audible under it. */
   let inkGain: GainNode | null = null
+  let eventAnalyser: AnalyserNode | null = null
+  let eventSamples: Float32Array<ArrayBuffer> | null = null
+  let eventMeterFrame = 0
 
+  /**
+   * The one noise buffer everything in the world is made of.
+   *
+   * -------------------------------------------------------------------------
+   * **The seam is crossfaded, not tapered, and the difference is the whole
+   * point of this comment.**
+   *
+   * This used to fade the first and last 0.4 s down to zero, under a comment
+   * saying it made the loop point inaudible. It did the exact opposite. A
+   * looped buffer that is silent at both ends is not seamless — it has a hole
+   * in it, 0.8 s wide, once per lap, and every continuous layer in the game
+   * plays this buffer on a loop. Measured: the ends sat at 11% of the RMS of
+   * the middle.
+   *
+   * What that sounds like depends only on `playbackRate`, because the period
+   * is `NOISE_SECONDS / rate`:
+   *
+   *   the Stormcrown's droplets   rate 1.93  ->  a hole every 2.1 s
+   *   its rain                    rate 1.16  ->  every 3.4 s
+   *   the Moonbreak's water       rate 1.06  ->  every 3.8 s
+   *
+   * — which is heard, correctly, as a sound that keeps stopping and starting
+   * rather than as an ocean. It was not a bug in either road's soundscape;
+   * both of them were faithfully playing a bed with a hole in it.
+   *
+   * The fix is the standard one for looping noise: generate a little more than
+   * is needed and fold the overrun back over the head with **equal-power**
+   * weights. `cos` and `sin` rather than `t` and `1 − t`, because the two
+   * signals being mixed are uncorrelated — linear weights would still dip 3 dB
+   * in the middle of the crossfade, which is quieter than a hole and still a
+   * pulse you can hear once you know it is there.
+   * -------------------------------------------------------------------------
+   */
   function noiseBuffer(context: AudioContext): AudioBuffer {
     const length = context.sampleRate * NOISE_SECONDS
+    const fade = Math.floor(context.sampleRate * 0.4)
     const buffer = context.createBuffer(1, length, context.sampleRate)
     const data = buffer.getChannelData(0)
 
     // Brown-ish noise: integrating white noise tilts the spectrum downward,
-    // which is what makes it read as air moving rather than as static.
+    // which is what makes it read as air moving rather than as static. Run on
+    // past the end of the loop, so there is a genuine continuation to fold in.
+    const raw = new Float32Array(length + fade)
     let last = 0
-    for (let i = 0; i < length; i++) {
+    for (let i = 0; i < raw.length; i++) {
       const white = Math.random() * 2 - 1
       last = (last + 0.021 * white) / 1.02
-      data[i] = last * 3.2
+      raw[i] = last * 3.2
     }
 
-    // taper the seam so the loop point is inaudible
-    const fade = context.sampleRate * 0.4
+    for (let i = 0; i < length; i++) data[i] = raw[i]
+
+    /*
+      Fold the overrun over the head.
+
+      `raw[length + i]` is what genuinely came after the last sample of the
+      loop, so at i = 0 the buffer is exactly that and the join is continuous;
+      by the end of the crossfade it is the original head again, and the rest
+      of the buffer is untouched. Constant power throughout.
+    */
     for (let i = 0; i < fade; i++) {
-      const g = i / fade
-      data[i] *= g
-      data[length - 1 - i] *= g
+      const t = (i / fade) * Math.PI * 0.5
+      data[i] = raw[length + i] * Math.cos(t) + raw[i] * Math.sin(t)
     }
     return buffer
   }
@@ -441,6 +505,19 @@ export function createAmbience(): AmbienceHandle {
         shimmer(beds.shimmer)
       }
     }
+
+    if (eventAnalyser && eventSamples && ++eventMeterFrame % 6 === 0) {
+      eventAnalyser.getFloatTimeDomainData(eventSamples)
+      let energy = 0
+      let peak = 0
+      for (let i = 0; i < eventSamples.length; i++) {
+        const sample = eventSamples[i]
+        energy += sample * sample
+        peak = Math.max(peak, Math.abs(sample))
+      }
+      worldSoundTelemetry.rms = Math.sqrt(energy / eventSamples.length)
+      worldSoundTelemetry.peak = peak
+    }
   }
 
   return {
@@ -462,14 +539,32 @@ export function createAmbience(): AmbienceHandle {
 
       master = ctx.createGain()
       master.gain.value = 0
-      master.connect(ctx.destination)
+      // Cars and place soundscapes each protect their own output, but they are
+      // summed here. One fast final limiter prevents a loud thunder/plunge over
+      // full throttle from becoming the laptop-speaker crack this mix used to
+      // produce, without flattening ordinary engine or garden dynamics.
+      limiter = ctx.createDynamicsCompressor()
+      limiter.threshold.value = -4
+      limiter.knee.value = 3
+      limiter.ratio.value = 14
+      limiter.attack.value = 0.002
+      limiter.release.value = 0.13
+      master.connect(limiter).connect(ctx.destination)
 
       const buffer = noiseBuffer(ctx)
       grain = buffer
 
       inkGain = ctx.createGain()
       inkGain.gain.value = 1
-      inkGain.connect(master)
+      if (import.meta.env.DEV) {
+        eventAnalyser = ctx.createAnalyser()
+        eventAnalyser.fftSize = 256
+        eventAnalyser.smoothingTimeConstant = 0.35
+        eventSamples = new Float32Array(eventAnalyser.fftSize)
+        inkGain.connect(eventAnalyser).connect(master)
+      } else {
+        inkGain.connect(master)
+      }
 
       // --- air, and the leaves on it -----------------------------------------
       const low = layer(ctx, buffer, {
@@ -608,11 +703,16 @@ export function createAmbience(): AmbienceHandle {
       void ctx?.close()
       ctx = null
       master = null
+      limiter = null
       for (const key of Object.keys(beds)) beds[key] = null
       leafFilter = null
       airFilter = null
       grain = null
       inkGain = null
+      eventAnalyser = null
+      eventSamples = null
+      worldSoundTelemetry.rms = 0
+      worldSoundTelemetry.peak = 0
       engines = 0
       duck = 0
     },
@@ -750,6 +850,92 @@ export function createAmbience(): AmbienceHandle {
       }
     },
 
+    /*
+      Physical punctuation, not interface feedback.
+
+      These cues only happen after the act they describe has genuinely happened:
+      a thought took root, an answer was sealed, the river rose, glass formed,
+      or a game was carried to the fire. They are deliberately short and share
+      `inkGain`, so they inherit the same unlock, visibility fade and final
+      speaker limiter as every other sound in the garden.
+    */
+    cue(kind, weight = 0.6) {
+      if (!ctx || !grain || !inkGain) return
+      const now = ctx.currentTime
+      const w = Math.max(0, Math.min(1, weight))
+      worldSoundTelemetry.last = kind
+      worldSoundTelemetry.cues++
+
+      const tone = (
+        at: number,
+        fromHz: number,
+        toHz: number,
+        peak: number,
+        length: number,
+        type: OscillatorType = 'sine',
+      ) => {
+        if (!ctx || !inkGain) return
+        const voice = ctx.createOscillator()
+        voice.type = type
+        voice.frequency.setValueAtTime(fromHz, at)
+        voice.frequency.exponentialRampToValueAtTime(toHz, at + length)
+        const level = ctx.createGain()
+        level.gain.setValueAtTime(0.0001, at)
+        level.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), at + 0.008)
+        level.gain.exponentialRampToValueAtTime(0.0001, at + length)
+        voice.connect(level).connect(inkGain)
+        voice.start(at)
+        voice.stop(at + length + 0.04)
+      }
+
+      if (kind === 'root') {
+        // Soil settles first; a small harmonic stem opens above it.
+        burst(inkGain, 0.035 + w * 0.025, 0.24, 'lowpass', 290, 0.7, 0.42)
+        tone(now, 146.83, 196, 0.018 + w * 0.014, 0.58, 'triangle')
+        tone(now + 0.07, 220, 293.66, 0.009 + w * 0.008, 0.72)
+        return
+      }
+
+      if (kind === 'seal') {
+        // Paper folds, then the small weight of the seal lands on it.
+        burst(inkGain, 0.025 + w * 0.018, 0.11, 'bandpass', 1250, 0.75, 0.72)
+        burst(inkGain, 0.04 + w * 0.035, 0.075, 'lowpass', 390, 0.8, 0.45)
+        tone(now + 0.018, 185, 128, 0.018 + w * 0.016, 0.2, 'triangle')
+        return
+      }
+
+      if (kind === 'water') {
+        // A low pour with two droplets: enough to answer the rising river,
+        // nowhere near large enough to become a reward jingle.
+        burst(inkGain, 0.055 + w * 0.045, 0.42, 'bandpass', 610, 0.48, 0.62)
+        burst(inkGain, 0.022 + w * 0.018, 0.22, 'highpass', 1450, 0.55, 1.25)
+        tone(now + 0.08, 510, 205, 0.014 + w * 0.012, 0.2)
+        tone(now + 0.2, 430, 176, 0.01 + w * 0.009, 0.17)
+        return
+      }
+
+      if (kind === 'glass') {
+        // Inharmonic partials make a pane, rather than a bell or notification.
+        burst(inkGain, 0.016 + w * 0.014, 0.035, 'highpass', 2300, 0.8, 1.8)
+        tone(now, 684, 676, 0.014 + w * 0.013, 0.78)
+        tone(now + 0.004, 1067, 1042, 0.007 + w * 0.007, 0.64)
+        tone(now + 0.009, 1517, 1478, 0.003 + w * 0.004, 0.5)
+        return
+      }
+
+      if (kind === 'ember') {
+        // A coal shifts and opens: low body, then two dry sparks.
+        burst(inkGain, 0.045 + w * 0.038, 0.08, 'bandpass', 720, 1.3, 0.75)
+        burst(inkGain, 0.025 + w * 0.025, 0.026, 'highpass', 2100, 1.7, 1.9)
+        tone(now, 96, 67, 0.015 + w * 0.014, 0.24, 'triangle')
+        return
+      }
+
+      // Lifting a thought from its thread: fibres, not a UI page-turn sample.
+      burst(inkGain, 0.025 + w * 0.018, 0.15, 'bandpass', 980, 0.5, 0.68)
+      burst(inkGain, 0.012 + w * 0.01, 0.07, 'highpass', 2600, 0.7, 1.35)
+    },
+
     chip(weight = 0.5) {
       if (!ctx || !grain || !inkGain) return
       const now = ctx.currentTime
@@ -826,3 +1012,12 @@ export function createAmbience(): AmbienceHandle {
  * — browsers cap them, and a second one would need its own gesture to unlock.
  */
 export const ambience = createAmbience()
+
+if (import.meta.env.DEV) {
+  const host = globalThis as typeof globalThis & {
+    __gardenSoundPlay?: (kind: WorldCue, weight?: number) => void
+  }
+  // A non-persistent way for browser checks to audition every cue without
+  // planting test thoughts, adding fake savings, or uploading fake memories.
+  host.__gardenSoundPlay = (kind, weight) => ambience.cue(kind, weight)
+}

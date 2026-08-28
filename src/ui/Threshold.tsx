@@ -21,6 +21,7 @@ import { GAMES } from '@/world/games/registry'
 import { theRoom } from '@/systems/waiting'
 import { useStandings, type Turn } from '@/world/games/useRound'
 import { useQuestions } from '@/systems/questions'
+import { ambience } from '@/systems/ambience'
 
 /**
  * What there is to play, one at a time.
@@ -96,6 +97,7 @@ function LiveWayIn({
     const key = waiting && (waiting < String(data.now()) || me > other)
       ? waiting
       : String(data.now())
+    ambience.cue('ember', 0.8)
     data.publishPresence({ racing: key })
     openRace(game, key)
   }
@@ -295,12 +297,17 @@ function TheHollow() {
   const [way, setWay] = useState(0)
   const last = GAMES.length
   const game = GAMES[at]
+  const begin = useCallback((gameId: string, solo: boolean) => {
+    ambience.cue('ember', 0.78)
+    play(gameId, solo)
+  }, [play])
   const go = useCallback(
     (by: 1 | -1) => setAt((n) => Math.max(0, Math.min(last, n + by))),
     [last],
   )
   const chooseGame = useCallback((index: number) => {
     if (!GAMES[index]) return
+    ambience.cue('ember', 0.38)
     setAt(index)
     setWay(0)
     setShowing('ways')
@@ -420,7 +427,7 @@ function TheHollow() {
             type="button"
             className={`game-go${way === 0 ? ' is-selected' : ''}`}
             onFocus={() => setWay(0)}
-            onClick={() => play(game.id, false)}
+            onClick={() => begin(game.id, false)}
             title={game.invite?.tip}
           >
             {game.invite
@@ -433,7 +440,7 @@ function TheHollow() {
               type="button"
               className={`quiet${way === 1 ? ' is-selected' : ''}`}
               onFocus={() => setWay(1)}
-              onClick={() => play(game.id, true)}
+              onClick={() => begin(game.id, true)}
             >
               on your own
             </button>

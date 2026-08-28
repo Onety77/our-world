@@ -83,6 +83,14 @@ export interface EngineState {
   boostLeft: number
 }
 
+/** Development-only mix reference for balancing the world against the car. */
+export const engineSoundTelemetry = { rms: 0, peak: 0 }
+if (import.meta.env.DEV) {
+  const host = globalThis as typeof globalThis & { __rallySound?: Record<string, unknown> }
+  host.__rallySound ??= {}
+  host.__rallySound.engine = engineSoundTelemetry
+}
+
 export interface EngineVoice {
   /** Called every frame. */
   set(state: EngineState): void
@@ -201,7 +209,12 @@ export function createEngineVoice(
   safety.ratio.value = 4
   safety.attack.value = 0.004
   safety.release.value = 0.16
-  out.connect(speakerCut).connect(safety).connect(master)
+  const analyser = ctx.createAnalyser()
+  analyser.fftSize = 256
+  analyser.smoothingTimeConstant = 0.45
+  const meterSamples = new Float32Array(analyser.fftSize)
+  let meterFrame = 0
+  out.connect(speakerCut).connect(safety).connect(analyser).connect(master)
 
   /*
     The tunnel.
@@ -570,6 +583,19 @@ export function createEngineVoice(
       const now = ctx.currentTime
       const dt = Math.min(0.1, Math.max(0, now - lastAt))
       lastAt = now
+
+      if (++meterFrame % 6 === 0) {
+        analyser.getFloatTimeDomainData(meterSamples)
+        let energy = 0
+        let peak = 0
+        for (let i = 0; i < meterSamples.length; i++) {
+          const sample = meterSamples[i]
+          energy += sample * sample
+          peak = Math.max(peak, Math.abs(sample))
+        }
+        engineSoundTelemetry.rms = Math.sqrt(energy / meterSamples.length)
+        engineSoundTelemetry.peak = peak
+      }
 
       const v = Math.max(0, state.speed)
       const revs = Math.max(0, Math.min(1.04, state.revs))
@@ -1012,6 +1038,8 @@ export function createEngineVoice(
         }
         out.disconnect()
         verbReturn.disconnect()
+        engineSoundTelemetry.rms = 0
+        engineSoundTelemetry.peak = 0
       }, 900)
     },
   }

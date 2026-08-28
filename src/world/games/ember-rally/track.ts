@@ -1876,7 +1876,9 @@ function makeRootSplit(track: Track, from: number): RootSplit {
     x[i] = sample.x
     y[i] = sample.y
     z[i] = sample.z
-    width[i] = 4.05
+    // Rootwake is the learned precision road. A 7.4 m deck leaves deliberate
+    // placement room around the car, but no longer lets a loose line feel safe.
+    width[i] = 3.7
     ceiling[i] = 3.62 + Math.sin(t * Math.PI * 7) * 0.24
     room[i] = 0.035
     wet[i] = 0.45 + Math.sin(t * 13.1) * 0.16
@@ -1908,9 +1910,9 @@ function makeRootSplit(track: Track, from: number): RootSplit {
     const b = Math.min(count - 1, i + 2)
     const distance = Math.max(0.5, ((metric[a] + metric[b]) * (b - a)) * 0.5)
     curv[i] = -(heading[b] - heading[a]) / distance
-    // A little apex room prevents mathematically correct driving from being
-    // punished while every straight remains substantially tighter than Rootway.
-    width[i] += Math.min(0.82, Math.abs(curv[i]) * 22)
+    // Keep restrained apex relief through the signature corners without letting
+    // them swell back to the width of an ordinary Rootway chamber.
+    width[i] += Math.min(0.7, Math.abs(curv[i]) * 19)
     bank[i] = Math.max(-0.16, Math.min(0.16, -curv[i] * 4.4))
     const usable = Math.max(0, width[i] - 1.25)
     // The tunnel is too narrow for the broad road's full edge-to-apex line.

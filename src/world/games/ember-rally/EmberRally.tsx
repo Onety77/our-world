@@ -5,6 +5,9 @@ import { makeTrack } from './track'
 import { driveSpirit } from './spirit'
 import { useRace } from './session'
 import { usePublishedTuning } from './tuningSync'
+import { TouchDriving } from './TouchDriving'
+import { drivingWithThumbs } from './touch'
+import { gapLabel, useBest } from './best'
 import {
   moveRun,
   timeLabel,
@@ -143,10 +146,7 @@ const COURSES: Record<StageId, {
  * which are now the brake and the handbrake. A hint that is wrong is worse
  * than none — it teaches the wrong thing once and is then gone.
  */
-const CONTROLS =
-  typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
-    ? 'left thumb steers · right thumb holds the throttle, pull down to brake and slide · tap for the ember'
-    : 'up to go · down to brake · arrows to steer · space to slide · shift for the ember'
+const CONTROLS = 'up to go · down to brake · arrows to steer · space to slide · shift for the ember'
 
 /** Arrow selection plus Enter, while leaving native button activation intact. */
 function useMenuKeys(count: number, activate: (index: number) => void) {
@@ -583,6 +583,7 @@ function CoursePicker({
             <i className="course-lamps"><b /><b /></i>
           </span>
           <span className="rally-course-name">The Rootway</span>
+          <CourseBest stage="rootway" />
           <span className="rally-course-copy">{COURSES.rootway.short}</span>
           <span className="rally-course-enter">go below</span>
         </button>
@@ -603,6 +604,7 @@ function CoursePicker({
             <i className="course-road" />
           </span>
           <span className="rally-course-name">The Moonbreak</span>
+          <CourseBest stage="moonbreak" />
           <span className="rally-course-copy">{COURSES.moonbreak.short}</span>
           <span className="rally-course-enter">take the high road</span>
         </button>
@@ -624,6 +626,7 @@ function CoursePicker({
             <i className="course-road" />
           </span>
           <span className="rally-course-name">The Stormcrown</span>
+          <CourseBest stage="stormcrown" />
           <span className="rally-course-copy">{COURSES.stormcrown.short}</span>
           <span className="rally-course-enter">climb into weather</span>
         </button>
@@ -691,6 +694,15 @@ function Road({
   const surface = useRef<HTMLDivElement>(null)
   const finish = useRef(onFinish)
   finish.current = onFinish
+  /*
+    Decided when the road opens, then left alone.
+
+    Not reactive on purpose: this decides whether there is a throttle at all,
+    and `attachControls` asks the same question separately for the same
+    reason. Two answers that could drift apart mid-race would be a car whose
+    accelerator came and went.
+  */
+  const phone = useRef(drivingWithThumbs()).current
 
   useEffect(() => {
     useGameStage.getState().take(true)
@@ -698,7 +710,23 @@ function Road({
       track,
       ghost,
       ghostName,
-      onFinish: (run) => finish.current(run),
+      onFinish: (run) => {
+        /*
+          Offered to the board before it is handed on.
+
+          Here rather than in the screen that reports it, because a run is
+          finished whether or not anybody stays to look at the result — and a
+          best time that only counted if you did not press "again" straight
+          away is a best time nobody would trust.
+        */
+        useBest.getState().offer(track.stage, {
+          timeMs: run.timeMs,
+          strikes: run.strikes,
+          driftMs: run.driftMs,
+          at: Date.now(),
+        })
+        finish.current(run)
+      },
     })
     useRace.getState().setSurface(surface.current)
     return () => {
@@ -717,9 +745,13 @@ function Road({
       <EmberBar />
       <Speed />
       <Pause onLeave={onLeave} onRestart={onRestart} hasResult={Boolean(children)} />
-      <p className="rally-hint" aria-hidden="true">
-        {CONTROLS}
-      </p>
+      {phone ? (
+        <TouchDriving />
+      ) : (
+        <p className="rally-hint" aria-hidden="true">
+          {CONTROLS}
+        </p>
+      )}
       {children}
     </div>
   )
@@ -758,7 +790,7 @@ function StartLights() {
         {phase === 'running'
           ? 'go'
           : touch
-            ? 'hold the right side to raise the engine'
+            ? 'it drives itself — you steer'
             : 'hold ↑ to raise the engine'}
       </span>
     </div>
@@ -1033,6 +1065,7 @@ function RunOver({
           : returnLabel.includes('moonwell') ? 'Clean across the Moonbreak.' : 'Clean through the Rootway.'}
         {run.driftMs > 2500 ? ` ${(run.driftMs / 1000).toFixed(1)} seconds sideways.` : ''}
       </p>
+      <BestLine />
       {saving ? <p className="rally-note">keeping the tyre marks…</p> : null}
       {fault ? <p className="rally-fault">{fault}</p> : null}
       <RallyActions actions={[
@@ -1042,6 +1075,53 @@ function RunOver({
           : []),
       ]} />
     </div>
+  )
+}
+
+/**
+ * The time this road is holding, on the door to it.
+ *
+ * On the chooser rather than only on the result, because the moment you decide
+ * which road to drive is the moment the number is worth knowing — a road you
+ * have never finished and a road you were 0.3 off last time are two different
+ * invitations, and the doors used to look identical.
+ *
+ * A road never finished says nothing at all. An empty slot with a dash in it
+ * would be three rows of punctuation on the one screen that is supposed to
+ * look like a way in.
+ */
+function CourseBest({ stage }: { stage: StageId }) {
+  const best = useBest((s) => s.bests[stage])
+  if (!best) return null
+  return <span className="rally-course-best">best {timeLabel(best.timeMs)}</span>
+}
+
+/**
+ * The one line this game never had: what you were trying to beat.
+ *
+ * Under the time rather than over it — the run you just did is the headline
+ * and the board is the context. Three things it can say, and each of them is a
+ * different moment: the first time you get down a road at all, the run that
+ * finally beats it, and every run in between, where the number to chase is
+ * still sitting there.
+ */
+function BestLine() {
+  const offer = useBest((s) => s.lastOffer)
+  if (!offer) return null
+  if (offer.beatMs === null) {
+    return <p className="rally-best first">your first time down this road</p>
+  }
+  if (offer.improved) {
+    return (
+      <p className="rally-best won">
+        a new best — <b>{gapLabel(offer.byMs)}</b> on {timeLabel(offer.beatMs)}
+      </p>
+    )
+  }
+  return (
+    <p className="rally-best">
+      <b>{gapLabel(offer.byMs)}</b> — your best here is {timeLabel(offer.beatMs)}
+    </p>
   )
 }
 

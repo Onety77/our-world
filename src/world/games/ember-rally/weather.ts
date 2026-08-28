@@ -27,6 +27,25 @@ export const storm = {
   /** 0 up to the cloud top, 1 well clear above it. */
   above: 0,
   /**
+   * How hard it is raining here, 0..1 — for the eye *and* the ear.
+   *
+   * -------------------------------------------------------------------------
+   * This exists because the two disagreed, and disagreeing is the one thing
+   * this file is for. The rain you could see was a shader with a single
+   * `uTime` uniform: the same rain in the forest at the bottom, in the blind
+   * middle of the cloud, and in clear air above the top. The rain you could
+   * *hear* meanwhile moved with the cloud. So the storm arrived in one sense
+   * and not the other, which reads — correctly — as the sound having nothing
+   * to do with the weather.
+   *
+   * The rule that fixes it is the one already written above about the flash:
+   * anything the world does, it does everywhere at once. So the rain is worked
+   * out in exactly one place, off the height of the road like everything else
+   * here, and the drops and the noise both read *this*.
+   * -------------------------------------------------------------------------
+   */
+  rain: 0,
+  /**
    * How hard the sky is lit this instant, 0..1.
    *
    * Strikes are short and they come in pairs and threes, the way real ones do —

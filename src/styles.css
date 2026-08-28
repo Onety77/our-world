@@ -9486,3 +9486,279 @@ body:has(.rally-running) .player {
     opacity: 0.48;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Driving it with two thumbs
+
+   Everything here is for a phone and nothing here appears on a keyboard. The
+   steering has no furniture at all — the left of the screen *is* left, and a
+   drawn pad on top of a large target only teaches people to aim at the small
+   one. What is drawn is the two buttons, and once, on the first race, a pair
+   of words saying which side is which.
+
+   The whole layer sits above `.rally-input` and below the pause control, so a
+   thumb on a button never also reaches the steering surface underneath.
+   -------------------------------------------------------------------------- */
+
+.rally-thumb {
+  position: absolute;
+  /* `left`/`top` are the *centre*, so a moved button pivots about itself. */
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 226, 184, 0.34);
+  background: rgba(18, 14, 11, 0.34);
+  /* Backdrop rather than a solid fill: the road has to stay readable through
+     a control that sits on top of the part of it you are driving into. */
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  color: rgba(255, 232, 198, 0.82);
+  font-size: 5vmin;
+  line-height: 1;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  /* No transition on transform: a button that eases when pressed reports the
+     press late, and this one is holding a car sideways. */
+  transition: background 90ms ease, border-color 90ms ease;
+}
+
+.rally-thumb.boost {
+  border-color: rgba(120, 196, 255, 0.4);
+  color: rgba(214, 236, 255, 0.86);
+}
+
+.rally-thumb.on {
+  background: rgba(255, 196, 120, 0.28);
+  border-color: rgba(255, 214, 160, 0.72);
+}
+
+.rally-thumb.boost.on {
+  background: rgba(120, 196, 255, 0.3);
+  border-color: rgba(176, 224, 255, 0.8);
+}
+
+/* ---- which side is which, said once --------------------------------------
+
+   Shown only to somebody who has never finished a road on this device, and
+   faded the moment the flag drops rather than on a timer: the thing that
+   proves you have understood is that you have started driving. */
+
+.rally-arrows {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6vw;
+  pointer-events: none;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: lowercase;
+  color: rgba(255, 232, 198, 0.5);
+  opacity: 1;
+  transition: opacity 900ms ease 600ms;
+}
+
+.rally-arrows.going {
+  opacity: 0;
+}
+
+.rally-arrows span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rally-arrows b {
+  font-size: 2.4rem;
+  font-weight: 400;
+  line-height: 0.6;
+  color: rgba(255, 226, 184, 0.72);
+}
+
+/* ---- turn your phone ------------------------------------------------------
+
+   A stop, not a hint. In portrait you can see about a second and a half of
+   road, which is less than the time it takes to react to a corner — so the
+   race pauses itself underneath this rather than letting somebody lose to the
+   shape of their hand. */
+
+.rally-turn {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  background: rgba(10, 8, 7, 0.92);
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  text-align: center;
+}
+
+.rally-turn p {
+  margin: 0;
+}
+
+.rally-turn-why {
+  font-size: 0.62rem;
+  color: rgba(255, 232, 198, 0.44);
+}
+
+/* A phone, drawn, turning. Two boxes and a rotation is enough to read as one
+   and costs nothing next to an icon font. */
+.rally-turn-phone {
+  width: 2.6rem;
+  height: 4.4rem;
+  border: 2px solid rgba(255, 226, 184, 0.6);
+  border-radius: 0.42rem;
+  animation: rally-turn-it 2.6s ease-in-out infinite;
+}
+
+@keyframes rally-turn-it {
+  0%, 26% { transform: rotate(0deg); }
+  56%, 84% { transform: rotate(-90deg); }
+  100% { transform: rotate(-90deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rally-turn-phone { animation: none; transform: rotate(-90deg); }
+  .rally-arrows { transition: none; }
+}
+
+/* --------------------------------------------------------------------------
+   The button layout editor, in the control room
+
+   A rectangle you put things on, rather than four sliders. What is being set
+   is a place on a screen, so the control is a screen.
+   -------------------------------------------------------------------------- */
+
+.thumb-phone {
+  position: relative;
+  width: 100%;
+  max-width: 30rem;
+  margin: 0.7rem 0 1rem;
+  border: 1px solid #2b3238;
+  border-radius: 0.6rem;
+  background: #0d0f11;
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* The line the steering is divided on. Worth seeing, because a button that has
+   drifted onto the wrong side is a button that also turns the car. */
+.thumb-half {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  color: #3c464e;
+}
+
+.thumb-half.left {
+  left: 0;
+  border-right: 1px dashed #232a30;
+}
+
+.thumb-half.right {
+  right: 0;
+}
+
+/*
+  The .thumb-phone prefix on every one of these is not tidiness.
+
+  These are <button> elements inside .admin, and the ".admin button" rule sets
+  a 2px border-radius at a specificity of 0,1,1. A bare ".thumb-spot" is 0,1,0
+  and loses — so the circles came out as squares, which is exactly what a
+  button looks like when it is pretending to be somewhere on a phone.
+*/
+.thumb-phone .thumb-spot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  /* Height, to match the phone's vmin. See the note above the file's editor. */
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #7fd6a8;
+  background: #163023;
+  color: #a8e8c6;
+  font-size: 1rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.thumb-phone .thumb-spot:active {
+  cursor: grabbing;
+}
+
+.thumb-phone .thumb-spot.boost {
+  border-color: #78c4ff;
+  background: #12283a;
+  color: #cfe8ff;
+}
+
+.thumb-phone .thumb-spot:focus-visible {
+  outline: 2px solid #a8e8c6;
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   The time to beat
+
+   Two places, and both are context rather than headline: under the run you
+   just did, and on the door to a road you have already driven. Quiet on
+   purpose — a leaderboard shouted at you after a forty-second race is an
+   arcade ending, and this game finishes at a fire.
+   -------------------------------------------------------------------------- */
+
+.rally-best {
+  margin: 0.35rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: lowercase;
+  color: rgba(255, 232, 198, 0.56);
+}
+
+.rally-best b {
+  font-weight: 600;
+  color: rgba(255, 232, 198, 0.86);
+}
+
+/* Beaten it. The one moment in the race worth a colour. */
+.rally-best.won,
+.rally-best.won b {
+  color: #f0b26a;
+}
+
+.rally-best.first {
+  color: rgba(255, 232, 198, 0.44);
+}
+
+.rally-course-best {
+  display: block;
+  margin-top: 0.2rem;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  color: rgba(255, 226, 184, 0.5);
+}

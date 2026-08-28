@@ -18,6 +18,7 @@ import { potTotal } from '@/data/local'
 import { format, parseMajor, progressToward } from '@/data/money'
 import { usePot } from '@/systems/pot'
 import { useQuestions } from '@/systems/questions'
+import { ambience } from '@/systems/ambience'
 
 export function PotForm() {
   const data = useData()
@@ -64,6 +65,7 @@ export function PotForm() {
     // you actually set aside, and quietly losing the entry is the worst of the
     // available outcomes.
     if (!added) return
+    ambience.cue('water', 0.78)
     setAmount('')
     setNote('')
     close()

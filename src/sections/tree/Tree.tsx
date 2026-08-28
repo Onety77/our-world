@@ -45,6 +45,7 @@ import { greatTree, hangDrop, hangSpot } from './greatTree'
 import { useSections } from '@/systems/sections'
 import { takenOverNow } from '@/systems/attention'
 import { QuestionVine } from './QuestionVine'
+import { ambience } from '@/systems/ambience'
 
 /**
  * One thought as the tree hangs it: a knot on a branch, and the length of
@@ -261,7 +262,10 @@ function Blooms() {
         */
         consider(thought.id, paperCentre(hungFrom(thought, i)), 0.72)
       })
-      if (best) open((best as { id: string }).id)
+      if (best) {
+        ambience.cue('paper', 0.42)
+        open((best as { id: string }).id)
+      }
     }
     window.addEventListener('pointerup', onUp)
     return () => window.removeEventListener('pointerup', onUp)

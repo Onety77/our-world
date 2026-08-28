@@ -3,6 +3,15 @@ import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser, type QuestionRound } from '@/data/types'
 import { attempt } from '@/systems/trouble'
 import { useQuestions } from '@/systems/questions'
+import { ambience } from '@/systems/ambience'
+
+/** The question sheets are the same paper as thoughts, so they use the same nib. */
+function soundOfWriting(before: string, after: string) {
+  const grew = after.length - before.length
+  if (grew === 1) ambience.nib(/[a-z0-9]/i.test(after.at(-1) ?? '') ? 0.62 : 0.34)
+  else if (grew > 1) ambience.nib(0.85)
+  else if (grew < 0) ambience.nib(0.35, true)
+}
 
 function Answered({ round }: { round: QuestionRound }) {
   const profiles = useWorldSlice((state) => state.profiles)
@@ -51,7 +60,10 @@ function RoundSheet({ round }: { round: QuestionRound }) {
     const saved = await attempt('your answer did not settle under the bark', () =>
       data.answerQuestion(round.id, body),
     )
-    if (saved) setBody('')
+    if (saved) {
+      ambience.cue('seal', 0.72)
+      setBody('')
+    }
   }
 
   return (
@@ -75,7 +87,10 @@ function RoundSheet({ round }: { round: QuestionRound }) {
                 ref={field}
                 className="ink question-writing"
                 value={body}
-                onChange={(event) => setBody(event.target.value)}
+                onChange={(event) => {
+                  soundOfWriting(body, event.target.value)
+                  setBody(event.target.value)
+                }}
                 placeholder="leave your answer here…"
                 maxLength={8000}
                 aria-label="your sealed answer"
@@ -123,7 +138,10 @@ function PlantQuestion() {
     const saved = await attempt('that question did not take root', () =>
       data.plantQuestion(prompt),
     )
-    if (saved) close()
+    if (saved) {
+      ambience.cue('root', 0.7)
+      close()
+    }
   }
 
   return (
@@ -136,7 +154,10 @@ function PlantQuestion() {
               ref={field}
               className="ink question-writing"
               value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
+              onChange={(event) => {
+                soundOfWriting(prompt, event.target.value)
+                setPrompt(event.target.value)
+              }}
               placeholder="What would you like the Tree to ask both of you?"
               maxLength={600}
               aria-label="question to plant"

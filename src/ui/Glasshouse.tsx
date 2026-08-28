@@ -100,7 +100,7 @@ export function LeavingAMemory() {
       window.setTimeout(() => {
         if (useMemories.getState().formingId === memory.id) forming(null)
       }, FORMING_MS)
-      ambience.said(true)
+      ambience.cue('glass', 1)
       close()
     } catch (error) {
       useTrouble.getState().say(error instanceof Error ? error.message : 'It would not go up.')
@@ -514,7 +514,14 @@ export function OpenMemory() {
       </div>
 
       <div className="opened-ways">
-        <button type="button" className="put-back" onClick={() => setTurned(!turned)}>
+        <button
+          type="button"
+          className="put-back"
+          onClick={() => {
+            ambience.cue('glass', 0.28)
+            setTurned(!turned)
+          }}
+        >
           {turned ? 'turn it back' : 'turn it over'}
         </button>
         <button type="button" className="put-back quiet" onClick={() => open(null)}>

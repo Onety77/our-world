@@ -1,20 +1,25 @@
 /**
- * What a drift actually costs, measured.
+ * What a drift actually costs, and where it actually goes.
  *
- * `npx tsx scripts/drift-probe.ts`
+ * `npm run drift`
  *
- * Two complaints, both about drifting, and both of the kind a lap time hides:
- * the car stops dead in a long corner, and the car holds 110-120 km/h sideways
- * for as long as you keep flicking it. Neither shows up in `rally-check`,
- * because that harness asks whether the car *works* — and in both of these it
- * works fine, it is just wrong.
+ * Two complaints, both about drifting, and both of the kind a lap time hides.
+ * The first — the car stopping dead in a long corner, and a swap costing
+ * nothing — is fixed and the traces below hold it fixed.
  *
- * **The walls are switched off here**, by pinning the car to the middle of the
- * road every step. That is a lie about the road and it is the only way to get
- * a truth about the drift: a drifting car runs wide, leans on the rock, and
- * the rock scrubs speed — so a trace taken on the real road is measuring the
- * wall, not the drift. The first run below is printed with the walls left on
- * to show exactly how much they were hiding.
+ * The second is subtler and is what the `n` and `along` columns are for. A
+ * drift commands a *course*, and a course that is not anchored to the road
+ * walks off it: the speedometer reads sixty because the car really is moving
+ * at sixty, and none of that sixty is going down the tunnel. It reads as the
+ * car stopping. So a speed trace on its own is not enough to tell whether a
+ * drift works, and this prints four things per second instead:
+ *
+ *   km/h    the speed the meter shows — the magnitude of the velocity
+ *   along   how much of that is going *down the road*. This is the number
+ *           that reads as speed to somebody driving
+ *   n       metres off the middle of the road. Should stay put in a
+ *           sustained drift; a drift that walks is a drift into the rock
+ *   rock    how much of the time it spent leaning on the wall
  */
 
 import {
@@ -42,45 +47,58 @@ interface Run {
   label: string
   steer: (t: number) => number
   handbrake: (t: number) => boolean
-  walls?: boolean
+  /** Pin the car to the middle to take the walls out of the measurement. */
+  noWalls?: boolean
 }
 
-function drift({ label, steer, handbrake, walls = false }: Run, seconds = 8): void {
+function drift({ label, steer, handbrake, noWalls = false }: Run, seconds = 7): void {
   const track = makeTrack(7, 'rootway')
   const car = createCar(track)
   windUpTo(track, car, 30)
 
-  const trace: string[] = []
+  const kmh: string[] = []
+  const along: string[] = []
+  const off: string[] = []
   let touched = 0
   let steps = 0
   let mark = 0
+  let lastS = car.s
+
   for (let step = 0; step < seconds / DT; step++) {
     const t = step * DT
+    const before = car.s
     advanceCar(track, car, { steer: steer(t), throttle: 1, brake: 0, handbrake: handbrake(t), boost: false }, DT)
     steps++
     if (car.touching) touched++
-    if (!walls) car.n = 0
+    if (noWalls) car.n = 0
     if (t >= mark) {
-      trace.push(`${(speedOf(car) * KMH).toFixed(0).padStart(3)}`)
+      kmh.push(`${(speedOf(car) * KMH).toFixed(0)}`.padStart(3))
+      // Metres down the road in the last second, as km/h, so the two columns
+      // are directly comparable — that gap is the whole complaint.
+      along.push(`${((car.s - lastS) * KMH).toFixed(0)}`.padStart(3))
+      off.push(`${car.n.toFixed(1)}`.padStart(5))
+      lastS = car.s
       mark += 1
     }
+    void before
   }
-  const wall = walls ? `   (on the rock ${Math.round((touched / steps) * 100)}% of the time)` : ''
-  console.log(`  ${label.padEnd(46)} ${trace.join(' ')}${wall}`)
+  const rock = Math.round((touched / steps) * 100)
+  console.log(`  ${label}`)
+  console.log(`      km/h  ${kmh.join(' ')}`)
+  console.log(`     along  ${along.join(' ')}   ${noWalls ? '' : `· on the rock ${rock}% of the time`}`)
+  if (!noWalls) console.log(`         n  ${off.join(' ')}`)
+  console.log('')
 }
 
 const swap = (period: number) => (t: number) => (Math.floor(t / period) % 2 === 0 ? 1 : -1)
-const held = () => true
 const flick = (t: number) => t < 0.3
 
-console.log('\nspeed in km/h, every second, entering at 108 with the throttle pinned')
-console.log(`  ${''.padEnd(46)}  0s   1   2   3   4   5   6   7\n`)
+console.log('\nentering every drift at 108 km/h with the throttle pinned\n')
+console.log('  --- the fixed ones: short drifts and side-swaps, walls off ---\n')
+drift({ label: 'swapping sides every 0.6s', steer: swap(0.6), handbrake: flick, noWalls: true })
+drift({ label: 'swapping sides every 0.35s', steer: swap(0.35), handbrake: flick, noWalls: true })
 
-drift({ label: 'the same drift WITH the walls, for scale', steer: () => 1, handbrake: held, walls: true })
-console.log()
-drift({ label: 'A  long corner, handbrake HELD all the way', steer: () => 1, handbrake: held })
-drift({ label: 'B  long corner, handbrake let go at 0.3s', steer: () => 1, handbrake: flick })
-drift({ label: 'C  swapping sides every 0.6s', steer: swap(0.6), handbrake: flick })
-drift({ label: 'D  swapping sides every 0.35s (the flick)', steer: swap(0.35), handbrake: flick })
-drift({ label: 'E  no drift, gentle cornering, for comparison', steer: () => 0.35, handbrake: () => false })
-console.log()
+console.log('  --- the one being complained about: one long corner, walls ON ---\n')
+drift({ label: 'hold one direction, handbrake let go', steer: () => 1, handbrake: flick })
+drift({ label: 'hold one direction, handbrake HELD', steer: () => 1, handbrake: () => true })
+drift({ label: 'no drift, gentle cornering, for comparison', steer: () => 0.3, handbrake: () => false })
