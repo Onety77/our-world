@@ -263,6 +263,24 @@ const DRIFT_TURN = 1.3
 /** How fast the arcade model takes over, and hands back. */
 const DRIFT_BLEND_IN = 7
 const DRIFT_BLEND_OUT = 5
+/**
+ * What swinging the car through costs, on top of hanging it out.
+ *
+ * Per radian per second of pose change, into the same scrub the angle feeds.
+ *
+ * Without it the scrub is a function of the *pose* alone — and a pose passes
+ * through zero every time you swap sides, so the one thing you can do to a set
+ * of tyres that ought to cost the most was costing nothing at all. Measured on
+ * a straight with the throttle pinned: flicking the car left-right-left ran
+ * away to 157 km/h while not drifting at all topped out at 115. Drifting was
+ * not a way of getting round a corner, it was the fastest way down a straight.
+ * See scripts/drift-probe.ts.
+ */
+const DRIFT_SWING_COST = 0.34
+/** How far hanging it right out pulls the ceiling below TUNE.driftTopSpeed. */
+const DRIFT_ANGLE_COST = 0.45
+/** How hard the ceiling pulls, per second. Fast enough to be the entry cost. */
+const DRIFT_CEILING_RATE = 1.3
 
 /** Kept so nothing that imported it breaks; any amount is spendable now. */
 export const BOOST_COST = 1
@@ -1052,7 +1070,26 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
       drive = axleTorque / 2 + (i === 2 ? diffLock : -diffLock)
     }
     let stopping = brakeTorque[i] * brakeDemand
-    if (!front && input.handbrake) stopping += TUNE.handbrake / 2
+    /*
+      The handbrake starts a drift and then gets out of the way.
+
+      Held down through a long corner it used to stop the car dead: 108 km/h to
+      a standstill in five seconds with the throttle pinned. Two things
+      compounded. The rears are locked, so no drive reaches the road at all —
+      and the drift has just relieved those same tyres of cornering, which
+      hands their entire friction budget to braking. A locked-rear car with
+      nothing else to spend grip on is the most effective brake in this file.
+
+      `driftMode` already promises that releasing the handbrake does not end a
+      drift, because a drift you have to hold a button through is a drift you
+      cannot steer with both hands. This is the other half of that promise:
+      holding it must not end one either.
+
+      Faded on `driftBlend` rather than switched, so the lock is still all
+      there for the instant that breaks the back loose, and so a lower
+      `driftHelper` keeps proportionally more of the real car's behaviour.
+    */
+    if (!front && input.handbrake) stopping += (TUNE.handbrake / 2) * (1 - car.driftBlend)
 
     const inertia = front
       ? WHEEL_INERTIA
@@ -1079,7 +1116,10 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     if (stopping > 0 && Math.sign(omega) !== Math.sign(wheel.omega) && wheel.omega !== 0) {
       omega = 0
     }
-    if (input.handbrake && !front) omega *= Math.exp(-14 * dt)
+    // The same fade, and this is the half that decides whether the car can
+    // drive: a wheel pinned at zero passes no engine torque to the road, however
+    // much of it is being asked for.
+    if (input.handbrake && !front) omega *= Math.exp(-14 * (1 - car.driftBlend) * dt)
     wheel.omega = omega
     wheel.spin += omega * dt
 
@@ -1195,6 +1235,72 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     const speed = Math.max(1, Math.hypot(car.vs, car.vn))
 
     /*
+      The angle it hangs at, following the same key that is steering it.
+
+      This is what makes swapping sides work: hold the other arrow and the
+      target crosses through zero to the far side, so the car swings through
+      straight and hangs out the other way without ever leaving the drift.
+
+      **Worked out before anything else in this block now**, because how fast
+      the pose is being moved turns out to be half of what a drift costs, and
+      the cost has to be known before the speed it applies to is spent on the
+      arc.
+    */
+    const want = -command * TUNE.driftAngle * car.driftBlend
+    const was = car.driftAngle
+    car.driftAngle += (want - car.driftAngle) * (1 - Math.exp(-TUNE.driftSwap * dt))
+    const swing = (car.driftAngle - was) / Math.max(dt, 1e-5)
+
+    /*
+      ------------------------------------------------------------------------
+      **What it costs** — the part that decides whether a drift is a way of
+      getting round a corner or a way of cheating the entire course.
+
+      Two terms, and the second is the one that was missing:
+
+        the angle    hanging it out scrubs speed. Squared, so a hint of
+                     opposite lock costs almost nothing and full lock bleeds
+                     properly
+        the swing    *moving* the pose scrubs far more than sitting at it.
+                     This is the tyres being dragged bodily across the road
+                     rather than merely pointing away from it
+
+      Without the swing term the cost was a function of the pose alone — and
+      the pose passes through zero on every side-swap, so a chicane taken
+      flick-flick-flick paid nothing at all. It was not close: 157 km/h down a
+      straight swapping sides against 115 not drifting at all, throttle pinned
+      for both. The drift was strictly quicker than the racing line everywhere,
+      which quietly makes every other number in this file decoration.
+
+      Then a ceiling, stated in km/h on a dial rather than left to emerge from
+      whatever the throttle, the gear and the angle happen to multiply out to.
+      A car that is sideways has two tyres pointing across its own path and no
+      longer accelerates; no combination of dials should be able to say
+      otherwise. Pulled towards rather than clamped, at a rate quick enough
+      that arriving sideways at 140 *is* the entry — a second or so of
+      deceleration you can hear and feel, which is what going sideways is
+      supposed to cost.
+      ------------------------------------------------------------------------
+    */
+    const sideways = Math.abs(Math.sin(car.driftAngle))
+    const slide = sideways * sideways + Math.abs(swing) * DRIFT_SWING_COST
+    let kept = speed * (1 - TUNE.driftScrub * slide * dt * car.driftBlend)
+    const ceiling = TUNE.driftTopSpeed * (1 - DRIFT_ANGLE_COST * sideways)
+    if (kept > ceiling) {
+      /*
+        The further past it goes the harder it is pulled back, for the same
+        reason the spin backstop further down does it: a constant rate is a
+        spring the engine can simply out-pull, and then the dial says 83 km/h
+        while the car sits at 100 and the number is a lie. Progressive, and
+        the dial is a speed the drift actually reaches.
+      */
+      const over = (kept - ceiling) / Math.max(1, ceiling)
+      const rate = DRIFT_CEILING_RATE * (1 + Math.min(3, over) * 9)
+      kept += (ceiling - kept) * (1 - Math.exp(-rate * dt)) * car.driftBlend
+    }
+    kept = Math.max(1, kept)
+
+    /*
       How tightly the path bends — as an arc, not as a force.
 
       See TUNE.driftTightness. The arrows name a curvature, the g ceiling and the
@@ -1205,38 +1311,21 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
 
       Set a little tighter than what the tyres can do, which is what makes a
       drift genuinely quicker through a tight corner than gripping — and paid
-      for by the scrub below, which is what stops it being quicker through
+      for by the scrub above, which is what stops it being quicker through
       everything.
     */
     const asked = (command / TUNE.driftTightness) * car.driftBlend
-    const most = (TUNE.driftGrip * TUNE.gravity) / (speed * speed)
+    const most = (TUNE.driftGrip * TUNE.gravity) / (kept * kept)
     const bend = Math.sign(asked) * Math.min(Math.abs(asked), most)
-    const turn = Math.max(-DRIFT_TURN, Math.min(DRIFT_TURN, bend * speed))
-
-    /*
-      The angle it hangs at, following the same key that is steering it.
-
-      This is what makes swapping sides work: hold the other arrow and the
-      target crosses through zero to the far side, so the car swings through
-      straight and hangs out the other way without ever leaving the drift.
-    */
-    const want = -command * TUNE.driftAngle * car.driftBlend
-    const was = car.driftAngle
-    car.driftAngle += (want - car.driftAngle) * (1 - Math.exp(-TUNE.driftSwap * dt))
-    const swing = (car.driftAngle - was) / Math.max(dt, 1e-5)
+    const turn = Math.max(-DRIFT_TURN, Math.min(DRIFT_TURN, bend * kept))
 
     // Rebuild the velocity from the pose, and rotate the car by however much
     // is needed for the *path* to turn at `turn` while the pose is changing.
-    const poseVs = speed * Math.cos(car.driftAngle)
-    const poseVn = speed * Math.sin(car.driftAngle)
+    const poseVs = kept * Math.cos(car.driftAngle)
+    const poseVn = kept * Math.sin(car.driftAngle)
     car.vs += (poseVs - car.vs) * car.driftBlend
     car.vn += (poseVn - car.vn) * car.driftBlend
     car.yaw += (turn - swing - car.yaw) * car.driftBlend
-
-    // Sideways is not free. Squared, so a small angle costs almost nothing and
-    // hanging it right out bleeds speed the way it should.
-    const sideways = Math.abs(Math.sin(car.driftAngle))
-    car.vs *= 1 - TUNE.driftScrub * sideways * sideways * dt * car.driftBlend
 
     /*
       What the body leans on.
@@ -1246,7 +1335,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
       moved by this block, not by them, so asking them how hard it is cornering
       gives an answer about a car that is not the one on screen.
     */
-    car.cornering += (turn * speed - car.cornering) * car.driftBlend
+    car.cornering += (turn * kept - car.cornering) * car.driftBlend
   }
 
   /*

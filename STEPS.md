@@ -6,25 +6,29 @@ saves nothing* to *the two of you are actually in it*.
 Do them in order. Several of them fail silently if done out of order, and the
 failure looks like "the garden is broken" rather than "step 4 is missing".
 
-`FIREBASE.md` covers part of this and is now out of date in one place — it says
-Cloud Storage is not needed. It is: the Glasshouse stores photographs. This
-file supersedes it.
+`FIREBASE.md` covers part of this and is out of date in one place — it says
+Cloud Storage is not needed. It is: the Glasshouse stores photographs and the
+Stars store voice-lights. This file supersedes it.
 
 ---
 
 ## Where it stands right now
 
-Checked, not remembered:
+Everything in this table that could be checked from the repo, was — just now,
+not remembered. The three console rows are marked, because nothing here can see
+your Firebase console; those are the ones to confirm with your own eyes.
 
 | | |
 |---|---|
 | The code | done — five places, three games, the conversation, the music, the Glasshouse |
-| Firebase project | exists. Auth switched on, Firestore created, Realtime DB created |
-| **Cloud Storage** | **not created** — needed now, for the Glasshouse |
-| **The two accounts** | **not made** |
-| **The rules** | **not published** — all three files |
-| `.env.local` | keys filled in, but `VITE_DATA_BACKEND=local` and both addresses empty |
-| **Hosting** | **does not exist.** There is no deploy config of any kind |
+| Firebase project | exists. Auth on, Firestore created, Realtime DB created |
+| Cloud Storage | *console — check.* Needed now, for photographs **and** voice-lights |
+| The two accounts | *console — check.* |
+| The rules | *console — check.* Three files, all three must be published |
+| The rule templates | **present and current** — every collection the app uses is covered |
+| `.env.local` | keys and database URL filled in. **`VITE_DATA_BACKEND=local`**, both addresses **empty**, both names **empty** |
+| Her city and clock | **still set to Lagos** — same as yours. See 2.4; this one is invisible when wrong |
+| Hosting | **does not exist.** No `firebase.json`, no Vercel, no Netlify, nothing |
 
 So: it currently runs only on your machine, in the fake local mode, and the
 whole thing is stored in your browser and nowhere else.
@@ -61,25 +65,26 @@ regions costs latency for no benefit.
 It will offer to start in test mode or locked mode. **Locked.** You are pasting
 real rules in step 3 and test mode is a bucket anyone can read for 30 days.
 
-This is new. Nothing needed Storage before the Glasshouse; photographs are the
-first thing in this world that stores bytes rather than documents.
+Storage now backs **two** things, not one: photographs in the Glasshouse and
+the brief voice-lights in the Stars. Both are bytes, both are new, and neither
+has ever run against a real bucket.
 
 ## 1.3 Check the bucket name matches
 
 **Storage → Files** shows the bucket, something like
 `your-project.firebasestorage.app` or `your-project.appspot.com`.
 
-Open `.env.local` and check `VITE_FB_STORAGE_BUCKET` is exactly that. It was
-filled in from the config you pasted long ago, and Google changed the default
-bucket domain partway through 2024 — so a project created around then can have
-a value that looks right and is not. If it is wrong, uploads fail with a
-permission error that has nothing to do with permissions.
+`VITE_FB_STORAGE_BUCKET` in `.env.local` is filled in — but it was filled in
+from a config you pasted long ago, and Google changed the default bucket domain
+partway through 2024, so a project created around then can have a value that
+looks right and is not. Check it character for character. If it is wrong,
+uploads fail with a permission error that has nothing to do with permissions.
 
 ---
 
 # Part 2 — The env file
 
-Open `.env.local`. Three things.
+Open `.env.local`. Four things, and all four are currently unset or wrong.
 
 ## 2.1 Flip the switch
 
@@ -112,20 +117,33 @@ written once on first run, editable afterwards from the profile — but the very
 first screen she ever sees says **"for {name}"**, and it should not say "for
 Cool".
 
-## 2.4 Check her timezone is actually hers
+## 2.4 Move her to where she actually is
 
-`VITE_COOL_TZ` is currently `Africa/Lagos` — the same as yours. That was
-harmless before and is not now. **The world runs on the other person's clock**:
-you get her hour and she gets yours. If both timezones are the same, the whole
-thing is invisible and the Stars has no dawn on its horizon, because there is
-no difference to show.
+Not just the timezone. All four of these are currently hers-in-name-only:
 
-Set it to `Asia/Shanghai`, or wherever she actually is, the day she lands. It
-is editable from `/dev7731` and from her own profile afterwards, so it does not
-have to be right at build time — but it does have to be right.
+```
+VITE_COOL_CITY=Lagos
+VITE_COOL_TZ=Africa/Lagos
+VITE_COOL_LAT=6.5244
+VITE_COOL_LON=3.3792
+```
+
+**The world runs on the other person's clock**: you get her hour and she gets
+yours. With both of you set to Lagos the whole idea is invisible — same hour,
+same sun, and the Stars has no dawn on its horizon because there is no
+difference to show.
+
+The coordinates matter as much as the zone, because they are what the weather
+and the sun are worked out from. Setting `VITE_COOL_TZ=Asia/Shanghai` and
+leaving the latitude in the Gulf of Guinea gives you her clock over your
+daylight, which is worse than not doing it at all — it looks right and is not.
+
+Change all four together, the day she lands. The timezone and city are editable
+afterwards from `/dev7731` and from her own profile, so they do not have to be
+right at build time — but they do have to be right.
 
 Everything else in the file is already correct: the Firebase keys, the database
-URL, the two cities, coordinates, and the pot currency.
+URL, your own city and coordinates, and the pot currency.
 
 ---
 
@@ -143,19 +161,25 @@ and the garden looks broken for no visible reason.
 npm run rules
 ```
 
-That reads the two addresses out of `.env.local` and writes three files into
-`rules-out/`:
+That reads the two addresses out of `.env.local` and writes into `rules-out/`:
 
 ```
+rules-out/PASTE-ME.md          ← all three, in order, with the addresses filled in
 rules-out/firestore.rules
 rules-out/database.rules.json
 rules-out/storage.rules
 ```
 
-**Do not hand-edit the templates in the repo root.** The addresses have to
-match what the app uses, and keeping that fact in four files is four places to
-get it wrong. `rules-out/` is gitignored; the templates beside it are the
-version to keep.
+**Open `rules-out/PASTE-ME.md` and work down it.** It is the three files in one
+document, in the order the console wants them, each block labelled with the
+screen it belongs on. The three separate files are beside it if you would
+rather copy them one at a time.
+
+`rules-out/` is gitignored, because that is the only copy anywhere with your
+real addresses in it. The templates in the repo root keep `__WARM_EMAIL__`
+placeholders and are the version to keep. **Do not hand-edit the templates** —
+the addresses have to match what the app uses, and keeping that fact in four
+files is four places to get it wrong.
 
 If it says `VITE_WARM_EMAIL is empty in .env.local`, go back to step 2.2.
 
@@ -163,14 +187,53 @@ If it says `VITE_WARM_EMAIL is empty in .env.local`, go back to step 2.2.
 
 In the console, one at a time:
 
-| File | Where | |
-|---|---|---|
-| `rules-out/firestore.rules` | **Firestore Database → Rules** | paste → **Publish** |
-| `rules-out/database.rules.json` | **Realtime Database → Rules** | paste → **Publish** |
-| `rules-out/storage.rules` | **Storage → Rules** | paste → **Publish** |
+| # | File | Where | |
+|---|---|---|---|
+| 1 | `firestore.rules` | **Firestore Database → Rules** | paste → **Publish** |
+| 2 | `database.rules.json` | **Realtime Database → Rules** | paste → **Publish** |
+| 3 | `storage.rules` | **Storage → Rules** | paste → **Publish** |
 
 Nothing takes effect until you press Publish on each one. All three. The
-Storage one is new and is the one you will forget.
+Storage one is the one you will forget.
+
+## 3.3 What each one is actually doing
+
+Worth thirty seconds before you paste something you cannot read.
+
+**Firestore** — the long one, and the only one worth reading in full. It starts
+from *nobody, to nothing* and opens exactly two doors, matched on the two
+addresses, lowercased on both sides. Every collection the app uses has its own
+block: `world`, `profiles`, `letters`, `contributions`, `plants`, `decor`,
+`tracks`, `messages`, `voiceLights`, `voiceLightConfig`, `rallyTuning`,
+`memories`, `rounds/moves`, `questionRounds/answers`, `questionSeeds` — and a
+final `match /{document=**}` that denies everything else forever. Checked
+against the app just now: nothing the code writes is missing a rule.
+
+**Realtime Database** — presence only. Where the two of you are standing right
+now, written several times a second and thrown away. The rule that matters is
+that **you may only write your own light**; without it either of you could drag
+the other around the garden. It also carries the two live invitations —
+`racing` (the Scattergories round you are sitting in) and `looking` (the memory
+you have open) — which is why Part 6 steps 6 and 8 are the ones that fail if
+this file is not published.
+
+**Storage** — the bytes, and it allows exactly two paths:
+
+- `memories/{file}` — create only, `image/webp` or `image/jpeg`, under 8 MB.
+  Never overwritten: every upload goes to a fresh id, and `resource == null`
+  makes that a rule rather than a habit.
+- `voice-lights/{who}/{file}` — create only, `audio/webm|mp4|ogg`, under 3 MB,
+  and `who` must be *you*.
+
+Everything outside those two paths is denied to everybody, forever.
+
+One honest caveat, because it is the single place in this garden where
+"private" is not obvious: a Storage download URL carries a long unguessable
+token, and **anybody holding that URL can fetch the file without signing in.**
+That is how the picture gets into an `<img>` at all. So the bucket is private —
+only the two of you can list it, upload to it, or ask for a URL — but a URL,
+once handed out, is a key. Nothing in the app ever puts one in an address bar,
+a link, or anything that leaves the device.
 
 ---
 
@@ -183,7 +246,8 @@ npm run dev
 Vite reads env files **once, at startup** — if it was already running, stop it
 and start it again or none of Part 2 exists.
 
-Then, in order:
+Then, in order. Each step proves one thing, and they are ordered so that a
+failure tells you which:
 
 1. You should get **"There's a garden here."** and a sign-in, not the garden.
    That alone proves the backend switch took.
@@ -191,15 +255,20 @@ Then, in order:
 3. Open `/dev7731`. Under **where this is** it should say **`connected`** —
    not `local · nothing is saved`.
 4. **Leave a thought** at the Tree. Hard-refresh. It should still be hanging
-   there. That proves Firestore and its rules.
+   there. *Firestore, and its rules.*
 5. **Say something** in the Stars. Hard-refresh. It should still be there.
-6. **Leave a memory** in the Glasshouse — a real photograph off your phone or
+6. **Leave a voice-light** in the Stars — the short recorded one, not typed.
+   Hard-refresh and play it back. *Storage path one, and the microphone.*
+7. **Leave a memory** in the Glasshouse — a real photograph off your phone or
    disk. Wait for the glass to form. Hard-refresh. The pane should still be
-   there *with the picture in it*, not just its colour. That proves Storage,
-   the Storage rules, and the bucket name all at once, and it is the one step
-   that exercises anything new.
+   there *with the picture in it*, not just its colour. *Storage path two, the
+   Storage rules and the bucket name, all at once.*
 
-If any of those come back empty after a refresh, go to **Troubleshooting** at
+Steps 6 and 7 are the two that have never executed against a real bucket in the
+history of this project. If one thing in this whole list surprises you, it is
+one of those.
+
+If any of them come back empty after a refresh, go to **Troubleshooting** at
 the bottom before continuing. Do not deploy a broken configuration and try to
 debug it over the network.
 
@@ -313,9 +382,9 @@ because each step proves something the next one assumes:
 8. **Both of you open the same memory at once.** The pane should take a warm
    edge and a cool one, and say *you are both looking at this*.
 
-Steps 6 and 8 are the two that go down the live presence channel. If everything
-else works and those two do not, it is the Realtime Database rules — republish
-`rules-out/database.rules.json`.
+Steps 6 and 8 are the two that go down the live presence channel — `racing` and
+`looking` in Part 3.3. If everything else works and those two do not, it is the
+Realtime Database rules; republish `rules-out/database.rules.json`.
 
 ---
 
@@ -329,9 +398,9 @@ both-of-you-in-step syncing are all built and all work — on a clock, with
 `Track.url` set to `null`. There are no audio files and **no way to add one
 from inside the app**: tracks are read, never written. To put real music in,
 you would upload files to Storage by hand and write the matching documents into
-a `tracks` collection in Firestore by hand, and `storage.rules` currently
-allows exactly one path (`/memories`) so it would need a second block. Say the
-word and I will build the way in properly.
+the `tracks` collection in Firestore by hand — and `storage.rules` allows two
+paths, neither of which is music, so it would need a third block. Say the word
+and I will build the way in properly.
 
 **Notifications only fire while the garden is open in a tab.** The setting says
 exactly that, deliberately, because that is all a web page can do without a
@@ -345,31 +414,77 @@ no garden.
 
 **Nothing has ever run against a real Cloud Storage bucket.** Everything above
 the seam has been driven end to end against the local mock, which keeps
-photographs in IndexedDB, but there is no emulator here and Storage was not
-switched on. Step 4.6 is the first time that code path will ever execute. If
-one thing in this whole list is going to surprise you, it is that one.
+photographs and recordings in IndexedDB, but there is no emulator here and
+Storage was not switched on. Steps 4.6 and 4.7 are the first time those two
+code paths will ever execute.
 
 **The control room is at `/dev7731`.** Nothing in the garden links to it and
-nothing hints at it; the world does not render there at all. It is where you
-check `connected`, pin an hour, set the quality tier, edit either profile,
-puppet the other person in local mode, choose whose day the world is having,
-and **tune how the rally car drives**. Bookmark it. If your host is not
-rewriting unknown paths to `index.html` — see 5.2 — `?dev7731` on the root
+nothing hints at it; the world does not render there at all. Bookmark it.
+
+It has four tabs. **car** is how the rally car drives; **world** is whose day
+the world is having, the hour, and jumping straight to a place; **you two** is
+both profiles, the voice-light limit and the Tree's question pool; **device**
+is the backend, the quality tier, puppeting the other person in local mode, and
+wiping this machine. It remembers which tab you were last on. If your host is
+not rewriting unknown paths to `index.html` — see 5.2 — `?dev7731` on the root
 works as a fallback.
 
-**How the car drives** is forty-one sliders under *how the car drives*, and the
-only thing about them worth reading before you start: **they are this device
-only until you press "send this car to both of you".** Drag anything for as
-long as you like — her car does not move. The page says which of the two states
-you are in, in a sentence, at the top. "drop my changes" goes back to whatever
-was last sent; "back to the code's numbers" goes back to how it shipped.
+**How the car drives** is forty-two sliders under the **car** tab, and the only
+thing about them worth reading before you start: **they are this device only
+until you press "send this car to both of you".** Drag anything for as long as
+you like — her car does not move. The page says which of the two states you are
+in, in a sentence, at the top.
+
+Under *start from one of these* there are five chips. **standard** is the way
+back: all forty-two dials to the numbers in the code, the car before anybody
+touched it. The other four — forgiving, sharper, looser, heavier — each move
+only their own dials and leave the rest where you left them, so they stack;
+press **standard** first if you want the car one of them actually describes.
+"drop my changes" is different again: it goes back to whatever was last *sent*,
+not to the code.
 
 That send is a write to `rallyTuning/ours`, from the warm account only, so it
-needs the rules of part 3 published like everything else. If sending fails
+needs the rules of Part 3 published like everything else. If sending fails
 against the real backend and everything else works, that is the rule missing.
 
 There used to be a `dev` panel sitting permanently in the corner of every
 screen. It is gone.
+
+---
+
+# The checks you can run without a browser
+
+None of these need Firebase, a console or a network. They are the fastest way
+to find out whether something you changed broke something you were not looking
+at.
+
+```
+npm run typecheck   the whole project
+npm run rally       the car: acceleration, braking, stability, the drift,
+                    and the fire-spirit round every road looking for spins,
+                    stalls, wall-riding and anything gone NaN
+npm run drift       what a drift costs, as a speed trace per second
+npm run tuning      that every one of the forty-two dials still reaches the car
+npm run sound       the Rootway's soundscape against a stub Web Audio API:
+                    every value finite, every layer actually reached over a
+                    real lap, nothing left running afterwards
+npm run shaders     the shader mistake this codebase keeps making
+npm run tris        what the garden costs in triangles, by object
+npm run scatter     Scattergories, played headless
+```
+
+Two of those earn their place rather than being box-ticking:
+
+`npm run tuning` failing with *dead dial* means a slider was added to
+`tuning.ts` and nothing reads it — a control that moves and does nothing, which
+you would otherwise find by tuning a car for an hour against a number that was
+never connected.
+
+`npm run sound` catches the one bug that matters in the audio files: a
+non-finite value reaching an AudioParam. That throws exactly once and takes the
+whole ambient bed down with it — no crash on screen, no red in a console you
+are looking at, just a world that stopped making noise somewhere around the
+third corner, on one machine, sometimes.
 
 ---
 
@@ -398,7 +513,14 @@ The rules are not published, or the addresses in them do not match
 **Everything works except photographs.**
 Storage-specific. In order: is Storage created at all (1.2); does
 `VITE_FB_STORAGE_BUCKET` match the real bucket exactly (1.3); is
-`rules-out/storage.rules` published (3.2). It is almost always the third.
+`storage.rules` published (3.2). It is almost always the third.
+
+**Photographs work but voice-lights do not.**
+Same bucket, different path and a different content type. `storage.rules`
+accepts `audio/webm`, `audio/mp4` and `audio/ogg` under 3 MB, and nothing else
+— so a browser recording in a fourth format is refused by the rule rather than
+by the app. If the recording never starts at all it is the microphone
+permission, which is a browser prompt and not this.
 
 **A photograph will not open when you pick it, and says so by name.**
 That is HEIC — the format iPhones use by default — being handed to a browser
@@ -415,20 +537,28 @@ the layer uploads first for exactly that reason — and is worth telling me.
 `VITE_DATA_BACKEND` is still `local`, or Vite was not restarted after you
 changed it.
 
+**Both clocks show the same time, and the Stars has no dawn.**
+`VITE_COOL_TZ` is still `Africa/Lagos`. Step 2.4 — and change the city and
+coordinates with it.
+
 ---
 
 # The short version
 
 ```
 1  console → Authentication → add two users
-2  console → Storage → Get started (locked, same region)
-3  .env.local → VITE_DATA_BACKEND=firebase, both emails, both names
-4  npm run rules
-5  paste all THREE rule files, publish all three
-6  npm run dev → sign in → leave a thought, a message, and a photograph
-7  hard-refresh; all three still there
-9  npx firebase-tools init hosting  (dist, SPA yes, overwrite no)
-10 npm run build && npx firebase-tools deploy --only hosting
-11 send her the link; both add it to the home screen
-12 the two-device pass in Part 6
+2  console → Storage → Get started (locked, same region as Firestore)
+3  console → Storage → Files → check the bucket name matches .env.local
+4  .env.local → VITE_DATA_BACKEND=firebase
+                both emails, both names
+                her city + timezone + lat + lon
+5  npm run rules
+6  open rules-out/PASTE-ME.md → paste all THREE → Publish all three
+7  npm run dev  (restart it; env is read once)
+8  sign in → a thought, a message, a voice-light, a photograph
+9  hard-refresh; all four still there, the picture still in the pane
+10 npx firebase-tools init hosting   (dist, SPA yes, overwrite no)
+11 npm run build && npx firebase-tools deploy --only hosting
+12 send her the link; both add it to the home screen
+13 the two-device pass in Part 6
 ```

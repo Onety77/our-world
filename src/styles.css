@@ -8267,6 +8267,84 @@ canvas {
 }
 
 /* ---------------------------------------------------------------------------
+   Tabs, at both levels.
+
+   This page was one continuous scroll and it worked right up until the car
+   arrived with forty-one sliders, at which point everything below the car
+   became unreachable in practice. Two levels of tab now: four across the whole
+   control room, and ten across the car's own dials.
+
+   They are chips rather than the underlined-tab convention, because underlines
+   need a baseline to sit on and this page has no typographic baseline to
+   speak of — it is a monospace grid of boxes. A filled box among outlined
+   boxes says "this one" in the same language everything else here is written
+   in, and it survives wrapping onto three rows on a phone, which an underline
+   row does not.
+--------------------------------------------------------------------------- */
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  /* Cancels the page padding so the bar spans the full width when stuck. */
+  margin: 0 -1.2rem;
+  padding: 0.6rem 1.2rem;
+  /* The one control that must always be reachable. The title above it and the
+     way out are worth their space once; this is worth it on every screen. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #0f1113;
+  border-bottom: 1px solid #1c2126;
+}
+
+.admin-tabs button {
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+  padding: 0.5rem 0.6rem;
+  letter-spacing: 0.06em;
+}
+
+.admin-tab-blurb {
+  margin: 0.55rem 0 0;
+  color: #6f7f8c;
+}
+
+/* The second level: which group of dials is open. Not sticky — one sticky bar
+   is orientation, two is a shrinking window. */
+.admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.9rem 0 0.2rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #1c2126;
+}
+
+.admin-chips button {
+  padding: 0.34rem 0.55rem;
+  min-height: 1.9rem;
+  font-size: 0.76rem;
+}
+
+/* How many dials in that group you have moved. The reason the chips are worth
+   having at all when you come back to half-finished work: it says where your
+   evening went without opening anything. */
+.admin-chip-count {
+  margin-left: 0.35rem;
+  padding: 0 0.25rem;
+  border-radius: 2px;
+  background: #7fd6a8;
+  color: #0f1113;
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.admin-chips button.on .admin-chip-count {
+  background: #a8e8c6;
+}
+
+/* ---------------------------------------------------------------------------
    The car dials.
 
    Forty-odd sliders on one page, and the only thing that stops that being a

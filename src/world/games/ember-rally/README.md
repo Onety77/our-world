@@ -454,8 +454,8 @@ whole lot is switched off above the water rather than drawn at zero opacity.
 ## The car is tuned from the control room, not from here
 
 **Roughly forty of the numbers that used to be constants in `physics.ts`,
-`camera.ts` and `controls.ts` now live in `tuning.ts`**, and `/dev7731` has a
-slider for each of them. Grip, weight, gravity, the steering ratio and how fast
+`camera.ts` and `controls.ts` now live in `tuning.ts`**, and the **car** tab of
+`/dev7731` has a slider for each of them, ten groups at a time. Grip, weight, gravity, the steering ratio and how fast
 your hand moves it, the brakes and their balance, the handbrake, all three
 helpers, the drift, the ember, and where the camera sits.
 

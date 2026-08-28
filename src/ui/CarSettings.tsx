@@ -39,6 +39,7 @@ import {
   DEFAULTS,
   DIALS,
   GROUPS,
+  type GroupId,
   PRESETS,
   TUNE,
   changedOnly,
@@ -47,6 +48,7 @@ import {
   type RallyTuning,
 } from '@/world/games/ember-rally/tuning'
 import { usePublishedTuning } from '@/world/games/ember-rally/tuningSync'
+import { useRemembered } from './remember'
 
 /** Whether two sets of dials say the same thing. */
 function same(a: Partial<RallyTuning>, b: Partial<RallyTuning>): boolean {
@@ -111,6 +113,15 @@ export function CarSettings() {
 
   const [filter, setFilter] = useState('')
   const [onlyChanged, setOnlyChanged] = useState(false)
+  /*
+    Which group of dials is open, and it survives the page load that "drive it
+    now" causes — see `useRemembered`. Without that, tuning the camera would
+    mean re-finding the camera after every single lap.
+  */
+  const [rememberedGroup, setGroup] = useRemembered('garden:car-group:v1', 'grip')
+  const group: GroupId = GROUPS.some((entry) => entry.id === rememberedGroup)
+    ? (rememberedGroup as GroupId)
+    : 'grip'
   const [snippet, setSnippet] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
 
@@ -120,6 +131,18 @@ export function CarSettings() {
   const publishedCount = Object.keys(published).length
   const changedCount = Object.keys(mine).length
   const warnings = troubles(TUNE)
+
+  /*
+    A search is not a group.
+
+    The filter and "only what I have changed" are the two questions that are
+    *about the whole car* rather than about one part of it — "where is the
+    brake balance", "what have I actually touched tonight" — so while either is
+    on, the chosen group is ignored and every group with a match is shown. A
+    filter that only searched the tab you happened to be looking at would be a
+    filter that lies.
+  */
+  const searching = filter.trim() !== '' || onlyChanged
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase()
@@ -173,19 +196,21 @@ export function CarSettings() {
       <h2>how the car drives</h2>
 
       <p className="admin-note">
-        Every number that decides what the rally car does. Move one and the very
-        next frame is different — there is nothing to save and nothing to
-        reload. Drive it, come back, move it again.
-      </p>
-      <p className="admin-note">
-        <b>These sliders are this device only</b> until you send them. Drag
-        anything you like; her car does not change until the button below says
-        so.
+        Move one and the very next frame is different — nothing to save, nothing
+        to reload. <b>These sliders are this device only</b> until you send
+        them, so drag anything you like: her car does not change until you
+        press the button.
       </p>
 
       {/* --- what state this is in, in one line ----------------------------- */}
       <p className="admin-note">
-        {unsent ? (
+        {unsent && changedCount === 0 ? (
+          <>
+            You have put the car back to <b>standard</b> — and{' '}
+            <b>she has not been sent it</b>. She is still driving an earlier set
+            of {publishedCount} {publishedCount === 1 ? 'dial' : 'dials'}.
+          </>
+        ) : unsent ? (
           <>
             You are driving <b>{changedCount} changed</b>{' '}
             {changedCount === 1 ? 'dial' : 'dials'} — and{' '}
@@ -218,9 +243,6 @@ export function CarSettings() {
         </button>
         <button type="button" disabled={draft === null} onClick={() => store.dropDraft()}>
           drop my changes
-        </button>
-        <button type="button" disabled={changedCount === 0} onClick={() => store.toDefaults()}>
-          back to the code's numbers
         </button>
         <button type="button" onClick={makeSnippet}>
           copy these numbers
@@ -266,6 +288,36 @@ export function CarSettings() {
       {/* --- somewhere to start from ---------------------------------------- */}
       <p className="admin-note admin-sub">start from one of these</p>
       <div className="row">
+        {/*
+          The way back, and it belongs in this row rather than up with send and
+          drop.
+
+          The other four *layer*. Each sets the handful of dials it has an
+          opinion about and leaves every other dial exactly where you left it —
+          which is what you want while chasing one feeling, and is quietly not
+          what you want an hour later, when "looser" has landed on top of
+          "heavier" on top of six things you moved by hand and the car it
+          produces is none of the three.
+
+          So the first chip is the one that empties the row: every dial back to
+          the number in the code, nothing carried over. It reads as a character
+          like the rest because that is what it is — the car before anybody had
+          an opinion — and it is what the other four are meant to be pressed
+          *from*. When it is lit, that is the car you are driving.
+
+          This was previously a button up in the send-and-drop row reading
+          "back to the code's numbers", which is true and was not findable:
+          that row is about the seam between this phone and hers, so nobody
+          looking for a way to undo a bad afternoon of tuning reads it.
+        */}
+        <button
+          type="button"
+          className={changedCount === 0 ? 'on' : ''}
+          title="Every dial back to the number in the code — the car before anybody touched it."
+          onClick={() => store.toDefaults()}
+        >
+          standard
+        </button>
         {PRESETS.map((preset) => (
           <button
             key={preset.id}
@@ -278,11 +330,23 @@ export function CarSettings() {
         ))}
       </div>
       <p className="admin-note">
+        <span className="admin-legend">
+          <b>standard</b> — all {DIALS.length} dials back to the code's numbers.
+          The car before anybody touched it, and the clean start the other four
+          are meant to be pressed from.
+        </span>
         {PRESETS.map((preset) => (
           <span key={preset.id} className="admin-legend">
             <b>{preset.name}</b> — {preset.note}
           </span>
         ))}
+        <span className="admin-legend">
+          <i>
+            Those four each move only their own dials and leave the rest where
+            you left them, so they stack. Press <b>standard</b> first for the
+            car as that one describes it.
+          </i>
+        </span>
       </p>
 
       {/* --- finding one ----------------------------------------------------- */}
@@ -316,17 +380,57 @@ export function CarSettings() {
         ) : null}
       </div>
 
+      {/*
+        One group at a time.
+
+        Forty-one sliders is not a page you read, it is a page you get lost in:
+        the camera dials were eight thousand pixels below the grip ones, so
+        "does the camera need to come in a bit" was a scroll rather than a
+        question. Ten chips, one open — and the count on a chip says where the
+        changes you have already made are living, which is the thing you most
+        want to know coming back to half-finished work.
+      */}
+      <nav className="admin-chips">
+        {GROUPS.map((entry) => {
+          const moved = DIALS.filter(
+            (dial) =>
+              dial.group === entry.id &&
+              Math.abs(TUNE[dial.key] - DEFAULTS[dial.key]) > 1e-9,
+          ).length
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              className={!searching && group === entry.id ? 'on' : ''}
+              title={entry.note}
+              onClick={() => {
+                // Choosing a group is also the way out of a search, because
+                // otherwise the chips look broken while one is running.
+                setGroup(entry.id)
+                setFilter('')
+                setOnlyChanged(false)
+              }}
+            >
+              {entry.short}
+              {moved > 0 ? <span className="admin-chip-count">{moved}</span> : null}
+            </button>
+          )
+        })}
+      </nav>
+
       {shown.length === 0 ? (
-        <p className="admin-note">Nothing matches. Clear the filter above.</p>
+        <p className="admin-note">
+          Nothing matches{onlyChanged && filter.trim() === '' ? ' — nothing is changed yet' : ''}.
+        </p>
       ) : null}
 
-      {GROUPS.map((group) => {
-        const dials = shown.filter((dial) => dial.group === group.id)
+      {GROUPS.filter((entry) => searching || entry.id === group).map((entry) => {
+        const dials = shown.filter((dial) => dial.group === entry.id)
         if (dials.length === 0) return null
         return (
-          <div key={group.id} className="admin-group">
-            <h3>{group.name}</h3>
-            <p className="admin-note">{group.note}</p>
+          <div key={entry.id} className="admin-group">
+            <h3>{entry.name}</h3>
+            <p className="admin-note">{entry.note}</p>
             {dials.map((dial) => (
               <DialRow key={dial.key} dial={dial} />
             ))}

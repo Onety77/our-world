@@ -18,6 +18,10 @@
  */
 
 export const storm = {
+  /** Metres along the authored climb, shared with its soundscape. */
+  s: 0,
+  /** True car speed in metres per second; camera motion is not vehicle motion. */
+  speed: 0,
   /** 0 below the cloud, 1 in the thick of it. */
   inCloud: 0,
   /** 0 up to the cloud top, 1 well clear above it. */

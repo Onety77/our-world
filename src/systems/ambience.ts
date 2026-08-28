@@ -44,6 +44,22 @@ export type { EngineState, EngineVoice } from './engine'
 const NOISE_SECONDS = 4
 
 /**
+ * The garden's one unlocked audio graph, for place-specific synthesisers.
+ *
+ * A road soundscape must share this context and output with the engine: a
+ * second `AudioContext` is commonly suspended on phones, ignores the garden's
+ * visibility/master fade, and doubles the platform's scarcest audio resource.
+ * The caller owns every node it connects and must stop it when its place
+ * unmounts. This deliberately exposes no ambient layer controls.
+ */
+export interface SynthesisBus {
+  context: AudioContext
+  output: AudioNode
+  noise: AudioBuffer
+  noiseSeconds: number
+}
+
+/**
  * Where the ear is.
  *
  * `garden` is the open world — the row of places seen from outside, which is
@@ -91,6 +107,8 @@ export interface AmbienceHandle {
    * being looked at as often as when it is.
    */
   said(mine: boolean): void
+  /** The shared graph for a self-contained, short-lived place soundscape. */
+  synthesisBus(): SynthesisBus | null
   /**
    * A car, and the road under it. Returns null if nothing has unlocked the
    * audio context yet — which cannot happen in practice, because you have to
@@ -772,6 +790,11 @@ export function createAmbience(): AmbienceHandle {
       ring.connect(ringGain).connect(inkGain)
       ring.start(now)
       ring.stop(now + 0.12)
+    },
+
+    synthesisBus(): SynthesisBus | null {
+      if (!ctx || !master || !grain) return null
+      return { context: ctx, output: master, noise: grain, noiseSeconds: NOISE_SECONDS }
     },
 
     /**

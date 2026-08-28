@@ -4,6 +4,78 @@ This is Codex's side of the hand-off log. Claude can read it before touching the
 same area; I read `NOTES.md` before beginning work. Entries record finished work,
 shared-file changes, measurements, and anything another agent should preserve.
 
+## 28 August 2026 - Codex - Stormcrown environmental soundscape
+
+- Added a fully synthesized Stormcrown voice and an allocation-free frame bridge.
+  It uses the same shared `AudioContext`, noise buffer and speaker-safe output as
+  the car and the other roads; there are no samples or new network assets.
+- Rainwood is close: two-band rain on the car/road, wet speed spray and cedar
+  boughs. Gale Bend and the exposed shelf add cross-car wind and irregular low
+  buffeting. Inside cloud, distant detail collapses into a middle-heavy moving
+  wash and restrained pressure mode instead of becoming a cave.
+- Thunder Stair keeps the cloud/mountain return while all three hairpins remain
+  readable from the engine. The eye above the storm is intentionally the quietest
+  district: thin high air and a distant storm floor replace rain. Preserve this
+  negative space; it is the reward for the climb, not an unfinished layer.
+- Stormfall restores rain and exposed wind as altitude falls. Its three visual
+  waterfalls now have approach-shaped low roar and spray, panned to the actual
+  authored side of each ribbon. Low cedar texture returns on the last run home.
+- Each visible lightning stroke gets a short electrical tear, but repeated
+  strokes within one channel share a single delayed thunder body. Direct low
+  impact arrives first, followed by an asymmetric 2.75-second mountain return;
+  thunder above the cloud is later and more remote. The twelve old rods produce
+  brief speed-shaped air/metal passes and can take a little charge from a stroke.
+- `weather.ts` now publishes the real car `s` and speed alongside cloud/altitude/
+  flash. `StormcrownSound.tsx` reads those values without React state, detects
+  authored districts/events, ducks ready/pause/finish, rejects restart teleports,
+  and fades/stops every node on unmount.
+- Validation: typecheck, rally simulation (4.79 km, 178.9 s spirit pace), the
+  102-shader/169-file sweep, production build and a live 77 km/h Stormcrown run
+  with pause/resume pass. Browser errors and overlays: none. Existing Three.js
+  Clock deprecation and the large Firebase/events chunk warning are unchanged.
+
+## 28 August 2026 - Codex - Moonbreak environmental soundscape
+
+- Added a fully synthesized Moonbreak world voice with no downloaded samples
+  and no second `AudioContext`. `ambience.synthesisBus()` exposes the existing
+  speaker-safe graph and shared noise buffer to both road soundscapes.
+- The open causeway now has speed-shaped crosswind, distant water and wet-edge
+  spray. Orchard branches and the resurfaced reeds use separate close textures;
+  broken arches produce paced overhead compression/stone/glass events.
+- The Drowned Mile has a staged plunge, underwater flow and pressure, tube-rib
+  speed markers, glass/structure resonance, a distinct resurfacing release, and
+  a low pressure swell synchronized to `Deepwater`'s 21-second large-creature
+  crossing. It is environmental tension, not a monster call or extra music.
+- `MoonbreakSound.tsx` reads the race's existing per-frame `deep` truth and
+  infers road speed without React updates. Mutable frame state and a memoized
+  arch list avoid sixty allocations a second. Pause/ready/finished states duck;
+  restarts cannot trigger a fake gust, dive or resurfacing event; unmount fades
+  and destroys every continuous node.
+- Fixed an older runtime-only `Deepwater` GLSL failure: `${FOGGED}` had been
+  interpolated in the middle of a `//` comment, injecting uncommented prose into
+  the compiled swimmer shader. The source-level shader sweep could not see it.
+- Validation: typecheck, rally simulation, 102-shader/167-file sweep, production
+  build, and a live Moonbreak run to 107 km/h with pause/resume and no browser
+  errors. The existing large Firebase/events chunk warning is unchanged.
+
+## 27 August 2026 - Codex - Ember Rally contact, nitro and exhaust feedback
+
+- Loose ground is now detected per contact patch for visuals. One tyre crossing
+  the Rootway's stone edge starts throwing warm earth immediately; all four
+  build separate clod-and-dust wakes once the whole car is on the verge. The
+  handling threshold remains unchanged.
+- Nitro's twin physical exhaust columns are wider and roughly four metres long,
+  with a white-hot core, a 24-particle ignition pressure front, continuous
+  pipe-rooted flame, a stronger camera catch and a substantially louder air/
+  turbo layer. The complete car still passes through the speaker safety chain.
+- The silencers now read the live countdown pedal rather than the physics
+  throttle, which is intentionally locked at zero before the green. They glow
+  under pre-start load and emit short twin exhaust pulses while revving and
+  pulling away; the haze retires at road speed and never competes with nitro.
+- Validation: typecheck, `npm run rally`, the 102-shader sweep, production
+  build, and a live browser error/overlay check pass. The existing large-chunk
+  build warning is unchanged.
+
 ## 27 August 2026 - Codex - Rootwake entrance rebuilt as a real two-way fork
 
 - Removed the added lintel, jambs and rubble mouth. The broken entrance was two

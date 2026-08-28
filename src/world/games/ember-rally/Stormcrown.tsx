@@ -24,6 +24,7 @@ import { basisAt, roadPoint, type RoadBasis, type TunnelChunk } from './geometry
 import { random } from './model'
 import { CLOUD_TOP, STORMCROWN, emptyRoad, roadAt, vergeWidth, type Track } from './track'
 import { storm } from './weather'
+import { StormcrownSound } from './StormcrownSound'
 
 const RING = 2
 const CHUNK = 60
@@ -698,6 +699,7 @@ export function StormcrownWorld({ track }: { track: Track }) {
 
   return (
     <>
+      <StormcrownSound track={track} />
       {/*
         Sixteen hundred metres, and it travels with you.
 

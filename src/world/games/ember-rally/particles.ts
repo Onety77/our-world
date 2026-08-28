@@ -133,6 +133,20 @@ export class Particles {
 
 export const GRIT = new Color('#6b5b46')
 /**
+ * Freshly opened earth from the verge.
+ *
+ * `GRIT` is the small, dark stone that lands again quickly. This is the dust
+ * hanging above it: lighter and warmer so a tyre leaving the Rootway's dark
+ * road is readable in the headlights instead of disappearing into the cave.
+ */
+export const LOOSE_EARTH = new Color('#a07d56')
+/** Cool vapour and soot leaving the twin silencers at low speed. */
+export const EXHAUST_HAZE = new Color('#a9a19a')
+/** The pressure edge of the nitro flame, blue enough to stay distinct from sparks. */
+export const NITRO_FLAME = new Color('#68cfff')
+/** The white-hot centre thrown out for the first instant of a nitro burn. */
+export const NITRO_CORE = new Color('#fff2d2')
+/**
  * Tyre smoke, which is a different thing from grit and has to look it.
  *
  * Grit is thrown off the ground and falls back to it; smoke comes off the

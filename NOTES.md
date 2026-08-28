@@ -40,6 +40,40 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 27 Aug · Claude · the control room has tabs
+
+The owner opened the page for the first time and the verdict was fair: one
+continuous scroll with forty-one sliders in the middle of it is not dense, it
+is a wall, and everything below the car had become unreachable.
+
+Two levels now. **Four tabs** across the top — car, world, you two, device —
+split by *what you are doing* rather than by what the settings are, which is
+why the quality tier sits with "wipe this device" and not with the sky. And
+**ten chips** inside the car for its groups of dials, with a count on each chip
+saying how many in that group you have moved, so half-finished work says where
+it left off without opening anything.
+
+Two things that are not decoration:
+
+- **Both selections are remembered in localStorage** (`ui/remember.ts`). The
+  drive loop is slider → *drive it now* → drive → back, and "back" is a full
+  page load, because the garden and the control room are different pages by
+  design. Tabs on ordinary React state would have landed you on the first tab
+  forty times an evening — they would have made the one loop the page exists
+  for measurably worse than the wall they replaced.
+- **The filter and "only what I have changed" ignore the chips.** Those two
+  questions are about the whole car, so while either is on, every group with a
+  match is shown and no chip reads as active. A filter that searched only the
+  tab you happened to be on would be a filter that lies.
+
+Chips rather than underlined tabs because this page has no typographic baseline
+for an underline to sit on — it is a monospace grid of boxes, so a filled box
+among outlined boxes is the same language everything else here is written in,
+and it survives wrapping to three rows on a phone.
+
+Nothing about the car changed: `npm run rally` and `npm run tuning` both still
+report what they did this morning.
+
 ## 27 Aug · Claude · the car is tuned from `/dev7731` now
 
 Forty-one dials — grip, weight, gravity, steering ratio and hand speed, brakes

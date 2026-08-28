@@ -71,6 +71,16 @@ export interface EngineState {
   /** 0..1 — how close the rock is. Whistles the wind. */
   tight: number
   boost: boolean
+  /**
+   * 1 the instant it lights, 0 as it dies. Not `boost` again in a dress.
+   *
+   * The whole reason the old nitro read as a switch is that a boolean is all
+   * the ear was given, so the rush could only ever be on or off — the same
+   * flat hiss for four and a half seconds and then nothing. A burn has a
+   * *shape*: it hits, it swells, it pulls, and it sags before it lets go. None
+   * of that can be synthesised from a bit.
+   */
+  boostLeft: number
 }
 
 export interface EngineVoice {
@@ -299,9 +309,34 @@ export function createEngineVoice(
   intakeGain.gain.value = 0.0001
   intakeSource.connect(intakeBand).connect(intakeGain).connect(dry)
 
-  // Nitro is a column of fast air, not merely a higher engine note. This wide
-  // filtered rush sits behind the combustion voice for the whole burn; an
-  // onset thump below makes the exact instant the boost catches unmistakable.
+  /*
+    ==========================================================================
+    THE EMBER
+    ==========================================================================
+
+    **Three layers, because a rush on its own is an air conditioner.** That is
+    the whole of what was wrong before: one wide band of filtered noise, held
+    at one level for the length of the burn, with a thump at the front. It is a
+    perfectly good *hiss*. It is not a shove, and the ear knows the difference
+    immediately even when it cannot say why.
+
+    What is actually being listened for, in order of how much each one carries:
+
+      the sweep    a resonant peak climbing through the burn. This is the
+                   layer that reads as *acceleration* rather than as noise,
+                   and it was the missing one. Pitch going up is the only
+                   thing in sound that means "faster" without argument
+      the rush     the wide column of air. Loud, but it is scenery — on its
+                   own it says "something is open", not "something is pushing"
+      the sub      a low tone under all of it. Never heard as a note, felt as
+                   pressure, and the reason the burn has weight on a phone
+                   speaker that reproduces none of it
+
+    All three are steered by `boostLeft` rather than by the boolean, so the
+    burn rises, pulls, and audibly sags before it lets go — which also makes it
+    the only place in the race that tells you the ember is nearly out without
+    looking away from the road at the bar.
+  */
   const boostSource = ctx.createBufferSource()
   boostSource.buffer = grain
   boostSource.loop = true
@@ -317,6 +352,38 @@ export function createEngineVoice(
   const boostGain = ctx.createGain()
   boostGain.gain.value = 0.0001
   boostSource.connect(boostHigh).connect(boostLow).connect(boostGain).connect(dry)
+
+  /*
+    The sweep: the same noise through a narrow resonant peak that climbs.
+
+    Fed from the rush's own source rather than a second one, so the two are
+    phase-coherent and read as one object being pushed harder — two
+    independent noise loops read as two separate things happening at once,
+    which is exactly the thin, doubled quality the old one had.
+  */
+  const boostPeak = ctx.createBiquadFilter()
+  boostPeak.type = 'bandpass'
+  boostPeak.frequency.value = 420
+  boostPeak.Q.value = 3.4
+  const boostPeakGain = ctx.createGain()
+  boostPeakGain.gain.value = 0.0001
+  boostHigh.connect(boostPeak).connect(boostPeakGain).connect(dry)
+
+  /*
+    The sub. A triangle, not a sine: a sine at 46 Hz is inaudible on anything
+    without a woofer, and the triangle's third and fifth harmonics land where a
+    phone speaker can still carry them, so the weight survives the trip.
+  */
+  const boostSub = ctx.createOscillator()
+  boostSub.type = 'triangle'
+  boostSub.frequency.value = 46
+  const boostSubLow = ctx.createBiquadFilter()
+  boostSubLow.type = 'lowpass'
+  boostSubLow.frequency.value = 240
+  boostSubLow.Q.value = 0.8
+  const boostSubGain = ctx.createGain()
+  boostSubGain.gain.value = 0.0001
+  boostSub.connect(boostSubLow).connect(boostSubGain).connect(out)
 
   const turbo = ctx.createOscillator()
   turbo.type = 'sine'
@@ -416,6 +483,7 @@ export function createEngineVoice(
   textureSource.start()
   intakeSource.start()
   boostSource.start()
+  boostSub.start()
   roadSource.start()
   windSource.start()
   front.source.start()
@@ -598,33 +666,129 @@ export function createEngineVoice(
       turbo.frequency.setTargetAtTime(1050 + revs * 3100 + (state.boost ? 500 : 0), now, 0.14)
       turboBand.frequency.setTargetAtTime(1200 + revs * 2800, now, 0.15)
       turboGain.gain.setTargetAtTime(
-        (spool * 0.01 + (state.boost ? 0.016 : 0)) * (1 - cut * 0.7) * wake,
+        (spool * 0.012 + (state.boost ? 0.04 : 0)) * (1 - cut * 0.7) * wake,
         now,
-        0.12,
+        state.boost ? 0.055 : 0.12,
       )
+      /*
+        The shape of the burn, out of one number.
+
+          climb   0 at the press, 1 by the time two thirds of it is gone.
+                  Everything that rises rides this
+          sag     1 for most of the burn, falling to 0 through the last
+                  fifth. Everything that dies rides this
+
+        Two curves rather than one, because the burn has to *keep pulling*
+        while it is also running out — a single envelope makes it either fade
+        the whole way (no shove) or cut off a cliff (no warning).
+      */
+      const left = Math.max(0, Math.min(1, state.boostLeft))
+      const climb = state.boost ? smoothstep(1, 0.34, left) : 0
+      const sag = smoothstep(0, 0.2, left)
+      const burn = state.boost ? sag : 0
+
       boostHigh.frequency.setTargetAtTime(580 + revs * 620, now, 0.08)
-      boostLow.frequency.setTargetAtTime(3300 + revs * 2200, now, 0.1)
+      boostLow.frequency.setTargetAtTime(3300 + revs * 2200 + climb * 1400, now, 0.1)
       boostGain.gain.setTargetAtTime(
-        state.boost ? (0.046 + throttle * 0.018) * wake : 0.0001,
+        burn * (0.086 + throttle * 0.032) * wake,
         now,
-        state.boost ? 0.035 : 0.11,
+        // Slower in than the old 0.024: the rush is allowed a fifth of a
+        // second to arrive *behind* the crack, which is what makes the crack
+        // read as the front of something rather than as a separate click.
+        state.boost ? 0.055 : 0.11,
       )
+
+      // The layer that does the work. Climbs about two octaves through the
+      // burn and keeps a little of the engine in it so the two stay one car.
+      boostPeak.frequency.setTargetAtTime(430 + climb * 1180 + revs * 560, now, 0.09)
+      boostPeak.Q.setTargetAtTime(3.4 + climb * 2.6, now, 0.2)
+      boostPeakGain.gain.setTargetAtTime(burn * (0.05 + climb * 0.055) * wake, now, 0.07)
+
+      // And the weight under it, rising a little as it goes so the pressure
+      // builds rather than sitting there.
+      boostSub.frequency.setTargetAtTime(44 + climb * 15 + revs * 9, now, 0.18)
+      boostSubGain.gain.setTargetAtTime(burn * 0.058 * wake, now, state.boost ? 0.04 : 0.13)
+
       if (state.boost && !lastBoost) {
-        noiseBurst(now, 0.075, 0.16, 'bandpass', 820, 0.8, 0.85)
-        noiseBurst(now + 0.015, 0.042, 0.22, 'highpass', 1800, 0.55, 2.2, out)
+        /*
+          The catch, in three parts that must land in this order.
+
+          A press that arrives as one sound is a click. What makes it a *hit*
+          is that the parts are staggered by a few milliseconds each and cover
+          three registers: stone-hard on top, a body underneath, and a sweep
+          climbing out of it that hands over to the sustained peak above.
+        */
+        // Top: the pressure crack. Short, bright, and the only genuinely
+        // sharp thing in the whole car — everything else here is round.
+        noiseBurst(now, 0.1, 0.055, 'highpass', 3100, 0.6, 2.9, out)
+        // Body: the shove through the exhaust.
+        noiseBurst(now + 0.008, 0.15, 0.26, 'bandpass', 700, 0.7, 0.78)
+        // And the column of air opening out behind it.
+        noiseBurst(now + 0.02, 0.075, 0.42, 'highpass', 1450, 0.5, 2.3, out)
+
+        /*
+          The sweep out of the hit.
+
+          A bandpass climbing 300 → 2400 in a third of a second, which is the
+          single most recognisable "boost" gesture there is and was the thing
+          missing entirely. It hands over to `boostPeak` just as it fades, so
+          the press and the burn are one continuous rise rather than an event
+          followed by a texture.
+        */
+        const sweepSource = ctx.createBufferSource()
+        sweepSource.buffer = grain
+        sweepSource.playbackRate.value = 1.5
+        const sweepBand = ctx.createBiquadFilter()
+        sweepBand.type = 'bandpass'
+        sweepBand.Q.value = 5.5
+        sweepBand.frequency.setValueAtTime(300, now)
+        sweepBand.frequency.exponentialRampToValueAtTime(2400, now + 0.34)
+        const sweepGain = ctx.createGain()
+        sweepGain.gain.setValueAtTime(0.0001, now)
+        sweepGain.gain.exponentialRampToValueAtTime(0.11, now + 0.05)
+        sweepGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4)
+        sweepSource.connect(sweepBand).connect(sweepGain).connect(dry)
+        sweepSource.start(now, Math.random() * (grainSeconds - 0.5), 0.46)
+        sweepSource.stop(now + 0.46)
+
+        // Bottom: the thump you feel. Deeper and longer than it was, because
+        // it is now holding the floor until the sub layer has faded up.
         const catchTone = ctx.createOscillator()
-        catchTone.type = 'sine'
+        catchTone.type = 'triangle'
         const catchGain = ctx.createGain()
-        catchTone.frequency.setValueAtTime(126, now)
-        catchTone.frequency.exponentialRampToValueAtTime(62, now + 0.18)
+        catchTone.frequency.setValueAtTime(148, now)
+        catchTone.frequency.exponentialRampToValueAtTime(52, now + 0.22)
         catchGain.gain.setValueAtTime(0.0001, now)
-        catchGain.gain.exponentialRampToValueAtTime(0.055, now + 0.008)
-        catchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24)
+        catchGain.gain.exponentialRampToValueAtTime(0.095, now + 0.01)
+        catchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34)
         catchTone.connect(catchGain).connect(dry)
         catchTone.start(now)
-        catchTone.stop(now + 0.26)
+        catchTone.stop(now + 0.36)
       } else if (!state.boost && lastBoost) {
-        noiseBurst(now, 0.026, 0.18, 'bandpass', 1250, 0.7, 1.6, out)
+        /*
+          Letting go, which used to be one small tick.
+
+          A blow-off is a *falling* hiss — the mirror of the sweep going in —
+          and giving the burn a proper end is most of what makes it feel like
+          it was a thing you spent rather than a thing that stopped.
+        */
+        const offSource = ctx.createBufferSource()
+        offSource.buffer = grain
+        offSource.playbackRate.value = 2.1
+        const offBand = ctx.createBiquadFilter()
+        offBand.type = 'bandpass'
+        offBand.Q.value = 3.2
+        offBand.frequency.setValueAtTime(2600, now)
+        offBand.frequency.exponentialRampToValueAtTime(680, now + 0.3)
+        const offGain = ctx.createGain()
+        offGain.gain.setValueAtTime(0.0001, now)
+        offGain.gain.exponentialRampToValueAtTime(0.07, now + 0.012)
+        offGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34)
+        offSource.connect(offBand).connect(offGain).connect(out)
+        offSource.start(now, Math.random() * (grainSeconds - 0.5), 0.4)
+        offSource.stop(now + 0.4)
+        // And the flutter of the valve underneath it.
+        noiseBurst(now + 0.02, 0.03, 0.14, 'lowpass', 320, 1.1, 0.5)
       }
       lastBoost = state.boost
 
@@ -838,7 +1002,7 @@ export function createEngineVoice(
       window.setTimeout(() => {
         for (const node of [
           combustion, mechanical, exhaust, turbo, brakeCry,
-          textureSource, intakeSource, boostSource, roadSource, windSource, front.source, rear.source,
+          textureSource, intakeSource, boostSource, boostSub, roadSource, windSource, front.source, rear.source,
         ]) {
           try {
             node.stop()

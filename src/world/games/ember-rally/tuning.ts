@@ -93,6 +93,7 @@ export interface RallyTuning {
   driftTightness: number
   driftGrip: number
   driftScrub: number
+  driftTopSpeed: number
   driftEnterSpeed: number
 
   // the ember
@@ -158,6 +159,7 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
   driftTightness: 25,
   driftGrip: 2.05,
   driftScrub: 0.2,
+  driftTopSpeed: 23,
   driftEnterSpeed: 11,
 
   boostPower: 1.38,
@@ -458,54 +460,71 @@ export type GroupId =
  * of the helpers being too low; "it feels like a box" is the camera and the
  * body, and never the tyres.
  */
-export const GROUPS: readonly { id: GroupId; name: string; note: string }[] = [
+export const GROUPS: readonly {
+  id: GroupId
+  /** The heading, in full. */
+  name: string
+  /** One word, for the row of chips. A chip that wraps is not a chip. */
+  short: string
+  note: string
+}[] = [
   {
     id: 'grip',
+    short: 'grip',
     name: 'grip',
     note: 'How hard the tyres hold on. The first place to look if the car will not turn, or turns and then leaves.',
   },
   {
     id: 'steering',
+    short: 'steering',
     name: 'steering',
     note: 'How much the wheels turn, and how fast your hand gets them there.',
   },
   {
     id: 'engine',
+    short: 'engine',
     name: 'engine and speed',
     note: 'How fast it goes and how hard it pulls.',
   },
   {
     id: 'stopping',
+    short: 'stopping',
     name: 'stopping',
     note: 'The brakes, their front-to-rear split, and the handbrake.',
   },
   {
     id: 'helpers',
+    short: 'helpers',
     name: 'the helpers',
     note: 'The three places the game drives for you. Turn these down for a car that demands more, up for one that forgives.',
   },
   {
     id: 'drift',
+    short: 'drift',
     name: 'the drift',
     note: 'What happens once the handbrake is down and the back has stepped out.',
   },
   {
     id: 'ember',
+    short: 'ember',
     name: 'the ember',
     note: 'The boost: how hard it shoves, how long it lasts, how long drifting takes to refill it.',
   },
   {
     id: 'car',
+    short: 'weight',
     name: 'the car itself',
     note: 'Weight and where it sits. These move everything else, so change them first and re-check the rest.',
   },
   {
     id: 'camera',
+    short: 'camera',
     name: 'the camera',
     note: 'Where you watch from. Most of what a car feels like is here rather than in the tyres.',
   },
   {
     id: 'feel',
+    short: 'body',
     name: 'the world and the body',
     note: 'Gravity, and how much the shell throws itself about on its springs.',
   },
@@ -822,6 +841,18 @@ export const DIALS: readonly Dial[] = [
     show: (v) => `${Math.round(v * 100)}% per second`,
   },
   {
+    key: 'driftTopSpeed',
+    group: 'drift',
+    name: 'How fast a drift goes',
+    note: 'The speed a drift settles at, and will not accelerate past — hanging it right out lands a little under this, a hint of angle a little over. Arriving faster than this is the entry: the car sheds the difference over about a second, which is the moment the drift is worth watching.',
+    low: 'a crawl',
+    high: 'flat out sideways',
+    min: 8,
+    max: 44,
+    step: 0.5,
+    show: (v) => `${Math.round(v * MS_TO_KMH)} km/h`,
+  },
+  {
     key: 'driftEnterSpeed',
     group: 'drift',
     name: 'Speed needed to start one',
@@ -1062,7 +1093,7 @@ export const PRESETS: readonly { id: string; name: string; note: string; values:
   {
     id: 'forgiving',
     name: 'forgiving',
-    note: 'For somebody who has never played it. More grip, more help, a calmer camera. Very hard to spin.',
+    note: 'More grip, more help, a calmer camera. Very hard to spin.',
     values: {
       grip: 2.1,
       rearBite: 13,
@@ -1078,7 +1109,7 @@ export const PRESETS: readonly { id: string; name: string; note: string; values:
   {
     id: 'sharper',
     name: 'sharper',
-    note: 'Quicker hands, more front end, less catching. Rewards being smooth and punishes being late.',
+    note: 'Quicker hands, more front end, less catching. Punishes being late.',
     values: {
       frontBite: 10.4,
       steerSpeed: 1.4,
@@ -1092,7 +1123,7 @@ export const PRESETS: readonly { id: string; name: string; note: string; values:
   {
     id: 'looser',
     name: 'looser',
-    note: 'A tail-happy car. Less rear grip, more angle, more of a drift for less provocation.',
+    note: 'Less rear grip, more angle, more drift for less provocation.',
     values: {
       rearBite: 9.2,
       balance: 0.7,
@@ -1106,7 +1137,7 @@ export const PRESETS: readonly { id: string; name: string; note: string; values:
   {
     id: 'heavier',
     name: 'heavier',
-    note: 'More mass, more lean, a looser camera. Nothing about the grip changes — this is entirely about how much the car feels like it weighs.',
+    note: 'More mass, more lean, a looser camera. The grip is untouched.',
     values: {
       weight: 1180,
       rotationWeight: 1.25,

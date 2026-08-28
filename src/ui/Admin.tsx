@@ -35,6 +35,7 @@ import { useEffect } from 'react'
 import { attempt } from '@/systems/trouble'
 import { useVoiceLights } from '@/systems/voiceLights'
 import { CarSettings } from './CarSettings'
+import { useRemembered } from './remember'
 
 /** Somewhere to start from. Any IANA name works — this is just convenience. */
 const COMMON_ZONES = [
@@ -60,6 +61,39 @@ const SHE_SAYS = [
   'tell me when you get in',
   'i am going to sleep. talk in your morning',
 ] as const
+
+/**
+ * Four tabs, and what belongs in each.
+ *
+ * ---------------------------------------------------------------------------
+ * This page was one continuous scroll, and once the car arrived — forty-one
+ * sliders, most of the page's height — that stopped being dense and started
+ * being a wall. Density was always the point here; a wall is not the same
+ * thing. Everything below the car was effectively unreachable, because getting
+ * to it meant scrolling past every dial.
+ *
+ * The split is by **what you are actually doing**, not by what the settings
+ * technically are:
+ *
+ *   car     the workbench. Opened a hundred times an evening while tuning,
+ *           and never at all otherwise. It earns a tab of its own by traffic
+ *   world   how the place looks and where in it you land
+ *   you two the two people, and the things one of you leaves for the other
+ *   device  what this particular phone or laptop is doing, up to and including
+ *           forgetting everything on it
+ *
+ * Which tab you were on is remembered — see `useRemembered`, and the note in
+ * it about why that is load-bearing rather than polish.
+ * ---------------------------------------------------------------------------
+ */
+const TABS = [
+  { id: 'car', name: 'car', blurb: 'how the rally car drives' },
+  { id: 'world', name: 'world', blurb: 'the sky, the hour, and where to land' },
+  { id: 'you', name: 'you two', blurb: 'both people, and what you leave each other' },
+  { id: 'device', name: 'device', blurb: 'this machine, and starting it over' },
+] as const
+
+type TabId = (typeof TABS)[number]['id']
 
 export function Admin() {
   const data = useData()
@@ -105,6 +139,13 @@ export function Admin() {
     local.setPresenceFor(them, { position: [x + dx, y, z + dz] })
   }
 
+  const [remembered, setTab] = useRemembered('garden:admin-tab:v1', 'car')
+  // Validated back into the union rather than trusted: a stale or hand-edited
+  // value must land somewhere real, not on a page with no sections in it.
+  const tab: TabId = TABS.some((entry) => entry.id === remembered)
+    ? (remembered as TabId)
+    : 'car'
+
   /** What the sky would be at right now, live, with the current setting. */
   const live = skyHour(profiles, me, whose, Date.now())
 
@@ -117,6 +158,34 @@ export function Admin() {
         </button>
       </header>
 
+      {/*
+        Sticky, and the header above it is not.
+
+        The one thing you must always be able to reach is the way to another
+        tab; the title and the way out are worth their space once. On a phone
+        this is the difference between four tabs helping and four tabs being
+        another thing to scroll back up past.
+      */}
+      <nav className="admin-tabs">
+        {TABS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className={tab === entry.id ? 'on' : ''}
+            aria-current={tab === entry.id ? 'page' : undefined}
+            onClick={() => setTab(entry.id)}
+          >
+            {entry.name}
+          </button>
+        ))}
+      </nav>
+      <p className="admin-note admin-tab-blurb">
+        {TABS.find((entry) => entry.id === tab)?.blurb}
+      </p>
+
+      {tab === 'car' && <CarSettings />}
+
+      {tab === 'device' && (
       <section>
         <h2>where this is</h2>
         <p className="admin-note">
@@ -137,14 +206,94 @@ export function Admin() {
           </select>
         </label>
       </section>
+      )}
 
-      {/*
-        High up, and immediately after "where this is", because it is the one
-        section on this page anybody comes here to use repeatedly. Everything
-        below it is set once and forgotten; this is a workbench.
-      */}
-      <CarSettings />
+      {tab === 'device' && (
+      <section>
+        <h2>how hard to push this device</h2>
+        <div className="row">
+          {(['low', 'medium', 'high'] as const).map((tier) => (
+            <button
+              key={tier}
+              type="button"
+              className={quality.tier === tier ? 'on' : ''}
+              onClick={() => quality.setTier(tier)}
+            >
+              {tier}
+            </button>
+          ))}
+        </div>
+        <p className="admin-note">
+          grass {quality.grassCount} · flowers {quality.flowerCount} · dpr{' '}
+          {quality.dpr}
+        </p>
+      </section>
+      )}
 
+      {tab === 'you' && (
+      <section>
+        <h2>the two of you</h2>
+        {USER_IDS.map((id) => (
+          <label key={id}>
+            <span className="k">
+              {id} — {localTimeLabel(profiles[id].timeZone)} local
+            </span>
+            <input
+              type="text"
+              value={profiles[id].name}
+              onChange={(e) => void data.setProfile(id, { name: e.target.value })}
+              aria-label={`${id} name`}
+            />
+            <input
+              type="text"
+              value={profiles[id].city}
+              onChange={(e) => void data.setProfile(id, { city: e.target.value })}
+              aria-label={`${id} city`}
+            />
+            <select
+              value={
+                COMMON_ZONES.includes(profiles[id].timeZone) ? profiles[id].timeZone : 'custom'
+              }
+              onChange={(e) => {
+                const tz = e.target.value
+                if (tz !== 'custom' && isValidTimeZone(tz)) {
+                  void data.setProfile(id, { timeZone: tz })
+                }
+              }}
+            >
+              {COMMON_ZONES.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+              <option value="custom">{profiles[id].timeZone} (current)</option>
+            </select>
+            <input
+              type="text"
+              defaultValue={
+                profiles[id].lat === null || profiles[id].lon === null
+                  ? ''
+                  : `${profiles[id].lat}, ${profiles[id].lon}`
+              }
+              placeholder="lat, lon"
+              aria-label={`${id} coordinates`}
+              onBlur={(e) => {
+                const parsed = parseCoordinates(e.target.value)
+                // Blank clears them, which hides the distance rather than
+                // showing a wrong one. Unparseable input is left alone.
+                if (e.target.value.trim() === '') {
+                  void data.setProfile(id, { lat: null, lon: null })
+                } else if (parsed) {
+                  void data.setProfile(id, parsed)
+                }
+              }}
+            />
+          </label>
+        ))}
+      </section>
+      )}
+
+      {tab === 'you' && (
       <section>
         <h2>voice-lights in the Stars</h2>
         <p className="admin-note">
@@ -174,7 +323,9 @@ export function Admin() {
         </div>
         {me !== 'warm' ? <p className="admin-note">Only the warm account owns this hidden setting.</p> : null}
       </section>
+      )}
 
+      {tab === 'you' && (
       <section>
         <h2>the Tree's question pool</h2>
         <p className="admin-note">
@@ -208,7 +359,10 @@ export function Admin() {
           <p className="admin-note">Only the warm account owns this hidden pool.</p>
         ) : null}
       </section>
+      )}
 
+      {tab === 'world' && (
+      <>
       {/*
         The one setting here that is a real design decision rather than
         scaffolding — see systems/whoseHour. It stays on this page because it
@@ -271,87 +425,11 @@ export function Admin() {
         </p>
       </section>
 
-      <section>
-        <h2>the two of you</h2>
-        {USER_IDS.map((id) => (
-          <label key={id}>
-            <span className="k">
-              {id} — {localTimeLabel(profiles[id].timeZone)} local
-            </span>
-            <input
-              type="text"
-              value={profiles[id].name}
-              onChange={(e) => void data.setProfile(id, { name: e.target.value })}
-              aria-label={`${id} name`}
-            />
-            <input
-              type="text"
-              value={profiles[id].city}
-              onChange={(e) => void data.setProfile(id, { city: e.target.value })}
-              aria-label={`${id} city`}
-            />
-            <select
-              value={
-                COMMON_ZONES.includes(profiles[id].timeZone) ? profiles[id].timeZone : 'custom'
-              }
-              onChange={(e) => {
-                const tz = e.target.value
-                if (tz !== 'custom' && isValidTimeZone(tz)) {
-                  void data.setProfile(id, { timeZone: tz })
-                }
-              }}
-            >
-              {COMMON_ZONES.map((z) => (
-                <option key={z} value={z}>
-                  {z}
-                </option>
-              ))}
-              <option value="custom">{profiles[id].timeZone} (current)</option>
-            </select>
-            <input
-              type="text"
-              defaultValue={
-                profiles[id].lat === null || profiles[id].lon === null
-                  ? ''
-                  : `${profiles[id].lat}, ${profiles[id].lon}`
-              }
-              placeholder="lat, lon"
-              aria-label={`${id} coordinates`}
-              onBlur={(e) => {
-                const parsed = parseCoordinates(e.target.value)
-                // Blank clears them, which hides the distance rather than
-                // showing a wrong one. Unparseable input is left alone.
-                if (e.target.value.trim() === '') {
-                  void data.setProfile(id, { lat: null, lon: null })
-                } else if (parsed) {
-                  void data.setProfile(id, parsed)
-                }
-              }}
-            />
-          </label>
-        ))}
-      </section>
+      </>
+      )}
 
-      <section>
-        <h2>how hard to push this device</h2>
-        <div className="row">
-          {(['low', 'medium', 'high'] as const).map((tier) => (
-            <button
-              key={tier}
-              type="button"
-              className={quality.tier === tier ? 'on' : ''}
-              onClick={() => quality.setTier(tier)}
-            >
-              {tier}
-            </button>
-          ))}
-        </div>
-        <p className="admin-note">
-          grass {quality.grassCount} · flowers {quality.flowerCount} · dpr{' '}
-          {quality.dpr}
-        </p>
-      </section>
-
+      
+      {tab === 'world' && (
       <section>
         <h2>go straight to</h2>
         <div className="row">
@@ -370,8 +448,9 @@ export function Admin() {
           ))}
         </div>
       </section>
+      )}
 
-      {local ? (
+      {tab === 'device' && (local ? (
         <section>
           <h2>pretending there are two of you</h2>
           <p className="admin-note">
@@ -409,9 +488,9 @@ export function Admin() {
             writing as her, and the rules refuse it. Which is correct.
           </p>
         </section>
-      )}
+      ))}
 
-      {local && (
+      {tab === 'device' && local && (
         <section className="admin-danger">
           <h2>start again</h2>
           <p className="admin-note">

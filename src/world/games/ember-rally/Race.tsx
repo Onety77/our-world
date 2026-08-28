@@ -28,7 +28,7 @@ import {
 import { Fire } from '@/world/Fire'
 import { ambience, type EngineVoice } from '@/systems/ambience'
 import { useQuality } from '@/systems/quality'
-import { AXLE_HALF_TRACK, AXLE_REAR, WHEEL_RADIUS } from './car'
+import { AXLE_FRONT, AXLE_HALF_TRACK, AXLE_REAR, WHEEL_RADIUS } from './car'
 import { ChaseCamera, planShots, type Shot } from './camera'
 import { attachControls, type RallyControls } from './controls'
 import { spiritDriver } from './spirit'
@@ -48,6 +48,8 @@ import { basisAt, buildTrail, buildTunnel, roadPoint } from './geometry'
 import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { deep } from './depth'
+import { buildField, forgetAround, senseAround, tell, type RoadField } from './around'
+import { RootwaySound } from './RootwaySound'
 import { storm } from './weather'
 import {
   LAMP_SLOTS,
@@ -79,11 +81,15 @@ import {
 import { TUNE } from './tuning'
 import {
   BLUE_SPARK,
+  EXHAUST_HAZE,
   GHOST_GRIT,
   GRIT,
   HOT_SPARK,
   DRIP,
+  LOOSE_EARTH,
   MOTE,
+  NITRO_CORE,
+  NITRO_FLAME,
   Particles,
   SMOKE,
   SPARK,
@@ -227,6 +233,9 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     [track],
   )
   useEffect(() => () => chunks.forEach((chunk) => chunk.geometry.dispose()), [chunks])
+  // A fresh go must not start inside the last one's cave — `around` is a plain
+  // object with no lifetime of its own, so it is cleared with the road.
+  useEffect(() => forgetAround, [track])
   const chunkMeshes = useRef<Mesh[]>([])
 
   // --- the lamps -----------------------------------------------------------
@@ -362,6 +371,15 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {track.stage === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
+      {/*
+        The cave, as a sound. See `systems/rootway.ts`.
+
+        Mounted beside the world rather than inside it because it draws
+        nothing: it is a `useFrame` and a graph of audio nodes, and hanging it
+        off the geometry would tie the tunnel's soundscape to the lifetime of a
+        mesh that gets rebuilt whenever the quality tier changes.
+      */}
+      {track.stage === 'rootway' ? <RootwaySound /> : null}
 
       {chunks.map((chunk, i) => (
         <mesh
@@ -543,6 +561,16 @@ class Driving {
   private shots: Shot[] = []
   private lampCursor = 0
   private lastGhostS = 0
+  /**
+   * What the ember held at the instant it was lit, in seconds.
+   *
+   * The sound needs the burn as a fraction rather than as a countdown, and
+   * dividing by `TUNE.boostSeconds` is not the same thing: a half-charged
+   * ember would then start life already sounding two-thirds spent. Catching
+   * the launch value costs one number and makes a short burn a complete
+   * small burn rather than the tail of a big one.
+   */
+  private boostFrom = 0
   private shotIndex = -1
   /** Which go the machine has been wound back for. */
   private attempt = -1
@@ -557,6 +585,14 @@ class Driving {
   private speedFlat = false
   private gritDue = 0
   private smokeDue = 0
+  /** Per-tyre loose-ground cadence; one wheel crossing the edge is visible. */
+  private readonly earthDue = [0, 0, 0, 0]
+  /** Twin-silencer cadence at the start line and during the first pull-away. */
+  private exhaustDue = 0
+  private exhaustLoaded = false
+  /** Nitro is continuous, but its pressure front is an edge. */
+  private nitroDue = 0
+  private nitroBurning = false
   /**
    * What was asked of the car this frame.
    *
@@ -572,6 +608,14 @@ class Driving {
   private sunk = 0
   /** And how deep into Rootwake, eased the same way. See ROOTWAKE_DARK. */
   private hidden = 0
+  /**
+   * Where the roots, the lamps and the water are, binned.
+   *
+   * Built on the first frame rather than in the constructor, because a road
+   * the player backs out of before it ever runs should not have paid for it.
+   * See `around.ts` for why it is binned at all.
+   */
+  private field: RoadField | null = null
   /** Seconds until the next stroke, and how many are left in this flash. */
   private nextStrike = 2
   private strokesLeft = 1
@@ -645,6 +689,11 @@ class Driving {
     this.shotIndex = -1
     this.lampCursor = 0
     this.lastGhostS = 0
+    this.earthDue.fill(0)
+    this.exhaustDue = 0
+    this.exhaustLoaded = false
+    this.nitroDue = 0
+    this.nitroBurning = false
     this.chase.reset()
     this.cleared = false
   }
@@ -676,6 +725,23 @@ class Driving {
 
     this.clock += args.delta
     args.lights.uniforms.uTime.value = this.clock
+    // `boostLeft` only ever jumps up on the press and falls from there, so the
+    // high-water mark *is* the launch value, with nothing to reset by hand.
+    if (this.car.boostLeft > this.boostFrom) this.boostFrom = this.car.boostLeft
+    if (this.car.boostLeft <= 0) this.boostFrom = 0
+
+    /*
+      What is around the car, for the ear.
+
+      Published rather than passed, and published from *here* rather than
+      worked out again inside the sound: the race is already holding the road,
+      the track and the car, and a soundscape that resamples all three is a
+      second opinion about where the walls are. See `around.ts`.
+    */
+    if (this.track.stage === 'rootway') {
+      if (this.field === null) this.field = buildField(this.track)
+      senseAround(this.track, this.car, this.field, session.phase === 'running')
+    }
 
     /*
       The Stormcrown's weather, off the height of the road under the car.
@@ -685,6 +751,8 @@ class Driving {
       frame is the one it happened on.
     */
     if (this.track.stage === 'stormcrown') {
+      storm.s = this.car.s
+      storm.speed = Math.hypot(this.car.vs, this.car.vn)
       const want = stormAt(this.track, this.car.s + 20)
       const ease = 1 - Math.exp(-1.6 * args.delta)
       storm.inCloud += (want.inCloud - storm.inCloud) * ease
@@ -864,6 +932,16 @@ class Driving {
 
     const speed = speedOf(car)
     const slip = slipOf(car)
+    /*
+      Physics is deliberately frozen behind the start lamps, so `car.revs`
+      remains zero there. The live pedal still raises the engine, however, and
+      every pre-start consumer â€” sound, exhaust glow and silencer haze â€” must
+      read the same synthetic rev value or the car visibly contradicts itself.
+    */
+    const readyRevs =
+      phase === 'ready'
+        ? this.input.throttle * (0.56 + Math.sin(this.clock * 11) * 0.018)
+        : car.revs
 
     if (TELEMETRY) {
       ;(window as unknown as { __rally?: unknown }).__rally = {
@@ -1000,9 +1078,17 @@ class Driving {
       }
     }
     args.materials.mine.uniforms.uBrake.value = car.braking
+    const pipeThrottle = phase === 'ready' ? this.input.throttle : car.throttle
     args.materials.mine.uniforms.uPipe.value = Math.max(
       car.boostLeft > 0 ? 1 : 0,
-      car.throttle < 0.3 && car.revs > 0.45 ? 0.35 + Math.random() * 0.4 : 0,
+      // The silencers now answer a loaded engine before the flag as well as
+      // glowing on overrun. Previously this read the locked physics throttle,
+      // which is always zero during the countdown.
+      phase === 'ready' && pipeThrottle > 0.04
+        ? 0.22 + pipeThrottle * 0.68 + Math.sin(this.clock * 31) * 0.06
+        : pipeThrottle < 0.3 && readyRevs > 0.45
+          ? 0.35 + Math.random() * 0.4
+          : 0,
     )
     for (let i = 0; i < 4; i++) {
       // The mesh numbers its wheels on the other side — see `MESH_FOR_WHEEL`.
@@ -1030,7 +1116,7 @@ class Driving {
       args.materials.beam.uniforms.uPower.value = power * 0.9
       // Full throttle holds roughly 4,700 rpm. The car is still physically
       // locked; this is only the driver's foot loading the engine for launch.
-      rev = this.input.throttle * (0.56 + Math.sin(this.clock * 11) * 0.018)
+      rev = readyRevs
     } else {
       args.lights.uniforms.uHeadPower.value = 1
       // The pod comes up with the ember, so a boost lights the far end of the
@@ -1076,6 +1162,7 @@ class Driving {
       wet: car.road.wet,
       tight: Math.max(0, Math.min(1, (5.4 - room) / 3.2)),
       boost: car.boostLeft > 0,
+      boostLeft: this.boostFrom > 0 ? car.boostLeft / this.boostFrom : 0,
     })
 
     // --- her -----------------------------------------------------------------
@@ -1133,12 +1220,15 @@ class Driving {
     lights.uniforms.uEmberPower.value = 1.15 + ember * 1.3
   }
 
-  /** A continuous exhaust jet with pressure in it, never loose screen glitter. */
+  /** A continuous exhaust jet with pressure in it, rooted in both silencers. */
   private updateBoostJets(rig: CarRig, burning: boolean) {
     rig.boostJets.visible = burning
     if (!burning) return
-    const pulse = 1 + Math.sin(this.clock * 43) * 0.07 + Math.sin(this.clock * 71) * 0.035
-    rig.boostJets.scale.set(0.94 + pulse * 0.06, 0.94 + pulse * 0.06, pulse)
+    const pulse = 1 + Math.sin(this.clock * 43) * 0.1 + Math.sin(this.clock * 71) * 0.055
+    // Most of the movement is lengthwise. A flame that inflates like a balloon
+    // reads as magic; a pressure column that lashes behind the pipes reads as
+    // thrust even in a still frame.
+    rig.boostJets.scale.set(0.96 + pulse * 0.08, 0.96 + pulse * 0.08, 1.04 + pulse * 0.18)
   }
 
   private showGhost(args: FrameArgs, run: RallyRun, elapsedMs: number, grid = 0) {
@@ -1390,8 +1480,12 @@ class Driving {
     const { delta } = args
     const drifting = Math.abs(slip) > 0.13 && speed > 9
 
-    if (drifting || car.rough) {
-      const heat = Math.min(1, Math.abs(slip) * 3 + (car.rough ? 0.5 : 0))
+    this.throwLooseEarth(args, car, speed)
+    this.throwSilencerHaze(args, car, speed)
+    this.throwNitro(args, car, speed)
+
+    if (drifting) {
+      const heat = Math.min(1, Math.abs(slip) * 3)
       this.colour.copy(car.road.wet > 0.45 ? WET_GRIT : GRIT)
       this.spit(args.dust, args.mine, this.colour, heat, 0.15 + speed * 0.005)
     }
@@ -1437,6 +1531,9 @@ class Driving {
     if (car.slam > 0.02 || car.hitStone) {
       const force = car.hitStone ? 0.7 : car.slam
       this.engine?.hit(force)
+      // The car's own impact is above; this is the tunnel answering it. Two
+      // different sounds on purpose — see `RootwayVoice.crash`.
+      tell({ kind: 'crash', force })
       this.chase.jolt(0.35)
       const many = 8 + Math.round(force * 14)
       for (let i = 0; i < many; i++) {
@@ -1535,6 +1632,194 @@ class Driving {
         )
       }
     }
+  }
+
+  /**
+   * Loose ground, wheel by wheel.
+   *
+   * `car.rough` only changes after the centre of the car has left the stone;
+   * that is the right threshold for handling and the wrong threshold for what
+   * the eye sees. A single outside tyre can already be deep in roots and soil.
+   * This uses each contact patch, so the first wheel over the edge speaks first
+   * and all four build a proper wake once the whole car is off-road.
+   */
+  private throwLooseEarth(args: FrameArgs, car: CarState, speed: number) {
+    if (speed < 1.5) {
+      this.earthDue.fill(0)
+      return
+    }
+
+    const cos = Math.cos(car.psi)
+    const sin = Math.sin(car.psi)
+    const edge = car.road.width - 0.12
+
+    for (let i = 0; i < 4; i++) {
+      const along = i < 2 ? AXLE_FRONT : AXLE_REAR
+      const lateral = i % 2 === 0 ? -AXLE_HALF_TRACK : AXLE_HALF_TRACK
+      const wheelN = car.n + lateral * cos + along * sin
+      const depth = Math.max(0, Math.min(1, (Math.abs(wheelN) - edge) / 0.72))
+      if (depth <= 0) {
+        this.earthDue[i] = 0
+        continue
+      }
+
+      this.earthDue[i] -= args.delta * (12 + speed * 2.25) * (0.35 + depth * 0.65)
+      while (this.earthDue[i] <= 0) {
+        this.earthDue[i] += 1
+        this.earthFromWheel(args.dust, args.mine, i, depth, speed, car.road.wet)
+      }
+    }
+  }
+
+  /** One clod and its dust, born exactly under one tyre. */
+  private earthFromWheel(
+    into: Particles,
+    rig: CarRig,
+    wheel: number,
+    depth: number,
+    speed: number,
+    wet: number,
+  ) {
+    const hub = rig.hubs[MESH_FOR_WHEEL[wheel]]
+    hub.updateMatrixWorld(true)
+    this.point.set(0, -WHEEL_RADIUS + 0.045, 0).applyMatrix4(hub.matrixWorld)
+    this.forward.set(0, 0, -1).transformDirection(rig.body.matrixWorld).normalize()
+    const side = wheel % 2 === 0 ? 1 : -1
+    this.sideways.set(side, 0, 0).transformDirection(rig.body.matrixWorld).normalize()
+    const throwBack = 1.8 + Math.min(4.2, speed * 0.1)
+    const throwOut = 0.5 + depth * 1.4
+    const colour = wet > 0.48 ? WET_GRIT : LOOSE_EARTH
+
+    into.spawn(
+      this.point.x,
+      this.point.y,
+      this.point.z,
+      this.forward.x * throwBack + this.sideways.x * throwOut + (Math.random() - 0.5) * 0.8,
+      0.65 + depth * 1.35 + Math.random() * 0.75,
+      this.forward.z * throwBack + this.sideways.z * throwOut + (Math.random() - 0.5) * 0.8,
+      0.55 + Math.random() * 0.5,
+      0.11 + depth * 0.17 + Math.random() * 0.07,
+      1.6 + depth * 1.3,
+      colour,
+    )
+
+    // A smaller, denser piece inside the cloud is what makes the cloud read
+    // as ground being thrown rather than smoke being played at the wheel.
+    if (Math.random() < 0.46 + depth * 0.3) {
+      into.spawn(
+        this.point.x,
+        this.point.y,
+        this.point.z,
+        this.forward.x * throwBack * 1.2 + this.sideways.x * throwOut,
+        1 + Math.random() * 1.8,
+        this.forward.z * throwBack * 1.2 + this.sideways.z * throwOut,
+        0.35 + Math.random() * 0.35,
+        0.035 + Math.random() * 0.045,
+        0.25,
+        wet > 0.48 ? WET_GRIT : GRIT,
+      )
+    }
+  }
+
+  /**
+   * Low-speed exhaust from the two silencers.
+   *
+   * It follows the live pedal during the countdown, not the locked physics
+   * throttle. At road speed the wake tears it away too quickly to see, so it
+   * naturally retires after the launch instead of becoming permanent smoke.
+   */
+  private throwSilencerHaze(args: FrameArgs, car: CarState, speed: number) {
+    if (car.boostLeft > 0) {
+      this.exhaustLoaded = false
+      this.exhaustDue = 0
+      return
+    }
+    const phase = useRace.getState().phase
+    const pedal = phase === 'ready' ? this.input.throttle : car.throttle
+    const lowSpeed = Math.max(0, 1 - speed / 17)
+    const loaded = pedal * lowSpeed
+    if (loaded < 0.035) {
+      this.exhaustLoaded = false
+      this.exhaustDue = 0
+      return
+    }
+
+    if (!this.exhaustLoaded) {
+      // The first squeeze clears both pipes with a short, visible cough.
+      for (let i = 0; i < 4; i++) this.silencerPuff(args.dust, args.mine, loaded, i % 2 === 0 ? -1 : 1)
+      this.exhaustLoaded = true
+      this.exhaustDue = 0.16
+    }
+    this.exhaustDue -= args.delta * (4 + loaded * 13)
+    while (this.exhaustDue <= 0) {
+      this.exhaustDue += 1
+      this.silencerPuff(args.dust, args.mine, loaded, Math.random() < 0.5 ? -1 : 1)
+    }
+  }
+
+  /** One pulse out of one physical tailpipe. */
+  private silencerPuff(into: Particles, rig: CarRig, load: number, side: number) {
+    rig.body.updateMatrixWorld(true)
+    this.point.set(side * 0.3, 0.26, -1.94).applyMatrix4(rig.body.matrixWorld)
+    this.forward.set(0, 0, -1).transformDirection(rig.body.matrixWorld).normalize()
+    const shove = 1.25 + load * 2.5
+    into.spawn(
+      this.point.x,
+      this.point.y,
+      this.point.z,
+      this.forward.x * shove + (Math.random() - 0.5) * 0.36,
+      0.16 + Math.random() * 0.34,
+      this.forward.z * shove + (Math.random() - 0.5) * 0.36,
+      0.48 + Math.random() * 0.42,
+      0.08 + load * 0.12 + Math.random() * 0.035,
+      2.4,
+      EXHAUST_HAZE,
+    )
+  }
+
+  /** A pressure front at ignition, then a dense flame torn from both pipes. */
+  private throwNitro(args: FrameArgs, car: CarState, speed: number) {
+    const burning = car.boostLeft > 0
+    if (!burning) {
+      this.nitroBurning = false
+      this.nitroDue = 0
+      return
+    }
+
+    if (!this.nitroBurning) {
+      this.nitroBurning = true
+      this.chase.jolt(0.28)
+      for (let i = 0; i < 24; i++) {
+        this.nitroParticle(args.sparks, args.mine, i < 8)
+      }
+    }
+
+    this.nitroDue -= args.delta * (30 + Math.min(32, speed * 0.7))
+    while (this.nitroDue <= 0) {
+      this.nitroDue += 1
+      this.nitroParticle(args.sparks, args.mine, Math.random() < 0.18)
+    }
+  }
+
+  /** One short additive lick, always born at a pipe rather than in the air. */
+  private nitroParticle(into: Particles, rig: CarRig, core: boolean) {
+    rig.body.updateMatrixWorld(true)
+    const side = Math.random() < 0.5 ? -0.3 : 0.3
+    this.point.set(side, 0.26, -1.98).applyMatrix4(rig.body.matrixWorld)
+    this.forward.set(0, 0, -1).transformDirection(rig.body.matrixWorld).normalize()
+    const shove = 6 + Math.random() * 7
+    into.spawn(
+      this.point.x,
+      this.point.y,
+      this.point.z,
+      this.forward.x * shove + (Math.random() - 0.5) * 1.1,
+      (Math.random() - 0.35) * 1.1,
+      this.forward.z * shove + (Math.random() - 0.5) * 1.1,
+      0.16 + Math.random() * 0.2,
+      core ? 0.09 + Math.random() * 0.07 : 0.07 + Math.random() * 0.09,
+      core ? 0.15 : 0.55,
+      core ? NITRO_CORE : NITRO_FLAME,
+    )
   }
 
   /**
@@ -1832,6 +2117,7 @@ const SILENT = {
   wet: 0,
   tight: 0,
   boost: false,
+  boostLeft: 0,
 }/**
  * What the light is like above the water, and what it is like underneath.
  *

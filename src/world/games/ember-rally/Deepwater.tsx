@@ -349,8 +349,8 @@ const FISH_FRAG = /* glsl */ `
   varying vec3 vWorld;
   uniform vec3 uColour;
   uniform float uDeep;
-  // The numbers, not ${FOGGED} itself: a fish fades *into* the water rather
-  // than out of it, so it wants the fog's range and not its blending rule.
+  // Repeat the fog uniforms rather than the shared helper: a fish fades into
+  // the water, not out of it, so it needs the range but not that blend rule.
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;

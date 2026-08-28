@@ -229,7 +229,13 @@ export function useCarRig(
         const outer = new Mesh(beamGeometry, boostOuter)
         outer.position.set(side, 0.26, -1.86)
         outer.rotation.y = Math.PI
-        outer.scale.set(0.055, 0.052, 0.13)
+        /*
+          Four metres of flame at full pressure. The old 1.7 metre needle was
+          technically present but disappeared underneath the spoiler and the
+          chase camera's perspective. Width matters as much as length here:
+          this is a compressed exhaust column, not two blue hairs.
+        */
+        outer.scale.set(0.105, 0.09, 0.31)
         outer.frustumCulled = false
         outer.renderOrder = 7
         boostJets.add(outer)
@@ -237,7 +243,7 @@ export function useCarRig(
         const core = new Mesh(beamGeometry, boostCore ?? boostOuter)
         core.position.set(side, 0.26, -1.865)
         core.rotation.y = Math.PI
-        core.scale.set(0.024, 0.021, 0.082)
+        core.scale.set(0.043, 0.035, 0.215)
         core.frustumCulled = false
         core.renderOrder = 8
         boostJets.add(core)

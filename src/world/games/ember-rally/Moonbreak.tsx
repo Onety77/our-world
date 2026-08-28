@@ -24,6 +24,7 @@ import { basisAt, roadPoint, type RoadBasis, type TunnelChunk } from './geometry
 import { MOONBREAK, WATER_Y, emptyRoad, roadAt, vergeWidth, type Track } from './track'
 import { Deepwater } from './Deepwater'
 import { deep } from './depth'
+import { MoonbreakSound } from './MoonbreakSound'
 
 
 
@@ -721,6 +722,7 @@ export function MoonbreakWorld({ track }: { track: Track }) {
 
   return (
     <>
+      <MoonbreakSound track={track} />
       <mesh frustumCulled={false} material={sky}>
         <sphereGeometry args={[2400, 28, 16]} />
       </mesh>
