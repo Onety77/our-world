@@ -1,14 +1,3 @@
 {
-  "//": [
-    "Every path serves the app, because the app reads the path.",
-    "",
-    "Vercel serves `dist` as static files, so without this anything that is not",
-    "exactly `/` is a file that does not exist and comes back 404. That breaks",
-    "two things immediately: `/dev7731`, which is the control room and the only",
-    "way to reach the car settings, and any link straight to a place.",
-    "",
-    "The query-string entries — ?section=, ?rally=, ?hour= — survive a rewrite",
-    "on their own, so this one line covers all of them."
-  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
