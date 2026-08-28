@@ -1,7 +1,7 @@
 rules_version = '2';
 
 /*
-  The bucket. Photographs and brief voice-lights, and nothing else.
+  The bucket. Photographs, brief voice-lights, and music.
 
   This is the third rules file and the first one that guards *bytes*. Same law
   as the other two: two people, forever, matched by address, and everybody else
@@ -112,7 +112,40 @@ service firebase.storage {
       allow delete: if isOneOfUs() && who == me();
     }
 
-    /* Everything outside the two byte stores, to everybody, forever. */
+    /*
+      Music.
+
+      Uploaded by hand rather than by the app, and that is why this block reads
+      differently from the two above it: there is no client code to constrain,
+      so the rule is doing all of the work on its own.
+
+      The player has been built and working for a long time on `Track.url ==
+      null` — a list, a transport, and the two-of-you-in-step syncing, all
+      running on a clock with nothing to play. This is the path that lets a
+      real file exist. Put the audio here, then write a document into the
+      `tracks` collection in Firestore pointing at it; the collection already
+      accepts writes from either of you.
+
+      **Update is allowed here and nowhere else in this file.** A photograph is
+      never edited and a voice-light is never edited, so both of those are
+      create-only and a reused path is a bug worth failing on. Music is the
+      opposite: replacing a bad rip of a song with a better one, at the same
+      path, is a completely ordinary thing to want, and forcing a new path for
+      it would leave the old file behind with a document still pointing at it.
+
+      Twenty-five megabytes, which is a long song at a high bitrate and an
+      absurd one for anything else. It is here so a mis-drag of a video file
+      fails at the door rather than after four minutes of uploading.
+    */
+    match /music/{file} {
+      allow read: if isOneOfUs();
+      allow write: if isOneOfUs()
+        && request.resource.contentType.matches('audio/.*')
+        && request.resource.size < 25 * 1024 * 1024;
+      allow delete: if isOneOfUs();
+    }
+
+    /* Everything outside the three byte stores, to everybody, forever. */
     match /{allPaths=**} {
       allow read, write: if false;
     }

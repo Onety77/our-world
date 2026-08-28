@@ -10,6 +10,7 @@ import {
   recordingMime,
   VOICE_LIGHT_SECONDS,
   voiceWaveform,
+  whyNoMicrophone,
 } from '@/systems/voiceRecording'
 
 interface Review {
@@ -137,10 +138,20 @@ export function VoiceLights() {
   }
 
   async function beginRecording(slot: number) {
+    /*
+      Ask why before asking whether.
+
+      This used to be one condition and one message — "this browser cannot
+      record a voice-light" — which is wrong nearly every time it appears. See
+      `whyNoMicrophone`: the usual cause is the page being open on a plain
+      http network address rather than localhost, and the browser is perfectly
+      capable. A message that blames the wrong thing costs an afternoon.
+    */
+    const why = whyNoMicrophone()
     const choice = recordingMime()
-    if (!choice || !navigator.mediaDevices?.getUserMedia) {
-      await attempt('this browser cannot record a voice-light', async () => {
-        throw new Error('Microphone recording is unavailable here.')
+    if (why !== null || !choice) {
+      await attempt('there is no microphone here', async () => {
+        throw new Error(why ?? 'Microphone recording is unavailable here.')
       })
       return
     }

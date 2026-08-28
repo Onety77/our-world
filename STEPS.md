@@ -33,8 +33,9 @@ your Firebase console; those are the ones to confirm with your own eyes.
 So: it currently runs only on your machine, in the fake local mode, and the
 whole thing is stored in your browser and nowhere else.
 
-Seven parts below. Parts 1–4 make it real. Part 5 puts it somewhere she can
-reach. Part 6 is the first two-device test. Part 7 is what still won't work.
+Eight parts below. Parts 1–4 make it real. Part 5 puts it somewhere she can
+reach. Part 6 is the first two-device test. Part 7 is what still won't work,
+and Part 8 is how to put real music in.
 
 ---
 
@@ -171,15 +172,25 @@ rules-out/storage.rules
 ```
 
 **Open `rules-out/PASTE-ME.md` and work down it.** It is the three files in one
-document, in the order the console wants them, each block labelled with the
-screen it belongs on. The three separate files are beside it if you would
-rather copy them one at a time.
+document, in the order the console wants them, with a table at the top saying
+which block goes on which screen. The three separate files are beside it if you
+would rather copy them one at a time.
+
+**Everything in `rules-out/` is comment-free.** The templates in the repo root
+are heavily commented and stay that way — that is where the reasoning about the
+security model lives, and anybody changing a rule needs to read why it is the
+shape it is. What you paste is a different thing with a different job: it is
+the rule and nothing else, because four hundred lines of explanation in a
+console text box at one in the morning is not documentation, it is somewhere
+for a mistake to hide. The generator strips them and then checks that stripping
+did not change what the rules *do* — same matches, same allows, balanced
+braces, both addresses intact — and refuses to write anything if it did.
 
 `rules-out/` is gitignored, because that is the only copy anywhere with your
-real addresses in it. The templates in the repo root keep `__WARM_EMAIL__`
-placeholders and are the version to keep. **Do not hand-edit the templates** —
-the addresses have to match what the app uses, and keeping that fact in four
-files is four places to get it wrong.
+real addresses in it. The templates keep `__WARM_EMAIL__` placeholders and are
+the version to keep. **Do not hand-edit the templates** — the addresses have to
+match what the app uses, and keeping that fact in four files is four places to
+get it wrong.
 
 If it says `VITE_WARM_EMAIL is empty in .env.local`, go back to step 2.2.
 
@@ -276,48 +287,85 @@ debug it over the network.
 
 # Part 5 — Put it somewhere she can reach
 
-**This does not exist yet.** There is no deploy config in the repo — no
-`firebase.json`, no Vercel, no Netlify, nothing. Right now the only way to open
-this is `npm run dev` on your laptop, which she obviously cannot do.
+Right now the only way to open this is `npm run dev` on your laptop, which she
+obviously cannot do. **You are going to Vercel**, so this part is written for
+Vercel.
 
 ## 5.1 The one thing to understand first
 
 Vite bakes every `VITE_*` value into the bundle **at build time**, not at run
-time. So whichever host you use, the build has to happen somewhere that has
-your `.env.local`. The simplest correct answer is: **build on your machine,
-upload the result.** That is what the steps below do.
+time. There is no `.env.local` on the server and there never will be — by the
+time the site is running, those values are already inside the JavaScript.
 
-## 5.2 Firebase Hosting (recommended)
+So Vercel needs its own copy of them, set in its dashboard. Miss one and the
+build succeeds and the site says *"The garden won't open"* with the name of the
+key it wanted, which is at least honest, but is a round trip you do not need.
 
-Same project, one command, free, HTTPS included — and HTTPS is not optional,
-because notifications and the photo picker both require a secure origin.
+**This is not a secret being leaked.** The Firebase web keys are public by
+design — they ship in the bundle on every Firebase site there has ever been.
+What stops anybody else touching your data is the rules of Part 3. The two
+addresses are in there too, and that is also fine: they are checked against
+Firebase Auth, so knowing one does not get you a password.
 
-Once, to set it up:
+## 5.2 Vercel
 
+### Once, to set it up
+
+1. Push this repo to GitHub, if it is not there already.
+2. <https://vercel.com> → **Add New… → Project** → import the repo.
+3. It will detect Vite on its own. Leave the build settings alone:
+   - Framework preset **Vite**
+   - Build command `npm run build`
+   - Output directory `dist`
+4. **Before you press Deploy**, open **Environment Variables** and add every
+   `VITE_` line from your `.env.local`. All of them, names exactly as they
+   are, for **Production, Preview and Development**.
+
+   The fastest way: open `.env.local`, copy the whole file, and use Vercel's
+   paste-a-`.env` box — it takes the lot in one go. Then delete any comment
+   lines it picked up.
+5. Deploy. It gives you a `.vercel.app` address over HTTPS.
+
+### The one thing Vercel will get wrong
+
+**Deep links 404 without a rewrite.** The app reads `?section=`, `?rally=`
+and `/dev7731` out of the URL. Vercel serves `dist` as static files, so
+anything that is not `/` is a file that does not exist — and `/dev7731`, the
+control room, is exactly that.
+
+Add `vercel.json` in the repo root:
+
+```json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
 ```
-npx firebase-tools login
-npx firebase-tools init hosting
-```
 
-When it asks:
+That is the whole file. Commit it. Without it the site works until the first
+time you open the control room or send her a link to a place.
 
-- **Use an existing project** → the garden's project
-- **Public directory** → `dist`
-- **Single-page app (rewrite all urls to /index.html)** → **Yes**.
-  This one matters. The app reads `?section=`, `?game=` and so on from the URL;
-  without the rewrite anything but the bare root 404s.
-- **Set up automatic builds with GitHub** → No
-- **Overwrite `dist/index.html`** → **No.** It will offer to write a placeholder
-  over your build.
+### Every time after that
 
-Then, every time you want to publish:
+Push to your main branch. Vercel builds and deploys on its own; there is no
+command to run. If you change anything in `.env.local`, change it in the
+Vercel dashboard too and **redeploy** — the old values are baked into the old
+build and will not update on their own.
 
-```
-npm run build
-npx firebase-tools deploy --only hosting
-```
+## 5.2b What Vercel does *not* change
 
-It prints a URL ending in `.web.app`. That is the address you send her.
+Hosting and data are separate things here, and only the hosting has moved:
+
+- **Auth, Firestore, Realtime Database and Storage all stay on Firebase.** The
+  rules of Part 3 are what protect them, and they are unaffected by where the
+  page is served from.
+- **You still need HTTPS**, and Vercel gives it. That matters more than it
+  sounds: the microphone for voice-lights, the photo picker in the Glasshouse
+  and notifications all *silently vanish* on a plain http origin. See the
+  troubleshooting entry about the network address.
+- **Storage may need to be told about the new address.** If photographs or
+  voice-lights fail to load with a CORS error once you are on Vercel, that is
+  the bucket refusing an origin it does not know. Fix with the `gsutil` CORS
+  config, or from the Google Cloud console for the same bucket.
 
 ## 5.3 A real warning about China
 
@@ -393,14 +441,12 @@ Realtime Database rules; republish `rules-out/database.rules.json`.
 None of these are broken. They were never built, and each is a decision rather
 than an oversight.
 
-**The music makes no sound.** The player, the list, the transport and the
-both-of-you-in-step syncing are all built and all work — on a clock, with
-`Track.url` set to `null`. There are no audio files and **no way to add one
-from inside the app**: tracks are read, never written. To put real music in,
-you would upload files to Storage by hand and write the matching documents into
-the `tracks` collection in Firestore by hand — and `storage.rules` allows two
-paths, neither of which is music, so it would need a third block. Say the word
-and I will build the way in properly.
+**There is no way to add music from inside the app.** The player, the list, the
+transport and the both-of-you-in-step syncing are all built and all work — they
+have just never had a file to play. Adding one is a job you do by hand, twice:
+once in Storage and once in Firestore. It takes about a minute per song and
+**Part 8 is the whole procedure**. If you end up adding more than a handful,
+say so and I will build the way in properly.
 
 **Notifications only fire while the garden is open in a tab.** The setting says
 exactly that, deliberately, because that is all a web page can do without a
@@ -451,6 +497,73 @@ There used to be a `dev` panel sitting permanently in the corner of every
 screen. It is gone.
 
 ---
+
+---
+
+# Part 8 — Putting real music in
+
+The player has always worked. It has never had a file. This is how one gets in,
+and it is two things per song: **the audio goes in Storage, a document pointing
+at it goes in Firestore.** No folder needs creating in advance — Storage makes
+the folder the moment you upload into it.
+
+Do Part 3 first. `storage.rules` gained a `music/` block for exactly this, so
+if you published the rules before today, **publish `storage.rules` again** or
+the upload is refused.
+
+## 8.1 Put the file in Storage
+
+**Build → Storage → Files.**
+
+1. There is a folder button beside **Upload file**. Make one called `music`.
+   Exactly that, lowercase — the rule matches `music/` and nothing else.
+2. Open it and upload the audio. Anything the browser can play: mp3, m4a, ogg,
+   wav. Under 25 MB, which is a long song at a high bitrate.
+3. Click the file. On the right, **File location → Download URL**. Copy it.
+   It is long and has a `?alt=media&token=…` on the end. **Keep all of it** —
+   the token is what makes the file fetchable.
+
+## 8.2 Write the document in Firestore
+
+**Build → Firestore Database → Data.**
+
+1. If there is no `tracks` collection yet, **Start collection** → id `tracks`.
+2. **Add document.** Let it auto-ID; nothing reads the id.
+3. Four fields:
+
+   | Field | Type | Value |
+   |---|---|---|
+   | `title` | string | what it is called. **Required** — a track with no title is ignored |
+   | `url` | string | the download URL from 8.1 |
+   | `by` | string | `warm` or `cool` — who put it on |
+   | `duration` | number | length in **seconds**, e.g. `214` for 3:34 |
+
+4. Save.
+
+That is it. The list is live, so it appears in the corner player without a
+refresh, on both of your devices.
+
+## 8.3 The two fields that behave oddly, and why
+
+**`duration` is in seconds, and `0` means "not known".** Put `0` in and the
+player shows no progress line at all rather than a wrong one — a bar that lies
+about where you are in a song is worse than no bar. So it is worth getting
+right, but nothing breaks if you do not.
+
+**The list is sorted by `title`**, not by when you added it. If you want an
+order, number the titles.
+
+## 8.4 What to check
+
+Open the garden, press play in the corner. If it stays silent:
+
+- **Nothing in the list at all** → the document has no `title`, or it is not in
+  a collection called exactly `tracks`.
+- **It is listed but will not play** → the `url` is wrong. The usual cause is
+  copying the file *path* instead of the **Download URL**, or losing the
+  `?alt=media&token=…` on the end.
+- **It plays for you and not for her** → `storage.rules` was not republished
+  after the `music/` block was added.
 
 # The checks you can run without a browser
 
@@ -533,6 +646,16 @@ On a phone that is usually the connection. If it persists on a good connection,
 the upload failed after the document was written, which should be impossible —
 the layer uploads first for exactly that reason — and is worth telling me.
 
+**The microphone, the photo picker or notifications quietly do not exist.**
+You are on `http://` at a plain address — almost always the **Network** URL
+Vite prints, like `http://172.20.10.10:5173`, opened so a phone can reach the
+same server. Browsers only hand out the microphone and the file picker on a
+*secure* origin, which means https **or localhost**, and on anything else the
+whole API is simply missing rather than refused. Nothing is wrong with the
+browser. Open `http://localhost:5173` on the machine itself, and use the
+Vercel address for the phone. The voice-light now says exactly this when it
+happens, and names the address it is on.
+
 **The control room says `local · nothing is saved`.**
 `VITE_DATA_BACKEND` is still `local`, or Vite was not restarted after you
 changed it.
@@ -557,8 +680,9 @@ coordinates with it.
 7  npm run dev  (restart it; env is read once)
 8  sign in → a thought, a message, a voice-light, a photograph
 9  hard-refresh; all four still there, the picture still in the pane
-10 npx firebase-tools init hosting   (dist, SPA yes, overwrite no)
-11 npm run build && npx firebase-tools deploy --only hosting
-12 send her the link; both add it to the home screen
-13 the two-device pass in Part 6
+10 push to GitHub → vercel.com → import the repo
+11 paste every VITE_ line into Vercel's environment variables
+12 commit vercel.json (already in the repo) or deep links 404
+13 deploy; send her the .vercel.app link; both add it to the home screen
+14 the two-device pass in Part 6
 ```
