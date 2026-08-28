@@ -4136,6 +4136,34 @@ canvas {
   transition: opacity var(--fade, 300ms) ease-in;
 }
 
+/*
+  And the word, on the rare occasion the veil is waiting rather than fading.
+
+  Centred, quiet, and in the same voice the doors and the games already use —
+  a place that is slow to arrive should say the same thing a round that is slow
+  to open says, because from where you are standing there is no difference.
+  Faded in on its own, slower than the veil, so it never flickers past on a
+  transition that turned out to be quick after all.
+*/
+.veil > .door-waiting {
+  position: absolute;
+  inset: auto 1.5rem 0 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+  text-align: center;
+  animation: veil-word 420ms ease-out both;
+}
+
+@keyframes veil-word {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veil > .door-waiting { animation: none; }
+}
+
 /* ---------------------------------------------------------------------------
    The Stars — talking.
 

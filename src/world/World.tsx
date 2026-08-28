@@ -26,6 +26,7 @@ import { useGameStage } from '@/world/games/stage'
 import { SceneEnvProvider } from './SceneEnv'
 import { SlideCamera } from './SlideCamera'
 import { GardenHub } from './GardenHub'
+import { useArriving } from '@/systems/arriving'
 import { Sky } from './Sky'
 import { Clouds } from './Clouds'
 import { Ground } from './Ground'
@@ -320,34 +321,39 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
         )}
 
         {/*
-          One boundary around both, and the fallback is the garden itself.
+          One boundary around both, and the fallback draws nothing.
 
           -------------------------------------------------------------------
-          Places and games are fetched rather than shipped now — see `later` —
-          which introduces exactly one way for this to go wrong: arriving
-          somewhere before its code does, and standing in an empty world for a
-          beat. That would be a worse thing than the loading time it bought.
+          Places and games are fetched rather than shipped — see `later` — so
+          there is exactly one way for this to go wrong: arriving somewhere
+          before its code does.
 
-          Two answers, and it needs both.
+          The first answer is that nothing should ever *have* to wait. Every
+          place is warmed a couple of seconds after the garden settles, and the
+          one a slide is heading for is warmed again the moment the slide
+          starts. On any real visit the code is here long before you are.
 
-          The first is that nothing should ever *have* to wait: every place is
-          warmed a couple of seconds after the garden settles, and the one a
-          slide is heading for is warmed again the moment the slide starts. On
-          any real visit the code is already here long before you are.
+          The second answer is this, for the visit that is not real — a cold
+          cache, a slow morning, a phone that dropped to one bar between the
+          door and the first swipe.
 
-          The second is this, for the visit that is not real — a cold cache, a
-          slow morning, a phone that dropped to one bar between the door and
-          the first swipe. The fallback is the hub: the meadow, the treeline,
-          the landmarks, the sky. So the worst case is not an empty world, it
-          is *the garden you were already standing in*, held for a moment
-          longer while the place you asked for arrives. Which is the same thing
-          the fade between places was already doing.
+          **This fallback used to be the garden hub, and that was wrong.** The
+          reasoning was that the worst case should be "the garden you were
+          already standing in, held a moment longer". It reads as nothing of
+          the kind. You asked for the Stars; the meadow faded *in*, sat there,
+          and was then replaced — because the veil lifts on a timer and the
+          code arrives when it arrives. Two clocks racing, and on a slow
+          morning the wrong one wins. What that looks like is not a load. It
+          looks like the thing crashed and recovered.
 
-          Never a spinner, and never nothing. Both would be the world admitting
-          it is a website.
+          So the fallback draws nothing at all, and the veil above it is told
+          to *wait* rather than to count — see `systems/arriving`. The sky and
+          the fog are outside this boundary and still render, so what is held
+          under the fade is an empty sky rather than the wrong world, and
+          nothing is ever shown that has to be taken back.
           -------------------------------------------------------------------
         */}
-        <Suspense fallback={<GardenHub />}>
+        <Suspense fallback={<Arriving />}>
           {Stage ? <Stage /> : shown.entered ? (() => {
             const Current = SECTIONS[shown.section].Scene
             return <Current key={SECTIONS[shown.section].id} />
@@ -356,6 +362,19 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
       </SceneEnvProvider>
     </>
   )
+}
+
+/**
+ * Rendered while a place is still being fetched: nothing, plus a word upward.
+ *
+ * It draws no geometry on purpose. The alternative is to draw *something*, and
+ * everything available to draw is a different place to the one that was asked
+ * for. Holding the fade down over an empty sky is honest; showing the meadow
+ * and taking it away again is not.
+ */
+function Arriving() {
+  useEffect(() => useArriving.getState().hold(), [])
+  return null
 }
 
 export function World({ hourOverride }: { hourOverride: number | null }) {

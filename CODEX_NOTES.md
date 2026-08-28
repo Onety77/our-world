@@ -318,3 +318,21 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Desktop is unchanged and still exposes the full voice-light experience.
   Verified at 375x667 (no voice-light controls in the interactive tree) and
   1200x800 (voice-lights present). Browser errors were empty and build passes.
+
+## 28 August 2026 - Codex - Nitro sound rebuilt around exhaust fire
+
+- Supersedes the earlier thin nitro mix. Its low-mid resonant layer was fed
+  after a 620 Hz high-pass, while the weight sat mostly at 44-68 Hz; that made
+  the turbo whistle and hiss dominate on ordinary speakers.
+- Added a dedicated saturated, speaker-limited boost bus with live boost-only
+  RMS/peak telemetry. The sustained burn now combines turbulent flame, broad
+  low-mid exhaust pressure, an audible 74-102 Hz body and subtle irregular
+  combustion movement. Turbo whistle contribution is deliberately secondary.
+- Rebuilt activation as a staggered igniter crack, exhaust shove, flame front,
+  two uneven catches and a broad pressure rise. Release is now a wide falling
+  decompression with a final exhaust cough rather than a small synthetic tick.
+- Boost also opens and strengthens the actual engine/exhaust voice, so it reads
+  as the same car under violent load rather than a sound effect placed over it.
+- Scope was only `src/systems/engine.ts`. Typecheck, shader validation, the full
+  Rally physics/track suite and production build all pass; the established
+  Firebase chunk-size warning remains unchanged.
