@@ -336,3 +336,11 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Scope was only `src/systems/engine.ts`. Typecheck, shader validation, the full
   Rally physics/track suite and production build all pass; the established
   Firebase chunk-size warning remains unchanged.
+
+## 29 August 2026 - Codex - Nitro fire redesign reverted
+
+- The 28 August saturated exhaust-fire redesign was too dense, dirty and loud
+  in actual play. It has been removed at the owner's request.
+- `src/systems/engine.ts` now matches the exact pre-redesign version from before
+  commit `7e17b8f`: the cleaner earlier ignition, rising rush and release are
+  restored with no changes to vehicle physics, boost duration or visuals.

@@ -84,14 +84,7 @@ export interface EngineState {
 }
 
 /** Development-only mix reference for balancing the world against the car. */
-export const engineSoundTelemetry = {
-  rms: 0,
-  peak: 0,
-  boostRms: 0,
-  boostPeak: 0,
-  boosting: false,
-  boostLeft: 0,
-}
+export const engineSoundTelemetry = { rms: 0, peak: 0 }
 if (import.meta.env.DEV) {
   const host = globalThis as typeof globalThis & { __rallySound?: Record<string, unknown> }
   host.__rallySound ??= {}
@@ -357,61 +350,24 @@ export function createEngineVoice(
     the only place in the race that tells you the ember is nearly out without
     looking away from the road at the bar.
   */
-  // Nitro has its own driven bus. The saturation adds audible harmonics to the
-  // pressure body while the car's final compressor still owns the hard limit.
-  const boostBus = ctx.createGain()
-  boostBus.gain.value = 0.92
-  const boostDrive = ctx.createWaveShaper()
-  boostDrive.curve = softClip(2.35)
-  boostDrive.oversample = '2x'
-  const boostFloor = ctx.createBiquadFilter()
-  boostFloor.type = 'highpass'
-  boostFloor.frequency.value = 54
-  boostFloor.Q.value = 0.7
-  const boostCeiling = ctx.createBiquadFilter()
-  boostCeiling.type = 'lowpass'
-  boostCeiling.frequency.value = 6800
-  boostCeiling.Q.value = 0.65
-  const boostAnalyser = ctx.createAnalyser()
-  boostAnalyser.fftSize = 256
-  boostAnalyser.smoothingTimeConstant = 0.35
-  const boostMeterSamples = new Float32Array(boostAnalyser.fftSize)
-  boostBus
-    .connect(boostDrive)
-    .connect(boostFloor)
-    .connect(boostCeiling)
-    .connect(boostAnalyser)
-    .connect(dry)
-
-  // Fast turbulent air. A shelf keeps the flame bright without deleting the
-  // low-mid chest, which is what the previous 620 Hz high-pass accidentally did.
   const boostSource = ctx.createBufferSource()
   boostSource.buffer = grain
   boostSource.loop = true
-  boostSource.playbackRate.value = 2.35
-  const boostBright = ctx.createBiquadFilter()
-  boostBright.type = 'highshelf'
-  boostBright.frequency.value = 720
-  boostBright.gain.value = 12
+  boostSource.playbackRate.value = 1.85
   const boostHigh = ctx.createBiquadFilter()
   boostHigh.type = 'highpass'
-  boostHigh.frequency.value = 105
-  boostHigh.Q.value = 0.65
+  boostHigh.frequency.value = 620
+  boostHigh.Q.value = 0.55
   const boostLow = ctx.createBiquadFilter()
   boostLow.type = 'lowpass'
-  boostLow.frequency.value = 5600
+  boostLow.frequency.value = 4300
   boostLow.Q.value = 0.72
   const boostGain = ctx.createGain()
   boostGain.gain.value = 0.0001
-  boostSource
-    .connect(boostBright)
-    .connect(boostHigh)
-    .connect(boostLow)
-    .connect(boostGain)
-    .connect(boostBus)
+  boostSource.connect(boostHigh).connect(boostLow).connect(boostGain).connect(dry)
 
   /*
-    The pressure core: the same noise through a broad low-mid resonance.
+    The sweep: the same noise through a narrow resonant peak that climbs.
 
     Fed from the rush's own source rather than a second one, so the two are
     phase-coherent and read as one object being pushed harder — two
@@ -420,27 +376,27 @@ export function createEngineVoice(
   */
   const boostPeak = ctx.createBiquadFilter()
   boostPeak.type = 'bandpass'
-  boostPeak.frequency.value = 310
-  boostPeak.Q.value = 0.8
+  boostPeak.frequency.value = 420
+  boostPeak.Q.value = 3.4
   const boostPeakGain = ctx.createGain()
   boostPeakGain.gain.value = 0.0001
-  // Feed this before the high-pass. It is a wide combustion body, not a whistle.
-  boostSource.connect(boostPeak).connect(boostPeakGain).connect(boostBus)
+  boostHigh.connect(boostPeak).connect(boostPeakGain).connect(dry)
 
   /*
-    The body. A triangle, not a sine: its upper harmonics let small speakers
-    reproduce the weight instead of spending it below their useful range.
+    The sub. A triangle, not a sine: a sine at 46 Hz is inaudible on anything
+    without a woofer, and the triangle's third and fifth harmonics land where a
+    phone speaker can still carry them, so the weight survives the trip.
   */
   const boostSub = ctx.createOscillator()
   boostSub.type = 'triangle'
-  boostSub.frequency.value = 76
+  boostSub.frequency.value = 46
   const boostSubLow = ctx.createBiquadFilter()
   boostSubLow.type = 'lowpass'
   boostSubLow.frequency.value = 240
   boostSubLow.Q.value = 0.8
   const boostSubGain = ctx.createGain()
   boostSubGain.gain.value = 0.0001
-  boostSub.connect(boostSubLow).connect(boostSubGain).connect(boostBus)
+  boostSub.connect(boostSubLow).connect(boostSubGain).connect(out)
 
   const turbo = ctx.createOscillator()
   turbo.type = 'sine'
@@ -630,31 +586,21 @@ export function createEngineVoice(
 
       if (++meterFrame % 6 === 0) {
         analyser.getFloatTimeDomainData(meterSamples)
-        boostAnalyser.getFloatTimeDomainData(boostMeterSamples)
         let energy = 0
         let peak = 0
-        let boostEnergy = 0
-        let boostPeak = 0
         for (let i = 0; i < meterSamples.length; i++) {
           const sample = meterSamples[i]
-          const boostSample = boostMeterSamples[i]
           energy += sample * sample
           peak = Math.max(peak, Math.abs(sample))
-          boostEnergy += boostSample * boostSample
-          boostPeak = Math.max(boostPeak, Math.abs(boostSample))
         }
         engineSoundTelemetry.rms = Math.sqrt(energy / meterSamples.length)
         engineSoundTelemetry.peak = peak
-        engineSoundTelemetry.boostRms = Math.sqrt(boostEnergy / boostMeterSamples.length)
-        engineSoundTelemetry.boostPeak = boostPeak
       }
 
       const v = Math.max(0, state.speed)
       const revs = Math.max(0, Math.min(1.04, state.revs))
       const throttle = Math.max(0, Math.min(1, state.throttle))
       const cut = Math.max(0, Math.min(1, state.shifting))
-      engineSoundTelemetry.boosting = state.boost
-      engineSoundTelemetry.boostLeft = Math.max(0, Math.min(1, state.boostLeft))
 
       /*
         --- standing still ------------------------------------------------
@@ -724,16 +670,12 @@ export function createEngineVoice(
       */
       const wake = smoothstep(0.3, 0.86, now - bornAt)
       const body = 0.026 + revs * 0.018 + throttle * 0.056 + hunt * idleness * 0.0012
-      const power = body * (state.boost ? 1.16 : 1) * (1 - cut * 0.82) * bounce * wake
+      const power = body * (1 - cut * 0.82) * bounce * wake
       engineGain.gain.setTargetAtTime(power, now, 0.025)
 
-      exhaustShape.frequency.setTargetAtTime(
-        180 + revs * 430 + throttle * 160 + (state.boost ? 310 : 0),
-        now,
-        0.08,
-      )
+      exhaustShape.frequency.setTargetAtTime(180 + revs * 430 + throttle * 160, now, 0.08)
       exhaustGain.gain.setTargetAtTime(
-        (0.007 + revs * 0.017 + throttle * 0.041 + (state.boost ? 0.055 : 0)) *
+        (0.007 + revs * 0.017 + throttle * 0.041 + (state.boost ? 0.016 : 0)) *
           (1 - cut * 0.86) * wake,
         now,
         0.055,
@@ -750,7 +692,7 @@ export function createEngineVoice(
       turbo.frequency.setTargetAtTime(1050 + revs * 3100 + (state.boost ? 500 : 0), now, 0.14)
       turboBand.frequency.setTargetAtTime(1200 + revs * 2800, now, 0.15)
       turboGain.gain.setTargetAtTime(
-        (spool * 0.012 + (state.boost ? 0.015 : 0)) * (1 - cut * 0.7) * wake,
+        (spool * 0.012 + (state.boost ? 0.04 : 0)) * (1 - cut * 0.7) * wake,
         now,
         state.boost ? 0.055 : 0.12,
       )
@@ -771,13 +713,10 @@ export function createEngineVoice(
       const sag = smoothstep(0, 0.2, left)
       const burn = state.boost ? sag : 0
 
-      // Two close, non-harmonic ripples stop the flame becoming a static hiss.
-      // The movement is fast enough to read as combustion, never as tremolo.
-      const flame = 0.88 + Math.sin(now * 47.3) * 0.07 + Math.sin(now * 31.7 + 0.8) * 0.05
-      boostHigh.frequency.setTargetAtTime(95 + revs * 120, now, 0.08)
-      boostLow.frequency.setTargetAtTime(4600 + revs * 1500 + climb * 900, now, 0.1)
+      boostHigh.frequency.setTargetAtTime(580 + revs * 620, now, 0.08)
+      boostLow.frequency.setTargetAtTime(3300 + revs * 2200 + climb * 1400, now, 0.1)
       boostGain.gain.setTargetAtTime(
-        burn * flame * (0.135 + throttle * 0.045 + climb * 0.025) * wake,
+        burn * (0.086 + throttle * 0.032) * wake,
         now,
         // Slower in than the old 0.024: the rush is allowed a fifth of a
         // second to arrive *behind* the crack, which is what makes the crack
@@ -785,19 +724,16 @@ export function createEngineVoice(
         state.boost ? 0.055 : 0.11,
       )
 
-      // Broad low-mid pressure rather than the old narrow rising whistle.
-      boostPeak.frequency.setTargetAtTime(280 + climb * 390 + revs * 190, now, 0.09)
-      boostPeak.Q.setTargetAtTime(0.72 + climb * 0.32, now, 0.2)
-      boostPeakGain.gain.setTargetAtTime(
-        burn * flame * (0.13 + climb * 0.045) * wake,
-        now,
-        0.07,
-      )
+      // The layer that does the work. Climbs about two octaves through the
+      // burn and keeps a little of the engine in it so the two stay one car.
+      boostPeak.frequency.setTargetAtTime(430 + climb * 1180 + revs * 560, now, 0.09)
+      boostPeak.Q.setTargetAtTime(3.4 + climb * 2.6, now, 0.2)
+      boostPeakGain.gain.setTargetAtTime(burn * (0.05 + climb * 0.055) * wake, now, 0.07)
 
       // And the weight under it, rising a little as it goes so the pressure
       // builds rather than sitting there.
-      boostSub.frequency.setTargetAtTime(74 + climb * 18 + revs * 10, now, 0.18)
-      boostSubGain.gain.setTargetAtTime(burn * 0.078 * wake, now, state.boost ? 0.04 : 0.13)
+      boostSub.frequency.setTargetAtTime(44 + climb * 15 + revs * 9, now, 0.18)
+      boostSubGain.gain.setTargetAtTime(burn * 0.058 * wake, now, state.boost ? 0.04 : 0.13)
 
       if (state.boost && !lastBoost) {
         /*
@@ -808,49 +744,50 @@ export function createEngineVoice(
           three registers: stone-hard on top, a body underneath, and a sweep
           climbing out of it that hands over to the sustained peak above.
         */
-        // The igniter cracks, then a much larger exhaust body and flame front
-        // arrive behind it. Their spacing is what makes one press feel physical.
-        noiseBurst(now, 0.13, 0.075, 'highpass', 2300, 0.55, 2.8, boostBus)
-        noiseBurst(now + 0.008, 0.32, 0.3, 'bandpass', 520, 0.62, 0.72, boostBus)
-        noiseBurst(now + 0.018, 0.24, 0.48, 'highpass', 720, 0.42, 2.1, boostBus)
-        // Uneven combustion catches—not metronomic clicks—join the sustained burn.
-        noiseBurst(now + 0.09, 0.16, 0.17, 'lowpass', 390, 0.72, 0.58, boostBus)
-        noiseBurst(now + 0.19, 0.13, 0.2, 'lowpass', 470, 0.68, 0.66, boostBus)
+        // Top: the pressure crack. Short, bright, and the only genuinely
+        // sharp thing in the whole car — everything else here is round.
+        noiseBurst(now, 0.1, 0.055, 'highpass', 3100, 0.6, 2.9, out)
+        // Body: the shove through the exhaust.
+        noiseBurst(now + 0.008, 0.15, 0.26, 'bandpass', 700, 0.7, 0.78)
+        // And the column of air opening out behind it.
+        noiseBurst(now + 0.02, 0.075, 0.42, 'highpass', 1450, 0.5, 2.3, out)
 
         /*
           The sweep out of the hit.
 
-          A broad bandpass climbs out of the exhaust register and hands over to
-          `boostPeak` just as it fades. It sounds like pressure gathering, not
-          the narrow sci-fi whistle that used to sit above the car.
+          A bandpass climbing 300 → 2400 in a third of a second, which is the
+          single most recognisable "boost" gesture there is and was the thing
+          missing entirely. It hands over to `boostPeak` just as it fades, so
+          the press and the burn are one continuous rise rather than an event
+          followed by a texture.
         */
         const sweepSource = ctx.createBufferSource()
         sweepSource.buffer = grain
-        sweepSource.playbackRate.value = 1.45
+        sweepSource.playbackRate.value = 1.5
         const sweepBand = ctx.createBiquadFilter()
         sweepBand.type = 'bandpass'
-        sweepBand.Q.value = 0.82
-        sweepBand.frequency.setValueAtTime(170, now)
-        sweepBand.frequency.exponentialRampToValueAtTime(1050, now + 0.42)
+        sweepBand.Q.value = 5.5
+        sweepBand.frequency.setValueAtTime(300, now)
+        sweepBand.frequency.exponentialRampToValueAtTime(2400, now + 0.34)
         const sweepGain = ctx.createGain()
         sweepGain.gain.setValueAtTime(0.0001, now)
-        sweepGain.gain.exponentialRampToValueAtTime(0.17, now + 0.045)
-        sweepGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.48)
-        sweepSource.connect(sweepBand).connect(sweepGain).connect(boostBus)
-        sweepSource.start(now, Math.random() * (grainSeconds - 0.55), 0.54)
-        sweepSource.stop(now + 0.54)
+        sweepGain.gain.exponentialRampToValueAtTime(0.11, now + 0.05)
+        sweepGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4)
+        sweepSource.connect(sweepBand).connect(sweepGain).connect(dry)
+        sweepSource.start(now, Math.random() * (grainSeconds - 0.5), 0.46)
+        sweepSource.stop(now + 0.46)
 
         // Bottom: the thump you feel. Deeper and longer than it was, because
         // it is now holding the floor until the sub layer has faded up.
         const catchTone = ctx.createOscillator()
         catchTone.type = 'triangle'
         const catchGain = ctx.createGain()
-        catchTone.frequency.setValueAtTime(138, now)
-        catchTone.frequency.exponentialRampToValueAtTime(66, now + 0.25)
+        catchTone.frequency.setValueAtTime(148, now)
+        catchTone.frequency.exponentialRampToValueAtTime(52, now + 0.22)
         catchGain.gain.setValueAtTime(0.0001, now)
-        catchGain.gain.exponentialRampToValueAtTime(0.14, now + 0.012)
-        catchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38)
-        catchTone.connect(catchGain).connect(boostBus)
+        catchGain.gain.exponentialRampToValueAtTime(0.095, now + 0.01)
+        catchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34)
+        catchTone.connect(catchGain).connect(dry)
         catchTone.start(now)
         catchTone.stop(now + 0.36)
       } else if (!state.boost && lastBoost) {
@@ -863,21 +800,21 @@ export function createEngineVoice(
         */
         const offSource = ctx.createBufferSource()
         offSource.buffer = grain
-        offSource.playbackRate.value = 1.8
+        offSource.playbackRate.value = 2.1
         const offBand = ctx.createBiquadFilter()
         offBand.type = 'bandpass'
-        offBand.Q.value = 0.82
-        offBand.frequency.setValueAtTime(1900, now)
-        offBand.frequency.exponentialRampToValueAtTime(360, now + 0.38)
+        offBand.Q.value = 3.2
+        offBand.frequency.setValueAtTime(2600, now)
+        offBand.frequency.exponentialRampToValueAtTime(680, now + 0.3)
         const offGain = ctx.createGain()
         offGain.gain.setValueAtTime(0.0001, now)
-        offGain.gain.exponentialRampToValueAtTime(0.14, now + 0.012)
-        offGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.44)
-        offSource.connect(offBand).connect(offGain).connect(boostBus)
-        offSource.start(now, Math.random() * (grainSeconds - 0.55), 0.5)
-        offSource.stop(now + 0.5)
-        // A last exhaust cough puts a full stop under the decompression.
-        noiseBurst(now + 0.035, 0.105, 0.2, 'lowpass', 360, 0.85, 0.55, boostBus)
+        offGain.gain.exponentialRampToValueAtTime(0.07, now + 0.012)
+        offGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34)
+        offSource.connect(offBand).connect(offGain).connect(out)
+        offSource.start(now, Math.random() * (grainSeconds - 0.5), 0.4)
+        offSource.stop(now + 0.4)
+        // And the flutter of the valve underneath it.
+        noiseBurst(now + 0.02, 0.03, 0.14, 'lowpass', 320, 1.1, 0.5)
       }
       lastBoost = state.boost
 
@@ -1103,10 +1040,6 @@ export function createEngineVoice(
         verbReturn.disconnect()
         engineSoundTelemetry.rms = 0
         engineSoundTelemetry.peak = 0
-        engineSoundTelemetry.boostRms = 0
-        engineSoundTelemetry.boostPeak = 0
-        engineSoundTelemetry.boosting = false
-        engineSoundTelemetry.boostLeft = 0
       }, 900)
     },
   }
