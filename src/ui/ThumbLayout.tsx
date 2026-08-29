@@ -17,12 +17,8 @@
  */
 
 import { useRef } from 'react'
-import {
-  DEFAULT_LAYOUT,
-  mirrored,
-  useTouchLayout,
-  type Spot,
-} from '@/world/games/ember-rally/touch'
+import { useSay } from '@/systems/useSay'
+import { mirrored, useTouchLayout, type Spot } from '@/world/games/ember-rally/touch'
 
 /** How wide the phone is drawn, relative to its height. A 19.5:9 in landscape. */
 const SHAPE = 19.5 / 9
@@ -135,15 +131,23 @@ function Mirror({ which, glyph }: { which: 'handbrake' | 'boost'; glyph: string 
 }
 
 export function ThumbLayout() {
+  const say = useSay()
   const layout = useTouchLayout((s) => s.layout)
   const resize = useTouchLayout((s) => s.resize)
   const reset = useTouchLayout((s) => s.reset)
-  const moved =
-    Math.abs(layout.handbrake.x - DEFAULT_LAYOUT.handbrake.x) > 1e-9 ||
-    Math.abs(layout.handbrake.y - DEFAULT_LAYOUT.handbrake.y) > 1e-9 ||
-    Math.abs(layout.boost.x - DEFAULT_LAYOUT.boost.x) > 1e-9 ||
-    Math.abs(layout.boost.y - DEFAULT_LAYOUT.boost.y) > 1e-9 ||
-    Math.abs(layout.size - DEFAULT_LAYOUT.size) > 1e-9
+  const published = useTouchLayout((s) => s.published)
+  const own = useTouchLayout((s) => s.own)
+  /*
+    Four states, and they are worth telling apart.
+
+    Nothing moved and nothing sent · showing what was sent · moved here and not
+    sent · moved here and it is exactly what was sent. The last two look
+    identical on screen and are completely different situations, which is the
+    same argument as the three lamps in the waiting room.
+  */
+  const matches =
+    own !== null && published !== null && JSON.stringify(own) === JSON.stringify(published)
+  const unsent = own !== null && !matches
 
   return (
     <section>
@@ -154,10 +158,41 @@ export function ThumbLayout() {
         and an ember are always within reach of whichever hand is free. Move
         the left pair and the right follows.
       </p>
+      {/*
+        Where this arrangement has got to.
+
+        It used to say "this device only", which was true and was the whole
+        problem: this screen is the only place the buttons can be arranged, and
+        nobody arranges four thumb buttons on the phone they are about to race
+        on. It saves as you drag — there has never been anything to press for
+        that — but saving on a laptop changed nothing on a phone. It now rides
+        to both of you in the car's own set, sent by the button below the
+        sliders.
+      */}
       <p className="admin-note">
-        This is <b>this device only</b> — where a button should sit is a fact
-        about your hands and your phone, so it is never sent anywhere. Arrow
-        keys nudge, shift for a bigger step.
+        {unsent ? (
+          <>
+            Moved here and <b>not sent yet</b>. It goes with the car — press{' '}
+            <b>send this car to both of you</b> under the sliders and{' '}
+            {published === null ? 'both phones' : say('{their} phone')} gets
+            this arrangement too.
+          </>
+        ) : matches ? (
+          <>
+            This is the arrangement <b>both of you are using</b>. Drag anything
+            and it becomes this device&rsquo;s own until you send it.
+          </>
+        ) : published !== null ? (
+          <>
+            Showing <b>the arrangement that was sent</b>. Nothing has been moved
+            on this device.
+          </>
+        ) : (
+          <>
+            Nothing has been sent or moved — these are the numbers in the code.
+          </>
+        )}{' '}
+        Arrow keys nudge, shift for a bigger step.
       </p>
 
       <div className="thumb-phone" style={{ aspectRatio: String(SHAPE) }}>
@@ -193,8 +228,13 @@ export function ThumbLayout() {
       </label>
 
       <div className="row">
-        <button type="button" className={moved ? '' : 'on'} disabled={!moved} onClick={reset}>
-          back where they started
+        {/*
+          What "back" means depends on whether anything was ever sent. With a
+          published arrangement it means "stop overriding it"; without one
+          there is nothing behind this device but the numbers in the code.
+        */}
+        <button type="button" className={own === null ? 'on' : ''} disabled={own === null} onClick={reset}>
+          {published === null ? 'back where they started' : 'back to the sent one'}
         </button>
       </div>
 

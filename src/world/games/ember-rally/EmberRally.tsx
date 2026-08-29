@@ -218,7 +218,23 @@ function RallyActions({ actions }: { actions: RallyAction[] }) {
   )
 }
 
+/**
+ * Half the gap between the two of you on the start line, in metres.
+ *
+ * A car is about two metres wide, so this is most of a metre of clear road
+ * between the doors: enough that neither of you is inside the other, little
+ * enough that you are plainly on the same start line.
+ *
+ * It was 1.9 — the number the chase draws its ghost at — and that is too wide
+ * for two cars that are both really there, because the camera sits behind
+ * yours rather than over the middle of the road. At 1.9 each, she was a third
+ * off the left of the screen at the one moment whose entire purpose is being
+ * able to look across at her.
+ */
+const GRID_SLOT = 1.35
+
 export default function EmberRally({
+  me,
   theirName,
   solo,
   variant,
@@ -486,6 +502,16 @@ export default function EmberRally({
         ghost={ghost}
         ghostName={ghostName}
         wheelToWheel={live}
+        /*
+          Your side of the grid, and it has to be decided by *who you are*.
+
+          Both phones run this same line, so anything local — who opened the
+          round, who pressed ready first, `Math.random` — would put each
+          driver on their own right and leave the two of you disagreeing about
+          where the other one was standing. Comparing the two user ids is the
+          one thing both devices already agree on, and it never changes.
+        */
+        grid={live ? (me === 'warm' ? GRID_SLOT : -GRID_SLOT) : 0}
         onFinish={(run) => keep.current(run)}
         onLeave={backToFire}
         onRestart={() => start(kind)}
@@ -958,6 +984,7 @@ function Road({
   ghost,
   ghostName,
   wheelToWheel,
+  grid,
   onFinish,
   onLeave,
   onRestart,
@@ -968,6 +995,7 @@ function Road({
   ghost: RallyRun | null
   ghostName: string
   wheelToWheel: boolean
+  grid: number
   onFinish(run: RallyRun): void
   onLeave(): void
   onRestart(): void
@@ -993,6 +1021,7 @@ function Road({
       ghost,
       ghostName,
       wheelToWheel,
+      grid,
       onFinish: (run) => {
         /*
           Offered to the board before it is handed on.
@@ -1019,7 +1048,7 @@ function Road({
       useRace.getState().setSurface(null)
       useGameStage.getState().take(false)
     }
-  }, [attempt, track, ghost, ghostName, wheelToWheel])
+  }, [attempt, track, ghost, ghostName, wheelToWheel, grid])
 
   return (
     <div

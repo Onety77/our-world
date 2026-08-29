@@ -15,6 +15,7 @@
 
 import {
   DRIVING_MAX,
+  KEEPALIVE_MS,
   LOST_MS,
   Rolling,
   readCar,
@@ -121,6 +122,25 @@ const backwards = new Rolling()
 backwards.push(sample(900), 0)
 backwards.push(sample(880), 160) // out of order, or a restart
 check('an impossible speed is not believed', (backwards.at(2000)?.s ?? 0) < 1000, true)
+
+console.log('\nA car that is not moving is still a car\n')
+
+/*
+  The grid. Both of you sit still for three seconds before the flag, sending
+  the same four numbers, and the far end must not decide either of you has left.
+*/
+check(
+  'the keepalive beats the timeout, with room for a dropped write',
+  KEEPALIVE_MS * 2 < LOST_MS,
+  true,
+)
+
+const still = new Rolling()
+let clock = 0
+for (; clock <= 6000; clock += KEEPALIVE_MS) still.push(sample(18), clock)
+check('a car parked on the grid is still on the grid six seconds later',
+  still.at(clock) !== null, true)
+check('and it has not crept forward', Math.abs((still.at(clock)?.s ?? 0) - 18) < 0.01, true)
 
 console.log(
   failed === 0

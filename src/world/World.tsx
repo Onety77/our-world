@@ -516,7 +516,38 @@ function Pacer() {
 }
 
 export function World({ hourOverride }: { hourOverride: number | null }) {
-  const dpr = useQuality((q) => q.dpr)
+  /*
+    Two resolutions, chosen by what is being drawn.
+
+    While a game owns the frame the meadow is not on screen at all, so the
+    number picked to keep a phone alive in a field of grass is simply the wrong
+    one — and on a phone it was the difference between a car with an edge and a
+    car made of steps. R3F resizes the drawing buffer when this changes, which
+    costs one reallocation on the way onto the road and one on the way off.
+  */
+  const meadowDpr = useQuality((q) => q.dpr)
+  const roadDpr = useQuality((q) => q.roadDpr)
+  const onTheRoad = useGameStage((s) => s.taken)
+  const dpr = onTheRoad ? roadDpr : meadowDpr
+
+  /*
+    Nothing on the screen is text while the road owns it.
+
+    `.rally-running` already refuses selection for itself and its children, and
+    that is not enough: the thing under a steering thumb is often the `<canvas>`
+    or the page behind it, and neither is inside that element — the road's DOM
+    is an overlay on the garden's renderer, not a wrapper around it. So a held
+    left-hand turn was landing on something that still counted as document
+    content, and Safari offered to copy it, complete with a highlight and a
+    popup, in the middle of a corner.
+
+    On the body instead, where there is nothing outside it to miss.
+  */
+  useEffect(() => {
+    if (!onTheRoad) return
+    document.body.classList.add('on-the-road')
+    return () => document.body.classList.remove('on-the-road')
+  }, [onTheRoad])
 
   return (
     <Canvas

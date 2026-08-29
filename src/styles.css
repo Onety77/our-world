@@ -10286,3 +10286,32 @@ body:has(.rally-running) .player {
   .broke h1 { font-size: clamp(1.2rem, 5vw, 1.6rem); }
   .broke-copy { display: none; }
 }
+
+/* ---- a held thumb is steering, not selecting ----------------------------- */
+/*
+  See the note in `World`. `.rally-running` covers the road's own overlay, but
+  the finger is usually on the renderer's canvas or on the page behind it, and
+  neither of those is inside that element. This is the same refusal made from
+  the body, where nothing can be outside it.
+
+  `-webkit-tap-highlight-color` is here too: the grey flash under every tap is
+  a browser telling you it thinks you pressed a link.
+*/
+body.on-the-road,
+body.on-the-road * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+  Text you might actually want is exempt, so this cannot quietly make the
+  failure screen unquotable — the one place on the road where selecting words
+  is the entire point.
+*/
+body.on-the-road .broke-what {
+  -webkit-user-select: text;
+  user-select: text;
+}

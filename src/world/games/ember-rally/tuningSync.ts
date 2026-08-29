@@ -14,6 +14,7 @@
 
 import { useEffect } from 'react'
 import { useData } from '@/data/provider'
+import { useTouchLayout } from './touch'
 import { useRallyTuning } from './tuning'
 
 /**
@@ -33,6 +34,15 @@ export function usePublishedTuning(): void {
   useEffect(() => {
     return data.watchRallyTuning((values) => {
       useRallyTuning.getState().receivePublished(values)
+      /*
+        The same document also carries where the two driving buttons go.
+
+        They ride together because it is written whole and because they are the
+        same question — how this car is driven — asked once about the physics
+        and once about the thumbs. Each reader takes the keys it knows and
+        ignores the rest, so neither has to know the other exists.
+      */
+      useTouchLayout.getState().receivePublished(values as Record<string, unknown>)
     })
   }, [data])
 }

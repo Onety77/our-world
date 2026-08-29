@@ -98,6 +98,17 @@ const CAR_LENGTH = 4
 export const LOST_MS = 2600
 
 /**
+ * Say it again even if nothing changed, after this long.
+ *
+ * Comfortably inside `LOST_MS`, because these are the two halves of one rule:
+ * a car that is genuinely still — on the grid, or stopped against a rock — is
+ * sending the same four numbers for ever, and a sender that deduplicates them
+ * for ever is a sender the far end declares lost. Two beats to spare, so one
+ * dropped write is not a car blinking out.
+ */
+export const KEEPALIVE_MS = 900
+
+/**
  * Her car between updates.
  *
  * Two jobs, and they pull against each other. Carrying her forward at her last

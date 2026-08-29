@@ -10,10 +10,24 @@ import { create } from 'zustand'
 
 export type Tier = 'low' | 'medium' | 'high'
 
-const TIERS: Record<Tier, { grass: number; flowers: number; dpr: number }> = {
-  low: { grass: 24_000, flowers: 600, dpr: 1 },
-  medium: { grass: 38_000, flowers: 1_000, dpr: 1.35 },
-  high: { grass: 65_000, flowers: 1_700, dpr: 1.5 },
+/*
+  `dpr` is the meadow's. `road` is the same tier on the road.
+
+  They are different numbers because they are different scenes, and the garden
+  is by far the more expensive one: sixty-five thousand blades of grass, each
+  one moving, over a sky that is itself a shader. The tunnel is a few hundred
+  metres of extruded rock and two cars — a fraction of the geometry and none of
+  the instancing — and it was being drawn at the resolution chosen to stop a
+  phone melting in a field of grass.
+
+  On a phone that is the difference between a car with an edge and a car made
+  of steps. The garden's number stays exactly where it was, because that one
+  was chosen against real overheating and nothing about it has changed.
+*/
+const TIERS: Record<Tier, { grass: number; flowers: number; dpr: number; road: number }> = {
+  low: { grass: 24_000, flowers: 600, dpr: 1, road: 1.5 },
+  medium: { grass: 38_000, flowers: 1_000, dpr: 1.35, road: 2 },
+  high: { grass: 65_000, flowers: 1_700, dpr: 1.5, road: 2 },
 }
 
 /**
@@ -46,6 +60,8 @@ interface QualityState {
   grassCount: number
   flowerCount: number
   dpr: number
+  /** What to draw at while a game owns the whole frame. See `TIERS`. */
+  roadDpr: number
   /** True once we've stepped down, so the control room can say so. */
   degraded: boolean
   degrade(): void
@@ -67,6 +83,21 @@ function shape(tier: Tier, degraded: boolean): Omit<QualityState, 'degrade' | 's
     grassCount: t.grass,
     flowerCount: t.flowers,
     dpr: t.dpr,
+    /*
+      Never past the pixels the screen has, and never below the meadow's.
+
+      The first half is the obvious one: asking for 2 on a display that is 1
+      draws four times the pixels to show the same thing. The second half is
+      the correction to it — the meadow already draws at 1.35 on a plain
+      laptop, which is deliberate supersampling against `antialias: false`, so
+      clamping the road to the device ratio made the road *softer than the
+      garden it replaced*. It measured it: the canvas went from 1215 wide back
+      to 900 the moment the race began.
+    */
+    roadDpr: Math.max(
+      t.dpr,
+      Math.min(t.road, typeof window === 'undefined' ? t.road : window.devicePixelRatio || 1),
+    ),
     degraded,
   }
 }

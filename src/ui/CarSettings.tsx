@@ -48,6 +48,7 @@ import {
   type RallyTuning,
 } from '@/world/games/ember-rally/tuning'
 import { useSay } from '@/systems/useSay'
+import { asNumbers, useTouchLayout } from '@/world/games/ember-rally/touch'
 import { usePublishedTuning } from '@/world/games/ember-rally/tuningSync'
 import { useRemembered } from './remember'
 
@@ -163,8 +164,19 @@ export function CarSettings() {
 
   async function send() {
     setSending(true)
+    /*
+      The car and where the thumbs go, in one write.
+
+      They travel together because the document is written whole — see
+      `setRallyTuning` — so a send that carried only the dials would quietly
+      delete the button layout off her phone. One send, one document, both
+      halves of "how this car is to be driven".
+    */
     const sent = await attempt('that car did not reach the other phone', () =>
-      data.setRallyTuning(mine as Record<string, number>),
+      data.setRallyTuning({
+        ...(mine as Record<string, number>),
+        ...asNumbers(useTouchLayout.getState().layout),
+      }),
     )
     setSending(false)
     // Only on a real success. Marking it published after a failed write would

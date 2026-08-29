@@ -46,6 +46,21 @@ export interface RaceSession {
    * a thing that happened and can be paused, and she is a person who cannot.
    */
   wheelToWheel: boolean
+  /**
+   * Metres off the middle of the road to start on, so two cars are not one.
+   *
+   * Wheel to wheel put both of you on the same piece of tarmac at the same
+   * moment, which is exactly what was asked for and looked like a single car
+   * until somebody moved. A chase solves this by drawing her ghost a car's
+   * width over — but she is not a ghost here, and a car drawn somewhere it is
+   * not would be a car you could steer through.
+   *
+   * So each of you *really starts* on your own side, and the wire carries it
+   * like everything else. Which side is decided by who you are rather than by
+   * anything local, or both phones would put their own driver on the right and
+   * the two of you would disagree about the shape of the grid.
+   */
+  grid: number
   /** Both runs, for the two-car replay. */
   replay: { mine: RallyRun; theirs: RallyRun } | null
   /**
@@ -90,6 +105,7 @@ export interface RaceSession {
     ghost: RallyRun | null
     ghostName?: string
     wheelToWheel?: boolean
+    grid?: number
     onFinish(run: RallyRun): void
   }): void
   watch(input: { track: Track; replay: { mine: RallyRun; theirs: RallyRun } }): void
@@ -110,6 +126,7 @@ export const useRace = create<RaceSession>((set) => ({
   ghost: null,
   ghostName: '',
   wheelToWheel: false,
+  grid: 0,
   replay: null,
   paused: false,
   surface: null,
@@ -117,7 +134,7 @@ export const useRace = create<RaceSession>((set) => ({
   speedo: null,
   onFinish: null,
 
-  open: ({ track, ghost, ghostName = '', wheelToWheel = false, onFinish }) =>
+  open: ({ track, ghost, ghostName = '', wheelToWheel = false, grid = 0, onFinish }) =>
     set((s) => ({
       phase: 'ready',
       paused: false,
@@ -126,6 +143,7 @@ export const useRace = create<RaceSession>((set) => ({
       ghost,
       ghostName,
       wheelToWheel,
+      grid,
       replay: null,
       onFinish,
     })),

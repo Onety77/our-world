@@ -99,7 +99,7 @@ import { MARK_LIFE, Marks } from './marks'
 import { useData } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { useRace } from './session'
-import { Rolling, readCar, writeCar } from './wire'
+import { KEEPALIVE_MS, Rolling, readCar, writeCar } from './wire'
 import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
 
 /** Seconds of lamps coming up before the road opens. */
@@ -217,14 +217,26 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     const rolling = new Rolling()
     const them = otherUser(data.me)
     let sent = ''
+    let sentAt = 0
     live.current = {
       rolling,
       send(text) {
-        // Presence writes are already throttled to `PRESENCE_INTERVAL`. This is
-        // only about not asking for a write that says exactly what the last one
-        // said, which happens whenever the car is stationary on the line.
-        if (text === sent) return
+        /*
+          Skip a repeat, but never go quiet.
+
+          Presence writes are already throttled to `PRESENCE_INTERVAL`; this is
+          about not asking for a write that says exactly what the last one
+          said, which is every frame of a car sitting still on the grid. The
+          keepalive is the other half of that, and it is not optional: the far
+          end drops a car it has not heard from in `LOST_MS`, so a perfectly
+          still car would be sent once, deduped for ever, and disappear off her
+          screen two and a half seconds later — which is precisely the moment
+          you would both be looking at the grid.
+        */
+        const now = performance.now()
+        if (text === sent && now - sentAt < KEEPALIVE_MS) return
         sent = text
+        sentAt = now
         data.publishPresence({ driving: text })
       },
     }
@@ -733,6 +745,18 @@ class Driving {
       this.car.shortcut = true
     } else if (ROOTWAKE_RIDE && this.track.split) this.car.s = this.track.split.from + 2
     else if (FROM > 0) this.car.s = Math.min(this.track.length - 2, FROM)
+
+    /*
+      Your own side of the road, before anybody moves.
+
+      Set on the car itself rather than drawn as an offset, because in a live
+      race the other person is really there: a car shown a metre from where it
+      is, is a car you can drive through. This is a real grid slot, it goes
+      down the wire with everything else, and it is where the physics starts
+      you. Zero for anything that is not wheel to wheel.
+    */
+    this.car.n = useRace.getState().grid
+
     this.recorder = new Recorder()
     this.countdown = COUNTDOWN
     this.clock = 0
@@ -1218,11 +1242,16 @@ class Driving {
 
     /*
       --- you, going the other way ------------------------------------------
-      Only once the flag has dropped. Before that both cars are on the line and
-      there is nothing to say; after the finish the last thing sent stands,
-      which is where she actually stopped.
+      From the moment the road opens, not from the flag.
+
+      Sending only while running left the start line empty: her car appeared
+      the instant the lights went out, which is the one moment you are least
+      able to look at it. Being able to see her sitting in the other grid slot
+      through the countdown is most of what makes this a race rather than two
+      people pressing go. After the finish the last thing sent stands, which is
+      where she actually stopped.
     */
-    if (args.live && phase === 'running') {
+    if (args.live && (phase === 'ready' || phase === 'running')) {
       const packed = packCar(car)
       args.live.send(writeCar(packed.n, packed.s, packed.psi, packed.state))
     }

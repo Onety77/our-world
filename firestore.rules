@@ -327,6 +327,13 @@ service cloud.firestore {
       small bag of finite numbers, nothing else. The reader on the far side
       validates each value against the dial it belongs to and clamps it, which
       is where a range check can actually be kept honest.
+
+      It also carries where the two on-screen driving buttons sit — five more
+      numbers, prefixed `thumb`. They ride here because this document is
+      written whole and because they are the same question as the dials, asked
+      about the thumbs instead of the physics: see `ember-rally/touch`. That
+      is 50 keys of the 60 allowed; the cap is what keeps this from becoming
+      somewhere to put anything.
     */
     match /rallyTuning/{id} {
       allow read: if isOneOfUs() && id == 'ours';

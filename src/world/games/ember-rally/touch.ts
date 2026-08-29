@@ -143,63 +143,147 @@ function clean(raw: unknown): TouchLayout {
   }
 }
 
-function read(): TouchLayout {
-  if (typeof window === 'undefined') return { ...DEFAULT_LAYOUT }
+/** This device's own arrangement, or null if it has never been given one. */
+function read(): TouchLayout | null {
+  if (typeof window === 'undefined') return null
   try {
     const raw = localStorage.getItem(LAYOUT_KEY)
-    return raw === null ? { ...DEFAULT_LAYOUT } : clean(JSON.parse(raw))
+    return raw === null ? null : clean(JSON.parse(raw))
   } catch {
-    return { ...DEFAULT_LAYOUT }
+    return null
   }
 }
 
-function write(layout: TouchLayout): void {
+function write(layout: TouchLayout | null): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout))
+    if (layout === null) localStorage.removeItem(LAYOUT_KEY)
+    else localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout))
   } catch {
     /* storage blocked; the buttons still work, the device just forgets */
   }
 }
 
 interface LayoutState {
+  /** What the buttons are actually drawn at: this device's, or the sent one. */
   layout: TouchLayout
+  /** What was sent to both of you, if anything has been. */
+  published: TouchLayout | null
+  /** This device's own arrangement. Null means "whatever was sent". */
+  own: TouchLayout | null
   move(which: 'handbrake' | 'boost', spot: Spot): void
   resize(size: number): void
+  /** Back to the sent arrangement, or to the defaults if none was sent. */
   reset(): void
+  receivePublished(values: Record<string, unknown>): void
 }
 
-/**
- * This device only, and that is the right scope.
- *
- * Where a button should sit is a fact about the size of somebody's hands and
- * the phone they are holding, not about the garden — so it is not sent, not
- * shared, and not part of the car. It is the one setting in here that is
- * genuinely personal.
- */
-export const useTouchLayout = create<LayoutState>((set, get) => ({
-  layout: read(),
-  move(which, spot) {
-    const layout = {
-      ...get().layout,
-      [which]: {
-        x: Math.max(0.06, Math.min(0.94, spot.x)),
-        y: Math.max(0.1, Math.min(0.94, spot.y)),
-      },
-    }
+/*
+  Sent, and kept, and the reason the first answer was wrong.
+
+  This used to be device-only, and the argument for it was good: where a button
+  sits is a fact about somebody's hands, not about the garden. What that missed
+  is *where it gets arranged*. The only screen that can arrange it is the
+  control room at `/dev7731`, and nobody drags four thumb buttons around on
+  the phone they are about to race on — they do it on a laptop, with a mouse,
+  looking at a picture of a phone. Then nothing changes on the phone, because
+  the phone was never told, and there is no button to press because it had
+  already saved. Correct, instant, and useless.
+
+  So there are two layers now, exactly as the car has:
+
+    published   what was sent to both of you, from the control room
+    this device this phone's own arrangement, if it has been given one
+
+  The device wins where it has an opinion, which keeps the original argument
+  intact — her hands are not your hands, and a phone that has been arranged by
+  hand should not be rearranged from a laptop. It just no longer means a laptop
+  can do nothing at all.
+
+  It travels in the car's own tuning document, as five more finite numbers. See
+  the note on `rallyTuning` in `firestore.rules`: that rule deliberately does
+  not enumerate its fields, precisely so it can carry a small bag of numbers
+  without a rules change every time the car gains one.
+*/
+
+/** The layout as plain numbers, for the document it is sent in. */
+export function asNumbers(layout: TouchLayout): Record<string, number> {
+  return {
+    thumbHandbrakeX: layout.handbrake.x,
+    thumbHandbrakeY: layout.handbrake.y,
+    thumbBoostX: layout.boost.x,
+    thumbBoostY: layout.boost.y,
+    thumbSize: layout.size,
+  }
+}
+
+/** And back, or null if the numbers are not all there. */
+export function fromNumbers(values: Record<string, unknown>): TouchLayout | null {
+  const at = (key: string) => {
+    const value = values[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+  const hx = at('thumbHandbrakeX')
+  const hy = at('thumbHandbrakeY')
+  const bx = at('thumbBoostX')
+  const by = at('thumbBoostY')
+  const size = at('thumbSize')
+  if (hx === null || hy === null || bx === null || by === null || size === null) return null
+  return clean({ handbrake: { x: hx, y: hy }, boost: { x: bx, y: by }, size })
+}
+/** This device's own if it has one, else what was sent, else the defaults. */
+function showing(own: TouchLayout | null, published: TouchLayout | null): TouchLayout {
+  return own ?? published ?? { ...DEFAULT_LAYOUT }
+}
+
+export const useTouchLayout = create<LayoutState>((set, get) => {
+  const own = read()
+  /** Dragging anything makes this device's arrangement its own. */
+  const nudge = (change: (from: TouchLayout) => TouchLayout) => {
+    const layout = change(get().layout)
     write(layout)
-    set({ layout })
-  },
-  resize(size) {
-    const layout = { ...get().layout, size: Math.max(0.07, Math.min(0.3, size)) }
-    write(layout)
-    set({ layout })
-  },
-  reset() {
-    write(DEFAULT_LAYOUT)
-    set({ layout: { ...DEFAULT_LAYOUT } })
-  },
-}))
+    set({ own: layout, layout })
+  }
+
+  return {
+    layout: showing(own, null),
+    published: null,
+    own,
+
+    move(which, spot) {
+      nudge((from) => ({
+        ...from,
+        [which]: {
+          x: Math.max(0.06, Math.min(0.94, spot.x)),
+          y: Math.max(0.1, Math.min(0.94, spot.y)),
+        },
+      }))
+    },
+
+    resize(size) {
+      nudge((from) => ({ ...from, size: Math.max(0.07, Math.min(0.3, size)) }))
+    },
+
+    /*
+      Back to the sent arrangement, not to the defaults.
+
+      "Reset" on a device that has been given a layout means "stop overriding
+      it", the same as dropping a draft of the car. With nothing sent there is
+      nothing to fall back to but the numbers in this file, which is the old
+      behaviour and still the right one.
+    */
+    reset() {
+      write(null)
+      set({ own: null, layout: showing(null, get().published) })
+    },
+
+    receivePublished(values) {
+      const published = fromNumbers(values)
+      if (published === null) return
+      set({ published, layout: showing(get().own, published) })
+    },
+  }
+})
 
 // ---------------------------------------------------------------------------
 // What the thumbs are doing
