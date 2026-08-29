@@ -36,6 +36,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useLobby } from '@/systems/useLobby'
+import { usePlaying } from '@/systems/playing'
+import { RaceRoom } from '@/ui/RaceRoom'
 import { ambience } from '@/systems/ambience'
 import type { GameProps } from '../types'
 import type { ChoseWord, DuelMove, DuelSetup } from './index'
@@ -79,6 +82,34 @@ export default function WordDuel({
     both lose, which is a better ending than a draw because it is funnier.
   */
   const race = variant === 'race'
+
+  /*
+    The room before the word.
+
+    A time challenge used to begin the instant the second person joined, which
+    means the person who tapped first had already been staring at the board for
+    however long it took her to arrive. Same word, same five minutes, different
+    starting lines. Now neither board is dealt until you have both said ready.
+    See `systems/lobby`.
+  */
+  const liveKey = usePlaying((s) => s.race)
+  const lobby = useLobby(race ? liveKey : null)
+
+  /*
+    The moment, kept once it has happened.
+
+    `lobby.startAt` is only non-null while both of you are still sitting in the
+    room, and presence is cleared the moment anybody leaves the game — so
+    reading it directly would make the deadline vanish mid-race and the clock
+    jump back to whenever the round document happened to be written. It is
+    latched on the first frame it exists and never read again.
+  */
+  const [flagAt, setFlagAt] = useState<number | null>(null)
+  useEffect(() => {
+    if (flagAt !== null || lobby.startAt === null) return
+    setFlagAt(lobby.startAt)
+  }, [flagAt, lobby.startAt])
+
   const [ready, setReady] = useState(wordsReady())
   const [typed, setTyped] = useState('')
   const [complaint, setComplaint] = useState<string | null>(null)
@@ -164,7 +195,15 @@ export default function WordDuel({
     the player; the result is from the record.
   */
   const [now, setNow] = useState(() => Date.now())
-  const deadline = race && round ? round.startedAt + RACE_MS : 0
+  /*
+    Five minutes from the flag, not from the round document.
+
+    `round.startedAt` is when the document was written, which is when the first
+    of you tapped — so the clock used to be running throughout the wait. It is
+    still the fallback, for a round opened by a device that never sat in a room
+    at all.
+  */
+  const deadline = race ? (flagAt ?? (round ? round.startedAt : 0)) + RACE_MS : 0
   const left = deadline ? Math.max(0, deadline - now) : 0
   const outOfTime = race && deadline > 0 && left <= 0
 
@@ -327,6 +366,33 @@ export default function WordDuel({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [typing, commit, rub, type])
+
+  /*
+    The room, before the bag is turned out.
+
+    Held ahead of everything else because a time challenge that has not started
+    should show no board at all — a grid you can look at for ninety seconds
+    while she finds her phone is ninety seconds of thinking about a word you
+    have not been dealt yet. The word is the same for both of you and it comes
+    from the round key, so nothing about it depends on when this is drawn.
+
+    `flagAt` rather than `lobby.go`: once the flag has dropped it stays
+    dropped, even after presence is cleared on the way out of the room.
+  */
+  if (race && flagAt === null) {
+    return (
+      <div className="game duel duel-room">
+        <p className="rally-kicker">time challenge</p>
+        <RaceRoom
+          lobby={lobby}
+          theirName={theirName}
+          waitingFor={`${theirName} has been asked. You both get the same word and five minutes, from the same moment.`}
+          onLeave={onLeave}
+          leaveLabel="back out to the fire"
+        />
+      </div>
+    )
+  }
 
   if (!ready || !setup) {
     return (

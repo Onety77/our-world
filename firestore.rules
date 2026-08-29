@@ -500,14 +500,37 @@ service cloud.firestore {
       // Named "${who}-${seq}", which is what lets these rules say "your own,
       // and never twice" without reading anything inside the document.
       match /moves/{moveId} {
-        // The opening move is the only one anyone commits blind: both place a
-        // fleet, both choose at once. Hers stays unreadable until yours exists.
-        // Every later move is open, because a turn-based game where you cannot
-        // see her turn is not a game.
+        /*
+          The opening move is the only one anyone commits blind: both choose at
+          once, and hers stays unreadable until yours exists. Every later move
+          is open, because a turn-based game where you cannot see her turn is
+          not a game.
+
+          ------------------------------------------------------------------
+          **The racer is exempt, and it has to be exempt here rather than in
+          the app.** A sealed opening is exactly right for Word Duel: seeing
+          her word before choosing yours would end the game. It is exactly
+          wrong for a time on a road. A lap time nobody may look at is not a
+          challenge — it is a number in a drawer, and the whole shape of
+          "leave her a line to chase" depends on the line being *visible* to
+          the person chasing it.
+
+          The seal was enforced down here, so no amount of work in the racer
+          could have shown her that ghost: the read simply failed. Which is
+          why the two of you sat on "nobody sees anybody's road until both
+          first runs are here" and never got past it.
+
+          Scoped by the round's own gameId rather than lifted, so Word Duel
+          keeps its seal exactly as it was. The lookup costs one document read,
+          and only on the path where the first three tests have already failed
+          — which is precisely the case this clause exists for.
+          ------------------------------------------------------------------
+        */
         allow read: if isOneOfUs()
           && (!moveId.matches('.*-0')
               || moveId.matches(me() + '-.*')
-              || exists(/databases/$(database)/documents/rounds/$(roundId)/moves/$(me() + '-0')));
+              || exists(/databases/$(database)/documents/rounds/$(roundId)/moves/$(me() + '-0'))
+              || get(/databases/$(database)/documents/rounds/$(roundId)).data.gameId == 'ember-rally');
 
         allow create: if isOneOfUs()
           && moveId.matches(me() + '-[0-9]+')

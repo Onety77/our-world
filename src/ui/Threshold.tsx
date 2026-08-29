@@ -12,6 +12,8 @@ import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { SECTIONS } from '@/sections/registry'
 import { useSections } from '@/systems/sections'
+import { raceKey } from '@/systems/lobby'
+import type { GameDefinition } from '@/world/games/types'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
 import { useTakenOver } from '@/systems/attention'
@@ -68,7 +70,7 @@ function LiveWayIn({
 }: {
   game: string
   them: string
-  live: { name: string; tip: string }
+  live: NonNullable<GameDefinition['live']>
   selected: boolean
   buttonRef: RefCallback<HTMLButtonElement>
   onFocus?(): void
@@ -85,7 +87,18 @@ function LiveWayIn({
   // A key she is already sitting in, waiting.
   const waiting = hers?.racing ?? ''
 
-  const start = () => {
+  /*
+    Joining is never a choice.
+
+    If she is already sitting in a round, that round has everything decided in
+    it — including which road, for a game that needs one — so the only correct
+    move is to take her key exactly as it is. Asking "which road" of somebody
+    joining would be offering a choice that cannot be honoured.
+  */
+  const joining = Boolean(waiting)
+  const [picking, setPicking] = useState(false)
+
+  const enter = (choice?: string) => {
     if (!bothHere) return
     /*
       Join hers if there is one, otherwise open your own.
@@ -94,12 +107,48 @@ function LiveWayIn({
       neither has seen the other's key yet: `me > other` compares 'warm' and
       'cool' as strings, so exactly one of you yields, always the same one.
     */
-    const key = waiting && (waiting < String(data.now()) || me > other)
-      ? waiting
-      : String(data.now())
+    const own = choice ? raceKey(data.now(), choice) : String(data.now())
+    const key = waiting && (waiting < String(data.now()) || me > other) ? waiting : own
     ambience.cue('ember', 0.8)
     data.publishPresence({ racing: key })
     openRace(game, key)
+  }
+
+  const start = () => {
+    if (!bothHere) return
+    /*
+      Ask first, if the game needs something settled.
+
+      The key *is* the invitation, so anything that has to be true of the round
+      must be in the key before it is published — see `LiveChoice`. One extra
+      tap, and she is never invited to a round that does not know where it is.
+    */
+    if (!joining && live.choose && live.choose.options.length > 0) {
+      setPicking(true)
+      return
+    }
+    enter()
+  }
+
+  if (picking && live.choose) {
+    return (
+      <div className="game-live-choose">
+        <span className="game-way-label">{live.choose.prompt}</span>
+        {live.choose.options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className="quiet"
+            onClick={() => enter(option.id)}
+          >
+            {option.name}
+          </button>
+        ))}
+        <button type="button" className="quiet" onClick={() => setPicking(false)}>
+          not now
+        </button>
+      </div>
+    )
   }
 
   return (

@@ -10044,3 +10044,125 @@ body:has(.rally-running) .player {
     transform: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Wheel to wheel: the room before the road
+
+   Two names, their states, and one number. Nothing else belongs on this screen
+   — it exists for the ten seconds between deciding to race and racing, and the
+   only questions it answers are "is she here" and "how long".
+   -------------------------------------------------------------------------- */
+
+.wheel-grid {
+  display: flex;
+  justify-content: center;
+  gap: clamp(1.2rem, 6vw, 3rem);
+  margin: 1.4rem 0 0.4rem;
+}
+
+.wheel-who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--sans);
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+}
+
+/* The lamp. Three states and three colours, because "not here" and "here but
+   not ready" look identical if you only draw two. */
+.wheel-who i {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: rgba(255, 232, 198, 0.16);
+  transition: background 300ms ease, box-shadow 300ms ease;
+}
+
+.wheel-who.here i {
+  background: rgba(255, 232, 198, 0.6);
+}
+
+.wheel-who.ready i {
+  background: #6fd39a;
+  box-shadow: 0 0 12px rgba(111, 211, 154, 0.55);
+}
+
+.wheel-who b {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.wheel-who small {
+  font-size: 0.6rem;
+  color: rgba(255, 232, 198, 0.45);
+}
+
+.wheel-who.ready small {
+  color: #6fd39a;
+}
+
+/* ---- the flag ------------------------------------------------------------ */
+
+.wheel-flag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  margin: 0.6rem 0 0.2rem;
+}
+
+.wheel-count {
+  font-family: var(--serif);
+  font-size: clamp(3.4rem, 16vw, 6rem);
+  line-height: 1;
+  color: var(--ink);
+  /* Re-keyed each second, so this replays on every number. */
+  animation: wheel-tick 420ms cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+@keyframes wheel-tick {
+  from { opacity: 0; transform: scale(1.35); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Runs left to right across the whole countdown, so the last second is
+   readable without reading the number. */
+.wheel-bar {
+  display: block;
+  width: min(18rem, 60vw);
+  height: 2px;
+  background: #f0b26a;
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-count { animation: none; }
+}
+
+/* ---- choosing a road before inviting her --------------------------------- */
+
+.game-live-choose {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The word game's waiting room. The lamps and the countdown are the same
+   component the racer uses; this only gives them somewhere to stand, centred,
+   with the game's own spacing rather than the racer's full-screen frame. */
+.duel-room {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  min-height: 60vh;
+}
+
+.duel-room h1 {
+  margin: 0.2rem 0 0;
+}

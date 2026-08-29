@@ -14,7 +14,8 @@
     "scatter": "npx --yes tsx scripts/scatter-check.ts",
     "shaders": "npx --yes tsx scripts/shader-check.ts",
     "tuning": "npx --yes tsx scripts/tuning-check.ts",
-    "drift": "npx --yes tsx scripts/drift-probe.ts"
+    "drift": "npx --yes tsx scripts/drift-probe.ts",
+    "lobby": "npx --yes tsx scripts/lobby-check.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

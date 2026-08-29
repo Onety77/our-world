@@ -5,6 +5,10 @@ import { makeTrack } from './track'
 import { driveSpirit } from './spirit'
 import { useRace } from './session'
 import { usePublishedTuning } from './tuningSync'
+import { stageOfKey } from '@/systems/lobby'
+import { useLobby } from '@/systems/useLobby'
+import { usePlaying } from '@/systems/playing'
+import { Wheel } from './Wheel'
 import { TouchDriving } from './TouchDriving'
 import { drivingWithThumbs } from './touch'
 import { gapLabel, useBest } from './best'
@@ -216,12 +220,24 @@ function RallyActions({ actions }: { actions: RallyAction[] }) {
 export default function EmberRally({
   theirName,
   solo,
+  variant,
   setup,
   mine,
   theirs,
   play,
   onLeave,
 }: GameProps<RallySetup, RallyMove>) {
+  /*
+    Wheel to wheel is a different shape of round and it starts here.
+
+    The road is already settled — it is in the key, chosen before the
+    invitation went out — so there is no picker, no sealed qualifying lap and
+    no chase. There is a room, a flag that drops for both of you at once, and
+    one run each. See `Wheel` and `systems/lobby`.
+  */
+  const live = variant === 'race'
+  const liveKey = usePlaying((s) => s.race)
+  const lobby = useLobby(live ? liveKey : null)
   /*
     Whatever the control room has sent, before anybody drives.
 
@@ -278,7 +294,17 @@ export default function EmberRally({
     return null
   }, [solo, theirs, mine])
 
-  const activeStage = stage ?? challenged ?? setup?.stage ?? 'rootway'
+  /*
+    A live round's road is in its key and nothing may override it.
+
+    Not `setup.stage` — a round document is written once, before anybody has
+    chosen anything, so its stage is whatever the default was. Not the local
+    picker either: the two of you have to be on the same road and the key is
+    the only thing you both hold.
+  */
+  const liveStage = live && liveKey ? (stageOfKey(liveKey, 'rootway') as StageId) : null
+  const activeStage =
+    liveStage ?? stage ?? challenged ?? setup?.stage ?? 'rootway'
   const track = useMemo(() => makeTrack(seed, activeStage), [seed, activeStage])
   // Only when there is nobody to race. Driving a whole lap costs about a tenth
   // of a second, and in a two-player round nothing ever looks at it.
@@ -327,6 +353,30 @@ export default function EmberRally({
     setAttempt((n) => n + 1)
     setView('road')
   }
+
+  /*
+    The flag, once.
+
+    Both devices reach `lobby.go` at the same instant — it is a comparison
+    against one agreed timestamp, not a message either of them sent — so this
+    puts both cars on the road together without anything being coordinated
+    here. The guard is a ref rather than a piece of state because it must not
+    be able to fire twice: `go` stays true for the whole race, and a second
+    firing would restart the road under somebody mid-corner.
+
+    Written out rather than calling `start`, which is rebuilt every render and
+    would either loop as a dependency or go stale without one.
+  */
+  const flagDropped = useRef(false)
+  useEffect(() => {
+    if (!live || !lobby.go || flagDropped.current) return
+    flagDropped.current = true
+    setKind('chase')
+    setLastRun(null)
+    setFault('')
+    setAttempt((n) => n + 1)
+    setView('road')
+  }, [live, lobby.go])
 
   const backToFire = () => {
     setLastRun(null)
@@ -382,7 +432,26 @@ export default function EmberRally({
 
   const course = COURSES[activeStage]
 
-  if (view === 'courses') {
+  /*
+    The room, until the flag drops.
+
+    Held ahead of every other screen because a live round has no menu: there is
+    nothing to choose and nothing to read. Once `go` is true this falls through
+    to the road below with `kind` already set to a chase, which is the run
+    shape that carries a time and no seal.
+  */
+  if (live && !lobby.go && view !== 'road') {
+    return (
+      <Wheel
+        lobby={lobby}
+        roadName={COURSES[activeStage].name}
+        theirName={theirName}
+        onLeave={onLeave}
+      />
+    )
+  }
+
+  if (view === 'courses' && !live) {
     return (
       <CoursePicker
         onChoose={choose}
@@ -398,7 +467,17 @@ export default function EmberRally({
   // --- on the road ---------------------------------------------------------
 
   if (view === 'road') {
-    const ghost = (solo ? spirit : kind === 'chase' ? theirLine : null) ?? null
+    /*
+      Nothing to chase in a live round.
+
+      `theirLine` is a *recording* of an earlier run, and in a round that
+      started ninety seconds ago there is not one — she is driving it now. Her
+      car being genuinely on the road beside you is a separate piece of work
+      (it needs her position on the wire, several times a second); what this
+      round promises today is the same road, from the same flag, and an honest
+      comparison at the end.
+    */
+    const ghost = (live ? null : solo ? spirit : kind === 'chase' ? theirLine : null) ?? null
     const ghostName = solo ? course.spirit : theirName
     return (
       <Road
@@ -457,6 +536,54 @@ export default function EmberRally({
     )
   }
 
+  /*
+    ==========================================================================
+    **Her line is there to be chased, not to be matched first.**
+
+    This used to open with "set my line" whatever the state of the road, and
+    the two runs were sealed against each other until both existed. That is
+    the right shape for Word Duel — seeing her word before choosing yours ends
+    the game — and it is the wrong shape for a lap time. A time nobody may look
+    at is not a challenge, and "she left you a line" followed by a screen
+    asking you to drive alone against nothing is the announcement and the game
+    disagreeing with each other.
+
+    So if she has been down this road and you have not, you chase her. Her time
+    is on the screen before you start, her car is on the road with you, and you
+    may keep going until you beat it — a chase is not a single sealed attempt,
+    it is a thing you have another go at.
+
+    The seal itself lived in `firestore.rules`, not here; the racer is now
+    exempt from it by `gameId`. Until those rules are republished her line
+    cannot be read at all and this branch will simply never be reached, which
+    is worth knowing before wondering why nothing changed.
+    ==========================================================================
+  */
+  if (!myLine && theirLine && !solo) {
+    return (
+      <Briefing
+        kicker={`${course.name.toLowerCase()} · ${theirName.toLowerCase()} has been down here`}
+        title="Her line is on the road"
+        copy={`The pale car is her real run — her steering, her braking, every place she got it wrong. She sets off when you do. Beat the time and the road is yours; miss it and you can go again.`}
+        primary={myChase ? 'go again' : 'chase her line'}
+        onPrimary={() => start('chase')}
+        onLeave={backToCourses}
+        leaveLabel="choose another road"
+        /*
+          Once you have had a go, the number that matters is the gap. Before
+          that it is simply the target — there is nothing to be behind by yet.
+        */
+        foot={
+          myChase
+            ? myChase.timeMs <= theirLine.timeMs
+              ? `you have it by ${timeLabel(theirLine.timeMs - myChase.timeMs)} · ${timeLabel(myChase.timeMs)}`
+              : `${timeLabel(myChase.timeMs - theirLine.timeMs)} off her · your best ${timeLabel(myChase.timeMs)}`
+            : `${timeLabel(theirLine.timeMs)} to beat`
+        }
+      />
+    )
+  }
+
   if (!myLine) {
     return (
       <Briefing
@@ -473,18 +600,38 @@ export default function EmberRally({
   }
 
   if (!theirLine) {
+    /*
+      She has not set a line of her own — because she does not have to any
+      more. She chases yours. So the honest thing to report here is whether
+      she has *been down it*, and how she got on.
+    */
+    const herTry = theirChase
+    const beat = herTry ? herTry.timeMs < myLine.timeMs : false
     return (
       <div className="rally rally-centre">
         <p className="rally-kicker">your line is in · {course.name.toLowerCase()}</p>
-        <h1>{course.sealedTitle}</h1>
+        <h1>
+          {herTry
+            ? beat
+              ? `${theirName} beat it.`
+              : `${theirName} has not caught you.`
+            : course.sealedTitle}
+        </h1>
         <p className="rally-copy">
-          Nobody sees anybody&rsquo;s road until both first runs are here. There is nothing to
-          wait beside — come back when this road has been travelled twice.
+          {herTry
+            ? beat
+              ? `She came home ${timeLabel(myLine.timeMs - herTry.timeMs)} up on you. The road is hers until you go again.`
+              : `She is ${timeLabel(herTry.timeMs - myLine.timeMs)} off your line so far, and she can keep trying.`
+            : `Your tyre marks are down. ${theirName} chases them whenever she next comes below.`}
         </p>
         <RallyActions actions={[
-          { label: 'choose another road', onChoose: backToCourses },
+          { label: 'run it again', onChoose: () => start('qualifying') },
+          { label: 'choose another road', onChoose: backToCourses, quiet: true },
         ]} />
-        <p className="rally-note">your line · {timeLabel(myLine.timeMs)}</p>
+        <p className="rally-note">
+          your line · {timeLabel(myLine.timeMs)}
+          {herTry ? ` · ${theirName.toLowerCase()} · ${timeLabel(herTry.timeMs)}` : ''}
+        </p>
       </div>
     )
   }

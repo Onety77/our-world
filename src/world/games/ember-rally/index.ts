@@ -23,7 +23,26 @@ export default {
     name: 'set a line for {them}',
     tip: 'She chases it whenever she next comes down here',
   },
-  live: { name: 'wheel to wheel', tip: 'The same road, at the same moment' },
+  live: {
+    name: 'wheel to wheel',
+    tip: 'The same road, at the same moment',
+    /*
+      Which road, before she is invited.
+
+      The key *is* the invitation, so a key without a road in it is an
+      invitation to somewhere neither of you has chosen — and re-keying after
+      she has joined would leave her sitting in a round that no longer exists.
+      Asking first costs one tap and makes the invitation complete.
+    */
+    choose: {
+      prompt: 'which road',
+      options: [
+        { id: 'rootway', name: 'The Rootway' },
+        { id: 'moonbreak', name: 'The Moonbreak' },
+        { id: 'stormcrown', name: 'The Stormcrown' },
+      ],
+    },
+  },
 
   /*
     The road is the seed and nothing else.
@@ -45,11 +64,29 @@ export default {
    * pollen before the race had happened.
    */
   isSettled({ mine, theirs, solo }) {
-    const chased = (moves: RallyMove[], stage: RallySetup['stage']) =>
-      moves.some((move) => move?.kind === 'chase' && (move.stage ?? 'rootway') === stage)
-    return (['rootway', 'moonbreak', 'stormcrown'] as const).some(
-      (stage) => chased(mine, stage) && (solo || chased(theirs, stage)),
-    )
+    const on = (moves: RallyMove[], stage: RallySetup['stage'], kind: RallyMove['kind']) =>
+      moves.some((move) => move?.kind === kind && (move.stage ?? 'rootway') === stage)
+
+    /*
+      A road is finished when somebody has chased somebody's line.
+
+      It used to require *both* of you to have chased, which was right while
+      every round was two sealed laps followed by two chases. It is wrong now:
+      one of you leaves a line and the other chases it, and in that shape the
+      person who left the line never chases anything — so a round that had
+      genuinely been raced would sit unsettled for ever and never pay out.
+
+      So: a line and a chase on the same road, from the two of you in either
+      direction. Still both people, still a real race, and it no longer insists
+      on a symmetry the game no longer has.
+    */
+    return (['rootway', 'moonbreak', 'stormcrown'] as const).some((stage) => {
+      if (solo) return on(mine, stage, 'chase')
+      const raced = (a: RallyMove[], b: RallyMove[]) =>
+        on(a, stage, 'qualifying') && on(b, stage, 'chase')
+      return raced(mine, theirs) || raced(theirs, mine) ||
+        (on(mine, stage, 'chase') && on(theirs, stage, 'chase'))
+    })
   },
 
   Emblem: EmberRallyEmblem,

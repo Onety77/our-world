@@ -15,6 +15,31 @@ import type { Round, UserId } from '@/data/types'
 export type GameMode = 'live' | 'async'
 
 /**
+ * Something that has to be settled *before* an invitation is sent.
+ *
+ * ---------------------------------------------------------------------------
+ * A live round is agreed through `Presence.racing`: one of you writes a key,
+ * the other sees it and joins. That works for a game where there is nothing to
+ * agree about beyond the moment — Scattergories deals the same letters from
+ * the key and there is nothing else to decide.
+ *
+ * The racer has three roads. Somebody has to choose, and the choice has to be
+ * made *before* the invitation, because the key is the invitation: publish a
+ * key with no road on it and she can join a round that does not yet know where
+ * it is. Re-keying afterwards would strand her on the old one.
+ *
+ * So a game may declare what it needs picked, the Hollow asks, and the answer
+ * goes into the key — see `raceKey` in `systems/lobby`. Nothing is written
+ * anywhere until the road is known.
+ * ---------------------------------------------------------------------------
+ */
+export interface LiveChoice {
+  /** Goes into the round key, so it must be short and URL-ish. */
+  id: string
+  name: string
+}
+
+/**
  * How a game names its rounds.
  *
  *   'daily'   — one a day, on your own local date. The pair of you get the
@@ -142,6 +167,13 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
     name: string
     /** One line, on hover, saying what it actually is. */
     tip: string
+    /**
+     * Asked before the invitation is sent, and folded into the round key.
+     *
+     * Omitted by every game that has nothing to settle first, which is most of
+     * them — the Hollow then behaves exactly as it always has.
+     */
+    choose?: { prompt: string; options: readonly LiveChoice[] }
   }
   /** Position around the Hollow's fire. Lower appears first. */
   order?: number
