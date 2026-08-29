@@ -402,9 +402,35 @@ export default function WordDuel({
 
         {typing && (
           <>
+            {/*
+              Enter and rub-out live *on the keyboard*, where a keyboard keeps
+              them.
+
+              They used to be two buttons in a row underneath, and on a phone
+              that is three separate failures at once: they are below the tray
+              so a thumb on the letters cannot reach them, "lay it down" is
+              disabled until the fifth letter lands so it reads as broken
+              rather than as waiting, and there is no Enter key anywhere — the
+              desktop path was a `keydown` listener, which a phone has no way
+              of firing. So the game could be typed into and not submitted.
+
+              On the bottom row with the letters, as every word game on a phone
+              has them, and wide enough to be hit without aiming.
+            */}
             <div className="tray">
-              {ROWS.map((row) => (
+              {ROWS.map((row, index) => (
                 <div className="tray-row" key={row}>
+                  {index === 2 ? (
+                    <button
+                      type="button"
+                      className="tray-key tray-wide tray-enter"
+                      onClick={commit}
+                      disabled={typed.length !== LENGTH || sending}
+                      aria-label={choosing ? 'give her this word' : 'lay this word down'}
+                    >
+                      enter
+                    </button>
+                  ) : null}
                   {row.split('').map((letter) => (
                     <button
                       key={letter}
@@ -416,27 +442,32 @@ export default function WordDuel({
                       {letter}
                     </button>
                   ))}
+                  {index === 2 ? (
+                    <button
+                      type="button"
+                      className="tray-key tray-wide tray-rub"
+                      onClick={rub}
+                      disabled={sending || typed.length === 0}
+                      aria-label="rub out the last letter"
+                    >
+                      <span aria-hidden="true">⌫</span>
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
-            <div className="duel-actions">
-              <button
-                type="button"
-                className="put-back quiet"
-                onClick={rub}
-                disabled={sending || typed.length === 0}
-              >
-                rub out
-              </button>
-              <button
-                type="button"
-                className="put-back"
-                onClick={commit}
-                disabled={typed.length !== LENGTH || sending}
-              >
-                {choosing ? 'give her this one' : 'lay it down'}
-              </button>
-            </div>
+            {/*
+              What enter will do, in words, because the key itself cannot say
+              it. Choosing a word for her and guessing hers are different acts
+              and the board looks identical for both.
+            */}
+            <p className="duel-enter-says">
+              {typed.length !== LENGTH
+                ? `${LENGTH - typed.length} more`
+                : choosing
+                  ? 'enter gives her this one'
+                  : 'enter lays it down'}
+            </p>
           </>
         )}
 

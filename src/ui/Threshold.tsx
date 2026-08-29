@@ -390,6 +390,29 @@ function TheHollow() {
           turns={turns}
           them={them.name}
           onPlay={(id) => {
+            /*
+              A challenge with something in it opens the round, not a menu.
+
+              ------------------------------------------------------------------
+              This screen exists to say *"she has left you a word"*. Tapping it
+              then asked "how would you like to enter?" and offered leaving her
+              a word, playing on your own, or going wheel to wheel — none of
+              which is the thing that was just announced, and one of which
+              starts an entirely separate solo round. There was no way to get
+              from the announcement to the game it was announcing.
+
+              So when the standing says there is a move to make — yours, or
+              hers already made — this goes straight into the shared round. The
+              menu is still there for the two states where a choice is
+              genuinely open: nothing today, and waiting on her.
+              ------------------------------------------------------------------
+            */
+            const standing = turns[id] ?? 'nothing'
+            if (standing === 'yours' || standing === 'both') {
+              ambience.cue('ember', 0.38)
+              begin(id, false)
+              return
+            }
             const index = GAMES.findIndex((candidate) => candidate.id === id)
             if (index >= 0) chooseGame(index)
           }}
@@ -714,7 +737,7 @@ export function Threshold() {
         </div>
         <span className="tree-turn-guide">
           <span className="tree-turn-pointer">drag / scroll to turn · home resets</span>
-          <span className="tree-turn-touch">drag sideways to turn</span>
+          <span className="tree-turn-touch">drag sideways to turn · pinch to zoom</span>
         </span>
       </div>
     )

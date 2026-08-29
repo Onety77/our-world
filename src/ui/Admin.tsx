@@ -38,6 +38,7 @@ import { CarSettings } from './CarSettings'
 import { ThumbLayout } from './ThumbLayout'
 import { Hearing } from './Hearing'
 import { Volumes } from './Volumes'
+import { Outdoors } from './Outdoors'
 import { useRemembered } from './remember'
 
 /** Somewhere to start from. Any IANA name works — this is just convenience. */
@@ -190,6 +191,7 @@ export function Admin() {
       {tab === 'car' && <ThumbLayout />}
 
       {tab === 'device' && <Volumes />}
+      {tab === 'device' && <Outdoors />}
       {tab === 'device' && <Hearing />}
 
       {tab === 'device' && (

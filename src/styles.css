@@ -9891,3 +9891,124 @@ body:has(.rally-running) .player {
 .hearing-bars span > :not(i) {
   position: relative;
 }
+
+/* The other hand's copy: drawn so four buttons can be judged as four, faded
+   so it is obvious which two are the ones you move. */
+.thumb-phone .thumb-spot.mirror {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Tucking the corner away
+
+   A phone held sideways in front of a game's menu puts the song title and the
+   last thing she said directly on top of "start the engine". This slides them
+   off and leaves a handle. See systems/corner for why it tucks rather than
+   hides.
+   -------------------------------------------------------------------------- */
+
+.corner {
+  /* Only the transform animates, so tucking never reflows the column. */
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.25, 1), opacity 200ms ease;
+}
+
+.corner.tucked {
+  /* Past its own width plus the screen inset, so nothing peeks out. */
+  transform: translateX(calc(100% + 2.5rem));
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- the handle ---------------------------------------------------------- */
+
+.corner-tab {
+  position: fixed;
+  right: 0;
+  bottom: max(1.1rem, env(safe-area-inset-bottom));
+  z-index: 12;
+  /* The mark is small; the target is not. Padding does the second job without
+     making the first one bigger. */
+  padding: 1.1rem 0.75rem 1.1rem 1.1rem;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+}
+
+.corner-tab span {
+  display: block;
+  width: 3px;
+  height: 2.4rem;
+  border-radius: 2px;
+  background: rgba(255, 226, 184, 0.34);
+  transition: background 180ms ease, height 220ms ease;
+}
+
+.corner-tab:hover span,
+.corner-tab:focus-visible span {
+  background: rgba(255, 226, 184, 0.7);
+}
+
+/* Pulled out: the handle shrinks back to a hint, because the thing it opens is
+   now on screen and saying so twice is clutter. */
+.corner-tab:not(.tucked) span {
+  height: 1.4rem;
+  background: rgba(255, 226, 184, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .corner,
+  .corner-tab span {
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Enter and rub-out, on the keyboard
+
+   They used to be two buttons underneath the tray, which on a phone is out of
+   a thumb's reach and — for enter — disabled until the fifth letter, so it
+   read as broken rather than as waiting. There was also no Enter key at all:
+   the desktop path was a keydown listener, which a phone cannot fire.
+   -------------------------------------------------------------------------- */
+
+.tray-wide {
+  /* Wider than a letter, because these two are hit without aiming and a miss
+     on either is a word lost or a word sent early. */
+  min-width: clamp(2.6rem, 13vw, 3.6rem);
+  font-family: var(--sans);
+  font-size: clamp(0.62rem, 2.6vw, 0.76rem);
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+}
+
+.tray-enter:not(:disabled) {
+  color: #f0b26a;
+}
+
+.tray-rub:not(:disabled) {
+  color: var(--ink);
+}
+
+/* Disabled is quiet rather than hidden: a key that vanishes when the word is
+   short is a keyboard that changes shape while you type on it. */
+.tray-key:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* What enter will do. Choosing a word for her and guessing hers look identical
+   on the board, so the difference has to be said. */
+.duel-enter-says {
+  margin: 0.55rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  text-align: center;
+  color: var(--ink-dim);
+}

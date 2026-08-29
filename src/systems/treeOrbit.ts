@@ -11,6 +11,13 @@
 const TAU = Math.PI * 2
 const DRAG_TURN = TAU
 const KEY_TURN = Math.PI / 7
+/**
+ * A dolly rather than a field-of-view zoom. At the near end the papers are
+ * large enough to choose with a thumb; at the far end the clearing still has
+ * an edge, so pinching can never lose the Tree altogether.
+ */
+const MIN_ZOOM = 0.52
+const MAX_ZOOM = 1.3
 
 export const treeOrbit = {
   /** Where the hand has asked the camera to go, in radians. */
@@ -20,6 +27,11 @@ export const treeOrbit = {
   /** Release momentum, radians per second. */
   velocity: 0,
   dragging: false,
+  /** Camera distance multiplier requested by a pinch. One is the authored view. */
+  zoom: 1,
+  /** Eased multiplier actually used by the camera. */
+  zoomCurrent: 1,
+  zooming: false,
 }
 
 let usedGesture = false
@@ -41,7 +53,8 @@ export interface TreeOrbitHandle {
  *
  * Sideways drag circles the trunk. Vertical touch movement remains available
  * to pointerLook, so a single finger can explore both axes without modes.
- * Wheel input covers both a mouse wheel and two-finger trackpad scrolling.
+ * Two fingers pinch the camera toward or away from the Tree. Wheel input
+ * covers both a mouse wheel and two-finger trackpad scrolling for turning.
  */
 export function attachTreeOrbit(
   el: HTMLElement,
@@ -54,13 +67,34 @@ export function attachTreeOrbit(
   let lastAt = 0
   let axis: 'horizontal' | 'vertical' | null = null
   let moved = false
+  const pointers = new Map<number, { x: number; y: number }>()
+  let pinching = false
+  let pinchStartDistance = 1
+  let pinchStartZoom = 1
 
   const width = () => el.getBoundingClientRect().width || 1
   const interactive = (target: EventTarget | null) =>
     target instanceof HTMLElement && Boolean(target.closest('button, input, textarea, select, a'))
 
   const down = (event: PointerEvent) => {
-    if (!active() || pointerId !== null || interactive(event.target)) return
+    if (!active() || interactive(event.target)) return
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()]
+      pinchStartDistance = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y))
+      pinchStartZoom = treeOrbit.zoom
+      pinching = true
+      moved = true
+      treeOrbit.dragging = false
+      treeOrbit.zooming = true
+      treeOrbit.velocity = 0
+      for (const id of pointers.keys()) el.setPointerCapture?.(id)
+      return
+    }
+
+    // A third contact does not create a second interpretation of the gesture.
+    if (pointers.size !== 1 || pointerId !== null) return
     pointerId = event.pointerId
     startX = lastX = event.clientX
     startY = event.clientY
@@ -71,6 +105,22 @@ export function attachTreeOrbit(
   }
 
   const move = (event: PointerEvent) => {
+    const contact = pointers.get(event.pointerId)
+    if (contact) {
+      contact.x = event.clientX
+      contact.y = event.clientY
+    }
+
+    if (pinching && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()]
+      const distance = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y))
+      treeOrbit.zoom = Math.max(
+        MIN_ZOOM,
+        Math.min(MAX_ZOOM, pinchStartZoom * (pinchStartDistance / distance)),
+      )
+      return
+    }
+
     if (event.pointerId !== pointerId) return
     const totalX = event.clientX - startX
     const totalY = event.clientY - startY
@@ -97,6 +147,26 @@ export function attachTreeOrbit(
   }
 
   const finish = (event: PointerEvent) => {
+    if (!pointers.has(event.pointerId)) return
+    pointers.delete(event.pointerId)
+
+    if (pinching || treeOrbit.zooming) {
+      el.releasePointerCapture?.(event.pointerId)
+      // Do not turn the one finger left behind into a new drag halfway through
+      // a pinch. Both hands lift, then the next touch begins a fresh gesture.
+      pointerId = null
+      axis = null
+      moved = false
+      treeOrbit.dragging = false
+      // Keep swallowing releases until the last finger from this pinch is up;
+      // otherwise that last release could be mistaken for a tap on a letter.
+      treeOrbit.zooming = pointers.size > 0
+      pinching = pointers.size > 0
+      usedGesture = true
+      setTimeout(() => { usedGesture = false }, 0)
+      return
+    }
+
     if (event.pointerId !== pointerId) return
     pointerId = null
     if (axis === 'horizontal') el.releasePointerCapture?.(event.pointerId)
@@ -143,15 +213,19 @@ export function attachTreeOrbit(
       event.preventDefault()
       // Return to the authored front without unwinding every completed turn.
       treeOrbit.angle = Math.round(treeOrbit.current / TAU) * TAU
+      treeOrbit.zoom = 1
       treeOrbit.velocity = 0
     }
   }
 
   const cancel = () => {
+    pointers.clear()
+    pinching = false
     pointerId = null
     axis = null
     moved = false
     treeOrbit.dragging = false
+    treeOrbit.zooming = false
     treeOrbit.velocity = 0
   }
 
@@ -181,6 +255,7 @@ export function stepTreeOrbit(delta: number, active: boolean): void {
   if (!active) {
     treeOrbit.velocity = 0
     treeOrbit.dragging = false
+    treeOrbit.zooming = false
     return
   }
 
@@ -191,6 +266,8 @@ export function stepTreeOrbit(delta: number, active: boolean): void {
 
   treeOrbit.current +=
     (treeOrbit.angle - treeOrbit.current) * (1 - Math.exp(-7.5 * delta))
+  treeOrbit.zoomCurrent +=
+    (treeOrbit.zoom - treeOrbit.zoomCurrent) * (1 - Math.exp(-10 * delta))
 
   // Keep the numbers small after many complete circles without changing the
   // view or making the easing cross the long way around zero.

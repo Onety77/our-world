@@ -61,7 +61,16 @@ export const gaze = { yaw: 0, pitch: 0 }
  * pitch would mean the garden could be left permanently staring at the ground
  * with no obvious way back; a peek that settles is both safer and nicer.
  */
-const touch = { active: false, pitch: 0, startY: 0, from: 0 }
+const touch = {
+  active: false,
+  pitch: 0,
+  startY: 0,
+  from: 0,
+  pointerId: null as number | null,
+  pointers: new Set<number>(),
+  /** A pinch stays a pinch until every finger has lifted. */
+  multi: false,
+}
 
 /** True once anything has told us this is a touch device. */
 let isTouch = false
@@ -78,7 +87,7 @@ export function attachPointerLook(el: HTMLElement): () => void {
   const onMove = (e: PointerEvent) => {
     if (e.pointerType === 'touch') {
       isTouch = true
-      if (touch.active) {
+      if (touch.active && !touch.multi && e.pointerId === touch.pointerId) {
         const r = rect()
         // Dragging *down* looks up, the way dragging a map moves the map.
         const travel = (touch.startY - e.clientY) / Math.max(1, r.height)
@@ -92,14 +101,26 @@ export function attachPointerLook(el: HTMLElement): () => void {
   const onDown = (e: PointerEvent) => {
     if (e.pointerType !== 'touch') return
     isTouch = true
+    touch.pointers.add(e.pointerId)
+    if (touch.pointers.size > 1) {
+      touch.active = false
+      touch.pointerId = null
+      touch.multi = true
+      return
+    }
+    if (touch.multi) return
     touch.active = true
+    touch.pointerId = e.pointerId
     touch.startY = e.clientY
     touch.from = touch.pitch
   }
 
   const onUp = (e: PointerEvent) => {
     if (e.pointerType !== 'touch') return
+    touch.pointers.delete(e.pointerId)
     touch.active = false
+    touch.pointerId = null
+    if (touch.pointers.size === 0) touch.multi = false
   }
 
   // The pointer leaving is the honest signal that nobody is looking anywhere

@@ -17,7 +17,12 @@
  */
 
 import { useRef } from 'react'
-import { DEFAULT_LAYOUT, useTouchLayout, type Spot } from '@/world/games/ember-rally/touch'
+import {
+  DEFAULT_LAYOUT,
+  mirrored,
+  useTouchLayout,
+  type Spot,
+} from '@/world/games/ember-rally/touch'
 
 /** How wide the phone is drawn, relative to its height. A 19.5:9 in landscape. */
 const SHAPE = 19.5 / 9
@@ -99,6 +104,36 @@ function Draggable({
   )
 }
 
+/**
+ * The other hand's copy, shown and not touchable.
+ *
+ * There are four buttons and two positions — the right pair is the left pair
+ * reflected. Drawing the mirrors matters because the thing most worth seeing
+ * here is whether the four of them collide with each other or with the car in
+ * the middle, and you cannot see that from two.
+ *
+ * Deliberately inert: dragging one would raise the question of what happens to
+ * its twin, and the answer would have to be "it moves too", which is a control
+ * that fights you. Move the left pair; the right pair follows.
+ */
+function Mirror({ which, glyph }: { which: 'handbrake' | 'boost'; glyph: string }) {
+  const layout = useTouchLayout((s) => s.layout)
+  const spot = mirrored(layout[which])
+  return (
+    <span
+      className={`thumb-spot mirror ${which}`}
+      aria-hidden="true"
+      style={{
+        left: `${spot.x * 100}%`,
+        top: `${spot.y * 100}%`,
+        height: `${layout.size * 100}%`,
+      }}
+    >
+      <span aria-hidden="true">{glyph}</span>
+    </span>
+  )
+}
+
 export function ThumbLayout() {
   const layout = useTouchLayout((s) => s.layout)
   const resize = useTouchLayout((s) => s.resize)
@@ -114,9 +149,15 @@ export function ThumbLayout() {
     <section>
       <h3>where the buttons are, on a phone</h3>
       <p className="admin-note">
-        Drag either one. This is <b>this device only</b> — where a button should
-        sit is a fact about your hands and your phone, so it is never sent
-        anywhere. Arrow keys nudge, shift for a bigger step.
+        Drag the two lit ones. <b>Both controls exist under both thumbs</b> —
+        the faded pair on the right is the left pair reflected, so a handbrake
+        and an ember are always within reach of whichever hand is free. Move
+        the left pair and the right follows.
+      </p>
+      <p className="admin-note">
+        This is <b>this device only</b> — where a button should sit is a fact
+        about your hands and your phone, so it is never sent anywhere. Arrow
+        keys nudge, shift for a bigger step.
       </p>
 
       <div className="thumb-phone" style={{ aspectRatio: String(SHAPE) }}>
@@ -133,6 +174,8 @@ export function ThumbLayout() {
         </span>
         <Draggable which="handbrake" glyph="✋" label="handbrake" />
         <Draggable which="boost" glyph="✦" label="ember" />
+        <Mirror which="boost" glyph="✦" />
+        <Mirror which="handbrake" glyph="✋" />
       </div>
 
       <label>

@@ -1,4 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
+import { CornerTab } from '@/ui/CornerTab'
+import { cornerIsInTheWay, useCorner } from '@/systems/corner'
 import { DataProvider, useData, useWorldSlice } from '@/data/provider'
 import { ambience, type Place } from '@/systems/ambience'
 import { paletteAt } from '@/systems/palette'
@@ -103,6 +105,30 @@ function Garden() {
   // out too, so there is nothing left in the top *left* either and the corner
   // can sit on the very edge.
   const corner = takenOver ? 'corner clear only' : inside ? 'corner clear' : 'corner'
+
+  /*
+    Whether the corner is currently sitting on top of something.
+
+    Re-read on every orientation change rather than once, because turning the
+    phone is exactly the moment this becomes true — and the whole complaint was
+    about what happens when you turn it.
+  */
+  const [inTheWay, setInTheWay] = useState(() => cornerIsInTheWay(takenOver))
+  useEffect(() => {
+    const check = () => setInTheWay(cornerIsInTheWay(takenOver))
+    check()
+    if (typeof matchMedia === 'undefined') return
+    const query = matchMedia('(orientation: landscape)')
+    query.addEventListener('change', check)
+    return () => query.removeEventListener('change', check)
+  }, [takenOver])
+
+  const tucked = useCorner((s) => s.tucked)
+  useEffect(() => {
+    // A new takeover is a new screen; last time's decision does not carry.
+    if (!takenOver) useCorner.getState().forget()
+    else if (inTheWay) useCorner.getState().tuckOnce()
+  }, [takenOver, inTheWay])
 
   const hourOverride = useHourOverride((h) => h.override)
 
@@ -303,7 +329,14 @@ function Garden() {
         into it, the top left is the way back out, and the top right is the two
         of you and the clocks. See `.corner` in styles.css.
       */}
-      <div className={corner}>
+      {/*
+        And on a phone held sideways, out of the way of whatever owns the
+        screen — see `systems/corner`. It tucks itself the first time it would
+        be sitting on a game's menu, and after that it does what you last told
+        it to.
+      */}
+      <CornerTab show={inTheWay} />
+      <div className={`${corner}${tucked && inTheWay ? ' tucked' : ''}`}>
         <Whisper />
         <Player />
       </div>

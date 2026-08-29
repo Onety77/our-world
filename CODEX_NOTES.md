@@ -372,6 +372,23 @@ shared-file changes, measurements, and anything another agent should preserve.
   `contextmenu`, and the steering surface cancels the default pointer-down
   action before capturing the thumb.
 - The scope remains Ember Rally while actively driving; text selection elsewhere
-  in the Garden is unchanged. Vite build and the complete Rally suite pass. A
-  repository-wide typecheck is presently blocked by unrelated existing missing
-  `Tier` and `useTakenOver` names in `src/world/World.tsx`.
+  in the Garden is unchanged. Vite build, repository-wide typecheck and the
+  complete Rally suite pass. The briefly missing `Tier` and `useTakenOver`
+  imports were observed while the shared workspace was mid-edit, not in a
+  complete build or the deployed site.
+
+## 29 August 2026 - Codex - Tree pinch zoom
+
+- The Tree of Thoughts now accepts a true two-finger pinch on its existing
+  gesture surface. Spreading the fingers dollies toward the Tree to make the
+  hanging papers easier to find and touch; closing them pulls back.
+- Zoom is bounded so the camera cannot enter the branches or lose the clearing,
+  and eased so it never snaps. One-finger sideways orbit and vertical looking
+  remain intact, while a pinch temporarily suspends the latter.
+- Every release belonging to a pinch is protected from letter/flower picking,
+  preventing the last lifted finger from opening a thought by accident. Home
+  now restores both the authored front angle and the normal distance.
+- The mobile guide now reads `drag sideways to turn · pinch to zoom`. A direct
+  pointer simulation covers both zoom limits, easing, the release guard and the
+  original one-finger orbit. The production build passes; its established
+  Firebase chunk warning is unchanged.

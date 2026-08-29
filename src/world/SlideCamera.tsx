@@ -125,15 +125,21 @@ export function SlideCamera() {
     // Stand further off on a narrow screen, along the line the place was
     // framed from — so the composition is the authored one, just smaller.
     const back = backOffFor(size.width / Math.max(1, size.height))
-    const baseX = (section.camera.position[0] - section.camera.target[0]) * back
-    const baseZ = (section.camera.position[2] - section.camera.target[2]) * back
+    // Tree pinch zoom is a physical dolly along the authored sightline. This
+    // keeps the perspective of the letters and branches natural instead of
+    // changing the lens and making the crown bow at the edges.
+    const treeZoom = circlingTree ? treeOrbit.zoomCurrent : 1
+    const cameraDistance = back * treeZoom
+    const baseX = (section.camera.position[0] - section.camera.target[0]) * cameraDistance
+    const baseZ = (section.camera.position[2] - section.camera.target[2]) * cameraDistance
     const orbitCos = Math.cos(circlingTree ? treeOrbit.current : 0)
     const orbitSin = Math.sin(circlingTree ? treeOrbit.current : 0)
     const orbitX = baseX * orbitCos + baseZ * orbitSin
     const orbitZ = -baseX * orbitSin + baseZ * orbitCos
     const from: [number, number, number] = [
       section.camera.target[0] + orbitX,
-      section.camera.target[1] + (section.camera.position[1] - section.camera.target[1]) * back,
+      section.camera.target[1] +
+        (section.camera.position[1] - section.camera.target[1]) * cameraDistance,
       section.camera.target[2] + orbitZ,
     ]
 

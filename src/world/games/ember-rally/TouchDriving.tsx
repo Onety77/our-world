@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { hasFinishedARace } from './best'
-import { releaseThumbs, thumb, useTouchLayout } from './touch'
+import { mirrored, releaseThumbs, thumb, useTouchLayout } from './touch'
 import { useRace } from './session'
 
 /**
@@ -30,15 +30,24 @@ import { useRace } from './session'
  */
 function Button({
   which,
+  side,
   label,
   glyph,
 }: {
   which: 'handbrake' | 'boost'
+  /**
+   * Which thumb this copy is under.
+   *
+   * The two copies of a control are the same control — they write the same
+   * flag — so nothing downstream knows or cares which one was pressed. This
+   * exists only to place it and to name it for a screen reader.
+   */
+  side: 'left' | 'right'
   label: string
   glyph: string
 }) {
   const layout = useTouchLayout((s) => s.layout)
-  const spot = layout[which]
+  const spot = side === 'left' ? layout[which] : mirrored(layout[which])
   const held = useRef(false)
   const node = useRef<HTMLButtonElement>(null)
 
@@ -82,8 +91,8 @@ function Button({
     <button
       ref={node}
       type="button"
-      className={`rally-thumb ${which}`}
-      aria-label={label}
+      className={`rally-thumb ${which} ${side}`}
+      aria-label={`${label}, ${side} hand`}
       style={{
         left: `${spot.x * 100}%`,
         top: `${spot.y * 100}%`,
@@ -190,11 +199,19 @@ export function TouchDriving() {
   const portrait = useSyncExternalStore(subscribe, isPortrait, () => false)
   useEffect(() => releaseThumbs, [])
   if (portrait) return <TurnIt />
+  /*
+    Four, and the order across the screen is: handbrake, ember · ember,
+    handbrake. See the note on mirroring in `touch.ts` — the two on the right
+    are the two on the left reflected, so neither hand is the wrong hand for
+    anything.
+  */
   return (
     <>
       <RallyArrows />
-      <Button which="handbrake" label="handbrake" glyph="✋" />
-      <Button which="boost" label="ember" glyph="✦" />
+      <Button which="handbrake" side="left" label="handbrake" glyph="✋" />
+      <Button which="boost" side="left" label="ember" glyph="✦" />
+      <Button which="boost" side="right" label="ember" glyph="✦" />
+      <Button which="handbrake" side="right" label="handbrake" glyph="✋" />
     </>
   )
 }

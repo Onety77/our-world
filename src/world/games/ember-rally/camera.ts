@@ -54,6 +54,54 @@ const FOV_STILL = 60
 const FOV_FLAT_OUT = 82
 
 /**
+ * The screen shape these two numbers were chosen against.
+ *
+ * A laptop, roughly — and that is the whole problem with them, because a
+ * three.js field of view is **vertical**, so the same number frames a
+ * completely different amount of world on a different shape of screen.
+ */
+const FOV_REFERENCE_ASPECT = 1.78
+
+/**
+ * The vertical field of view that shows the same *width* on any screen.
+ *
+ * ---------------------------------------------------------------------------
+ * **This is why the car was the size of a fingernail on a phone.**
+ *
+ * A vertical field of view held constant across shapes does not hold the
+ * picture constant — it holds the *height* constant and lets the width do
+ * whatever the aspect says. A phone held sideways is about 2.16 wide, against
+ * a laptop's 1.78, so eighty-two degrees vertical becomes a hundred and
+ * twenty-four degrees horizontal. That is a fisheye. Everything in the middle
+ * of a fisheye is small, and the thing in the middle is your car.
+ *
+ * It also stacks with a shorter viewport: the same object is fewer pixels tall
+ * on a 390-pixel-high screen than on a 560-pixel one before any of this. The
+ * two together are what makes it look broken rather than merely wide.
+ *
+ * So the angle is converted: work out the horizontal view these numbers *meant*
+ * on the shape they were chosen for, and give back whatever vertical angle
+ * produces that same horizontal view here. On a laptop nothing changes at all.
+ * On a phone in landscape the flat-out figure comes back about eighty-two to
+ * seventy-one, the fisheye goes, and the car grows by roughly a fifth.
+ *
+ * **Only ever narrows.** On a screen *taller* than the reference — a phone
+ * held upright, which the race no longer allows but the car inspector does —
+ * this would widen the angle enormously, and the portrait compensation below
+ * already has an opinion about that case. One of them is enough.
+ * ---------------------------------------------------------------------------
+ */
+function fitToScreen(vertical: number, aspect: number): number {
+  if (!Number.isFinite(aspect) || aspect <= FOV_REFERENCE_ASPECT) return vertical
+  const radians = (vertical * Math.PI) / 180
+  const horizontal = 2 * Math.atan(Math.tan(radians / 2) * FOV_REFERENCE_ASPECT)
+  const fitted = 2 * Math.atan(Math.tan(horizontal / 2) / aspect)
+  // A floor, because an absurdly wide window should stop zooming in rather
+  // than end up looking through a keyhole at its own bonnet.
+  return Math.max(34, (fitted * 180) / Math.PI)
+}
+
+/**
  * How much of a phone this is.
  *
  * 0 on a laptop, 1 on a phone held upright, and it matters more here than
@@ -302,14 +350,24 @@ export class ChaseCamera {
     }
 
     // --- field of view -------------------------------------------------------
+    /*
+      Fitted to the shape of the screen before the dial is applied.
+
+      `TUNE.cameraZoom` stays a multiplier on the *result*, so it still means
+      what it says on the panel — "how close the camera feels" — rather than
+      quietly meaning something different on each device.
+    */
     const wantFov =
-      (FOV_STILL +
-        (FOV_FLAT_OUT - FOV_STILL) * fast +
-        (car.boostLeft > 0 ? 5 : 0) +
-        // Opened right up on a phone to buy back some horizontal view. It costs
-        // vertical distortion at the edges, and in a tube nobody sees it.
-        phone * 21) *
-      TUNE.cameraZoom
+      fitToScreen(
+        FOV_STILL +
+          (FOV_FLAT_OUT - FOV_STILL) * fast +
+          (car.boostLeft > 0 ? 5 : 0) +
+          // Opened right up on a phone held *upright* to buy back some
+          // horizontal view. The race asks you to turn it now, so this is for
+          // the car inspector and the studio rather than for driving.
+          phone * 21,
+        camera.aspect,
+      ) * TUNE.cameraZoom
     this.fov += (wantFov - this.fov) * ease(2.6)
     if (Math.abs(camera.fov - this.fov) > 0.05) {
       camera.fov = this.fov

@@ -18,7 +18,8 @@
  *   the left of the screen, held    steer left
  *   the right of the screen, held   steer right
  *   the throttle                    is not a control. It is always on
- *   two buttons at the bottom       the handbrake, and the ember
+ *   four buttons at the bottom      a handbrake and an ember under *each*
+ *                                   thumb — see the note on mirroring below
  *
  * **Nothing is drawn for the steering.** There is no wheel and no pad, because
  * the whole of the left half *is* the left, and drawing a small target on top
@@ -55,11 +56,40 @@ export interface Spot {
   y: number
 }
 
+/**
+ * Two positions, four buttons.
+ *
+ * ---------------------------------------------------------------------------
+ * **Both controls exist under both thumbs**, mirrored across the middle of the
+ * screen, with the handbrakes on the outside and the embers inboard.
+ *
+ * The first version had one of each — handbrake left, ember right — and that
+ * is one of each only if you never need them together. You do, constantly: the
+ * ember is what cancels a drift and leaves you going fast, so *pull, hold,
+ * fire* is the whole move, and with one on each side it is two thumbs crossing
+ * the screen to do it. Duplicated, the move belongs to whichever hand is free.
+ *
+ * The handbrakes go outboard because that is the deeper reach and the
+ * handbrake is the one you commit to; the embers sit inboard where a thumb
+ * rests, because that is the one pressed mid-corner without looking.
+ *
+ * **Stored as two spots, drawn as four.** The right pair is the left pair
+ * reflected — `x → 1 − x` — so a layout cannot end up lopsided, and the panel
+ * in `/dev7731` stays two things to drag rather than four to keep level.
+ * ---------------------------------------------------------------------------
+ */
 export interface TouchLayout {
+  /** The outer button on the left. Its mirror is the outer one on the right. */
   handbrake: Spot
+  /** The inner button on the left. Its mirror is the inner one on the right. */
   boost: Spot
   /** Across the smaller side of the screen, so a button is round at any size. */
   size: number
+}
+
+/** The same spot, on the other side of the screen. */
+export function mirrored(spot: Spot): Spot {
+  return { x: 1 - spot.x, y: spot.y }
 }
 
 /**
@@ -84,9 +114,9 @@ export interface TouchLayout {
  * well inside where a thumb falls without regripping.
  */
 export const DEFAULT_LAYOUT: TouchLayout = {
-  handbrake: { x: 0.3, y: 0.8 },
-  boost: { x: 0.7, y: 0.8 },
-  size: 0.14,
+  handbrake: { x: 0.16, y: 0.8 },
+  boost: { x: 0.36, y: 0.8 },
+  size: 0.13,
 }
 
 const LAYOUT_KEY = 'rally:touch-layout:v1'
