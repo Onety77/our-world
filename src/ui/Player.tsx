@@ -33,6 +33,15 @@ import {
 } from '@/systems/listening'
 import type { Listening } from '@/data/types'
 
+/**
+ * How many songs the list shows before it starts scrolling.
+ *
+ * Here only to know whether to draw the fade at the bottom — the height itself
+ * is `--player-row` in the stylesheet, because it is a measurement of type and
+ * padding and belongs where those are. If one moves, move the other.
+ */
+const SHOWN = 5
+
 export function Player() {
   const data = useData()
   const me = data.me
@@ -230,13 +239,22 @@ export function Player() {
             )}
           </p>
 
+          {/*
+            `player-all` turns off the fade at the bottom of the list.
+
+            The fade is how the panel says "there is more down here" without
+            spending a word or an arrow on it, so it has to be absent when
+            there is not — a fade that lies about five songs being six is worse
+            than no fade at all. The height it fades at is `--player-row` in
+            the stylesheet, where the type and padding it is measured from live.
+          */}
           {nothing ? (
             <p className="player-empty">
               Nothing here to play yet. Whatever either of you adds will show up
               in this list.
             </p>
           ) : (
-            <ul>
+            <ul className={tracks.length > SHOWN ? '' : 'player-all'}>
               {tracks.map((t) => (
                 <li key={t.id}>
                   <button

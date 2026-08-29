@@ -4516,14 +4516,59 @@ canvas {
   pointer-events: auto;
 }
 
+/*
+  The music sits on something.
+
+  It used to sit on the garden, and on a phone that meant a list of song titles
+  laid directly over whatever the world happened to be saying underneath —
+  eight tracks straight through the middle of a briefing, two typefaces at
+  right angles to each other, neither readable. A text shadow is not enough
+  when the thing behind the text is also text.
+
+  So it gets a surface, in the same family as the Stars' dock: a warm dark
+  translucent panel, one hairline of a border, a soft shadow to lift it off the
+  world and a blur so what shows through is colour rather than detail. Quiet
+  enough that the garden still reads behind it, opaque enough that nothing
+  behind it competes with a song title.
+*/
 .player {
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.34rem;
+  padding: 0.6rem 0.75rem 0.55rem;
   text-align: right;
   text-shadow: var(--lift);
+  background: linear-gradient(
+    160deg,
+    rgba(18, 15, 11, 0.82),
+    rgba(10, 9, 8, 0.66)
+  );
+  border: 1px solid rgba(240, 216, 178, 0.11);
+  border-radius: 0.9rem;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  /* Opening is a change of height; let it be one rather than a jump. */
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+/*
+  Barely there when folded.
+
+  Closed, this is one line and two arrows, and a full panel around it would be
+  a box sitting in the corner of the garden all day for no reason. Open, it is
+  a list of things to read and it earns the whole surface.
+*/
+.player:not(.open) {
+  background: linear-gradient(
+    160deg,
+    rgba(18, 15, 11, 0.5),
+    rgba(10, 9, 8, 0.34)
+  );
+  border-color: rgba(240, 216, 178, 0.07);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
 }
 
 .player-bar {
@@ -4669,14 +4714,20 @@ canvas {
 
 /* ---- opened ---- */
 
+/*
+  The whole list no longer scrolls — only the songs do.
+
+  `46vh` is half a phone, so eight tracks simply all showed, and the line that
+  says whether she is listening too scrolled away with them. That line is the
+  only part of this panel that is about *her*, and it is the part that should
+  never move.
+*/
 .player-list {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
-  max-height: min(46vh, 20rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
   margin-bottom: 0.3rem;
+  min-height: 0;
   animation: drift-in 0.42s cubic-bezier(0.2, 0.7, 0.25, 1) both;
 }
 
@@ -4704,10 +4755,42 @@ canvas {
   animation: breathe 3.4s ease-in-out infinite;
 }
 
+/*
+  Five songs, then scroll.
+
+  `--player-row` is one row measured rather than guessed: the title's line box
+  plus the padding above and below it. Five of them is enough to choose from at
+  a glance and short enough that the panel is still a thing in the corner of
+  the garden rather than a page.
+
+  Capped against the viewport as well, because five rows is the wrong number on
+  a phone held sideways — there is no point reserving ten rems of a four-rem
+  screen. Whichever is smaller wins.
+*/
 .player-list ul {
+  /* Measured, not guessed: one row is 31.2px against a 16px root. */
+  --player-row: 1.96rem;
   list-style: none;
   margin: 0;
   padding: 0;
+  max-height: min(calc(5 * var(--player-row)), 34vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 216, 178, 0.22) transparent;
+  /*
+    The last row fades out, which is the only honest way to say "there is more"
+    without adding a word or an arrow. A hard edge at exactly five looks like
+    five is all there is.
+  */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+}
+
+/* Nothing to fade when everything fits. */
+.player-list ul.player-all {
+  mask-image: none;
+  -webkit-mask-image: none;
 }
 
 .player-list li button {
