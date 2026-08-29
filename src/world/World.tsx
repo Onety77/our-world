@@ -420,6 +420,16 @@ const FRAMES: Record<Tier, number> = { low: 30, medium: 45, high: 60 }
 const HIDDEN_FRAMES = 8
 
 /**
+ * The most time one frame is allowed to carry, in milliseconds.
+ *
+ * A tab that has been in the background hands the next `requestAnimationFrame`
+ * a gap of however long it was away. Letting that through as one delta moves
+ * every animation in the garden by minutes in a single step. A tenth of a
+ * second is the same ceiling the car's physics uses on the same argument.
+ */
+const LONGEST_STEP_MS = 100
+
+/**
  * Drives the render loop by hand, at a rate we choose.
  *
  * Lives inside the Canvas because that is the only place `advance` exists.
@@ -430,6 +440,10 @@ const HIDDEN_FRAMES = 8
  */
 function Pacer() {
   const advance = useThree((state) => state.advance)
+  /** Seconds handed to R3F. Ours, not the wall clock. See the note below. */
+  const seconds = useRef(0)
+  /** Wall-clock milliseconds at the last frame we actually drew. */
+  const lastAdvance = useRef(0)
   const tier = useQuality((q) => q.tier)
   /*
     A game that owns the Canvas is not "behind" anything — it *is* the screen,
@@ -439,18 +453,61 @@ function Pacer() {
   const stage = useGameStage((s) => s.taken)
   const wanted = covered && !stage ? HIDDEN_FRAMES : FRAMES[tier]
 
+  /*
+    ==========================================================================
+    **The clock this hands to `advance` is in SECONDS, and that is the whole
+    of this comment.**
+
+    React Three Fiber's own loop, for `frameloop="never"`:
+
+        delta = timestamp - state.clock.elapsedTime
+        state.clock.elapsedTime = timestamp
+
+    `THREE.Clock.elapsedTime` is seconds. Handing it `performance.now()` —
+    which is the obvious thing to hand a rAF callback's timestamp to, and is
+    what this did first — makes every delta a thousand times too large. The
+    world does not break in any way that looks like a bug: it runs, it renders,
+    nothing throws. It simply moves a thousand times too fast, clouds tearing
+    across the sky like a flashback in a film, which is a much more alarming
+    thing to be handed than a stack trace.
+
+    So: our own clock, in seconds, accumulated by hand.
+
+    **It is accumulated rather than derived** from a start time, for two
+    reasons. Skipped frames must still contribute their time or the world
+    would run slow in exact proportion to how much the frame rate was capped.
+    And a step is clamped: coming back to a backgrounded tab hands rAF a gap
+    of minutes, and a single frame with a two-minute delta in it moves every
+    animation in the garden to somewhere it should never be.
+
+    **Refs, not locals**, because this effect re-runs whenever the target rate
+    changes — and a clock that restarted at zero would hand R3F a delta of
+    *minus* whatever had elapsed so far.
+    ==========================================================================
+  */
   useEffect(() => {
     let frame = 0
-    let last = 0
     // A millisecond of slack, or a 60 Hz panel asked for 60 fps drops every
     // other frame to 30 because the deadline lands a hair late every time.
     const gap = 1000 / wanted - 1
+
     const step = (now: number) => {
       frame = requestAnimationFrame(step)
-      if (now - last < gap) return
-      last = now
-      advance(now)
+
+      if (lastAdvance.current === 0) {
+        // The first frame carries no time, so nothing jumps on arrival.
+        lastAdvance.current = now
+        advance(seconds.current)
+        return
+      }
+      if (now - lastAdvance.current < gap) return
+
+      const elapsed = Math.min(LONGEST_STEP_MS, now - lastAdvance.current)
+      lastAdvance.current = now
+      seconds.current += elapsed / 1000
+      advance(seconds.current)
     }
+
     frame = requestAnimationFrame(step)
     return () => cancelAnimationFrame(frame)
   }, [advance, wanted])
