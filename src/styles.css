@@ -10012,3 +10012,35 @@ body:has(.rally-running) .player {
   text-align: center;
   color: var(--ink-dim);
 }
+
+/* --------------------------------------------------------------------------
+   Her board, on a narrow screen
+
+   `.duel-boards .shape` is pinned to the right of the board and centred on it,
+   which works when there is room beside the grid and lands *on top of it* when
+   there is not — a phone in portrait puts "got it in 6" and its pips straight
+   across the middle two rows of your own guesses.
+
+   Below the board instead, in normal flow, once the screen is too narrow to
+   hold both side by side.
+   -------------------------------------------------------------------------- */
+
+/*
+  48rem, not 34.
+
+  The first attempt at this used 34rem — 544 px — which is narrower than a
+  good many phones report in CSS pixels, so the very screens it was written for
+  did not match it. Anything under 768 px wide is a phone or a small tablet in
+  portrait, and none of those has room for a second board beside the first.
+*/
+@media (max-width: 48rem) {
+  .duel-boards {
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .duel-boards .shape {
+    position: static;
+    transform: none;
+  }
+}

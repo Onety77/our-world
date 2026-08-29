@@ -779,6 +779,14 @@ export interface DataLayer {
    */
   setRallyTuning(values: Record<string, number>): Promise<void>
 
+  // ---- how loud each place is ---------------------------------------------
+
+  /** Watch the authored per-section ambience levels shared by both devices. */
+  watchAmbienceTuning(listener: (values: Record<string, number>) => void): () => void
+
+  /** Publish a complete set of per-section ambience levels. Warm account only. */
+  setAmbienceTuning(values: Record<string, number>): Promise<void>
+
   // ---- the Glasshouse ------------------------------------------------------
 
   /**

@@ -229,6 +229,24 @@ export default function WordDuel({
         await play(move)
         setTyped('')
         setComplaint(null)
+      } catch (error) {
+        /*
+          A move that does not land has to say so.
+
+          Without this the whole failure was invisible: `play` rejects, the
+          word stays in the row, nothing appears on the board and nothing is
+          written anywhere — so from the seat it looks as though pressing enter
+          simply did nothing, or ate the word. Whatever the cause, the person
+          holding the phone is owed the sentence.
+
+          The word is deliberately *kept* rather than cleared, so a failure
+          costs a tap rather than five.
+        */
+        setComplaint(
+          error instanceof Error && error.message
+            ? `That did not reach the fire — ${error.message}`
+            : 'That did not reach the fire. Try it again.',
+        )
       } finally {
         setSending(false)
       }
@@ -461,9 +479,13 @@ export default function WordDuel({
               it. Choosing a word for her and guessing hers are different acts
               and the board looks identical for both.
             */}
+            {/*
+              "5 more" was ambiguous and got read as five *tries* left, which
+              is the other number this game is about. Say what is being counted.
+            */}
             <p className="duel-enter-says">
               {typed.length !== LENGTH
-                ? `${LENGTH - typed.length} more`
+                ? `${LENGTH - typed.length} more ${LENGTH - typed.length === 1 ? 'letter' : 'letters'}`
                 : choosing
                   ? 'enter gives her this one'
                   : 'enter lays it down'}

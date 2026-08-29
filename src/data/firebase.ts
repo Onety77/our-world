@@ -135,6 +135,7 @@ const QUESTION_SEEDS = 'questionSeeds'
 const VOICE_LIGHTS = 'voiceLights'
 const VOICE_LIGHT_CONFIG = 'voiceLightConfig'
 const RALLY_TUNING = 'rallyTuning'
+const AMBIENCE_TUNING = 'ambienceTuning'
 
 /** Presence is per person, under a path only that person may write. */
 const presencePath = (id: UserId) => `presence/${id}`
@@ -1563,6 +1564,34 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         would leave a number nobody can see behind on her phone forever.
       */
       await setDoc(doc(db, RALLY_TUNING, 'ours'), clean)
+    },
+
+    watchAmbienceTuning(listener) {
+      return onSnapshot(
+        doc(db, AMBIENCE_TUNING, 'ours'),
+        (snap) => {
+          const raw = (snap.data() ?? {}) as Record<string, unknown>
+          const values: Record<string, number> = {}
+          for (const [key, value] of Object.entries(raw)) {
+            if (typeof value === 'number' && Number.isFinite(value)) values[key] = value
+          }
+          listener(values)
+        },
+        // The mix written in code is always a safe fallback.
+        () => listener({}),
+      )
+    },
+
+    async setAmbienceTuning(values) {
+      if (me !== 'warm') throw new Error('Only the warm account sets how the places sound.')
+      const clean: Record<string, number> = {}
+      for (const key of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+        const value = values[key]
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          clean[key] = Math.max(0, Math.min(1, value))
+        }
+      }
+      await setDoc(doc(db, AMBIENCE_TUNING, 'ours'), clean)
     },
 
     watchRound(id, listener) {

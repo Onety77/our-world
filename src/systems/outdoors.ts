@@ -1,50 +1,32 @@
 /**
- * How much of the garden you can hear from inside each place.
+ * The authored loudness of each place.
  *
- * ---------------------------------------------------------------------------
- * **This is a real dial, not a workaround.** The mix table in `ambience.ts`
- * gives every place a weight for every layer, and the two outdoor layers — the
- * air and the leaves on it — were set generously nearly everywhere:
+ * This is not the device volume. `systems/volume` answers how loud this phone
+ * wants the world, effects and music; these numbers answer how loud the Hollow
+ * itself is compared with the Tree or the river. That makes them shared world
+ * tuning, in exactly the same sense as the published Rally handling.
  *
- *     garden  air 1.00   leaves 1.00
- *     tree    air 1.00   leaves 1.30   ← more of both than the garden itself
- *     glass   air 0.55   leaves 0.72
- *     river   air 0.50   leaves 0.28
- *     stars   air 0.42   leaves 0.10
- *     hollow  air 0.05   leaves 0.00
+ * There are three layers:
  *
- * Read on its own that is defensible: the Tree *is* outdoors, and standing
- * under it should not sound like standing indoors. Heard on a phone speaker
- * with everything else competing, it means four of the five places sound like
- * the meadow with something quiet added, and each one stops having a sound of
- * its own.
+ *   default    every place at the mix written in `ambience.ts`
+ *   published  the levels saved for both people
+ *   draft      what this device is trying in dev7731
  *
- * Which of those two is right is a matter of taste and of what the speaker in
- * your hand does with a broad band of noise, so it is not a thing to settle by
- * argument. It is a thing to put a fader on.
- *
- * **One number per place, multiplying the two outdoor layers only.** Not the
- * water, the fire, the room tone or the Stars' tones — those are what each
- * place is *made of*, and turning them down would not quieten the garden, it
- * would empty the room.
- * ---------------------------------------------------------------------------
+ * The draft wins locally until it is either published or dropped. It survives
+ * the full-page trip from dev7731 back into the Garden so a change can actually
+ * be heard before it is sent.
  */
 
 import { create } from 'zustand'
 import type { Place } from './ambience'
 
-/** Every place you can be inside. The garden is not one — it is the outside. */
-export const INSIDES: readonly Place[] = ['tree', 'river', 'hollow', 'stars', 'glasshouse']
+/** Every place you can enter. The open garden keeps the personal world level. */
+export const INSIDES = ['tree', 'river', 'hollow', 'stars', 'glasshouse'] as const
+export type InsidePlace = (typeof INSIDES)[number]
 
-export type Outdoors = Record<Place, number>
+export type PlaceLevels = Record<Place, number>
 
-/**
- * Everything as it has always been, so nothing changes until you move one.
- *
- * The garden is pinned at 1 and has no fader: turning the garden down *in the
- * garden* is what the world fader is for.
- */
-export const OPEN: Outdoors = {
+export const OPEN: PlaceLevels = {
   garden: 1,
   tree: 1,
   river: 1,
@@ -53,10 +35,11 @@ export const OPEN: Outdoors = {
   glasshouse: 1,
 }
 
-const KEY = 'garden:outdoors:v1'
+/** Kept at the old key so sliders already moved by the owner become a draft. */
+const DRAFT_KEY = 'garden:outdoors:v1'
 
-function clean(raw: unknown): Outdoors {
-  const out: Outdoors = { ...OPEN }
+function clean(raw: unknown): PlaceLevels {
+  const out: PlaceLevels = { ...OPEN }
   if (raw === null || typeof raw !== 'object') return out
   const source = raw as Record<string, unknown>
   for (const place of INSIDES) {
@@ -68,50 +51,88 @@ function clean(raw: unknown): Outdoors {
   return out
 }
 
-function read(): Outdoors {
-  if (typeof window === 'undefined') return { ...OPEN }
+function readDraft(): PlaceLevels | null {
+  if (typeof window === 'undefined') return null
   try {
-    const raw = localStorage.getItem(KEY)
-    return raw === null ? { ...OPEN } : clean(JSON.parse(raw))
+    const raw = localStorage.getItem(DRAFT_KEY)
+    return raw === null ? null : clean(JSON.parse(raw))
   } catch {
-    return { ...OPEN }
+    return null
   }
 }
 
-function write(value: Outdoors): void {
+function writeDraft(value: PlaceLevels | null): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem(KEY, JSON.stringify(value))
+    if (value === null) localStorage.removeItem(DRAFT_KEY)
+    else localStorage.setItem(DRAFT_KEY, JSON.stringify(value))
   } catch {
-    /* storage blocked; the faders still work, the device just forgets */
+    /* The live draft still works; this browser just cannot remember it. */
   }
 }
 
-interface OutdoorsState {
-  howMuch: Outdoors
-  set(place: Place, value: number): void
-  reset(): void
+export function samePlaceLevels(a: PlaceLevels, b: PlaceLevels): boolean {
+  return INSIDES.every((place) => Math.abs(a[place] - b[place]) <= 1e-9)
 }
 
-export const useOutdoors = create<OutdoorsState>((set, get) => ({
-  howMuch: read(),
+interface PlaceVolumeState {
+  published: PlaceLevels
+  draft: PlaceLevels | null
+  /** Effective values: the local draft when one exists, otherwise published. */
+  howMuch: PlaceLevels
+  set(place: InsidePlace, value: number): void
+  toDefaults(): void
+  dropDraft(): void
+  receivePublished(values: Record<string, number>): void
+  markPublished(values: PlaceLevels): void
+}
+
+const firstDraft = readDraft()
+
+export const useOutdoors = create<PlaceVolumeState>((set, get) => ({
+  published: { ...OPEN },
+  draft: firstDraft,
+  howMuch: firstDraft ?? { ...OPEN },
+
   set(place, value) {
-    const howMuch = { ...get().howMuch, [place]: Math.max(0, Math.min(1, value)) }
-    write(howMuch)
-    set({ howMuch })
+    const draft = {
+      ...(get().draft ?? get().published),
+      [place]: Math.max(0, Math.min(1, value)),
+    }
+    writeDraft(draft)
+    set({ draft, howMuch: draft })
   },
-  reset() {
-    write(OPEN)
-    set({ howMuch: { ...OPEN } })
+
+  toDefaults() {
+    const draft = { ...OPEN }
+    writeDraft(draft)
+    set({ draft, howMuch: draft })
+  },
+
+  dropDraft() {
+    writeDraft(null)
+    set((state) => ({ draft: null, howMuch: state.published }))
+  },
+
+  receivePublished(values) {
+    const published = clean(values)
+    set((state) => {
+      if (state.draft && samePlaceLevels(state.draft, published)) {
+        writeDraft(null)
+        return { published, draft: null, howMuch: published }
+      }
+      return { published, howMuch: state.draft ?? published }
+    })
+  },
+
+  markPublished(values) {
+    const published = clean(values)
+    writeDraft(null)
+    set({ published, draft: null, howMuch: published })
   },
 }))
 
-/**
- * Read it without subscribing — the ambience tick runs sixty times a second.
- *
- * Returns the whole record rather than one place, because the tick is in the
- * middle of a crossfade between two of them and needs both.
- */
-export function outdoorsNow(): Outdoors {
+/** Read on the ambience animation loop without causing React frame updates. */
+export function placeLevelsNow(): PlaceLevels {
   return useOutdoors.getState().howMuch
 }

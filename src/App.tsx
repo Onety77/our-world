@@ -49,6 +49,7 @@ import { takenOverNow, useTakenOver } from '@/systems/attention'
 import { useMemories } from '@/systems/memories'
 import { atTheDoor, useHourOverride } from '@/systems/dev'
 import { later } from '@/systems/later'
+import { usePublishedOutdoors } from '@/systems/outdoorsSync'
 
 /**
  * `?hour=18.6` pins the clock, `?section=river` opens straight into a place,
@@ -86,6 +87,9 @@ if (startGame) {
 
 function Garden() {
   const data = useData()
+  // Shared world tuning must arrive before and while the ambience graph runs.
+  // A local draft still wins on this device until it is saved or dropped.
+  usePublishedOutdoors()
   const me = data.me
   const profiles = useWorldSlice((s) => s.profiles)
 

@@ -338,6 +338,38 @@ service cloud.firestore {
     }
 
     /*
+      The authored loudness of the five places. This is world tuning, not a
+      person's device volume, so Warm publishes it once and both devices read
+      the same mix. Explicit fields and 0..1 bounds keep a broken control room
+      from turning an AudioParam into NaN or an unsafe gain.
+    */
+    match /ambienceTuning/{id} {
+      allow read: if isOneOfUs() && id == 'ours';
+      allow create, update: if isOneOfUs()
+        && me() == 'warm'
+        && id == 'ours'
+        && request.resource.data.keys().hasOnly([
+          'tree', 'river', 'hollow', 'stars', 'glasshouse'
+        ])
+        && request.resource.data.tree is number
+        && request.resource.data.tree >= 0
+        && request.resource.data.tree <= 1
+        && request.resource.data.river is number
+        && request.resource.data.river >= 0
+        && request.resource.data.river <= 1
+        && request.resource.data.hollow is number
+        && request.resource.data.hollow >= 0
+        && request.resource.data.hollow <= 1
+        && request.resource.data.stars is number
+        && request.resource.data.stars >= 0
+        && request.resource.data.stars <= 1
+        && request.resource.data.glasshouse is number
+        && request.resource.data.glasshouse >= 0
+        && request.resource.data.glasshouse <= 1;
+      allow delete: if false;
+    }
+
+    /*
       The Glasshouse.
 
       A memory is a photograph plus at most two short lines, and the picture

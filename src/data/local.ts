@@ -190,6 +190,7 @@ const QUESTIONS_KEY = 'garden:questions:v1'
 const VOICE_LIGHTS_KEY = 'garden:voice-lights:v1'
 const VOICE_LIGHT_LIMIT_KEY = 'garden:voice-light-limit:v1'
 const RALLY_TUNING_KEY = 'garden:rally-tuning:v1'
+const AMBIENCE_TUNING_KEY = 'garden:ambience-tuning:v1'
 
 interface StoredQuestionSeed {
   id: string
@@ -431,6 +432,24 @@ function loadRallyTuning(): Record<string, number> {
   }
 }
 
+function loadAmbienceTuning(): Record<string, number> {
+  if (typeof localStorage === 'undefined') return {}
+  try {
+    const raw = JSON.parse(localStorage.getItem(AMBIENCE_TUNING_KEY) ?? '{}') as unknown
+    if (raw === null || typeof raw !== 'object') return {}
+    const out: Record<string, number> = {}
+    for (const key of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+      const value = (raw as Record<string, unknown>)[key]
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        out[key] = Math.max(0, Math.min(1, value))
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
 function loadVoiceLightLimit(): number {
   if (typeof localStorage === 'undefined') return 3
   const value = Number(localStorage.getItem(VOICE_LIGHT_LIMIT_KEY) ?? 3)
@@ -572,6 +591,8 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
   let rallyTuning = loadRallyTuning()
   const rallyTuningWatchers = new Set<(values: Record<string, number>) => void>()
+  let ambienceTuning = loadAmbienceTuning()
+  const ambienceTuningWatchers = new Set<(values: Record<string, number>) => void>()
 
   function saveVoiceLights() {
     if (typeof localStorage === 'undefined') return
@@ -1183,6 +1204,27 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         localStorage.setItem(RALLY_TUNING_KEY, JSON.stringify(rallyTuning))
       }
       for (const watcher of rallyTuningWatchers) watcher(rallyTuning)
+    },
+
+    watchAmbienceTuning(listener) {
+      ambienceTuningWatchers.add(listener)
+      listener(ambienceTuning)
+      return () => ambienceTuningWatchers.delete(listener)
+    },
+
+    async setAmbienceTuning(values) {
+      const clean: Record<string, number> = {}
+      for (const key of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+        const value = values[key]
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          clean[key] = Math.max(0, Math.min(1, value))
+        }
+      }
+      ambienceTuning = clean
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AMBIENCE_TUNING_KEY, JSON.stringify(ambienceTuning))
+      }
+      for (const watcher of ambienceTuningWatchers) watcher(ambienceTuning)
     },
 
     sayAs(id, body) {

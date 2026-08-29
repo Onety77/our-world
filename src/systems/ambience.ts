@@ -39,7 +39,7 @@
 
 import { createEngineVoice, type EngineVoice } from './engine'
 import { gainOf, levelsNow } from './volume'
-import { outdoorsNow } from './outdoors'
+import { placeLevelsNow } from './outdoors'
 
 export type { EngineState, EngineVoice } from './engine'
 
@@ -363,11 +363,18 @@ export function createAmbience(): AmbienceHandle {
     return { source, filter, gain, lfo }
   }
 
-  /** How much of a layer this place wants, blended across the crossfade. */
+  /**
+   * How much of a layer this place wants, including its published/draft place
+   * level and blended exactly across the crossfade.
+   */
   function levelOf(name: string): number {
     const row = MIX[name]
     if (!row) return 0
-    return row[from] * (1 - blend) + row[place] * blend
+    const levels = placeLevelsNow()
+    return (
+      row[from] * (levels[from] ?? 1) * (1 - blend) +
+      row[place] * (levels[place] ?? 1) * blend
+    )
   }
 
   /**
@@ -457,19 +464,8 @@ export function createAmbience(): AmbienceHandle {
       if (gain) gain.gain.setTargetAtTime(value * open, now, 0.35)
     }
 
-    /*
-      How much of the garden this place lets in.
-
-      Blended across the crossfade exactly like the mix weights are, so walking
-      from the meadow into the cave does not step. See `systems/outdoors` for
-      why the two outdoor layers get a fader of their own and the water, the
-      fire and the room tone do not.
-    */
-    const howMuch = outdoorsNow()
-    const outdoors = (howMuch[from] ?? 1) * (1 - blend) + (howMuch[place] ?? 1) * blend
-
-    set('air', levelOf('air') * outdoors * (0.1 + currentWind * 0.2))
-    set('leaves', levelOf('leaves') * outdoors * (0.012 + currentWind * 0.05))
+    set('air', levelOf('air') * (0.1 + currentWind * 0.2))
+    set('leaves', levelOf('leaves') * (0.012 + currentWind * 0.05))
     set('water', levelOf('water') * 0.19)
     set('fire', levelOf('fire') * 0.16)
     set('room', levelOf('room') * 0.13)
@@ -784,15 +780,11 @@ export function createAmbience(): AmbienceHandle {
     },
 
     hearing() {
-      const howMuch = outdoorsNow()
-      const outdoors = (howMuch[from] ?? 1) * (1 - blend) + (howMuch[place] ?? 1) * blend
       const levels: Record<string, number> = {}
       for (const name of Object.keys(MIX)) {
-        // The two outdoor layers are shown *after* the place's own fader, so
-        // this panel says what you can actually hear rather than what the
-        // table would like you to hear.
-        const scale = name === 'air' || name === 'leaves' ? outdoors : 1
-        levels[name] = Number((levelOf(name) * scale).toFixed(3))
+        // `levelOf` already includes the section fader, so zero here genuinely
+        // means the complete ambient room is sealed.
+        levels[name] = Number(levelOf(name).toFixed(3))
       }
       return { place, from, blend: Number(blend.toFixed(2)), levels }
     },

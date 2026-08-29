@@ -392,3 +392,27 @@ shared-file changes, measurements, and anything another agent should preserve.
   pointer simulation covers both zoom limits, easing, the release guard and the
   original one-finger orbit. The production build passes; its established
   Firebase chunk warning is unchanged.
+
+## 29 August 2026 - Codex - Section ambience controls repaired
+
+- Root cause: the dev7731 per-place faders only multiplied the outdoor `air`
+  and `leaves` beds. Hollow already used 5% air and no leaves, so its fader had
+  almost nothing to turn down while the louder noise-shaped fire and cave-room
+  beds stayed at full strength. The missing Save button was not the original
+  failure; those old values silently auto-saved to one browser only.
+- A place fader now scales that place's complete ambient mix. Hollow 0% means
+  air, fire, crackles and rock rumble all reach zero; intermediate levels are
+  blended through the existing crossfade without a step.
+- The control now has the same three-stage model as Rally tuning: code defaults,
+  a published mix shared by both devices, and a remembered local draft for
+  auditioning. dev7731 names the state plainly and adds `save these levels for
+  both of you`, `drop my changes`, and `every place back to full` controls.
+- Added a validated `ambienceTuning/ours` Firestore document, matching local
+  data-layer save/watch methods, and a Garden-side live subscription. Only the
+  Warm account may publish, with all five levels constrained to 0..1 in both
+  code and Firestore rules.
+- Existing locally adjusted section values migrate into the new draft rather
+  than disappearing. Personal world/effects/music volume remains device-only.
+- No-incremental TypeScript, generated-rule validation, the production build,
+  a draft/publish/shared-update simulation and the local data-layer round trip
+  all pass. The established Firebase chunk warning remains unchanged.

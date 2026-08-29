@@ -70,11 +70,11 @@ export function Hearing() {
             ))}
           </div>
           <p className="admin-note">
-            These are the mix weights for the place, not loudness — a layer at
-            zero is silent, and one at 1 is as much of itself as that place
-            ever asks for. If the place named above is the place you are
-            standing in, the bed is doing its job and anything you can hear is
-            that place&rsquo;s own sound.
+            These are the live mix weights after the section fader. A layer at
+            zero is silent; putting the current place at 0% makes every bar
+            reach zero after its crossfade. If the place named above is where
+            you are standing, this is the sound that room is actually asking
+            the audio graph to make.
           </p>
         </>
       )}

@@ -1,19 +1,18 @@
-/**
- * One fader per place: how much of the garden reaches into it.
- *
- * The mix gives the Tree more wind and leaves than the meadow does, and the
- * Glasshouse and the Wellspring over half — which is defensible on paper and
- * means, on a phone speaker, that four of the five places sound like the
- * meadow with something quiet added. Whether that is right is a matter of
- * taste and of what your speaker does with a broad band of noise, so it gets a
- * fader rather than an argument. See `systems/outdoors`.
- */
+/** Shared ambience tuning: one complete room-level fader per place. */
 
-import { ambience, type Place } from '@/systems/ambience'
-import { INSIDES, OPEN, useOutdoors } from '@/systems/outdoors'
+import { useState } from 'react'
+import { useData } from '@/data/provider'
+import { attempt } from '@/systems/trouble'
+import {
+  INSIDES,
+  OPEN,
+  samePlaceLevels,
+  useOutdoors,
+  type InsidePlace,
+} from '@/systems/outdoors'
+import { usePublishedOutdoors } from '@/systems/outdoorsSync'
 
-const NAMES: Record<Place, string> = {
-  garden: 'the garden',
+const NAMES: Record<InsidePlace, string> = {
   tree: 'the Tree',
   river: 'the Wellspring',
   hollow: 'the Hollow',
@@ -21,72 +20,112 @@ const NAMES: Record<Place, string> = {
   glasshouse: 'the Glasshouse',
 }
 
-/**
- * What the mix asks for before this fader touches it.
- *
- * Shown because a fader at 100% on the Tree and a fader at 100% on the Hollow
- * are doing very different things, and without the starting point the two look
- * identical.
- */
-const ASKS: Record<Place, string> = {
-  garden: '',
-  tree: 'the loudest of the five — more wind and leaves than the meadow',
-  river: 'half the wind, a quarter of the leaves, under the water',
-  hollow: 'almost none already — what you hear in here is the fire and the rock',
-  stars: 'thin, high air',
-  glasshouse: 'over half, through the broken roof',
+const HEARD: Record<InsidePlace, string> = {
+  tree: 'wind, leaves and the low woodland room beneath them',
+  river: 'water, air, leaves and the valley underneath the river',
+  hollow: 'the cave fire, its crackles, the rock rumble and the small air leak',
+  stars: 'the thin night air, distant room and rare glass-like tones',
+  glasshouse: 'roof wind, wet floor, glass resonance and the room around it',
 }
 
 export function Outdoors() {
-  const howMuch = useOutdoors((s) => s.howMuch)
-  const set = useOutdoors((s) => s.set)
-  const reset = useOutdoors((s) => s.reset)
-  const moved = INSIDES.some((place) => Math.abs(howMuch[place] - OPEN[place]) > 1e-9)
+  const data = useData()
+  usePublishedOutdoors()
+
+  const levels = useOutdoors((state) => state.howMuch)
+  const published = useOutdoors((state) => state.published)
+  const draft = useOutdoors((state) => state.draft)
+  const store = useOutdoors.getState()
+  const [sending, setSending] = useState(false)
+
+  const unsent = draft !== null && !samePlaceLevels(levels, published)
+  const nonstandard = !samePlaceLevels(levels, OPEN)
+
+  async function save() {
+    setSending(true)
+    const saved = await attempt('those sound levels did not reach the garden', () =>
+      data.setAmbienceTuning(
+        Object.fromEntries(INSIDES.map((place) => [place, levels[place]])),
+      ),
+    )
+    setSending(false)
+    if (saved) store.markPublished(levels)
+  }
 
   return (
     <section>
-      <h3>how much of the garden reaches inside</h3>
+      <h3>how loud each place is</h3>
       <p className="admin-note">
-        The wind and the leaves only — not the water, the fire, the rock or the
-        Stars&rsquo; tones, because those are what each place is <i>made of</i>{' '}
-        and turning them down would empty the room rather than quieten the
-        garden. Takes effect while you listen. <b>This device only.</b>
+        The complete ambient room, not only the wind. Move a fader to make a
+        draft on this device, listen to it in the Garden, then save it when it
+        feels right. Saving changes the authored mix for <b>both of you</b>.
+        Your personal world/effects/music faders above remain device-only.
+      </p>
+
+      <p className="admin-note">
+        {unsent ? (
+          <>
+            You are listening to a <b>local draft</b>. The other device still
+            has the last saved mix.
+          </>
+        ) : (
+          <>
+            These are the <b>saved levels</b> both devices receive.
+          </>
+        )}
       </p>
 
       {INSIDES.map((place) => (
         <label key={place}>
           <span className="k">
-            {NAMES[place]} · {Math.round(howMuch[place] * 100)}%
-            {howMuch[place] === 0 ? ' — sealed' : ''}
+            {NAMES[place]} · {Math.round(levels[place] * 100)}%
+            {levels[place] === 0 ? ' — silent' : ''}
           </span>
           <input
             type="range"
             min={0}
             max={1}
             step={0.01}
-            value={howMuch[place]}
-            aria-label={`garden sound inside ${NAMES[place]}`}
-            onChange={(event) => {
-              set(place, Number(event.target.value))
-              // The tick reads the store directly, so nothing has to be pushed
-              // into the graph — but a place you are not standing in will not
-              // be heard changing, which is worth knowing while dragging.
-            }}
+            value={levels[place]}
+            aria-label={`complete ambience in ${NAMES[place]}`}
+            onChange={(event) => store.set(place, Number(event.target.value))}
           />
-          <span className="admin-note">{ASKS[place]}</span>
+          <span className="admin-note">{HEARD[place]}</span>
         </label>
       ))}
 
       <div className="row">
-        <button type="button" className={moved ? '' : 'on'} disabled={!moved} onClick={reset}>
-          leave every door open
+        <button
+          type="button"
+          className={unsent ? 'on' : ''}
+          disabled={data.me !== 'warm' || !unsent || sending}
+          onClick={() => void save()}
+        >
+          {sending ? 'saving…' : 'save these levels for both of you'}
+        </button>
+        <button type="button" disabled={draft === null} onClick={store.dropDraft}>
+          drop my changes
+        </button>
+        <button
+          type="button"
+          disabled={!nonstandard}
+          onClick={store.toDefaults}
+        >
+          every place back to full
         </button>
       </div>
 
+      {data.me !== 'warm' ? (
+        <p className="admin-note">
+          Only the warm account can publish the world mix. This device can
+          still draft and audition any level.
+        </p>
+      ) : null}
+
       <p className="admin-note">
-        You will only hear a fader move while you are standing in that place.
-        The panel below says which one the bed thinks you are in
-        {ambience.running ? '' : ' — once the sound has started'}.
+        There is no live sound behind dev7731 because the 3D world is not
+        mounted here. Return to the Garden to audition the draft; it has
+        already been remembered on this device.
       </p>
     </section>
   )
