@@ -67,8 +67,11 @@ export default {
     tip: 'You write your three minutes now, she writes hers whenever she comes',
   },
   live: {
+    // Two, because `ROUNDS` is two. It said four for as long as nobody had
+    // played it through — and "at the same moment" was the same kind of claim
+    // until the room in `Writing` made it one.
     name: 'roll together',
-    tip: 'Four rounds, both writing at the same moment',
+    tip: 'Two rounds, both writing from the same moment',
   },
 
   makeSetup(seed) {

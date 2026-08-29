@@ -25,8 +25,10 @@
 import {
   LOBBY_COUNTDOWN_MS,
   agreedStart,
+  legKey,
   raceKey,
   readSitting,
+  roundOfKey,
   stageOfKey,
   writeSitting,
 } from '../src/systems/lobby'
@@ -59,6 +61,46 @@ check(
   readSitting(writeSitting(key, 1_730_000_005_000)),
   { key, readyAt: 1_730_000_005_000 },
 )
+/*
+  The one below is here because the door got it wrong.
+
+  `Presence.racing` is read by two different things: this room, and the
+  Threshold's "join her" button. The room always went through `readSitting`;
+  the button took the field as the key itself, which is true right up until she
+  taps ready and then never again. She would sit ready in a room forever while
+  his phone opened a round called `…@1730000005000` and waited for somebody who
+  had never, as far as it could tell, arrived.
+*/
+check('a ready sitting is not a key', writeSitting(key, 1_730_000_005_000) === key, false)
+check('and the key survives being read back out', readSitting(writeSitting(key, 1_730_000_005_000))?.key, key)
+
+// ---------------------------------------------------------------------------
+console.log('\nA round with more than one flag in it\n')
+
+/*
+  Scattergories turns a glass before each of its two rounds, so it needs a flag
+  before each. The rest of the garden has one, and the first leg is the plain
+  key precisely so that none of it has to know.
+*/
+check('the first leg is just the round', legKey(key, 0), key)
+check('the second leg is its own room', legKey(key, 1), `${key}#1`)
+check('one leg is never another', legKey(key, 1) === legKey(key, 0), false)
+
+// What the door has to be able to do with any of them.
+check('the round comes back out of a leg', roundOfKey(legKey(key, 1)), key)
+check('and out of a plain key, unharmed', roundOfKey(key), key)
+check('and out of nothing', roundOfKey(''), '')
+check(
+  'the door reads a round, never a leg',
+  roundOfKey(readSitting(writeSitting(legKey(key, 1), 1_730_000_005_000))?.key ?? ''),
+  key,
+)
+check('two legs of the same round never agree', agreedStart(
+  legKey(key, 0),
+  { key: legKey(key, 0), readyAt: 1_730_000_005_000 },
+  { key: legKey(key, 1), readyAt: 1_730_000_005_000 },
+), null)
+check('a leg still fits the presence field', legKey(key, 9).length + 1 + 13 <= 64, true)
 /*
   A device running the previous build writes a bare key. It must read as
   somebody who is in the room and has not pressed the button — not as an error,

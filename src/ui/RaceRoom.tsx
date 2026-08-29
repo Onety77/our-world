@@ -31,11 +31,12 @@ function Flag({ countdown }: { countdown: number }) {
       <span className="wheel-count" key={seconds}>
         {seconds > 0 ? seconds : 'go'}
       </span>
-      <span
-        className="wheel-bar"
-        aria-hidden="true"
-        style={{ transform: `scaleX(${1 - countdown / LOBBY_COUNTDOWN_MS})` }}
-      />
+      <span className="wheel-track" aria-hidden="true">
+        <span
+          className="wheel-bar"
+          style={{ transform: `scaleX(${1 - countdown / LOBBY_COUNTDOWN_MS})` }}
+        />
+      </span>
     </div>
   )
 }

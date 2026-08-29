@@ -96,19 +96,15 @@ export default function WordDuel({
   const lobby = useLobby(race ? liveKey : null)
 
   /*
-    The moment, kept once it has happened.
+    The moment, kept once it has happened — see `go` and `flagAt` in the hook.
 
-    `lobby.startAt` is only non-null while both of you are still sitting in the
-    room, and presence is cleared the moment anybody leaves the game — so
-    reading it directly would make the deadline vanish mid-race and the clock
-    jump back to whenever the round document happened to be written. It is
-    latched on the first frame it exists and never read again.
+    It used to be latched here, on the first frame `startAt` existed, which was
+    a frame too early: the room came down as soon as the two of you agreed, so
+    the countdown was never on screen and the board appeared with five minutes
+    already running. The latch is now the flag itself, and it lives in the hook
+    because all three games wanted it.
   */
-  const [flagAt, setFlagAt] = useState<number | null>(null)
-  useEffect(() => {
-    if (flagAt !== null || lobby.startAt === null) return
-    setFlagAt(lobby.startAt)
-  }, [flagAt, lobby.startAt])
+  const flagAt = lobby.flagAt
 
   const [ready, setReady] = useState(wordsReady())
   const [typed, setTyped] = useState('')
@@ -376,10 +372,11 @@ export default function WordDuel({
     have not been dealt yet. The word is the same for both of you and it comes
     from the round key, so nothing about it depends on when this is drawn.
 
-    `flagAt` rather than `lobby.go`: once the flag has dropped it stays
-    dropped, even after presence is cleared on the way out of the room.
+    `lobby.go` is latched inside the hook, so the flag stays dropped even
+    after presence is cleared on the way out of the room — and the room stays
+    up through the countdown rather than vanishing the moment you both agree.
   */
-  if (race && flagAt === null) {
+  if (race && !lobby.go) {
     return (
       <div className="game duel duel-room">
         <p className="rally-kicker">time challenge</p>

@@ -24,8 +24,16 @@ export interface Lobby {
   startAt: number | null
   /** Milliseconds until the flag, or null. Recomputed a few times a second. */
   countdown: number | null
-  /** True once the moment has passed and the race should be running. */
+  /**
+   * True once the moment has passed, and true from then on.
+   *
+   * Latched rather than derived, because `startAt` is read out of presence and
+   * presence is cleared the moment anybody leaves the game. Deriving it would
+   * mean the flag un-dropping underneath a round already being played.
+   */
   go: boolean
+  /** The instant it dropped at, kept for anything timing itself from there. */
+  flagAt: number | null
   ready(): void
   /** Take it back, while there is still a countdown to take it back from. */
   wait(): void
@@ -47,8 +55,28 @@ export function useLobby(key: string | null): Lobby {
   const hers = useMemo(() => readSitting(presence[them]?.racing), [presence, them])
 
   const sheIsHere = key !== null && hers?.key === key
-  const youAreReady = key !== null && mine?.key === key && mine.readyAt !== null
+  const youAreHere = key !== null && mine?.key === key
+  const youAreReady = youAreHere && mine?.readyAt !== null
   const sheIsReady = sheIsHere && hers?.readyAt !== null
+
+  /*
+    Announcing yourself, once, on arrival.
+
+    The door writes the key when you open a live round, which is enough for a
+    game with one flag in it. It is not enough for a game with a flag before
+    every round: the second round's key has never been through the door, so
+    without this each of you would sit in an empty room, ready, watching a lamp
+    that says the other one is not here — because neither of you had said so.
+
+    Guarded on `youAreHere` rather than run on mount, so it can only ever add
+    a key that is missing. Writing unconditionally would clear your own
+    readiness on any re-render that happened to follow it, which is a countdown
+    that resets itself the moment it starts.
+  */
+  useEffect(() => {
+    if (key === null || youAreHere) return
+    data.publishPresence({ racing: writeSitting(key, null) })
+  }, [key, youAreHere, data])
 
   /*
     The last of the two to press is the one the flag hangs off.
@@ -78,13 +106,42 @@ export function useLobby(key: string | null): Lobby {
     return () => window.clearInterval(timer)
   }, [startAt, data])
 
+  /*
+    The flag, and why it is a timeout rather than a comparison.
+
+    It has to survive presence going away — see `go` above — and it equally has
+    to be cancellable, because "not yet" during a countdown must actually stop
+    it. A latch that ignores `startAt` once set would make the first
+    unstoppable and the second impossible. So nothing is remembered until the
+    moment arrives: while it is still coming, this follows `startAt` exactly
+    and the cleanup cancels a countdown either of you takes back. Once it
+    fires, the number is kept and never consulted again.
+  */
+  const [flagAt, setFlagAt] = useState<number | null>(null)
+  const [dropped, setDropped] = useState(false)
+  useEffect(() => {
+    if (dropped || startAt === null) return
+    const fire = () => {
+      setFlagAt(startAt)
+      setDropped(true)
+    }
+    const left = startAt - data.now()
+    if (left <= 0) {
+      fire()
+      return
+    }
+    const timer = window.setTimeout(fire, left)
+    return () => window.clearTimeout(timer)
+  }, [dropped, startAt, data])
+
   return {
     sheIsHere,
     sheIsReady,
     youAreReady,
     startAt,
     countdown,
-    go: startAt !== null && countdown !== null && countdown <= 0,
+    go: dropped,
+    flagAt,
     ready() {
       if (key === null) return
       data.publishPresence({ racing: writeSitting(key, data.now()) })

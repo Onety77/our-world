@@ -92,6 +92,23 @@ export function DataProvider({
 
 function LocalProvider({ children }: { children: ReactNode }) {
   const layer = useMemo<DataLayer>(() => createLocalDataLayer(whoAmI()), [])
+
+  /*
+    A handle on the mock, under `?shot=1`, same switch as `window.__rally`.
+
+    The two-person parts of the garden are the ones hardest to look at: a
+    waiting room, a countdown, a flag that drops for both of you. Presence is
+    the one piece of state the mock deliberately does not persist — it is about
+    right now, not about the save file — so a second tab is a second, unrelated
+    person, and there is no way to stage "she is here and ready" by hand.
+
+    This is the local mock only. `RealProvider` has no equivalent and must not
+    grow one: on the real backend the other person is a real person.
+  */
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has('shot')) {
+    ;(window as unknown as { __local?: DataLayer }).__local = layer
+  }
+
   return (
     <ConnectionContext.Provider value={{ status: 'local' }}>
       <DataContext.Provider value={layer}>{children}</DataContext.Provider>

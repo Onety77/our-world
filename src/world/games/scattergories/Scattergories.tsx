@@ -39,11 +39,18 @@ import {
   type Deal,
   type Line,
 } from './rules'
+import { legKey } from '@/systems/lobby'
+import { usePlaying } from '@/systems/playing'
+import { useLobby } from '@/systems/useLobby'
+import { RaceRoom } from '@/ui/RaceRoom'
 import type { ScatterMove, ScatterSetup, Sheet, Strike } from './index'
+
+/** The one place the game's name is spelled, since round ids are built from it. */
+const GAME_ID = 'scattergories'
 
 /** Where round `n` of a match keyed `key` lives. See the note on `Sheet`. */
 function roundIdFor(key: string, n: number): string {
-  return `scattergories:${key}${n === 0 ? '' : `-r${n + 1}`}`
+  return `${GAME_ID}:${key}${n === 0 ? '' : `-r${n + 1}`}`
 }
 
 const blank = () => Array.from({ length: PER_SHEET }, () => '')
@@ -84,7 +91,7 @@ function useMatch(key: string, upTo: number): RoundState[] {
     for (let n = 1; n <= Math.min(upTo, ROUNDS - 1); n++) {
       const id = roundIdFor(key, n)
       void data
-        .openRound({ id, gameId: 'scattergories', setup: { seed: 0 } })
+        .openRound({ id, gameId: GAME_ID, setup: { seed: 0 } })
         .catch(() => {
           /* losing the race to open is normal — the watcher delivers either way */
         })
@@ -240,7 +247,22 @@ export default function Scattergories({
 }: GameProps<ScatterSetup, ScatterMove>) {
   const data = useData()
   const live = variant === 'race'
-  const key = round?.id.split(':')[1] ?? 'today'
+  // The key as the door wrote it, which is not the same as `key` below.
+  const liveKey = usePlaying((s) => s.race)
+  /*
+    Everything after the game's name, not the first piece of it.
+
+    `split(':')[1]` is right for exactly one of the three ways in: a daily
+    round is `scattergories:2026-08-29` and gives back the date. A live one is
+    `scattergories:race:1787976619614` and gave back the word "race"; a solo
+    one gave back "solo". Since this key is what `roundIdFor` builds the later
+    rounds out of, every live match's round two was being written to the same
+    document — `scattergories:race-r2` — and the second match you ever played
+    would open the first one's second round. The same for every solo match.
+    Round one was always fine, which is why it went unnoticed: it is the only
+    round the shell opens by itself.
+  */
+  const key = round ? round.id.slice(GAME_ID.length + 1) : 'today'
 
   /**
    * Writing a move into one of the later round documents.
@@ -312,6 +334,21 @@ export default function Scattergories({
           round={at.n}
           storeKey={`garden:scatter:${key}:${at.n}`}
           live={live}
+          theirName={theirName}
+          /*
+            A key per round, not per match.
+
+            Every round turns its own glass, so every round needs its own
+            flag — agreeing once at the start would leave the second round
+            drifting apart again, and by then you are both mid-match and far
+            less willing to notice.
+
+            Built off `liveKey` — the key the door published — rather than off
+            `key`, which has `race:` on the front of it. The two must agree,
+            because this is what goes into `Presence.racing`, and she may be
+            standing at the door reading it as somewhere to join.
+          */
+          lobbyKey={live && liveKey ? legKey(liveKey, at.n) : null}
           onDone={async (answers) => {
             const move: Sheet = { kind: 'sheet', round: at.n, answers }
             if (at.n === 0) await play(move)
@@ -371,6 +408,8 @@ function Writing({
   round,
   storeKey,
   live,
+  theirName,
+  lobbyKey,
   onDone,
   onLeave,
 }: {
@@ -378,10 +417,50 @@ function Writing({
   round: number
   storeKey: string
   live: boolean
+  theirName: string
+  /** The round's own key while rolling together, null when playing apart. */
+  lobbyKey: string | null
   onDone(answers: string[]): Promise<void>
   onLeave(): void
 }) {
   const glass = useGlass(storeKey + ':glass', live)
+
+  /*
+    Rolling together, actually together.
+
+    "Roll together" used to mean nothing more than two people opening the same
+    match: each of you then met your own `turn the glass` screen and started
+    your own three minutes whenever you happened to press. Nobody lost time by
+    it — the glass is per-device and you each got your full three — but the
+    mode's whole promise is the same three minutes, and it was not keeping it.
+
+    It mattered more than a broken promise, because `useGlass` gives up its
+    pause for this. In an asynchronous round a phone call stops the clock; in a
+    live one it cannot, on the grounds that a timer one of you can stop is not
+    a timer. That reasoning only holds if the two clocks are the same clock.
+    Until this room existed it took her safety away and gave nothing back.
+
+    `flagAt` is latched: presence is cleared on the way out of the game, so
+    reading `lobby.startAt` directly would make the flag un-drop underneath a
+    round already being written.
+  */
+  const lobby = useLobby(lobbyKey)
+
+  /*
+    Up until the flag, not up until you agree on one.
+
+    Leaving the room the moment both of you were ready meant the countdown —
+    the one part of this that tells you it is about to start — was on screen
+    for no frames at all. You went from "waiting" to a sheet of twelve blank
+    categories with three minutes already running.
+  */
+  const waitingForHer = lobbyKey !== null && !lobby.go
+
+  // The flag turns the glass. Both phones reach this line off the same number.
+  useEffect(() => {
+    if (!lobby.go || glass.turned) return
+    glass.turn()
+  }, [lobby.go, glass.turned, glass.turn])
   const [answers, setAnswers] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem(storeKey)
@@ -447,8 +526,10 @@ function Writing({
 
   const written = answers.filter((a) => a.trim() !== '').length
 
+  // Not while the room is up: in there Enter belongs to the ready button,
+  // and this listener would turn a glass the two of you had not agreed on.
   useEffect(() => {
-    if (!landed || glass.turned) return
+    if (!landed || glass.turned || waitingForHer) return
     const onKey = (event: KeyboardEvent) => {
       const focused = document.activeElement
       if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
@@ -468,7 +549,7 @@ function Writing({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [glass.turned, glass.turn, landed, onLeave, openingChoice])
+  }, [glass.turned, glass.turn, landed, onLeave, openingChoice, waitingForHer])
 
   useEffect(() => {
     if (!glass.turned) return
@@ -491,6 +572,23 @@ function Writing({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [categoryAt, glass.turned])
+
+  if (waitingForHer) {
+    return (
+      <div className="scatter-room">
+        <p className="game-sub">
+          round {round + 1} of {ROUNDS} · everything begins with <b>{deal.letter}</b>
+        </p>
+        <RaceRoom
+          lobby={lobby}
+          theirName={theirName}
+          waitingFor={`${theirName} has the same letter and the same twelve. The glass turns for both of you at once.`}
+          onLeave={onLeave}
+          leaveLabel="not now"
+        />
+      </div>
+    )
+  }
 
   if (!glass.turned) {
     return (

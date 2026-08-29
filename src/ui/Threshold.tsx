@@ -12,7 +12,7 @@ import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { SECTIONS } from '@/sections/registry'
 import { useSections } from '@/systems/sections'
-import { raceKey } from '@/systems/lobby'
+import { raceKey, readSitting, roundOfKey } from '@/systems/lobby'
 import type { GameDefinition } from '@/world/games/types'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
@@ -84,8 +84,20 @@ function LiveWayIn({
   const mine = presence[me]
   const hers = presence[other]
   const bothHere = Boolean(mine?.online && hers?.online)
-  // A key she is already sitting in, waiting.
-  const waiting = hers?.racing ?? ''
+  /*
+    A key she is already sitting in, waiting.
+
+    Read through `readSitting` rather than straight off the wire, because
+    `Presence.racing` stops being a bare key the moment she taps ready — from
+    then on it carries her readiness on the end of it, `key@1756…`. Joining
+    that string verbatim opened a *different* round, with an `@` in its
+    document id, and left the two of you holding keys that could never agree:
+    she would sit ready in the room forever, while you waited for somebody who,
+    as far as your phone could tell, had never arrived. It needed nothing
+    unusual to trigger — only her being ready before you opened the door, which
+    is exactly what the room is for.
+  */
+  const waiting = roundOfKey(readSitting(hers?.racing)?.key ?? '')
 
   /*
     Joining is never a choice.

@@ -10129,10 +10129,21 @@ body:has(.rally-running) .player {
 
 /* Runs left to right across the whole countdown, so the last second is
    readable without reading the number. */
-.wheel-bar {
+/* The bar needs something to be a bar *of*. Scaled from nothing against a
+   dark background it read as a stray orange dash that happened to be growing;
+   with the track behind it you can see how much of the wait is left, which is
+   the only thing it is there to say. */
+.wheel-track {
   display: block;
   width: min(18rem, 60vw);
   height: 2px;
+  background: rgba(240, 178, 106, 0.22);
+}
+
+.wheel-bar {
+  display: block;
+  width: 100%;
+  height: 100%;
   background: #f0b26a;
   transform-origin: left center;
 }
@@ -10165,4 +10176,34 @@ body:has(.rally-running) .player {
 
 .duel-room h1 {
   margin: 0.2rem 0 0;
+}
+
+/* Scattergories waits in the same room, once before each round rather than
+   once before the match — every round turns its own glass, so every round has
+   its own flag. Same lamps, same countdown, the letter kept overhead so the
+   wait is not dead time: you can be thinking about the letter while you wait,
+   which is the one part of this game there is no advantage in hiding. */
+.scatter-room {
+  /* Across all three rows of `.game`, or it lands in the `auto` one at the
+     top and the whole room sits in the upper third with the horizon under it. */
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.scatter-room h1 {
+  margin: 0.2rem 0 0;
+}
+
+.scatter-room .game-sub {
+  margin: 0 0 0.6rem;
+}
+
+.scatter-room .game-sub b {
+  font-weight: 400;
+  color: var(--gold, #d89555);
 }

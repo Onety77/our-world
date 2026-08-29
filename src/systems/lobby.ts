@@ -119,3 +119,35 @@ export function stageOfKey(key: string, fallback: string): string {
   const stage = key.slice(at + 1)
   return stage.length > 0 ? stage : fallback
 }
+
+const LEG = '#'
+
+/**
+ * One flag out of several in the same round.
+ *
+ * Scattergories turns a fresh glass before each of its rounds, so it needs a
+ * flag before each of them, and two flags cannot share a key — the second
+ * would be standing in a room the two of you had already left. So each leg
+ * gets its own: `1730000000000#1`.
+ *
+ * **The first leg is the round key itself, unchanged.** Everything that is not
+ * this game has exactly one flag, and none of it should have to know the word
+ * "leg" to keep working.
+ */
+export function legKey(roundKey: string, leg: number): string {
+  return leg === 0 ? roundKey : `${roundKey}${LEG}${leg}`
+}
+
+/**
+ * The round a sitting is in, with the leg taken back off.
+ *
+ * `Presence.racing` has two readers. This room uses it to find each other
+ * inside a round; the Threshold uses it, from outside, as the key of a round
+ * to *join* — so anything the room adds to that field has to be removable
+ * again, or the door starts opening rounds that do not exist. It nearly did:
+ * joining her mid-Scattergories would have opened `…:race:1730000000000#1`.
+ */
+export function roundOfKey(key: string): string {
+  const at = key.indexOf(LEG)
+  return at < 0 ? key : key.slice(0, at)
+}

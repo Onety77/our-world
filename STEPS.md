@@ -420,11 +420,19 @@ because each step proves something the next one assumes:
    before you have played, it says *your move* and never anything about whether
    she has — that is the seal, and it is the thing most worth confirming
    against the real rules rather than the mock.
-6. **Both of you tap "roll together"** on Scattergories within a few seconds of
-   each other. You should land in the *same* round. This has never once run
-   against the real backend — the invitation goes down the presence channel,
-   and the code that sends it was fixed while building the Glasshouse but has
-   never been exercised for real.
+6. **Both of you tap "roll together"** on Scattergories. You no longer have to
+   do it within a few seconds of each other: whoever taps first waits in a
+   room, sees the other one arrive, and the glass only turns once you have
+   both said *ready*. Three, two, one, and you both get the same letter at the
+   same moment. It asks again before round two, because round two turns a
+   fresh glass.
+
+   The same room is now in front of Word Duel's *time challenge* and the
+   racer's *wheel to wheel*, and it is the same code in all three
+   (`ui/RaceRoom`, over `systems/lobby` — `npm run lobby` checks the
+   arithmetic without a browser). Worth trying all three, because this is the
+   part that has never once run against the real backend: the invitation and
+   the readiness both go down the presence channel.
 7. **She leaves a memory in the Glasshouse.** You open it, turn the pane over,
    and write what you remember. She refreshes and finds it on the back.
 8. **Both of you open the same memory at once.** The pane should take a warm
