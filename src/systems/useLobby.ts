@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
-import { agreedStart, readSitting, writeSitting } from './lobby'
+import { agreedStart, flagWithin, readSitting, writeSitting } from './lobby'
 
 export interface Lobby {
   /** She is holding the same key. */
@@ -85,7 +85,57 @@ export function useLobby(key: string | null): Lobby {
     both phones agree: whichever order the two presses arrive in, and whichever
     device is asked, the answer is the same number.
   */
-  const startAt = key === null ? null : agreedStart(key, mine, hers)
+  const agreed = key === null ? null : agreedStart(key, mine, hers)
+
+  /*
+    ==========================================================================
+    The agreed instant, clamped into this device's own three seconds.
+
+    The flag is an absolute moment, and an absolute moment only works if two
+    clocks agree about what time it is. On the road they did not. One phone
+    dropped the flag and started driving while the other sat in the room
+    watching a countdown from **fourteen** — which is not a number this
+    countdown can produce, because it only ever counts 3.2 seconds. Fourteen
+    means the other device's `readyAt` was written about eleven seconds into
+    this device's future: their clocks were eleven seconds apart.
+
+    They are not supposed to be. `data.now()` is the server's clock, corrected
+    per device from `.info/serverTimeOffset`, and everything that has to agree
+    between two people goes through it. Something on one of those two phones
+    was not corrected — a stale offset, a listener that had not landed yet, a
+    clock that moved after it did. It cannot be found from here, and it does
+    not have to be, because the flag should never have been able to fail this
+    badly for a reason this ordinary.
+
+    So the agreed instant is now advice, not law. Each device counts down from
+    the moment *it* saw the two of you ready, and takes the agreed instant only
+    where it falls inside that window:
+
+      - clocks agree     — `agreed` lands 0..3.2s ahead, and is used exactly,
+                           so the flag is still the same instant for both
+      - clocks disagree  — it is clamped, and each device counts its own 3.2s
+                           from seeing the pair, which the two of you reach
+                           within a network hop of each other
+
+    Worst case goes from *eleven seconds* to the difference between two RTDB
+    fan-outs. And "not yet" still cancels, because nothing is remembered until
+    the flag actually drops: while it is coming, this follows `agreed`.
+    ==========================================================================
+  */
+  const [flag, setFlag] = useState<{ agreed: number; at: number } | null>(null)
+  useEffect(() => {
+    if (agreed === null) {
+      setFlag(null)
+      return
+    }
+    setFlag((was) => {
+      if (was?.agreed === agreed) return was
+      const now = data.now()
+      return { agreed, at: flagWithin(agreed, now) }
+    })
+  }, [agreed, data])
+
+  const startAt = flag?.at ?? null
 
   /*
     The countdown is state rather than a derived value, because it has to

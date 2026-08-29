@@ -4,7 +4,7 @@ import type { SectionDefinition } from '../registry'
 export default {
   id: 'stars',
   name: 'The Stars',
-  blurb: 'Your night, her morning, and the space in between.',
+  blurb: 'Your night, {their} morning, and the space in between.',
   order: 3,
   camera: {
     // low, looking out and slightly up — the horizon with her dawn on it sits

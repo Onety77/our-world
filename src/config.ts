@@ -49,8 +49,28 @@ export class ConfigError extends Error {
  * deliberately the *safe* default: the failure mode is "obviously not real",
  * never "looks real, is wrong".
  */
+/*
+  `?mock=1` puts a development build on the local layer whatever the env says.
+
+  Env files cannot do this from the outside: `.env.local` holds the real keys
+  and beats anything handed to the process, so a checker that wants the mock
+  has no way to ask for it except by editing the developer's own file. The
+  browser checks — `npm run places` — need a garden they can walk into without
+  a password, and this is the only door that does not involve touching
+  `.env.local`, which has been corrupted once already by a script trying.
+
+  Development only, and one-directional: it can only ever step *down* to the
+  mock. There is no query string anywhere that turns the real backend on.
+*/
+function askedForTheMock(): boolean {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return false
+  return new URLSearchParams(window.location.search).get('mock') === '1'
+}
+
 export const DATA_BACKEND: DataBackend =
-  optional('VITE_DATA_BACKEND', 'local') === 'firebase' ? 'firebase' : 'local'
+  optional('VITE_DATA_BACKEND', 'local') === 'firebase' && !askedForTheMock()
+    ? 'firebase'
+    : 'local'
 
 export interface FirebaseConfig {
   apiKey: string

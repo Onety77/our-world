@@ -14,6 +14,7 @@ import { SECTIONS } from '@/sections/registry'
 import { useSections } from '@/systems/sections'
 import { raceKey, readSitting, roundOfKey } from '@/systems/lobby'
 import type { GameDefinition } from '@/world/games/types'
+import { useSay } from '@/systems/useSay'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
 import { useTakenOver } from '@/systems/attention'
@@ -76,6 +77,7 @@ function LiveWayIn({
   onFocus?(): void
 }) {
   const data = useData()
+  const say = useSay()
   const me = data.me
   const other = otherUser(me)
   const presence = useWorldSlice((s) => s.presence)
@@ -171,9 +173,9 @@ function LiveWayIn({
       onFocus={onFocus}
       onClick={start}
       disabled={!bothHere}
-      title={bothHere ? live.tip : them + ' is not here right now'}
+      title={bothHere ? say(live.tip) : them + ' is not here right now'}
     >
-      {waiting ? `join ${them}` : live.name}
+      {waiting ? `join ${them}` : say(live.name)}
       {!bothHere && <small>only when you are both here</small>}
     </button>
   )
@@ -311,6 +313,7 @@ function summary(turns: Record<string, Turn>, them: string): string {
 
 function TheHollow() {
   const play = usePlaying((s) => s.open)
+  const say = useSay()
   const me = useData().me
   const profiles = useWorldSlice((s) => s.profiles)
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
@@ -500,7 +503,7 @@ function TheHollow() {
             {game.Emblem ? <game.Emblem /> : null}
           </span>
           <h2>{game.name}</h2>
-          <p>{game.blurb}</p>
+          <p>{say(game.blurb)}</p>
           <small>{game.duration}</small>
         </header>
 
@@ -512,11 +515,9 @@ function TheHollow() {
             className={`game-go${way === 0 ? ' is-selected' : ''}`}
             onFocus={() => setWay(0)}
             onClick={() => begin(game.id, false)}
-            title={game.invite?.tip}
+            title={game.invite ? say(game.invite.tip) : undefined}
           >
-            {game.invite
-              ? game.invite.name.replace('{them}', them.name)
-              : `play with ${them.name}`}
+            {game.invite ? say(game.invite.name) : `play with ${them.name}`}
           </button>
           <div className="game-else">
             <button
@@ -582,7 +583,7 @@ function TheHollow() {
             <span className="game-card-object">{g.Emblem ? <g.Emblem /> : null}</span>
             <strong>{g.name}</strong>
             <span className="game-length">{g.duration}</span>
-            <small>{g.blurb}</small>
+            <small>{say(g.blurb)}</small>
             <span className="game-card-command">
               {index === at ? 'enter to choose' : 'bring to the fire'}
             </span>

@@ -25,6 +25,7 @@
 import {
   LOBBY_COUNTDOWN_MS,
   agreedStart,
+  flagWithin,
   legKey,
   raceKey,
   readSitting,
@@ -101,6 +102,46 @@ check('two legs of the same round never agree', agreedStart(
   { key: legKey(key, 1), readyAt: 1_730_000_005_000 },
 ), null)
 check('a leg still fits the presence field', legKey(key, 9).length + 1 + 13 <= 64, true)
+
+// ---------------------------------------------------------------------------
+console.log('\nWhen the two clocks do not agree\n')
+
+/*
+  The one the road actually failed on.
+
+  A phone showed a countdown of fourteen, which a 3.2 second countdown cannot
+  produce, while the other phone was already driving. Eleven seconds of clock
+  disagreement, on a flag that assumed none.
+*/
+const T = 1_730_000_000_000
+
+check(
+  'clocks agree, and the agreed instant is kept exactly',
+  flagWithin(T + 3_200, T),
+  T + 3_200,
+)
+check('most of the way through the countdown, still exact', flagWithin(T + 900, T), T + 900)
+check(
+  'her clock eleven seconds fast is not eleven seconds of waiting',
+  flagWithin(T + 14_200, T),
+  T + LOBBY_COUNTDOWN_MS,
+)
+check(
+  'her clock eleven seconds slow does not start you alone',
+  flagWithin(T - 8_000, T),
+  T,
+)
+check('a moment exactly now is now', flagWithin(T, T), T)
+check(
+  'nobody ever waits longer than the countdown',
+  [0, 1, 3_200, 14_200, 600_000].every((ahead) => flagWithin(T + ahead, T) - T <= LOBBY_COUNTDOWN_MS),
+  true,
+)
+check(
+  'and nobody ever waits less than nothing',
+  [0, -1, -8_000, -600_000].every((behind) => flagWithin(T + behind, T) >= T),
+  true,
+)
 /*
   A device running the previous build writes a bare key. It must read as
   somebody who is in the room and has not pressed the button — not as an error,

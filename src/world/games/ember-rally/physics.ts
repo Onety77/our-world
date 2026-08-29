@@ -1884,6 +1884,30 @@ export function advanceCar(
  * Sampling on elapsed time rather than per frame, so a run recorded at 120fps
  * and one recorded at 30fps are the same length and replay identically.
  */
+/**
+ * A car, as the four things anybody else needs to draw it.
+ *
+ * One description, two readers. It is what a saved run is made of, sample by
+ * sample, and it is what goes down the wire six times a second while the two
+ * of you are racing — see `wire.ts`. Written twice, the ghost you chase and
+ * the car beside you would be free to slowly stop being the same shape.
+ */
+export function packCar(car: CarState): { n: number; s: number; psi: number; state: number } {
+  const slip = Math.min(1, Math.abs(slipOf(car)) / 0.6)
+  return {
+    n: car.n,
+    s: car.s,
+    psi: car.psi,
+    state:
+      (Math.round(slip * SAMPLE_DRIFT) & SAMPLE_DRIFT) |
+      (car.boostLeft > 0 ? SAMPLE_BOOST : 0) |
+      (car.rough ? SAMPLE_ROUGH : 0) |
+      (car.braking > 0.35 ? SAMPLE_BRAKE : 0) |
+      (wheelspinOf(car) > 0.3 ? SAMPLE_SLIDE : 0) |
+      (car.shortcut ? SAMPLE_SHORTCUT : 0),
+  }
+}
+
 export class Recorder {
   private readonly path: number[] = []
   private next = 0
@@ -1897,20 +1921,8 @@ export class Recorder {
   }
 
   private push(car: CarState) {
-    const slip = Math.min(1, Math.abs(slipOf(car)) / 0.6)
-    const state =
-      (Math.round(slip * SAMPLE_DRIFT) & SAMPLE_DRIFT) |
-      (car.boostLeft > 0 ? SAMPLE_BOOST : 0) |
-      (car.rough ? SAMPLE_ROUGH : 0) |
-      (car.braking > 0.35 ? SAMPLE_BRAKE : 0) |
-      (wheelspinOf(car) > 0.3 ? SAMPLE_SLIDE : 0) |
-      (car.shortcut ? SAMPLE_SHORTCUT : 0)
-    this.path.push(
-      Math.round(car.n * 1000),
-      Math.round(car.s * 100),
-      Math.round(car.psi * 1000),
-      state,
-    )
+    const { n, s, psi, state } = packCar(car)
+    this.path.push(Math.round(n * 1000), Math.round(s * 100), Math.round(psi * 1000), state)
   }
 
   finish(car: CarState): RallyRun {

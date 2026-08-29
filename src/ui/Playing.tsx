@@ -10,6 +10,7 @@ import { useCallback, useEffect, Suspense } from 'react'
 import { useBackCloses } from '@/systems/backstop'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
+import { WhenItBreaks } from './WhenItBreaks'
 import { usePlaying } from '@/systems/playing'
 import { GAMES } from '@/world/games/registry'
 import type { GameDefinition } from '@/world/games/types'
@@ -173,6 +174,15 @@ function Runner({
           </div>
         }
       >
+        {/*
+          A game falling over should not take the garden with it.
+
+          The whole world is inside one of these too, in `main`, but the outer
+          one can only offer the front door. This one keeps the Hollow, the
+          fire and everything else on screen and standing — and, more to the
+          point, keeps the thing that broke named next to the game it broke in.
+        */}
+        <WhenItBreaks place={game.name}>
         <Component
           me={me}
           theirName={profiles[them].name}
@@ -186,6 +196,7 @@ function Runner({
           award={award}
           onLeave={onClose}
         />
+        </WhenItBreaks>
       </Suspense>
     </div>
   )

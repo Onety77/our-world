@@ -82,6 +82,20 @@ export interface Presence {
    * gone by itself when the phone goes into a tunnel.
    */
   looking?: string
+
+  /**
+   * Her car, on the road, while the two of you are racing wheel to wheel.
+   *
+   * Four integers — across the road, along it, heading, and a packed byte of
+   * lamps and smoke — in the same encoding a recorded run is stored in. See
+   * `world/games/ember-rally/wire`, which owns both ends of it.
+   *
+   * Down this channel and not through a round document for the obvious reason:
+   * a round is written once and kept for ever, and this is six writes a second
+   * that stop mattering the instant the next one lands. It is also the only
+   * live channel there is. Absent unless a live race is actually running.
+   */
+  driving?: string
 }
 
 // ---------------------------------------------------------------------------

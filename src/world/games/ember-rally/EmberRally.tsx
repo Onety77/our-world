@@ -7,6 +7,7 @@ import { useRace } from './session'
 import { usePublishedTuning } from './tuningSync'
 import { stageOfKey } from '@/systems/lobby'
 import { useLobby } from '@/systems/useLobby'
+import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
 import { Wheel } from './Wheel'
 import { TouchDriving } from './TouchDriving'
@@ -94,8 +95,8 @@ const COURSES: Record<StageId, {
     soloCopy: 'A small fire knows this road and it is quicker than it looks. It leaves a pale line through the tunnel; follow that and you will not be far off. Brake into the bend, hold the slide, and let go at the apex.',
     spirit: 'the fire-spirit',
     returnTo: 'return to the fire',
-    setTitle: 'Set a line she cannot see',
-    setCopy: 'Learn the turns and leave your tyre marks in the dark. Her first run stays under the stone until yours is beside it — and yours stays under it until hers is.',
+    setTitle: 'Set a line {she} cannot see',
+    setCopy: 'Learn the turns and leave your tyre marks in the dark. {Their} first run stays under the stone until yours is beside it — and yours stays under it until {hers} is.',
     sealedTitle: 'The stone stays closed.',
     chaseHome: 'home to the fire',
     resultKicker: 'two lines through one dark',
@@ -109,8 +110,8 @@ const COURSES: Record<StageId, {
     soloCopy: 'The road is visible here, but that does not make it kind. Carry speed across the Mirror Flats, give Tidecut one honest brake, then brake earlier than feels necessary when four amber pearls call the Moonhook.',
     spirit: 'the moon-spirit',
     returnTo: 'return to the moonwell',
-    setTitle: 'Leave a wake she cannot see',
-    setCopy: 'Learn the pale turns and leave your tyre marks above the water. Her first crossing stays under the moon until yours is beside it — and yours stays there until hers is.',
+    setTitle: 'Leave a wake {she} cannot see',
+    setCopy: 'Learn the pale turns and leave your tyre marks above the water. {Their} first crossing stays under the moon until yours is beside it — and yours stays there until {hers} is.',
     sealedTitle: 'The water keeps it.',
     chaseHome: 'home across the water',
     resultKicker: 'two wakes under one moon',
@@ -125,7 +126,7 @@ const COURSES: Record<StageId, {
     spirit: 'the storm-spirit',
     returnTo: 'return to the stormfire',
     setTitle: 'Leave a line above the cloud',
-    setCopy: 'Carry one private line from the cedars to the crown. Her climb stays inside the weather until yours is beside it — and neither of you sees the mountain give the other away.',
+    setCopy: 'Carry one private line from the cedars to the crown. {Their} climb stays inside the weather until yours is beside it — and neither of you sees the mountain give the other away.',
     sealedTitle: 'The storm keeps it.',
     chaseHome: 'home through the rain',
     resultKicker: 'two lights under one storm',
@@ -235,6 +236,7 @@ export default function EmberRally({
     no chase. There is a room, a flag that drops for both of you at once, and
     one run each. See `Wheel` and `systems/lobby`.
   */
+  const say = useSay()
   const live = variant === 'race'
   const liveKey = usePlaying((s) => s.race)
   const lobby = useLobby(live ? liveKey : null)
@@ -471,11 +473,9 @@ export default function EmberRally({
       Nothing to chase in a live round.
 
       `theirLine` is a *recording* of an earlier run, and in a round that
-      started ninety seconds ago there is not one — she is driving it now. Her
-      car being genuinely on the road beside you is a separate piece of work
-      (it needs her position on the wire, several times a second); what this
-      round promises today is the same road, from the same flag, and an honest
-      comparison at the end.
+      started ninety seconds ago there is not one — she is driving it now. So
+      in a live round there is no ghost at all, and the second car on the road
+      comes from presence instead: `wheelToWheel` below, and `wire.ts`.
     */
     const ghost = (live ? null : solo ? spirit : kind === 'chase' ? theirLine : null) ?? null
     const ghostName = solo ? course.spirit : theirName
@@ -485,6 +485,7 @@ export default function EmberRally({
         track={track}
         ghost={ghost}
         ghostName={ghostName}
+        wheelToWheel={live}
         onFinish={(run) => keep.current(run)}
         onLeave={backToFire}
         onRestart={() => start(kind)}
@@ -563,9 +564,11 @@ export default function EmberRally({
     return (
       <Briefing
         kicker={`${course.name.toLowerCase()} · ${theirName.toLowerCase()} has been down here`}
-        title="Her line is on the road"
-        copy={`The pale car is her real run — her steering, her braking, every place she got it wrong. She sets off when you do. Beat the time and the road is yours; miss it and you can go again.`}
-        primary={myChase ? 'go again' : 'chase her line'}
+        title={say('{Their} line is on the road')}
+        copy={say(
+          'The pale car is {their} real run — {their} steering, {their} braking, every place {she} got it wrong. {She} sets off when you do. Beat the time and the road is yours; miss it and you can go again.',
+        )}
+        primary={myChase ? 'go again' : say('chase {their} line')}
         onPrimary={() => start('chase')}
         onLeave={backToCourses}
         leaveLabel="choose another road"
@@ -577,7 +580,7 @@ export default function EmberRally({
           myChase
             ? myChase.timeMs <= theirLine.timeMs
               ? `you have it by ${timeLabel(theirLine.timeMs - myChase.timeMs)} · ${timeLabel(myChase.timeMs)}`
-              : `${timeLabel(myChase.timeMs - theirLine.timeMs)} off her · your best ${timeLabel(myChase.timeMs)}`
+              : `${timeLabel(myChase.timeMs - theirLine.timeMs)} off ${say('{her}')} · your best ${timeLabel(myChase.timeMs)}`
             : `${timeLabel(theirLine.timeMs)} to beat`
         }
       />
@@ -588,8 +591,8 @@ export default function EmberRally({
     return (
       <Briefing
         kicker={`${course.name.toLowerCase()} · first passage`}
-        title={course.setTitle}
-        copy={course.setCopy}
+        title={say(course.setTitle)}
+        copy={say(course.setCopy)}
         primary="set my line"
         onPrimary={() => start('qualifying')}
         onLeave={backToCourses}
@@ -620,9 +623,13 @@ export default function EmberRally({
         <p className="rally-copy">
           {herTry
             ? beat
-              ? `She came home ${timeLabel(myLine.timeMs - herTry.timeMs)} up on you. The road is hers until you go again.`
-              : `She is ${timeLabel(herTry.timeMs - myLine.timeMs)} off your line so far, and she can keep trying.`
-            : `Your tyre marks are down. ${theirName} chases them whenever she next comes below.`}
+              ? say(
+                  `{She} came home ${timeLabel(myLine.timeMs - herTry.timeMs)} up on you. The road is {hers} until you go again.`,
+                )
+              : say(
+                  `{She} is ${timeLabel(herTry.timeMs - myLine.timeMs)} off your line so far, and {she} can keep trying.`,
+                )
+            : say(`Your tyre marks are down. ${theirName} chases them whenever {she} next comes below.`)}
         </p>
         <RallyActions actions={[
           { label: 'run it again', onChoose: () => start('qualifying') },
@@ -640,8 +647,10 @@ export default function EmberRally({
     return (
       <Briefing
         kicker={`${theirName.toLowerCase()} has been down there`}
-        title="Her light is on the road"
-        copy={`This time the pale car is real: her steering, her braking, every place she got it wrong. She sets off when you do. Catch her, pass her, and bring both lines ${course.chaseHome}.`}
+        title={say('{Their} light is on the road')}
+        copy={`${say(
+          'This time the pale car is real: {their} steering, {their} braking, every place {she} got it wrong. {She} sets off when you do. Catch {her}, pass {her}, and bring both lines',
+        )} ${course.chaseHome}.`}
         primary="begin the chase"
         onPrimary={() => start('chase')}
         onLeave={backToCourses}
@@ -748,7 +757,11 @@ function CourseState({
     )
   }
   if (myLine && !theirLine) {
-    return <span className="rally-course-state">your line is down · waiting for her</span>
+    return (
+      <span className="rally-course-state">
+        your line is down · waiting for {theirName.toLowerCase()}
+      </span>
+    )
   }
   if (myLine && theirLine) {
     return <span className="rally-course-state open">both lines are in · chase it</span>
@@ -944,6 +957,7 @@ function Road({
   track,
   ghost,
   ghostName,
+  wheelToWheel,
   onFinish,
   onLeave,
   onRestart,
@@ -953,6 +967,7 @@ function Road({
   track: ReturnType<typeof makeTrack>
   ghost: RallyRun | null
   ghostName: string
+  wheelToWheel: boolean
   onFinish(run: RallyRun): void
   onLeave(): void
   onRestart(): void
@@ -977,6 +992,7 @@ function Road({
       track,
       ghost,
       ghostName,
+      wheelToWheel,
       onFinish: (run) => {
         /*
           Offered to the board before it is handed on.
@@ -1003,7 +1019,7 @@ function Road({
       useRace.getState().setSurface(null)
       useGameStage.getState().take(false)
     }
-  }, [attempt, track, ghost, ghostName])
+  }, [attempt, track, ghost, ghostName, wheelToWheel])
 
   return (
     <div

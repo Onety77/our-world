@@ -97,8 +97,8 @@ export function CarStudio() {
 
   const lights = useMemo(() => createLights(), [])
   const rock = useRockMaterial(lights)
-  const shell = useCarMaterial(lights, false)
-  const wheels = useWheelMaterials(lights, false)
+  const shell = useCarMaterial(lights, 'mine')
+  const wheels = useWheelMaterials(lights, 'mine')
   const beamMaterial = useBeamMaterial(lights, '#ffcf96')
 
   const beamGeometry = useMemo(() => {

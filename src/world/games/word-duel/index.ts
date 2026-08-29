@@ -37,7 +37,7 @@ export interface DuelSetup {
 export default {
   id: 'word-duel',
   name: 'Word duel',
-  blurb: 'You pick a word for her, she picks one for you. Six guesses each.',
+  blurb: 'You pick a word for {her}, {she} picks one for you. Six guesses each.',
   mode: 'async',
   cadence: 'daily',
   duration: 'a few minutes, once a day',
@@ -48,7 +48,7 @@ export default {
   */
   invite: {
     name: 'leave {them} a word',
-    tip: 'She picks yours apart whenever she next comes down here',
+    tip: '{She} picks yours apart whenever {she} next comes down here',
   },
   live: { name: 'time challenge', tip: 'Five minutes each, same word' },
 

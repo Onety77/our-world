@@ -39,6 +39,7 @@ import { ThumbLayout } from './ThumbLayout'
 import { Hearing } from './Hearing'
 import { Volumes } from './Volumes'
 import { Outdoors } from './Outdoors'
+import { useSay } from '@/systems/useSay'
 import { useRemembered } from './remember'
 
 /** Somewhere to start from. Any IANA name works — this is just convenience. */
@@ -99,8 +100,33 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id']
 
+/** The skew, in words, since "+3" and "-3" are read wrong about half the time. */
+function skewLabel(ms: number): string {
+  const seconds = Math.abs(ms) / 1000
+  if (seconds < 0.75) return 'level with'
+  const rounded = seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)
+  return `${rounded}s ${ms < 0 ? 'ahead of' : 'behind'}`
+}
+
 export function Admin() {
+  const say = useSay()
+
   const data = useData()
+
+  /*
+    `now()` is the corrected clock and `Date.now()` is the raw one, so the gap
+    between them is the correction itself. Re-read on a timer rather than once,
+    because the offset arrives after the database connects — reading it at
+    mount would show zero on every device, which is exactly the reading that
+    would be believed and exactly the one that is wrong.
+  */
+  const [clockSkew, setClockSkew] = useState(0)
+  useEffect(() => {
+    const read = () => setClockSkew(data.now() - Date.now())
+    read()
+    const timer = window.setInterval(read, 2000)
+    return () => window.clearInterval(timer)
+  }, [data])
   const local = useLocalLayer()
   const profiles = useWorldSlice((s) => s.profiles)
   const presence = useWorldSlice((s) => s.presence)
@@ -203,6 +229,21 @@ export function Admin() {
         <p className="admin-note">
           you are <b>{profiles[me].name}</b> ({me}) · {memories.length} memories in
           the glass
+        </p>
+        {/*
+          This device's clock against the server's.
+
+          Everything two people have to agree about — most of all the flag on a
+          live race — is timed off `data.now()`, which is this device's clock
+          plus the correction the Realtime Database sends down. When that
+          correction is missing or stale the two of you are simply in different
+          seconds, and the symptom is bizarre rather than obviously a clock: a
+          countdown from fourteen on one phone while the other is already
+          driving. That happened. It is bounded now — see `flagWithin` — but a
+          number you can read is how anybody would ever find out *why*.
+        */}
+        <p className="admin-note">
+          this device&rsquo;s clock is <b>{skewLabel(clockSkew)}</b> the server
         </p>
         <label>
           <span className="k">look at it as</span>
@@ -382,9 +423,9 @@ export function Admin() {
       <section>
         <h2>whose day the world is having</h2>
         <p className="admin-note">
-          By default you get <b>hers</b> and she gets yours — so neither of you
-          is looking at your own weather. The far horizon in the Stars always
-          shows the other one, whichever way this is set.
+          By default you get <b>{say('{hers}')}</b> and {say('{she}')} gets yours —
+          so neither of you is looking at your own weather. The far horizon in
+          the Stars always shows the other one, whichever way this is set.
         </p>
         <div className="row">
           {(Object.keys(WHOSE_WORDS) as Whose[]).map((key) => (
@@ -394,7 +435,7 @@ export function Admin() {
               className={whose === key ? 'on' : ''}
               onClick={() => setWhose(key)}
             >
-              {WHOSE_WORDS[key]}
+              {say(WHOSE_WORDS[key])}
             </button>
           ))}
         </div>
@@ -463,7 +504,7 @@ export function Admin() {
         <section>
           <h2>pretending there are two of you</h2>
           <p className="admin-note">
-            Local mode only. None of this touches anything she will ever see —
+            {say('Local mode only. None of this touches anything {she} will ever see —')}{' '}
             it writes to this device and nowhere else.
           </p>
           <div className="row">
@@ -479,7 +520,7 @@ export function Admin() {
                 local.sayAs(them, SHE_SAYS[Math.floor(Math.random() * SHE_SAYS.length)])
               }
             >
-              she says something
+              {say('{she} says something')}
             </button>
           </div>
           <div className="row">
@@ -493,8 +534,9 @@ export function Admin() {
         <section>
           <h2>pretending there are two of you</h2>
           <p className="admin-note">
-            Not available against the real backend — puppeting her would mean
-            writing as her, and the rules refuse it. Which is correct.
+            {say(
+              'Not available against the real backend — puppeting {her} would mean writing as {her}, and the rules refuse it. Which is correct.',
+            )}
           </p>
         </section>
       ))}

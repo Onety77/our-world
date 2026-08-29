@@ -45,6 +45,14 @@
         ],
         "looking": { ".validate": "newData.isString() && newData.val().length <= 64" },
 
+        "//driving": [
+          "Her car on the road, while a live race is running: four integers in",
+          "the same encoding a recorded run is stored in. Six writes a second",
+          "and none of them matter a moment later, which is exactly what this",
+          "channel is for. See src/world/games/ember-rally/wire.ts."
+        ],
+        "driving": { ".validate": "newData.isString() && newData.val().length <= 64" },
+
         "position": {
           "$axis": { ".validate": "newData.isNumber()" },
           ".validate": "newData.hasChildren(['0', '1', '2'])"

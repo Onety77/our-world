@@ -104,7 +104,22 @@ export interface AmbienceHandle {
    * own sound and the argument is about the *mix*, or it is not, and there is
    * a bug.
    */
-  hearing(): { place: Place; from: Place; blend: number; levels: Record<string, number> }
+  /**
+   * Where the ambience is, and — in development — what it actually sounds
+   * like: `loud` as RMS, `bright` as the spectral centroid in hertz, and
+   * `bands` as the share of the energy in each of four ranges. Zeroes in a
+   * production build, where the analyser is not built.
+   */
+  hearing(): {
+    place: Place
+    from: Place
+    blend: number
+    levels: Record<string, number>
+    loud: number
+    heard: number
+    bright: number
+    bands: Record<string, number>
+  }
   /** 0..1, drops when the tab is hidden. */
   setMaster(value: number): void
   /** The world and effects faders. Music is applied at the player. */
@@ -184,17 +199,25 @@ export interface AmbienceHandle {
 */
 const MIX: Record<string, Record<Place, number>> = {
   //         garden  tree  river  hollow  stars  glasshouse
-  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0.05, stars: 0.42, glasshouse: 0.55 },
+  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0.015, stars: 0.42, glasshouse: 0.55 },
   leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0.1,  glasshouse: 0.72 },
   water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    glasshouse: 0.12 },
-  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 1,    stars: 0,    glasshouse: 0 },
-  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 1,    stars: 0.3,  glasshouse: 0.78 },
+  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 0.26, stars: 0,    glasshouse: 0 },
+  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  glasshouse: 0.78 },
   shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    glasshouse: 0.5 },
 }
 
 /** How often the loose events fire, per second, at full strength. */
 const BURBLE_RATE = 3.4
-const CRACKLE_RATE = 6.5
+/*
+  Crackles per second, and it used to be 6.5.
+
+  Six and a half events a second is not a fire, it is rain on leaves — and up
+  at 1.9–5.3 kHz, which is where rain on leaves lives, it read as exactly that.
+  A fire you are sitting next to ticks a couple of times a second and the ticks
+  have some wood in them.
+*/
+const CRACKLE_RATE = 2.1
 const SHIMMER_RATE = 0.26
 
 /** Seconds the bed takes to cross from one place to the next. */
@@ -212,6 +235,21 @@ export function createAmbience(): AmbienceHandle {
   let limiter: DynamicsCompressorNode | null = null
   /** The place you are standing in. See `systems/volume`. */
   let worldBus: GainNode | null = null
+  /*
+    An ear on the world bus, in development only.
+
+    `hearing()` used to report the numbers in `MIX` and nothing else, which is
+    how a place got shipped whose values were all small and which was, in fact,
+    horrible to sit in. Mix values are not loudness: a level of 0.16 on a wide
+    band of noise is louder than 1.0 on something that barely moves the air.
+
+    So this is the actual signal, after the layers and before the master fade:
+    how loud, and how bright. Brightness is the one that catches a place
+    pretending to be somewhere else — a cave and a hedge can measure the same
+    loudness and the cave is an octave and a half lower.
+  */
+  let worldEar: AnalyserNode | null = null
+  let worldSamples: Float32Array<ArrayBuffer> | null = null
   /** Things that happen because of you: the car, the stones, the pen. */
   let effectsBus: GainNode | null = null
   let running = false
@@ -360,7 +398,9 @@ export function createAmbience(): AmbienceHandle {
     source.connect(filter).connect(gain)
     source.start()
 
-    return { source, filter, gain, lfo }
+
+  
+  return { source, filter, gain, lfo }
   }
 
   /**
@@ -512,14 +552,23 @@ export function createAmbience(): AmbienceHandle {
       while (crackleDue < 0) {
         crackleDue += 1
         // Mostly ticks, occasionally a proper pop with some low in it.
-        const big = Math.random() < 0.13
+        const big = Math.random() < 0.16
+        /*
+          Lower and longer than they were.
+
+          The small ticks were 1.9–5.3 kHz, which is the register of a raindrop
+          hitting a leaf; an ember is an octave and a half below that and has a
+          little body to it. The long tails are the cave — in a room made of
+          rock a tick does not simply stop, and that decay is most of what tells
+          you the walls are close.
+        */
         burst(
           beds.fire,
-          big ? 0.09 + Math.random() * 0.09 : 0.02 + Math.random() * 0.035,
-          big ? 0.06 + Math.random() * 0.06 : 0.008 + Math.random() * 0.02,
+          big ? 0.075 + Math.random() * 0.07 : 0.014 + Math.random() * 0.022,
+          big ? 0.14 + Math.random() * 0.13 : 0.03 + Math.random() * 0.05,
           'bandpass',
-          big ? 700 + Math.random() * 900 : 1900 + Math.random() * 3400,
-          big ? 1.4 : 2.5 + Math.random() * 4,
+          big ? 340 + Math.random() * 420 : 900 + Math.random() * 1500,
+          big ? 1.6 : 2.8 + Math.random() * 3.2,
           big ? 0.8 : 1.7 + Math.random() * 1.4,
         )
       }
@@ -545,6 +594,103 @@ export function createAmbience(): AmbienceHandle {
       }
       worldSoundTelemetry.rms = Math.sqrt(energy / eventSamples.length)
       worldSoundTelemetry.peak = peak
+    }
+  }
+
+    /*
+    One frame of the world bus, as a number you can put in a test.
+
+    `loud` is RMS, not peak — a place is how much air it is moving on average,
+    and peak would just report the loudest crackle. `bright` is the spectral
+    centroid in hertz: the frequency the energy balances around. A hedge in
+    wind sits high; a cave with a fire in it should sit very low, and if it
+    does not then whatever is playing is not a cave, whatever the mix says.
+  */
+  /*
+    Four bands, because one number cannot tell you what to change.
+
+    The centroid says a place is bright without saying what is making it
+    bright, and RMS says it is loud without saying whether that is a rumble you
+    can barely hear or a hiss sitting on top of everything. Split into low /
+    body / presence / air and the offender names itself: the Hollow measured
+    dark and loud at once, which is only possible if something big is happening
+    down low — and it was the room rumble, not the fire at all.
+  */
+/*
+  How loud a frequency actually seems, relative to a kilohertz.
+
+  Plain RMS says the Hollow is the loudest place in the garden, which is true
+  and useless: nearly half its energy is under 140Hz, where the ear is ten to
+  twenty decibels less sensitive and a laptop speaker barely moves at all. A
+  cave *should* have most of its energy down there — that low floor is the
+  whole reason it reads as a room with walls — so the number to tune against
+  is not how much air is moving but how much of it anybody notices.
+
+  The standard A-weighting curve, which is that, in one line.
+*/
+function aWeight(hz: number): number {
+  if (hz <= 0) return 0
+  const f2 = hz * hz
+  const ra =
+    (12194 ** 2 * f2 * f2) /
+    ((f2 + 20.6 ** 2) *
+      Math.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2)) *
+      (f2 + 12194 ** 2))
+  return 10 ** ((20 * Math.log10(ra) + 2) / 20)
+}
+
+  const BANDS: [string, number, number][] = [
+    ['low', 20, 140],
+    ['body', 140, 600],
+    ['presence', 600, 2400],
+    ['air', 2400, 11000],
+  ]
+
+  function listen(): {
+    loud: number
+    heard: number
+    bright: number
+    bands: Record<string, number>
+  } {
+    if (!worldEar || !worldSamples || !ctx) {
+      return { loud: 0, heard: 0, bright: 0, bands: {} }
+    }
+    worldEar.getFloatTimeDomainData(worldSamples)
+    let sum = 0
+    for (const sample of worldSamples) sum += sample * sample
+    const loud = Math.sqrt(sum / worldSamples.length)
+
+    const bins = new Float32Array(worldEar.frequencyBinCount)
+    worldEar.getFloatFrequencyData(bins)
+    const perBin = ctx.sampleRate / worldEar.fftSize
+    let weighted = 0
+    let total = 0
+    let heardPower = 0
+    for (let i = 1; i < bins.length; i++) {
+      // Out of decibels and back into amplitude, or the quiet bins — which are
+      // most of them — would count for as much as the loud ones.
+      const amp = Math.pow(10, bins[i] / 20)
+      const hz = i * perBin
+      weighted += amp * hz
+      total += amp
+      const a = amp * aWeight(hz)
+      heardPower += a * a
+    }
+    const bands: Record<string, number> = {}
+    for (const [name, from, to] of BANDS) {
+      let sum = 0
+      for (let i = 1; i < bins.length; i++) {
+        const hz = i * perBin
+        if (hz >= from && hz < to) sum += Math.pow(10, bins[i] / 20)
+      }
+      bands[name] = total > 0 ? Number((sum / total).toFixed(3)) : 0
+    }
+
+    return {
+      loud: Number(loud.toFixed(5)),
+      heard: Number(Math.sqrt(heardPower).toFixed(5)),
+      bright: total > 0 ? Math.round(weighted / total) : 0,
+      bands,
     }
   }
 
@@ -594,6 +740,13 @@ export function createAmbience(): AmbienceHandle {
       */
       worldBus = ctx.createGain()
       worldBus.gain.value = gainOf(levelsNow().world)
+      if (import.meta.env.DEV) {
+        worldEar = ctx.createAnalyser()
+        worldEar.fftSize = 2048
+        worldEar.smoothingTimeConstant = 0
+        worldSamples = new Float32Array(worldEar.fftSize)
+        worldBus.connect(worldEar)
+      }
       worldBus.connect(master)
 
       effectsBus = ctx.createGain()
@@ -676,18 +829,29 @@ export function createAmbience(): AmbienceHandle {
       */
       const roar = layer(ctx, buffer, {
         type: 'lowpass',
-        frequency: 250,
+        frequency: 185,
         Q: 0.9,
-        gain: 0.75,
+        gain: 0.62,
         rate: 0.5,
         lfoRate: 0.09,
         lfoDepth: 0.3,
       })
+      /*
+        Narrow, and much quieter than it was.
+
+        At Q 0.45 a bandpass is barely a filter — 720Hz with that Q passes most
+        of a kilohertz and a half either side, which is not a flame, it is a
+        wash of mid noise. Which is exactly what it sounded like: standing in
+        the Hollow sounded like standing in the garden, because a broad band of
+        mid noise is what a hedge in wind *is*. Q 2.2 makes it a resonance
+        rather than a wash, and the level below it makes it the fire's breath
+        rather than the room's floor.
+      */
       const flame = layer(ctx, buffer, {
         type: 'bandpass',
-        frequency: 720,
-        Q: 0.45,
-        gain: 0.2,
+        frequency: 430,
+        Q: 2.2,
+        gain: 0.045,
         rate: 0.95,
         lfoRate: 0.21,
         lfoDepth: 0.09,
@@ -786,7 +950,7 @@ export function createAmbience(): AmbienceHandle {
         // means the complete ambient room is sealed.
         levels[name] = Number(levelOf(name).toFixed(3))
       }
-      return { place, from, blend: Number(blend.toFixed(2)), levels }
+      return { place, from, blend: Number(blend.toFixed(2)), levels, ...listen() }
     },
 
     /**
@@ -1094,6 +1258,20 @@ export function createAmbience(): AmbienceHandle {
  * — browsers cap them, and a second one would need its own gesture to unlock.
  */
 export const ambience = createAmbience()
+
+/*
+  A handle on the ears, in development, beside `__gardenSound` above.
+
+  A soundscape is the one thing in here that cannot be checked by looking at
+  it, and the last time one shipped unheard it was unbearable. `hearing()` now
+  returns the measured signal as well as the mix, so one place can be held
+  against another — quieter, darker, or not — without anybody having to trust a
+  description of it.
+*/
+if (import.meta.env.DEV) {
+  const host = globalThis as typeof globalThis & { __ambience?: AmbienceHandle }
+  host.__ambience = ambience
+}
 
 if (import.meta.env.DEV) {
   const host = globalThis as typeof globalThis & {

@@ -566,6 +566,7 @@ ${LIGHT_HEAD}
   uniform vec3 uBounce;
   uniform float uGlow;
   uniform float uGhost;
+  uniform float uTint;
   uniform vec3 uGhostTint;
   /** 0..1 — the brake pedal. Lights the two red lenses in the tail. */
   uniform float uBrake;
@@ -604,7 +605,7 @@ ${LIGHT_BODY}
 
     // The edge. Cool, and only where the surface turns away.
     float rim = pow(1.0 - max(dot(normal, view), 0.0), 3.5);
-    col += mix(vec3(0.2, 0.26, 0.38), uGhostTint * 0.9, uGhost) * rim * 0.45;
+    col += mix(vec3(0.2, 0.26, 0.38), uGhostTint * 0.9, uTint) * rim * 0.45;
 
     /*
       Anything the car lights itself.
@@ -637,7 +638,7 @@ ${LIGHT_BODY}
     // A brake lamp has a dim filament in it always, and comes right up on the
     // pedal — which is what makes her braking point readable from behind.
     float lit = lens + vFinish.z + isBrake * (0.06 + uBrake * 1.5) + isPipe * uPipe;
-    col += mix(vColor, uGhostTint * 1.4, uGhost) * lit * 3.2;
+    col += mix(vColor, uGhostTint * 1.4, uTint) * lit * 3.2;
 
     /*
       A disc is not a lamp. It is a piece of iron with heat in it, so it runs
@@ -649,26 +650,42 @@ ${LIGHT_BODY}
     float heat = isDisc * clamp(uDisc, 0.0, 1.0);
     col += mix(vec3(0.85, 0.11, 0.02), vec3(1.0, 0.55, 0.16), heat) * heat * heat * 2.6;
 
-    if (uGhost > 0.5) {
-      // She is really here — running the same road at the same time — but she
-      // is a recording, and pretending otherwise would be the one dishonest
-      // thing in the game. So: solid enough to block a corner, translucent
-      // enough that you can always see the rock through her.
-      col = mix(col, uGhostTint * (0.16 + rim * 0.7), 0.62);
-    }
+    /*
+      Her colour, and separately how much of the rock you can see through her.
 
-    gl_FragColor = vec4(caveFog(col, vDepth), uGhost > 0.5 ? 0.5 + rim * 0.4 : 1.0);
+      These used to be one flag, which forced a choice the game should not have
+      to make: her car was either yours or a see-through recording. Wheel to
+      wheel is neither — she is *actually there*, on the road, right now — so
+      it is her colour at full strength and no transparency at all. A chase
+      keeps the transparency, because there she really is a recording, and
+      pretending otherwise would be the one dishonest thing in the game.
+    */
+    col = mix(col, uGhostTint * (0.16 + rim * 0.7), 0.62 * uTint);
+
+    gl_FragColor = vec4(caveFog(col, vDepth), mix(1.0, 0.5 + rim * 0.4, uGhost));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `
 
-function carMaterial(lights: RallyLights, ghost: boolean): ShaderMaterial {
+/**
+ * Whose car this is.
+ *
+ * `mine` is the one you are driving. `chase` is her recorded line — her
+ * colour, and see-through, because it is a thing that already happened.
+ * `live` is her, now, wheel to wheel: the same colour and completely solid,
+ * because she is a car on the road and not a memory of one.
+ */
+export type Whose = 'mine' | 'chase' | 'live'
+
+function carMaterial(lights: RallyLights, whose: Whose): ShaderMaterial {
+  const hers = whose !== 'mine'
+  const seeThrough = whose === 'chase'
   return new ShaderMaterial({
     vertexShader: CAR_VERT,
     fragmentShader: CAR_FRAG,
-    transparent: ghost,
-    depthWrite: !ghost,
+    transparent: seeThrough,
+    depthWrite: !seeThrough,
     /*
       Spreading the light uniforms copies the *references*, not the values, so
       every material made this way shares one `uHeadLeft` object with the rock
@@ -679,8 +696,18 @@ function carMaterial(lights: RallyLights, ghost: boolean): ShaderMaterial {
       ...lights.uniforms,
       uBounce: { value: new Color('#7d5327') },
       uGlow: { value: 0.3 },
-      uGhost: { value: ghost ? 1 : 0 },
-      uGhostTint: { value: new Color('#9fb6e8') },
+      uGhost: { value: seeThrough ? 1 : 0 },
+      uTint: { value: hers ? 1 : 0 },
+      /*
+        Her blue.
+
+        It was `#9fb6e8` — a pale lavender that, once mixed down and fogged,
+        was close enough to the road's own moonlight that on a phone at speed
+        she read as a grey car. This is the same idea with the blue actually
+        in it, so that at a glance, in a mirror, in the dark, the car ahead is
+        obviously not yours.
+      */
+      uGhostTint: { value: new Color('#5cc4ff') },
       uBrake: { value: 0 },
       uDisc: { value: 0 },
       uPipe: { value: 0 },
@@ -688,8 +715,8 @@ function carMaterial(lights: RallyLights, ghost: boolean): ShaderMaterial {
   })
 }
 
-export function useCarMaterial(lights: RallyLights, ghost = false): ShaderMaterial {
-  const material = useMemo(() => carMaterial(lights, ghost), [lights, ghost])
+export function useCarMaterial(lights: RallyLights, whose: Whose = 'mine'): ShaderMaterial {
+  const material = useMemo(() => carMaterial(lights, whose), [lights, whose])
   useEffect(() => () => material.dispose(), [material])
   return material
 }
@@ -709,10 +736,10 @@ export function useCarMaterial(lights: RallyLights, ghost = false): ShaderMateri
  * shader program — three.js caches those by source — so this is close to free
  * and it is the difference between a car and a picture of one.
  */
-export function useWheelMaterials(lights: RallyLights, ghost = false): ShaderMaterial[] {
+export function useWheelMaterials(lights: RallyLights, whose: Whose = 'mine'): ShaderMaterial[] {
   const materials = useMemo(
-    () => [0, 1, 2, 3].map(() => carMaterial(lights, ghost)),
-    [lights, ghost],
+    () => [0, 1, 2, 3].map(() => carMaterial(lights, whose)),
+    [lights, whose],
   )
   useEffect(() => () => materials.forEach((m) => m.dispose()), [materials])
   return materials

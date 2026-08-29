@@ -38,6 +38,14 @@ export interface RaceSession {
   /** Whose line to run against, if anyone's. */
   ghost: RallyRun | null
   ghostName: string
+  /**
+   * The two of you are on this road at the same moment.
+   *
+   * Not a recording — presence, six times a second, both ways. It changes what
+   * the second car on the screen *is*, so the road has to be told: a ghost is
+   * a thing that happened and can be paused, and she is a person who cannot.
+   */
+  wheelToWheel: boolean
   /** Both runs, for the two-car replay. */
   replay: { mine: RallyRun; theirs: RallyRun } | null
   /**
@@ -81,6 +89,7 @@ export interface RaceSession {
     track: Track
     ghost: RallyRun | null
     ghostName?: string
+    wheelToWheel?: boolean
     onFinish(run: RallyRun): void
   }): void
   watch(input: { track: Track; replay: { mine: RallyRun; theirs: RallyRun } }): void
@@ -100,6 +109,7 @@ export const useRace = create<RaceSession>((set) => ({
   track: null,
   ghost: null,
   ghostName: '',
+  wheelToWheel: false,
   replay: null,
   paused: false,
   surface: null,
@@ -107,7 +117,7 @@ export const useRace = create<RaceSession>((set) => ({
   speedo: null,
   onFinish: null,
 
-  open: ({ track, ghost, ghostName = '', onFinish }) =>
+  open: ({ track, ghost, ghostName = '', wheelToWheel = false, onFinish }) =>
     set((s) => ({
       phase: 'ready',
       paused: false,
@@ -115,6 +125,7 @@ export const useRace = create<RaceSession>((set) => ({
       track,
       ghost,
       ghostName,
+      wheelToWheel,
       replay: null,
       onFinish,
     })),

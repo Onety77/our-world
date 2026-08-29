@@ -64,7 +64,7 @@ export default {
 
   invite: {
     name: 'roll for {them}',
-    tip: 'You write your three minutes now, she writes hers whenever she comes',
+    tip: 'You write your three minutes now, {she} writes {hers} whenever {she} comes',
   },
   live: {
     // Two, because `ROUNDS` is two. It said four for as long as nobody had

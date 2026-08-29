@@ -37,6 +37,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useLobby } from '@/systems/useLobby'
+import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
 import { RaceRoom } from '@/ui/RaceRoom'
 import { ambience } from '@/systems/ambience'
@@ -82,6 +83,7 @@ export default function WordDuel({
     both lose, which is a better ending than a draw because it is funnier.
   */
   const race = variant === 'race'
+  const say = useSay()
 
   /*
     The room before the word.
@@ -400,7 +402,7 @@ export default function WordDuel({
   }
 
   const note = race
-    ? raceHeadline({ done, won, herWon, outOfTime, finishedAt, target, theirName })
+    ? raceHeadline({ done, won, herWon, outOfTime, finishedAt, target, theirName, say })
     : headline({ choosing, waiting, done, won, target, theirName, solo })
 
   return (
@@ -474,8 +476,10 @@ export default function WordDuel({
                 ? theirName + ' is still looking.'
                 : ''
               : bothDone
-                ? 'Yours was ' + (herWord ?? '').toUpperCase() +
-                  '. Hers was ' + (myWord ?? '').toUpperCase() + '.'
+                ? say(
+                    'Yours was ' + (herWord ?? '').toUpperCase() +
+                      '. {Hers} was ' + (myWord ?? '').toUpperCase() + '.',
+                  )
                 : done
                   ? 'You are done. ' + theirName + ' is still going.'
                   : '')}
@@ -507,7 +511,7 @@ export default function WordDuel({
                       className="tray-key tray-wide tray-enter"
                       onClick={commit}
                       disabled={typed.length !== LENGTH || sending}
-                      aria-label={choosing ? 'give her this word' : 'lay this word down'}
+                      aria-label={choosing ? say('give {her} this word') : 'lay this word down'}
                     >
                       enter
                     </button>
@@ -550,7 +554,7 @@ export default function WordDuel({
               {typed.length !== LENGTH
                 ? `${LENGTH - typed.length} more ${LENGTH - typed.length === 1 ? 'letter' : 'letters'}`
                 : choosing
-                  ? 'enter gives her this one'
+                  ? say('enter gives {her} this one')
                   : 'enter lays it down'}
             </p>
           </>
@@ -569,7 +573,7 @@ export default function WordDuel({
               take one from the pile
             </button>
             <button type="button" className="put-back quiet" onClick={onLeave}>
-              wait for her
+              wait for {say('{her}')}
             </button>
           </div>
         )}
@@ -635,6 +639,7 @@ function raceHeadline({
   finishedAt,
   target,
   theirName,
+  say,
 }: {
   done: boolean
   won: boolean
@@ -643,6 +648,8 @@ function raceHeadline({
   finishedAt: { mine: number | null; theirs: number | null }
   target: string | null
   theirName: string
+  /** Passed in rather than hooked: this is a plain function, not a component. */
+  say(text: string): string
 }): string | null {
   const answer = (target ?? '').toUpperCase()
 
@@ -652,7 +659,10 @@ function raceHeadline({
       ? 'You got there first.'
       : theirName + ' got there first.'
   }
-  if (won && !herWon) return outOfTime || done ? 'You got it. ' + theirName + ' did not.' : 'Got it — and she has not.'
+  if (won && !herWon)
+    return outOfTime || done
+      ? 'You got it. ' + theirName + ' did not.'
+      : say('Got it — and {she} has not.')
   if (herWon && !won) return theirName + ' got it. It was ' + answer + '.'
 
   if (outOfTime) return 'Neither of you. It was ' + answer + '.'

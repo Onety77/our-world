@@ -120,6 +120,31 @@ export function stageOfKey(key: string, fallback: string): string {
   return stage.length > 0 ? stage : fallback
 }
 
+/**
+ * The agreed instant, brought inside this device's own three seconds.
+ *
+ * `agreedStart` gives a moment in server time, which is only a shared moment
+ * if the two clocks agree about what server time is. On the road they did not:
+ * one phone dropped the flag and drove off while the other watched a countdown
+ * from **fourteen** — impossible for a 3.2 second countdown, and therefore
+ * proof that the other device's `readyAt` had been written eleven seconds into
+ * this one's future.
+ *
+ * So the agreement becomes advice. Where the clocks are close the agreed
+ * moment falls inside the window and comes back untouched, and the flag is
+ * still one instant for both of you. Where they are not, each device counts
+ * its own 3.2 seconds from seeing the pair ready — and since both see that
+ * within a network hop of each other, the worst case stops being *eleven
+ * seconds* and becomes the difference between two fan-outs.
+ *
+ * Never in the past, either: a device whose clock runs ahead would otherwise
+ * compute a moment already gone and start instantly, alone.
+ */
+export function flagWithin(agreed: number, now: number): number {
+  const left = Math.min(Math.max(agreed - now, 0), LOBBY_COUNTDOWN_MS)
+  return now + left
+}
+
 const LEG = '#'
 
 /**

@@ -714,6 +714,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         // Absent rather than present-and-empty, so `if (them.racing)` reads the
         // same here as it does against the mock. See the note in `flush`.
         if (typeof d.racing === 'string' && d.racing !== '') them.racing = d.racing
+        if (typeof d.driving === 'string' && d.driving !== '') them.driving = d.driving
         if (typeof d.looking === 'string' && d.looking !== '') them.looking = d.looking
 
         commitPresence({
@@ -771,6 +772,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     */
     const racing = pending.racing ?? here.racing
     const looking = pending.looking ?? here.looking
+    const driving = pending.driving ?? here.driving
 
     const body = {
       online: true,
@@ -779,6 +781,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       heading: pending.heading ?? here.heading,
       ...(racing ? { racing } : {}),
       ...(looking ? { looking } : {}),
+      ...(driving ? { driving } : {}),
       lastSeen: rtdbTimestamp(),
     }
     // Fire and forget. A dropped presence write is not worth a retry — another

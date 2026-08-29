@@ -28,6 +28,8 @@ import { useTrouble } from '@/systems/trouble'
 import { ambience } from '@/systems/ambience'
 import { toTheNewest } from '@/sections/glasshouse/aisle'
 import { openPane } from '@/sections/glasshouse/view'
+// Named apart from this file's own `say`, which puts words on the glass.
+import { useSay as useWords } from '@/systems/useSay'
 
 /** How long the glass takes to form, in milliseconds. Matches the shader. */
 const FORMING_MS = 2400
@@ -181,6 +183,7 @@ export function LeavingAMemory() {
  * reactions, no "shared on", nothing that a photo library would put here.
  */
 export function OpenMemory() {
+  const inWords = useWords()
   const data = useData()
   const me = data.me
   const memories = useMemories((s) => s.all)
@@ -454,7 +457,7 @@ export function OpenMemory() {
             <p className={`opened-remembers ${theirLine.by}`}>{theirLine.body}</p>
           ) : mine ? (
             <p className="opened-remembers waiting">
-              Nothing on this side yet. She writes here, when she gets to it.
+              {inWords('Nothing on this side yet. {She} writes here, when {she} gets to it.')}
             </p>
           ) : saying === null ? (
             <button type="button" className="opened-say" onClick={() => setSaying('')}>

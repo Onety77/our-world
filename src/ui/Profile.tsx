@@ -17,6 +17,7 @@ import { parseCoordinates } from '@/systems/geo'
 import { isValidTimeZone, localTimeLabel } from '@/systems/time'
 import { useProfileSheet } from '@/systems/profileSheet'
 import { useNotify } from '@/systems/notify'
+import { useSay } from '@/systems/useSay'
 
 /**
  * Somewhere to start. Not a complete list — anything IANA is accepted below,
@@ -46,6 +47,7 @@ const ZONES = [
  * more than it does fails silently, at night, for somebody who was waiting.
  */
 function Telling() {
+  const say = useSay()
   const wanted = useNotify((s) => s.wanted)
   const standing = useNotify((s) => s.standing)
   const want = useNotify((s) => s.want)
@@ -66,7 +68,7 @@ function Telling() {
           disabled={blocked}
           onChange={(e) => void want(e.target.checked)}
         />
-        <span className="profile-field">tell me when she says something</span>
+        <span className="profile-field">{say('tell me when {she} says something')}</span>
       </label>
       <span className="pot-why">
         {blocked

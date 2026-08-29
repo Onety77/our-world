@@ -47,6 +47,7 @@ import {
   type Dial,
   type RallyTuning,
 } from '@/world/games/ember-rally/tuning'
+import { useSay } from '@/systems/useSay'
 import { usePublishedTuning } from '@/world/games/ember-rally/tuningSync'
 import { useRemembered } from './remember'
 
@@ -97,6 +98,7 @@ function troubles(t: RallyTuning): string[] {
 }
 
 export function CarSettings() {
+  const say = useSay()
   const data = useData()
   usePublishedTuning()
   const go = useSections((s) => s.go)
@@ -198,8 +200,8 @@ export function CarSettings() {
       <p className="admin-note">
         Move one and the very next frame is different — nothing to save, nothing
         to reload. <b>These sliders are this device only</b> until you send
-        them, so drag anything you like: her car does not change until you
-        press the button.
+        them, so drag anything you like: {say('{their}')} car does not change
+        until you press the button.
       </p>
 
       {/* --- what state this is in, in one line ----------------------------- */}
@@ -207,17 +209,18 @@ export function CarSettings() {
         {unsent && changedCount === 0 ? (
           <>
             You have put the car back to <b>standard</b> — and{' '}
-            <b>she has not been sent it</b>. She is still driving an earlier set
-            of {publishedCount} {publishedCount === 1 ? 'dial' : 'dials'}.
+            <b>{say('{she} has not been sent it')}</b>. {say('{She} is')} still
+            driving an earlier set of {publishedCount}{' '}
+            {publishedCount === 1 ? 'dial' : 'dials'}.
           </>
         ) : unsent ? (
           <>
             You are driving <b>{changedCount} changed</b>{' '}
             {changedCount === 1 ? 'dial' : 'dials'} — and{' '}
-            <b>she has not been sent them</b>.{' '}
+            <b>{say('{she} has not been sent them')}</b>.{' '}
             {publishedCount === 0
-              ? 'She is driving the car as the code has it.'
-              : `She is driving an earlier set of ${publishedCount}.`}
+              ? say('{She} is driving the car as the code has it.')
+              : say(`{She} is driving an earlier set of ${publishedCount}.`)}
           </>
         ) : publishedCount === 0 ? (
           <>
@@ -226,7 +229,7 @@ export function CarSettings() {
           </>
         ) : (
           <>
-            You and she are driving <b>the same car</b> — {publishedCount}{' '}
+            You and {say('{she}')} are driving <b>the same car</b> — {publishedCount}{' '}
             {publishedCount === 1 ? 'dial' : 'dials'} moved and sent.
           </>
         )}

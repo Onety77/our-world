@@ -76,9 +76,13 @@ export const useWhoseHour = create<WhoseState>((set) => ({
   },
 }))
 
-/** What each setting is called, where somebody has to choose between them. */
+/**
+ * What each setting is called, where somebody has to choose between them.
+ *
+ * Run through `say` at the point it is read — from her side this is his hour.
+ */
 export const WHOSE_WORDS: Record<Whose, string> = {
-  theirs: 'her hour',
+  theirs: '{their} hour',
   mine: 'your hour',
   device: 'this device',
 }

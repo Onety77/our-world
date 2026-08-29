@@ -20,6 +20,7 @@
  */
 
 import { LOBBY_COUNTDOWN_MS } from '@/systems/lobby'
+import { useSay } from '@/systems/useSay'
 import type { Lobby } from '@/systems/useLobby'
 
 /** The one number, big, in the middle. Three, two, one, and the flag. */
@@ -73,6 +74,7 @@ export function RaceRoom({
   onLeave(): void
   leaveLabel?: string
 }) {
+  const say = useSay()
   const counting = lobby.countdown !== null && lobby.countdown > 0
 
   return (
@@ -80,7 +82,7 @@ export function RaceRoom({
       {counting ? (
         <Flag countdown={lobby.countdown ?? 0} />
       ) : (
-        <h1>{lobby.sheIsHere ? 'She is here.' : `Waiting for ${theirName}.`}</h1>
+        <h1>{lobby.sheIsHere ? say('{She} is here.') : `Waiting for ${theirName}.`}</h1>
       )}
 
       <div className="wheel-grid">

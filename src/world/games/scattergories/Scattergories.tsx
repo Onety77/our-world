@@ -42,6 +42,7 @@ import {
 import { legKey } from '@/systems/lobby'
 import { usePlaying } from '@/systems/playing'
 import { useLobby } from '@/systems/useLobby'
+import { useSay } from '@/systems/useSay'
 import { RaceRoom } from '@/ui/RaceRoom'
 import type { ScatterMove, ScatterSetup, Sheet, Strike } from './index'
 
@@ -739,14 +740,15 @@ function Waiting({
   answers: string[]
   onLeave(): void
 }) {
+  const say = useSay()
   return (
     <>
       <div className="game-head">
         <p className="game-sub">round {round + 1} of {ROUNDS}</p>
         <h1 className="scatter-title">Yours is under the cover.</h1>
         <p className="game-ask">
-          {them}&rsquo;s three minutes are hers to turn. Neither list opens until
-          both are in.
+          {them}&rsquo;s three minutes are {say('{hers}')} to turn. Neither list
+          opens until both are in.
         </p>
       </div>
       <ol className="scatter-sheet sealed">

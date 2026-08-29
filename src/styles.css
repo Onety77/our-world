@@ -10207,3 +10207,82 @@ body:has(.rally-running) .player {
   font-weight: 400;
   color: var(--gold, #d89555);
 }
+
+/* ---- the screen that is not blank ---------------------------------------- */
+/*
+  See `ui/WhenItBreaks`. Deliberately plain and deliberately readable at arm's
+  length in landscape on a phone, because the most likely reader is somebody
+  photographing it to send to the other one.
+*/
+.broke {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem
+    max(1.5rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  text-align: center;
+  background: #10100e;
+  color: var(--ink, #efe7d8);
+}
+
+.broke-kicker {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  letter-spacing: 0.15em;
+  text-transform: lowercase;
+  color: #d89555;
+}
+
+.broke h1 {
+  max-width: 18ch;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(1.6rem, 6vw, 2.6rem);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+.broke-copy {
+  max-width: 46ch;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  opacity: 0.78;
+}
+
+/* The one part meant to be photographed, so it wraps rather than scrolls. */
+.broke-what {
+  max-width: min(56ch, 100%);
+  margin: 0.2rem 0 0.4rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(240, 178, 106, 0.28);
+  border-radius: 0.4rem;
+  background: rgba(240, 178, 106, 0.06);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.broke-ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+  justify-content: center;
+}
+
+@media (orientation: landscape) and (max-height: 480px) {
+  /* Landscape on a phone: the headline is the first thing to give up room. */
+  .broke { gap: 0.45rem; }
+  .broke h1 { font-size: clamp(1.2rem, 5vw, 1.6rem); }
+  .broke-copy { display: none; }
+}

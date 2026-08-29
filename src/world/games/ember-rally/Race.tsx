@@ -54,6 +54,7 @@ import {
   createLights,
   useBeamMaterial,
   useCarMaterial,
+  type Whose,
   useDustMaterial,
   useGlowMaterial,
   useRockMaterial,
@@ -62,8 +63,9 @@ import {
   useWheelMaterials,
   type RallyLights,
 } from './materials'
-import { runAt, runDurationMs, type RallyRun, type RunSample } from './model'
+import { runAt, runDurationMs, type RunSample } from './model'
 import {
+  packCar,
   Recorder,
   advanceCar,
   createCar,
@@ -94,7 +96,10 @@ import {
   WET_GRIT,
 } from './particles'
 import { MARK_LIFE, Marks } from './marks'
+import { useData } from '@/data/provider'
+import { otherUser } from '@/data/types'
 import { useRace } from './session'
+import { Rolling, readCar, writeCar } from './wire'
 import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
 
 /** Seconds of lamps coming up before the road opens. */
@@ -184,6 +189,59 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
   const ghostRun = useRace((s) => s.ghost)
   const replay = useRace((s) => s.replay)
 
+  /*
+    ==========================================================================
+    Her car, while the two of you are actually on the road together.
+
+    Wheel to wheel used to be two people driving the same road at the same
+    moment and seeing nothing of each other, which is a time trial with better
+    manners. This is the channel that fixes it: presence, six times a second,
+    both ways, no server — see `wire.ts` for what goes down it and `npm run
+    wire` for the arithmetic that keeps it looking like a car.
+
+    Held in a ref and fed from a subscription rather than from React state, on
+    purpose. Her car arrives about six times a second; putting that through a
+    re-render would rebuild this component — every mesh, every material — six
+    times a second, mid-race, on a phone. The frame reads the ref instead and
+    React never hears about any of it.
+    ==========================================================================
+  */
+  const data = useData()
+  const wheelToWheel = useRace((s) => s.wheelToWheel)
+  const live = useRef<LiveWheel | null>(null)
+  useEffect(() => {
+    if (!wheelToWheel) {
+      live.current = null
+      return
+    }
+    const rolling = new Rolling()
+    const them = otherUser(data.me)
+    let sent = ''
+    live.current = {
+      rolling,
+      send(text) {
+        // Presence writes are already throttled to `PRESENCE_INTERVAL`. This is
+        // only about not asking for a write that says exactly what the last one
+        // said, which happens whenever the car is stationary on the line.
+        if (text === sent) return
+        sent = text
+        data.publishPresence({ driving: text })
+      },
+    }
+    const stop = data.subscribe((world) => {
+      const sample = readCar(world.presence[them]?.driving)
+      if (sample) rolling.push(sample, performance.now())
+    })
+    return () => {
+      stop()
+      live.current = null
+      // Take the car off the road behind you. Left standing, it is an
+      // invitation to a race that finished, sitting in her presence until the
+      // tab closes.
+      data.publishPresence({ driving: '' })
+    }
+  }, [wheelToWheel, data])
+
   const lights = useMemo(() => {
     const next = createLights()
     if (track.stage === 'moonbreak') {
@@ -206,11 +264,13 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     return next
   }, [track.stage])
   const rockMaterial = useRockMaterial(lights)
-  const mineMaterial = useCarMaterial(lights, false)
-  const theirsMaterial = useCarMaterial(lights, true)
+  const mineMaterial = useCarMaterial(lights, 'mine')
+  // Solid when she is really out there, see-through when she is a recording.
+  const hers: Whose = wheelToWheel ? 'live' : 'chase'
+  const theirsMaterial = useCarMaterial(lights, hers)
   // One per corner, because a brake disc glows with *that* corner's heat.
-  const mineWheels = useWheelMaterials(lights, false)
-  const theirsWheels = useWheelMaterials(lights, true)
+  const mineWheels = useWheelMaterials(lights, 'mine')
+  const theirsWheels = useWheelMaterials(lights, hers)
   const glowMaterial = useGlowMaterial(lights)
   const beamMaterial = useBeamMaterial(lights, '#ffcf96')
   const ghostBeamMaterial = useBeamMaterial(lights, '#9fb6e8')
@@ -345,6 +405,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       sparks,
       marks,
       markMaterial,
+      live: live.current,
       materials: {
         mine: mineMaterial,
         theirs: theirsMaterial,
@@ -421,7 +482,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       ) : null}
 
       <primitive object={mine.root} />
-      {theirRun ? <primitive object={theirs.root} /> : null}
+      {theirRun || wheelToWheel ? <primitive object={theirs.root} /> : null}
 
       {/* Flat on the stone, so it goes down before anything in the air. */}
       <mesh
@@ -501,6 +562,18 @@ function buildLanterns(track: Track) {
 // Everything that happens per frame
 // ---------------------------------------------------------------------------
 
+/**
+ * Both ends of a live race, as the frame sees them.
+ *
+ * `rolling` is her, smoothed out of six updates a second into something that
+ * moves like a car. `send` is you, going the other way. Neither exists unless
+ * the round is actually wheel to wheel.
+ */
+interface LiveWheel {
+  rolling: Rolling
+  send(text: string): void
+}
+
 interface FrameArgs {
   delta: number
   camera: PerspectiveCamera
@@ -515,6 +588,8 @@ interface FrameArgs {
   sparks: Particles
   marks: Marks
   markMaterial: ShaderMaterial
+  /** Present only while the two of you are on the road at the same moment. */
+  live: LiveWheel | null
   materials: {
     mine: ShaderMaterial
     theirs: ShaderMaterial
@@ -1141,15 +1216,51 @@ class Driving {
       boostLeft: this.boostFrom > 0 ? car.boostLeft / this.boostFrom : 0,
     })
 
+    /*
+      --- you, going the other way ------------------------------------------
+      Only once the flag has dropped. Before that both cars are on the line and
+      there is nothing to say; after the finish the last thing sent stands,
+      which is where she actually stopped.
+    */
+    if (args.live && phase === 'running') {
+      const packed = packCar(car)
+      args.live.send(writeCar(packed.n, packed.s, packed.psi, packed.state))
+    }
+
     // --- her -----------------------------------------------------------------
+    const rolling = args.live ? args.live.rolling.at(performance.now()) : null
     const ghost = session.ghost
-    if (ghost) {
+    if (rolling) {
+      /*
+        She is really there.
+
+        No `grid` offset and no clock: a recording is played back against your
+        own elapsed time, but she is not being played back at all. Where the
+        wire says she is, is where she is — including on the start line, which
+        is why her car is visible in the `ready` phase here and not for a
+        ghost. Seeing her sitting beside you before the flag is most of what
+        makes this feel like a race rather than a countdown.
+      */
+      args.theirs.root.visible = true
+      this.showGhost(args, rolling, car.elapsed * 1000)
+      const near = rolling.shortcut === car.shortcut
+        ? Math.max(0, 1 - Math.abs(rolling.s - car.s) / 26)
+        : 0
+      this.engine?.pressure(near * near)
+    } else if (args.live) {
+      // Live, but nothing has arrived yet, or she has gone quiet. Better an
+      // empty road than a car frozen where she was two seconds ago.
+      args.theirs.root.visible = false
+      args.lights.uniforms.uGhostPower.value = 0
+      this.engine?.pressure(0)
+    } else if (ghost) {
       // She set off when you did, so her clock is your clock. That is what
       // turns a sealed run into a race: the gap you can see is the gap there
       // would have been if you had both been here at once.
       args.theirs.root.visible = phase !== 'ready'
       const grid = Math.max(0, 1 - car.elapsed / 2.4) * -1.9
-      this.showGhost(args, ghost, phase === 'ready' ? 0 : car.elapsed * 1000, grid)
+      const elapsedMs = phase === 'ready' ? 0 : car.elapsed * 1000
+      this.showGhost(args, runAt(ghost, elapsedMs), elapsedMs, grid)
       const near = this.ghost.shortcut === car.shortcut
         ? Math.max(0, 1 - Math.abs(this.ghost.s - car.s) / 26)
         : 0
@@ -1207,9 +1318,18 @@ class Driving {
     rig.boostJets.scale.set(0.96 + pulse * 0.08, 0.96 + pulse * 0.08, 1.04 + pulse * 0.18)
   }
 
-  private showGhost(args: FrameArgs, run: RallyRun, elapsedMs: number, grid = 0) {
+  /*
+    The second car, from wherever it came from.
+
+    It used to take a recording and a time and look her up. It takes the sample
+    itself now, because in a live race there is no recording to look anything
+    up in — she is driving, and the sample came off her phone a fraction of a
+    second ago. Everything below this line is the same either way, which is the
+    point: her brake lamps, her smoke and her line are drawn from the same four
+    numbers whether they were saved last night or arrived just now.
+  */
+  private showGhost(args: FrameArgs, sample: RunSample, elapsedMs: number, grid = 0) {
     const rig = args.theirs
-    const sample = runAt(run, elapsedMs)
     Object.assign(this.ghost, sample)
 
     const roll = Math.max(-0.14, Math.min(0.14, sample.drift * 0.16 * Math.sign(sample.yaw || 1)))
@@ -1316,7 +1436,7 @@ class Driving {
       this.spit(args.dust, args.mine, GRIT, me.drift * 0.6 + 0.2, 0.2)
     }
 
-    this.showGhost(args, replay.theirs, at, them.n - runAt(replay.theirs, at).n)
+    this.showGhost(args, runAt(replay.theirs, at), at, them.n - runAt(replay.theirs, at).n)
 
     // The camera and the chunk window both ask the car where it is, so it is
     // told — the replay has no physics but it does have a subject.

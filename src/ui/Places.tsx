@@ -14,8 +14,10 @@ import { takenOverNow, useTakenOver } from '@/systems/attention'
 import { SECTIONS } from '@/sections/registry'
 import { slidePosition, useSections } from '@/systems/sections'
 import { grabbed } from '@/systems/swipe'
+import { useSay } from '@/systems/useSay'
 
 export function Places() {
+  const say = useSay()
   const takenOver = useTakenOver()
   const index = useSections((s) => s.index)
   const entered = useSections((s) => s.entered)
@@ -96,7 +98,7 @@ export function Places() {
       >
         {!entered && <span className="place-count">0{index + 1} / 0{SECTIONS.length}</span>}
         <h1>{here.name}</h1>
-        <p>{here.blurb}</p>
+        <p>{say(here.blurb)}</p>
         {!entered && (
           <button type="button" className="enter-place" onClick={enter}>
             <span>enter this place</span>

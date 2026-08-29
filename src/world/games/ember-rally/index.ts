@@ -6,7 +6,7 @@ import type { RallyMove, RallySetup } from './model'
 export default {
   id: 'ember-rally',
   name: 'Ember Rally',
-  blurb: 'Choose a road, set a line, then chase hers through fire, moonlight, or storm.',
+  blurb: 'Choose a road, set a line, then chase {hers} through fire, moonlight, or storm.',
   mode: 'async',
   cadence: 'daily',
   duration: 'one long road, twice',
@@ -21,7 +21,7 @@ export default {
   */
   invite: {
     name: 'set a line for {them}',
-    tip: 'She chases it whenever she next comes down here',
+    tip: '{She} chases it whenever {she} next comes down here',
   },
   live: {
     name: 'wheel to wheel',
