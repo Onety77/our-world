@@ -38,6 +38,7 @@
  */
 
 import { createEngineVoice, type EngineVoice } from './engine'
+import { gainOf, levelsNow } from './volume'
 
 export type { EngineState, EngineVoice } from './engine'
 
@@ -90,8 +91,23 @@ export interface AmbienceHandle {
   setWind(value: number): void
   /** Crossfades the bed to whatever this place sounds like. */
   setPlace(place: Place): void
+  /**
+   * What the bed is currently playing, and how far through the crossfade.
+   *
+   * For the control room, and it exists because "I can still hear the garden
+   * in here" is a question nobody could answer. The mix is a table of numbers
+   * in this file, the crossfade is a variable nothing exposes, and the only
+   * instrument available was somebody's ears on a phone in another country.
+   * Two numbers on a screen settle it in a second: either the bed is on the
+   * place you are standing in, in which case what you can hear is that place's
+   * own sound and the argument is about the *mix*, or it is not, and there is
+   * a bug.
+   */
+  hearing(): { place: Place; from: Place; blend: number; levels: Record<string, number> }
   /** 0..1, drops when the tab is hidden. */
   setMaster(value: number): void
+  /** The world and effects faders. Music is applied at the player. */
+  setLevels(levels: { world: number; effects: number }): void
   /**
    * One stroke of a pen on paper. Called per character while writing.
    *
@@ -193,6 +209,10 @@ export function createAmbience(): AmbienceHandle {
   let ctx: AudioContext | null = null
   let master: GainNode | null = null
   let limiter: DynamicsCompressorNode | null = null
+  /** The place you are standing in. See `systems/volume`. */
+  let worldBus: GainNode | null = null
+  /** Things that happen because of you: the car, the stones, the pen. */
+  let effectsBus: GainNode | null = null
   let running = false
 
   /** One gain per layer, kept so the place and the wind can steer them. */
@@ -551,6 +571,27 @@ export function createAmbience(): AmbienceHandle {
       limiter.release.value = 0.13
       master.connect(limiter).connect(ctx.destination)
 
+      /*
+        Two buses under the master, so the balance is reachable.
+
+        Everything used to sum straight into `master`, which left exactly one
+        control over the whole mix — and if the car is too loud against the
+        wind, turning the master down takes the wind with it. Splitting the sum
+        by *where a sound comes from* is what makes "quieter car, same garden"
+        a thing anybody can ask for. See `systems/volume`.
+
+        The limiter stays where it is, after both. It is protecting the
+        speaker, not the mix, and a limiter that can be turned down is not
+        protecting anything.
+      */
+      worldBus = ctx.createGain()
+      worldBus.gain.value = gainOf(levelsNow().world)
+      worldBus.connect(master)
+
+      effectsBus = ctx.createGain()
+      effectsBus.gain.value = gainOf(levelsNow().effects)
+      effectsBus.connect(master)
+
       const buffer = noiseBuffer(ctx)
       grain = buffer
 
@@ -561,9 +602,9 @@ export function createAmbience(): AmbienceHandle {
         eventAnalyser.fftSize = 256
         eventAnalyser.smoothingTimeConstant = 0.35
         eventSamples = new Float32Array(eventAnalyser.fftSize)
-        inkGain.connect(eventAnalyser).connect(master)
+        inkGain.connect(eventAnalyser).connect(effectsBus)
       } else {
-        inkGain.connect(master)
+        inkGain.connect(effectsBus)
       }
 
       // --- air, and the leaves on it -----------------------------------------
@@ -616,7 +657,7 @@ export function createAmbience(): AmbienceHandle {
       water.gain.value = 0
       rush.gain.connect(water)
       riffle.gain.connect(water)
-      water.connect(master)
+      water.connect(worldBus)
 
       /*
         --- the fire ----------------------------------------------------------
@@ -647,7 +688,7 @@ export function createAmbience(): AmbienceHandle {
       fire.gain.value = 0
       roar.gain.connect(fire)
       flame.gain.connect(fire)
-      fire.connect(master)
+      fire.connect(worldBus)
 
       // --- the room ----------------------------------------------------------
       // Almost too low to hear on a phone, and the whole point of it: a cave
@@ -664,15 +705,15 @@ export function createAmbience(): AmbienceHandle {
       const room = ctx.createGain()
       room.gain.value = 0
       rumble.gain.connect(room)
-      room.connect(master)
+      room.connect(worldBus)
 
       // --- the sky -----------------------------------------------------------
       const sky = ctx.createGain()
       sky.gain.value = 0
-      sky.connect(master)
+      sky.connect(worldBus)
 
-      low.gain.connect(master)
-      leaves.gain.connect(master)
+      low.gain.connect(worldBus)
+      leaves.gain.connect(worldBus)
 
       beds.air = low.gain
       beds.leaves = leaves.gain
@@ -728,6 +769,27 @@ export function createAmbience(): AmbienceHandle {
       from = blend < 1 ? from : place
       place = next
       blend = 0
+    },
+
+    hearing() {
+      const levels: Record<string, number> = {}
+      for (const name of Object.keys(MIX)) levels[name] = Number(levelOf(name).toFixed(3))
+      return { place, from, blend: Number(blend.toFixed(2)), levels }
+    },
+
+    /**
+     * Move the two faders that live in the audio graph.
+     *
+     * Music is not here: it is an `<audio>` element in the corner player and
+     * never enters this context, so its fader is applied where it plays.
+     */
+    setLevels(levels) {
+      if (!ctx) return
+      const now = ctx.currentTime
+      // Eased, because a fader dragged in the control room while the garden is
+      // playing should not step.
+      worldBus?.gain.setTargetAtTime(gainOf(levels.world), now, 0.08)
+      effectsBus?.gain.setTargetAtTime(gainOf(levels.effects), now, 0.08)
     },
 
     setMaster(value) {
@@ -980,7 +1042,15 @@ export function createAmbience(): AmbienceHandle {
 
     synthesisBus(): SynthesisBus | null {
       if (!ctx || !master || !grain) return null
-      return { context: ctx, output: master, noise: grain, noiseSeconds: NOISE_SECONDS }
+      /*
+        A road's soundscape is the *world*, not an effect.
+
+        Rain on the Stormcrown and water under the Moonbreak are the place
+        doing something, in the same sense the meadow's wind is — so they
+        belong on the same fader as the wind, and turning the car down should
+        not take the weather with it.
+      */
+      return { context: ctx, output: worldBus ?? master, noise: grain, noiseSeconds: NOISE_SECONDS }
     },
 
     /**
@@ -994,7 +1064,7 @@ export function createAmbience(): AmbienceHandle {
     engine(): EngineVoice | null {
       if (!ctx || !master || !grain) return null
       engines++
-      const voice = createEngineVoice(ctx, master, grain, NOISE_SECONDS, () => {
+      const voice = createEngineVoice(ctx, effectsBus ?? master, grain, NOISE_SECONDS, () => {
         engines = Math.max(0, engines - 1)
       })
       return voice

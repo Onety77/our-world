@@ -182,6 +182,9 @@ export function attachControls(surface: HTMLElement): RallyControls {
   let touchBoost = false
 
   const onDown = (event: PointerEvent) => {
+    // A steering hold is a game input, never the beginning of the browser's
+    // long-press selection/callout gesture.
+    event.preventDefault()
     engaged = true
     const rect = surface.getBoundingClientRect()
     const side = event.clientX - rect.left < rect.width * 0.5 ? -1 : 1

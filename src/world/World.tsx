@@ -16,13 +16,14 @@ import { ACESFilmicToneMapping, Group } from 'three'
 import { useData, useWorldSlice } from '@/data/provider'
 import { paletteAt } from '@/systems/palette'
 import { warmWhenIdle } from '@/systems/later'
-import { createFrameWatchdog, useQuality } from '@/systems/quality'
+import { createFrameWatchdog, useQuality, type Tier } from '@/systems/quality'
 import { skyHour, useWhoseHour } from '@/systems/whoseHour'
 import { SECTIONS } from '@/sections/registry'
 import { FADE_MS, useSections } from '@/systems/sections'
 import { usePlaying } from '@/systems/playing'
 import { GAMES } from '@/world/games/registry'
 import { useGameStage } from '@/world/games/stage'
+import { useTakenOver } from '@/systems/attention'
 import { SceneEnvProvider } from './SceneEnv'
 import { SlideCamera } from './SlideCamera'
 import { GardenHub } from './GardenHub'
@@ -385,11 +386,89 @@ function Arriving() {
   return null
 }
 
+/**
+ * How many frames a second the world is worth, by tier.
+ *
+ * ---------------------------------------------------------------------------
+ * **The garden used to render as fast as the device would let it, forever.**
+ * That is the default and it is the wrong default for this: a phone with a
+ * 120 Hz screen was drawing a kilometre of cave a hundred and twenty times a
+ * second to show a fire flickering, and doing it until the battery or the
+ * thermal governor made it stop. A world that is mostly weather does not need
+ * every frame the panel can display; it needs enough of them to move.
+ *
+ * The ceiling matters as much as the floor. Even 60 halves the work on a
+ * high-refresh phone, and nothing in this garden moves fast enough for the
+ * difference between 60 and 120 to be visible — there is no aiming, no
+ * twitch, and the fastest thing on screen is a camera easing sideways.
+ * ---------------------------------------------------------------------------
+ */
+const FRAMES: Record<Tier, number> = { low: 30, medium: 45, high: 60 }
+
+/**
+ * And almost nothing while the world is behind something.
+ *
+ * Reading a letter, looking at a photograph, standing at the door — the world
+ * is still there and still moving, and you cannot see it. Rendering it at full
+ * rate is the purest waste in the whole application.
+ *
+ * Slowed rather than stopped, deliberately. Some of what covers the world is
+ * not opaque, and a scene that freezes solid behind a translucent sheet reads
+ * as the app having hung. Eight frames a second is still motion and is very
+ * nearly free.
+ */
+const HIDDEN_FRAMES = 8
+
+/**
+ * Drives the render loop by hand, at a rate we choose.
+ *
+ * Lives inside the Canvas because that is the only place `advance` exists.
+ * With `frameloop="never"` React Three Fiber renders nothing on its own and
+ * this is the only thing that makes a frame happen — which is exactly the
+ * control that was wanted, and is safe here only because nothing in the garden
+ * calls `invalidate`.
+ */
+function Pacer() {
+  const advance = useThree((state) => state.advance)
+  const tier = useQuality((q) => q.tier)
+  /*
+    A game that owns the Canvas is not "behind" anything — it *is* the screen,
+    and a race at eight frames a second is not a race. See `games/stage.ts`.
+  */
+  const covered = useTakenOver()
+  const stage = useGameStage((s) => s.taken)
+  const wanted = covered && !stage ? HIDDEN_FRAMES : FRAMES[tier]
+
+  useEffect(() => {
+    let frame = 0
+    let last = 0
+    // A millisecond of slack, or a 60 Hz panel asked for 60 fps drops every
+    // other frame to 30 because the deadline lands a hair late every time.
+    const gap = 1000 / wanted - 1
+    const step = (now: number) => {
+      frame = requestAnimationFrame(step)
+      if (now - last < gap) return
+      last = now
+      advance(now)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [advance, wanted])
+
+  return null
+}
+
 export function World({ hourOverride }: { hourOverride: number | null }) {
   const dpr = useQuality((q) => q.dpr)
 
   return (
     <Canvas
+      /*
+        Never on its own — see `Pacer`, which is the only thing that draws a
+        frame here now. The screenshot harness is unaffected: it reads the
+        drawing buffer, and the buffer is filled by the same advance.
+      */
+      frameloop="never"
       dpr={dpr}
       gl={{
         antialias: false, // the grain and fog hide more aliasing than MSAA fixes
@@ -413,6 +492,7 @@ export function World({ hourOverride }: { hourOverride: number | null }) {
       }}
       camera={{ fov: 55, near: 0.1, far: 2400, position: [0, 4, 20] }}
     >
+      <Pacer />
       <Scene hourOverride={hourOverride} />
     </Canvas>
   )

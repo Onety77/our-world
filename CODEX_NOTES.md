@@ -360,3 +360,18 @@ shared-file changes, measurements, and anything another agent should preserve.
   standalone app identity and maskable install assets.
 - Manifest JSON, image dimensions/opacity, no-incremental TypeScript, and the
   Vite production build pass. The established Firebase chunk warning remains.
+
+## 29 August 2026 - Codex - Mobile steering owns the long press
+
+- Fixed the phone browser treating a held left/right steering thumb as text
+  selection or a copy/context-menu request. The old protection lived only on
+  the transparent `.rally-input` sheet, while visible race overlays were sibling
+  elements above it and remained eligible for the native long-press gesture.
+- The active `.rally-running` takeover and every descendant now disable text
+  selection, iOS touch callouts and native dragging. Its React boundary cancels
+  `contextmenu`, and the steering surface cancels the default pointer-down
+  action before capturing the thumb.
+- The scope remains Ember Rally while actively driving; text selection elsewhere
+  in the Garden is unchanged. Vite build and the complete Rally suite pass. A
+  repository-wide typecheck is presently blocked by unrelated existing missing
+  `Tier` and `useTakenOver` names in `src/world/World.tsx`.

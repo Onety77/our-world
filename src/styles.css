@@ -3096,6 +3096,25 @@ canvas {
 
 .rally-running {
   overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/*
+  A held steering thumb is not a request to select the speed, the start cue or
+  one of the tutorial words layered above the transparent input sheet. Safari's
+  callout belongs to the element under the finger, so protecting only
+  `.rally-input` leaves every sibling overlay eligible for the two-second copy
+  gesture. While the road owns the screen, all of its descendants are controls
+  or instruments and none is document content.
+*/
+.rally-running * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -9816,4 +9835,59 @@ body:has(.rally-running) .player {
 
 .rally-course-state.open {
   color: #9ad6b0;
+}
+
+/* --------------------------------------------------------------------------
+   What the bed is playing
+
+   Six weights, as bars, so "am I hearing the right place" is a glance rather
+   than an argument. See ui/Hearing for why this exists at all.
+   -------------------------------------------------------------------------- */
+
+.hearing-bars {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.6rem 0 0.9rem;
+}
+
+.hearing-bars span {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.24rem 0.5rem;
+  border: 1px solid #232a30;
+  border-radius: 2px;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: #6f7f8c;
+  overflow: hidden;
+}
+
+/* The fill sits behind the label rather than beside it, so a long name and a
+   short bar do not fight for the same width. */
+.hearing-bars i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #16232b;
+}
+
+.hearing-bars span.on {
+  color: #cfd4d8;
+  border-color: #2f3a42;
+}
+
+.hearing-bars span.on i {
+  background: #1d3b2c;
+}
+
+.hearing-bars b {
+  position: relative;
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hearing-bars span > :not(i) {
+  position: relative;
 }

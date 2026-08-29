@@ -859,7 +859,10 @@ function Road({
   }, [attempt, track, ghost, ghostName])
 
   return (
-    <div className="rally rally-running">
+    <div
+      className="rally rally-running"
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <div ref={surface} className="rally-input" />
       <StartLights key={attempt} />
       <EmberBar />

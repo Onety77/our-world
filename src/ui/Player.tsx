@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useRef } from 'react'
+import { gainOf, levelsNow, useVolume } from '@/systems/volume'
 import { useData, useWorldSlice } from '@/data/provider'
 import { attempt } from '@/systems/trouble'
 import {
@@ -115,12 +116,32 @@ export function Player() {
   // --- the sound ------------------------------------------------------------
   const audio = useRef<HTMLAudioElement>(null)
 
+  /*
+    Two things want to set this volume, and they multiply rather than fight.
+
+    The music fader is where this device wants music to sit; the duck is a
+    voice-light briefly taking the front of the mix. Written as one expression
+    with both in it, because the previous version assigned `1` when the duck
+    released — which would have silently thrown away the fader every time she
+    sent a voice-light.
+  */
+  const musicLevel = useVolume((s) => s.levels.music)
+  const ducked = useRef(false)
+
+  useEffect(() => {
+    const el = audio.current
+    if (el) el.volume = gainOf(musicLevel) * (ducked.current ? 0.14 : 1)
+  }, [musicLevel])
+
   // A voice-light is deliberately rare and intimate. Let it sit in front of
   // the shared song without changing the shared playback state for her.
   useEffect(() => {
     const duck = (event: Event) => {
       const active = (event as CustomEvent<boolean>).detail === true
-      if (audio.current) audio.current.volume = active ? 0.14 : 1
+      ducked.current = active
+      if (audio.current) {
+        audio.current.volume = gainOf(levelsNow().music) * (active ? 0.14 : 1)
+      }
     }
     window.addEventListener('garden:voice-light', duck)
     return () => window.removeEventListener('garden:voice-light', duck)
