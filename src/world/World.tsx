@@ -203,7 +203,8 @@ function FrameWatchdog() {
 function useShownWorld(): { entered: boolean; section: number } {
   const index = useSections((s) => s.index)
   const entered = useSections((s) => s.entered)
-  const [shown, setShown] = useState({ entered, section: index })
+  const shown = useSections((s) => s.shown)
+  const showNow = useSections((s) => s.showNow)
 
   /*
     Fetch the place you are heading for, the moment you decide to go there.
@@ -227,10 +228,17 @@ function useShownWorld(): { entered: boolean; section: number } {
 
   useEffect(() => {
     if (entered === shown.entered && (!entered || index === shown.section)) return
-    // swap at the midpoint of the fade — see Veil in App
-    const id = setTimeout(() => setShown({ entered, section: index }), FADE_MS / 2)
+    /*
+      Swap at the midpoint of the fade — see `Veil` in App.
+
+      Written into the store rather than into local state, because the DOM
+      layer draws places too and has to arrive on the same frame the world
+      does. See the note on `shown` in `systems/sections` for what happened
+      when they were on separate clocks.
+    */
+    const id = setTimeout(() => showNow({ entered, section: index }), FADE_MS / 2)
     return () => clearTimeout(id)
-  }, [entered, index, shown])
+  }, [entered, index, shown, showNow])
 
   return shown
 }

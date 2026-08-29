@@ -344,3 +344,19 @@ shared-file changes, measurements, and anything another agent should preserve.
 - `src/systems/engine.ts` now matches the exact pre-redesign version from before
   commit `7e17b8f`: the cleaner earlier ignition, rising rush and release are
   restored with no changes to vehicle physics, boost duration or visuals.
+
+## 29 August 2026 - Codex - Official Garden icon
+
+- The owner selected proposal 01, “Two Lights, One Garden”: the intertwined
+  circular plants with distinct warm and cool blossoms.
+- The built-in image generator was used for a constrained production edit that
+  preserved the selected mark, removed its noisy transparent fringe and placed
+  it on the Garden's opaque `#0d1512` midnight background.
+- Final assets live in `public/icons`: the 1254px master, 512px and 192px install
+  icons, 180px Apple touch icon, and 32px browser favicon. The original three
+  transparent proposals remain in `public/logos` as design history.
+- `index.html` now links only the favicon, Apple touch icon, and manifest; the
+  mark is never rendered inside the Garden UI. `site.webmanifest` supplies the
+  standalone app identity and maskable install assets.
+- Manifest JSON, image dimensions/opacity, no-incremental TypeScript, and the
+  Vite production build pass. The established Firebase chunk warning remains.

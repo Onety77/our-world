@@ -59,8 +59,10 @@ const RECENT = 4
  * lines.
  */
 function useInTheStars(): boolean {
-  const index = useSections((s) => s.index)
-  const entered = useSections((s) => s.entered)
+  // The place on screen, not the one being travelled to — see the note on
+  // `shown` in `systems/sections`. Anything drawing the inside of a place has
+  // to arrive on the same frame the place does.
+  const { entered, section: index } = useSections((s) => s.shown)
   return entered && SECTIONS[index]?.id === 'stars'
 }
 

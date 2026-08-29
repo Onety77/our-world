@@ -40,8 +40,10 @@ export function VoiceLights() {
   const data = useData()
   const me = data.me
   const profiles = useWorldSlice((state) => state.profiles)
-  const index = useSections((state) => state.index)
-  const entered = useSections((state) => state.entered)
+  // The place on screen, not the one being travelled to — see the note on
+  // `shown` in `systems/sections`. Anything drawing the inside of a place has
+  // to arrive on the same frame the place does.
+  const { entered, section: index } = useSections((state) => state.shown)
   const here = entered && SECTIONS[index]?.id === 'stars'
 
   const lights = useVoiceLights((state) => state.lights)

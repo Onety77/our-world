@@ -31,6 +31,32 @@ interface SectionsState {
   count: number
   /** Browsing shows the garden's places as destinations; entered opens one. */
   entered: boolean
+  /**
+   * What is *on screen*, which is not the same thing as where you are going.
+   *
+   * -------------------------------------------------------------------------
+   * `index` and `entered` move the instant a decision is made. What you can
+   * see does not: the world swaps at the darkest point of the fade, half a
+   * fade later, because swapping it in daylight is a cut.
+   *
+   * **This is in the store because two different layers draw a place**, and
+   * they were reading two different clocks. The 3D world used a private,
+   * delayed copy of these numbers; the DOM over the top of it — the name of
+   * the place, the way in, the Hollow's whole game chooser — read `entered`
+   * and `index` raw. So entering the Hollow put its menu on screen
+   * immediately, over the *garden*, while the fade was still going down, and
+   * then the world changed underneath it half a fade later.
+   *
+   * Which is exactly what it looked like: the Hollow appearing, going, and
+   * appearing again. Nothing was mounting twice. Two things were arriving at
+   * different times and the second arrival made the first look like a glitch.
+   *
+   * One clock, one arrival. Written by `useShownDriver`, which is called in
+   * exactly one place; everybody else reads it.
+   * -------------------------------------------------------------------------
+   */
+  shown: { entered: boolean; section: number }
+  showNow(shown: { entered: boolean; section: number }): void
   go(index: number): void
   enter(): void
   leave(): void
@@ -43,6 +69,8 @@ export const useSections = create<SectionsState>((set, get) => ({
   index: 0,
   count: 1,
   entered: false,
+  shown: { entered: false, section: 0 },
+  showNow: (shown) => set({ shown }),
   go: (index) => set({ index: Math.max(0, Math.min(get().count - 1, index)) }),
   enter: () => set({ entered: true }),
   leave: () => set({ entered: false }),

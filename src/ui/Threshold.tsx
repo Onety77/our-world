@@ -664,8 +664,16 @@ function TheGlasshouse() {
 
 export function Threshold() {
   const data = useData()
-  const index = useSections((s) => s.index)
-  const entered = useSections((s) => s.entered)
+  /*
+    The place that is *on screen*, not the one being travelled to.
+
+    This read `index` and `entered` directly, which move the moment you press
+    the way in — so the Hollow's whole chooser appeared over the garden while
+    the fade was still going down, and the world it belongs to arrived half a
+    fade afterwards. Two arrivals, and the second one made the first look like
+    a glitch. See the note on `shown` in `systems/sections`.
+  */
+  const { entered, section: index } = useSections((s) => s.shown)
   const write = useReading((s) => s.startWriting)
   const tend = usePot((s) => s.show)
   const takenOver = useTakenOver()

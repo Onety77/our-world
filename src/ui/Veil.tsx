@@ -43,6 +43,14 @@ import { usePlaying } from '@/systems/playing'
  */
 const SAY_SOMETHING_AFTER = 900
 
+/**
+ * How long nothing has to be arriving before the fade is allowed to lift.
+ *
+ * Long enough to swallow the gap between two chunks resolving back to back,
+ * short enough that nobody waits for it on purpose.
+ */
+const QUIET_FOR = 220
+
 export function Veil() {
   const entered = useSections((s) => s.entered)
   const waiting = useArriving((s) => s.waiting > 0)
@@ -57,6 +65,27 @@ export function Veil() {
   const gameIsSpeaking = usePlaying((s) => s.gameId !== null)
   const [fading, setFading] = useState(false)
   const [waited, setWaited] = useState(false)
+  /**
+   * Still dark, a moment after the last thing landed.
+   *
+   * -------------------------------------------------------------------------
+   * A place is not always one chunk. Two of them resolving a few hundred
+   * milliseconds apart would take the fade down, back up, and down again — a
+   * flicker, and a worse one than the wait it was trying to hide, because a
+   * screen that brightens and darkens reads as something going wrong rather
+   * than as something arriving.
+   *
+   * So the dark is not released the instant nothing is waiting; it is released
+   * once nothing has been waiting for a short while. Anything that suspends
+   * inside that window is absorbed into the same fade instead of starting a
+   * second one.
+   *
+   * The cost is that a fast load is held very slightly longer than it strictly
+   * needs to be, which is the trade asked for: slower, and seamless, rather
+   * than quick and flickering.
+   * -------------------------------------------------------------------------
+   */
+  const [settling, setSettling] = useState(false)
   const mounted = useRef(false)
 
   useEffect(() => {
@@ -79,7 +108,17 @@ export function Veil() {
     return () => clearTimeout(id)
   }, [waiting])
 
-  const dark = fading || waiting
+  // Hold the dark across a gap between two arrivals. See `settling` above.
+  useEffect(() => {
+    if (waiting) {
+      setSettling(true)
+      return
+    }
+    const id = setTimeout(() => setSettling(false), QUIET_FOR)
+    return () => clearTimeout(id)
+  }, [waiting])
+
+  const dark = fading || waiting || settling
   const speak = waited && !gameIsSpeaking
 
   return (

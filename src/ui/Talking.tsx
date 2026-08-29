@@ -116,8 +116,10 @@ function marksTime(at: number, previous: number | null): boolean {
  * hard-coding 3 here would break the moment a section is added before it.
  */
 function useInTheStars(): boolean {
-  const index = useSections((s) => s.index)
-  const entered = useSections((s) => s.entered)
+  // The place on screen, not the one being travelled to — see the note on
+  // `shown` in `systems/sections`. Anything drawing the inside of a place has
+  // to arrive on the same frame the place does.
+  const { entered, section: index } = useSections((s) => s.shown)
   const takenOver = useTakenOver()
   return entered && !takenOver && SECTIONS[index]?.id === 'stars'
 }
