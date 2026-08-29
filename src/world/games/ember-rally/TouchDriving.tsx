@@ -147,14 +147,26 @@ function RallyArrows() {
  * The race pauses itself underneath, so nobody comes back to a car that has
  * been driving into a wall while they rotated.
  */
+/*
+  Turning the phone upright stops the road — except when she is on it.
+
+  Holding the world still is exactly right on your own: the screen is unusable,
+  so there is nothing to be gained by letting the car drive on into a wall.
+  In a live race it is not available. Stopping your car does not stop hers, and
+  a frozen car publishes nothing, so she would watch you vanish off the road
+  rather than crash on it. Better to crash, honestly, in front of her.
+
+  The overlay still comes up either way. It is only the pause that is refused.
+*/
 function TurnIt() {
   const pause = useRace((s) => s.pause)
   const resume = useRace((s) => s.resume)
+  const wheelToWheel = useRace((s) => s.wheelToWheel)
   const paused = useRef(false)
 
   useEffect(() => {
     releaseThumbs()
-    if (!paused.current) {
+    if (!paused.current && !wheelToWheel) {
       paused.current = true
       pause()
     }
@@ -164,7 +176,7 @@ function TurnIt() {
         resume()
       }
     }
-  }, [pause, resume])
+  }, [pause, resume, wheelToWheel])
 
   return (
     <div className="rally-turn" role="status">

@@ -1056,6 +1056,7 @@ function Road({
       onContextMenu={(event) => event.preventDefault()}
     >
       <div ref={surface} className="rally-input" />
+      <Rush />
       <StartLights key={attempt} />
       <EmberBar />
       <Speed />
@@ -1194,6 +1195,37 @@ function EmberBar() {
  * one thing on screen that should be still is dancing.
  * ---------------------------------------------------------------------------
  */
+/**
+ * The frame closing in, as the road speeds up.
+ *
+ * ---------------------------------------------------------------------------
+ * The camera already does most of the work of speed — the field of view opens
+ * from 60 to 82 degrees, the eye drops toward the road and the whole thing
+ * starts to shake. On a laptop that is plenty. On a phone it is not, and the
+ * reason is size: at arm's length there is very little periphery for a widening
+ * lens to reveal, and on the Moonbreak in particular there is nothing close to
+ * the camera to rush past — flat causeway, still water, a tree every hundred
+ * metres. Turn the engine off and a car at two hundred looks parked.
+ *
+ * This is the cheapest honest cue there is: the edges darken as you go faster,
+ * the way your own vision narrows. One CSS variable written once a frame, no
+ * geometry, no shader, nothing for a phone to render but a gradient that was
+ * already composited.
+ *
+ * **Deliberately small.** It is at nothing below a third of top speed and only
+ * reaches its full strength flat out, where it is still a suggestion rather
+ * than a tunnel. If it is ever noticed *as* an effect it has been overdone.
+ * ---------------------------------------------------------------------------
+ */
+function Rush() {
+  const el = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    useRace.getState().setRush(el.current)
+    return () => useRace.getState().setRush(null)
+  }, [])
+  return <div ref={el} className="rally-rush" aria-hidden="true" />
+}
+
 function Speed() {
   const value = useRef<HTMLElement>(null)
   const line = useRef<HTMLElement>(null)
@@ -1246,7 +1278,24 @@ function Pause({
 }) {
   const paused = useRace((s) => s.paused)
 
+  /*
+    There is no pausing a race she is in.
+
+    A live round is the one place in the garden where time is not yours. Press
+    this and your car stops while hers does not, your clock stops while the
+    round's does not, and — because a stopped frame publishes nothing — your
+    car goes quiet and drops off her road two and a half seconds later. From
+    her side you would disappear mid-corner and come back somewhere impossible.
+    Escape is a key people press by accident, so this is not something to warn
+    about; it is something not to have.
+
+    Leaving is still there. Getting out of a race you are losing is allowed;
+    stopping one she is still driving is not.
+  */
+  const wheelToWheel = useRace((s) => s.wheelToWheel)
+
   useEffect(() => {
+    if (wheelToWheel) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       // The result is already up and has its own way onward; pausing over the
@@ -1261,9 +1310,26 @@ function Pause({
     // Captured, so it is handled before the garden's own Escape sees it.
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [hasResult])
+  }, [hasResult, wheelToWheel])
 
   if (hasResult) return null
+
+  /*
+    A way out, but not a way to stop.
+
+    Returning nothing at all here would leave a live race with no exit — the
+    only control on the road is this one, and a race you cannot walk out of is
+    worse than one you can pause. So: the same corner, the same button, and it
+    leaves instead of holding the world still. No confirmation, because the
+    thing being abandoned is a race, and because a menu is a pause.
+  */
+  if (wheelToWheel) {
+    return (
+      <button type="button" className="rally-leave" onClick={onLeave}>
+        leave the race
+      </button>
+    )
+  }
 
   if (!paused) {
     return (

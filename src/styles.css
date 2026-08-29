@@ -10315,3 +10315,52 @@ body.on-the-road .broke-what {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* ---- the frame closing in with speed ------------------------------------- */
+/*
+  See `Rush` in `EmberRally`. The camera already opens its lens and drops and
+  shakes; on a phone that is not enough, because there is barely any periphery
+  at arm's length and on the Moonbreak nothing near the camera to rush past.
+
+  This is the edges darkening the way vision narrows — one custom property
+  written once a frame, on a gradient the compositor was drawing anyway. It is
+  meant to be felt and not seen: if you can point at it, it is too strong.
+*/
+.rally-rush {
+  --rush: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: var(--rush);
+  background: radial-gradient(
+    ellipse 74% 62% at 50% 54%,
+    rgba(0, 0, 0, 0) 42%,
+    rgba(0, 0, 0, 0.34) 78%,
+    rgba(0, 0, 0, 0.62) 100%
+  );
+}
+
+/*
+  Stronger on a phone, and only on a phone.
+
+  Not a preference — a different amount of screen. The same gradient over six
+  inches held at arm's length covers a fraction of the eye that it covers on a
+  laptop, so matching the *look* means different numbers. This is also the
+  place it was actually needed.
+*/
+@media (pointer: coarse) {
+  .rally-rush {
+    background: radial-gradient(
+      ellipse 66% 56% at 50% 54%,
+      rgba(0, 0, 0, 0) 38%,
+      rgba(0, 0, 0, 0.4) 74%,
+      rgba(0, 0, 0, 0.72) 100%
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* It does not move, but it is a motion cue, and it is not load-bearing. */
+  .rally-rush { display: none; }
+}

@@ -97,6 +97,8 @@ export interface RaceSession {
    * React anywhere near it.
    */
   speedo: { value: HTMLElement; line: HTMLElement } | null
+  /** The vignette that closes in with speed. See `setRush`. */
+  rush: HTMLElement | null
   /** Called once, with the run, when the car reaches the far fire. */
   onFinish: ((run: RallyRun) => void) | null
 
@@ -112,6 +114,13 @@ export interface RaceSession {
   setSurface(el: HTMLElement | null): void
   setEmberBar(el: HTMLElement | null): void
   setSpeedo(nodes: { value: HTMLElement; line: HTMLElement } | null): void
+  /**
+   * The edge of the frame, which narrows as the road speeds up.
+   *
+   * Handed over by the DOM half like the speedometer and the ember bar, and
+   * written the same way — one `style` property a frame, no React in the loop.
+   */
+  setRush(el: HTMLElement | null): void
   pause(): void
   resume(): void
   begin(): void
@@ -132,6 +141,7 @@ export const useRace = create<RaceSession>((set) => ({
   surface: null,
   emberBar: null,
   speedo: null,
+  rush: null,
   onFinish: null,
 
   open: ({ track, ghost, ghostName = '', wheelToWheel = false, grid = 0, onFinish }) =>
@@ -162,6 +172,7 @@ export const useRace = create<RaceSession>((set) => ({
   setSurface: (surface) => set({ surface }),
   setEmberBar: (emberBar) => set({ emberBar }),
   setSpeedo: (speedo) => set({ speedo }),
+  setRush: (rush) => set({ rush }),
   begin: () => set({ phase: 'running' }),
   pause: () => set({ paused: true }),
   resume: () => set({ paused: false }),

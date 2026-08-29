@@ -106,6 +106,24 @@ import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './t
 const COUNTDOWN = 3.1
 
 /**
+ * The fraction of top speed the frame starts closing in at.
+ *
+ * A third, so half the speedometer passes before anything happens at all and
+ * the effect belongs to the top of the range where it is telling the truth.
+ * Below this it is exactly zero — a vignette that is always slightly on is
+ * just a darker game.
+ */
+const RUSH_FROM = 0.34
+
+/**
+ * How high the air goes, in metres above the road.
+ *
+ * The band a driver looks through. Above this a mote is weather rather than
+ * speed: it never crosses the frame, it just sits there being slightly grey.
+ */
+const MOTE_CEILING = 4.2
+
+/**
  * `?rally=ride` hands your car to the fire-spirit and lets it drive.
  *
  * For looking at the road, not for playing: the whole tunnel end to end, the
@@ -629,6 +647,9 @@ class Driving {
   private engine: EngineVoice | null = null
 
   private countdown = COUNTDOWN
+  /** 0..1, eased. How far the edges of the frame have closed in. */
+  private rush = 0
+  private shownRush = -1
   private clock = 0
   private handedOver = false
   private shots: Shot[] = []
@@ -759,6 +780,8 @@ class Driving {
 
     this.recorder = new Recorder()
     this.countdown = COUNTDOWN
+    this.rush = 0
+    this.shownRush = -1
     this.clock = 0
     this.handedOver = false
     this.settle = 0
@@ -1152,6 +1175,28 @@ class Driving {
         speedo.line.classList.toggle('flat', flat)
       }
     }
+    /*
+      The edges of the frame, closing in.
+
+      One custom property a frame, which the compositor turns into a gradient
+      it was already drawing — see `Rush`. Squared, so the first half of the
+      speedometer does nothing at all and the last quarter does most of it: a
+      cue that comes on linearly is a cue you notice at forty miles an hour,
+      which is not what it is for.
+    */
+    const rush = session.rush
+    if (rush) {
+      const of = Math.min(1, speed / TUNE.topSpeed)
+      const past = Math.max(0, (of - RUSH_FROM) / (1 - RUSH_FROM))
+      const want = past * past
+      // Eased, or it flickers on every gear change and every kerb.
+      this.rush += (want - this.rush) * (1 - Math.exp(-4 * delta))
+      if (Math.abs(this.rush - this.shownRush) > 0.004) {
+        this.shownRush = this.rush
+        rush.style.setProperty('--rush', this.rush.toFixed(3))
+      }
+    }
+
     args.materials.mine.uniforms.uBrake.value = car.braking
     const pipeThrottle = phase === 'ready' ? this.input.throttle : car.throttle
     args.materials.mine.uniforms.uPipe.value = Math.max(
@@ -1692,6 +1737,19 @@ class Driving {
       Dust spawned ahead of the car and then left exactly where it is. It reads
       as speed because it genuinely is not moving and you genuinely are, which
       is the whole difference between this and a streak drawn on the glass.
+
+      **In the band you can actually see through, not up to the roof.** This
+      used to spread the motes over three quarters of the ceiling, which is
+      fine in a tunnel — the Rootway's roof is 5.6 metres and every mote landed
+      in front of you. The Moonbreak's "ceiling" is 18 and the Stormcrown's is
+      34, because those are open sky rather than rock, so nine out of ten motes
+      were spawning somewhere above your head where they read as haze and never
+      passed the camera at all. Which is exactly why those two roads looked
+      parked with the engine off, and the tunnel did not.
+
+      Capped at head height instead. The tunnel is unchanged to within a
+      handspan; the open roads get the same air, in the place it is worth
+      having, without a single extra particle being drawn.
     */
     this.motesDue -= delta * (6 + speed * 1.6)
     while (this.motesDue < 0) {
@@ -1701,7 +1759,7 @@ class Driving {
       roadPoint(
         road,
         (Math.random() * 2 - 1) * road.width * 1.1,
-        0.25 + Math.random() * road.ceiling * 0.75,
+        0.25 + Math.random() * Math.min(road.ceiling * 0.75, MOTE_CEILING),
         this.point,
         basis,
       )
