@@ -544,7 +544,24 @@ export function Talking() {
     // Only let go of the words once they are actually somewhere.
     if (!sent) return
     setDraft('')
-    stopWriting()
+    /*
+      The reply is answered, but the composer stays open.
+
+      This used to call `stopWriting()`, which unmounts the field — and on a
+      phone unmounting the field is what puts the keyboard away. So every
+      single message ended with the keyboard sliding down and the whole column
+      jumping up to fill the space it left, and saying two things in a row
+      meant tapping back in and waiting for it to come up again. That is not
+      how texting anybody works.
+
+      Nothing about sending means you are finished. The ways out are the ways
+      out of everything else here: tap somewhere else, or press escape. Both
+      already exist a few lines up.
+    */
+    if (replyTo !== null) answer(null)
+    // Belt and braces: nothing above blurs the field, but if anything ever
+    // does, the cursor belongs back where you were typing.
+    field.current?.focus()
     toNewest()
     ambience.said(true)
   }
@@ -637,15 +654,27 @@ export function Talking() {
             rows={1}
             placeholder={`say something to ${them.name}`}
             aria-label={`say something to ${them.name}`}
+            /*
+              The phone's own return key says "send", because that is what it
+              does. Costs nothing and removes the only real question left after
+              taking the buttons away.
+            */
+            enterKeyHint="send"
           />
-          <div className="saying-actions">
-            <button type="button" className="say-it" onClick={() => void say()}>
-              send it up
-            </button>
-            <button type="button" className="say-not" onClick={stopWriting}>
-              not now
-            </button>
-          </div>
+          {/*
+            No send button, and no "not now".
+
+            Enter sends. That is the whole contract, on a phone and on a
+            desktop, and it is the one every messaging app has taught everybody
+            already — so a pair of buttons underneath was two rows of furniture
+            explaining a thing nobody needed explaining, parked permanently
+            under the newest message in the quietest place in the garden.
+
+            "Not now" was the odd one out twice over: it is the only way *out*
+            of anything here that had a control of its own, when tapping
+            somewhere else and pressing escape already do it — see
+            `useDismissOutside` and the Escape handler above.
+          */}
         </div>
       ) : (
         <button type="button" className="start-saying" onClick={startWriting}>

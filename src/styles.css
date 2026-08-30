@@ -4523,7 +4523,7 @@ canvas {
   the two lights are made of. It brightens as the field takes focus.
 */
 .start-saying-name::after,
-.saying-field + .saying-actions::before {
+.saying::after {
   content: '';
   display: block;
   height: 1px;
@@ -4564,38 +4564,17 @@ canvas {
   color: var(--ink-faint);
 }
 
-.saying-actions {
-  display: flex;
-  justify-content: center;
-  gap: 1.6rem;
-  flex-wrap: wrap;
-}
+/*
+  The beam under the field, which used to hang off the button row.
 
-.saying-actions::before {
+  It is the one horizontal rule in the garden, and it earns that by not being a
+  border: it is the line of light the words are written along, the same beam the
+  two lights are made of. It lived on `.saying-actions::before` because there
+  was a row of buttons for it to sit above. There is not any more — enter sends
+  — so it belongs to the composer, which is what it was always drawing under.
+*/
+.saying::after {
   width: 8rem;
-  flex-basis: 100%;
-  order: -1;
-}
-
-.say-it,
-.say-not {
-  background: none;
-  border: 0;
-  padding: 0.4rem 0.2rem;
-  cursor: pointer;
-  font-family: var(--sans);
-  font-size: 0.68rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  text-shadow: var(--lift);
-}
-
-.say-it {
-  color: var(--ink);
-}
-
-.say-not {
-  color: var(--ink-faint);
 }
 
 @media (max-width: 30rem) {
@@ -9803,8 +9782,6 @@ body:has(.rally-running) .player {
     line-height: 1.45;
   }
 
-  body:has(.talking) .say-it,
-  body:has(.talking) .say-not,
   body:has(.talking) .saying-drop {
     min-height: 2.75rem;
   }
