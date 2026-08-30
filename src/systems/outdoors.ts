@@ -303,9 +303,82 @@ if (import.meta.env.DEV) {
   host.__outdoors = useOutdoors
 }
 
-/** Read on the ambience animation loop without causing React frame updates. */
+/*
+  And on top of all of it, what *this person* wants.
+
+  Everything above is the authored world: one mix, published once, the same in
+  both hands. This is the layer over it that belongs to whoever is holding the
+  phone — she likes it louder, you are in an office, the room is noisy tonight.
+  Two numbers, because there are two kinds of place: the open garden, and
+  inside anything.
+
+  Never sent. It is not a fact about the world, and there is nothing to save.
+*/
+const MINE_KEY = 'garden:my-ambience:v1'
+
+export interface MyAmbience {
+  /** The meadow, out in the open. */
+  garden: number
+  /** Inside any of the five places. */
+  sections: number
+}
+
+function readMine(): MyAmbience {
+  const out: MyAmbience = { garden: 1, sections: 1 }
+  if (typeof window === 'undefined') return out
+  try {
+    const raw = JSON.parse(localStorage.getItem(MINE_KEY) ?? 'null') as unknown
+    if (raw && typeof raw === 'object') {
+      const source = raw as Record<string, unknown>
+      for (const key of ['garden', 'sections'] as const) {
+        const value = source[key]
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          out[key] = Math.max(0, Math.min(1, value))
+        }
+      }
+    }
+  } catch {
+    /* nothing kept */
+  }
+  return out
+}
+
+interface MyAmbienceState {
+  mine: MyAmbience
+  setMine(which: keyof MyAmbience, value: number): void
+}
+
+export const useMyAmbience = create<MyAmbienceState>((set, get) => ({
+  mine: readMine(),
+  setMine(which, value) {
+    const mine = { ...get().mine, [which]: Math.max(0, Math.min(1, value)) }
+    try {
+      localStorage.setItem(MINE_KEY, JSON.stringify(mine))
+    } catch {
+      /* it still works this session */
+    }
+    set({ mine })
+  },
+}))
+
+/**
+ * Read on the ambience animation loop without causing React frame updates.
+ *
+ * The authored level for each place, already multiplied by this person's own
+ * preference for that *kind* of place — so the loop asks one question and gets
+ * one number, and neither half has to know about the other.
+ */
 export function placeLevelsNow(): PlaceLevels {
-  return useOutdoors.getState().howMuch
+  const { howMuch } = useOutdoors.getState()
+  const { mine } = useMyAmbience.getState()
+  return {
+    garden: howMuch.garden * mine.garden,
+    tree: howMuch.tree * mine.sections,
+    river: howMuch.river * mine.sections,
+    hollow: howMuch.hollow * mine.sections,
+    stars: howMuch.stars * mine.sections,
+    glasshouse: howMuch.glasshouse * mine.sections,
+  }
 }
 
 /** The same, for how much meadow is allowed inside. */

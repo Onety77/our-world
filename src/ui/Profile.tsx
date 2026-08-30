@@ -19,6 +19,7 @@ import { useProfileSheet } from '@/systems/profileSheet'
 import { useDismissOutside } from './useDismissOutside'
 import { useNotify } from '@/systems/notify'
 import { useSay } from '@/systems/useSay'
+import { MySound } from './MySound'
 
 /**
  * Somewhere to start. Not a complete list — anything IANA is accepted below,
@@ -71,11 +72,23 @@ function Telling() {
         />
         <span className="profile-field">{say('tell me when {she} says something')}</span>
       </label>
-      <span className="pot-why">
-        {blocked
-          ? 'This browser is refusing notifications for the garden. It has to be turned back on in the browser’s own settings for this site — a page cannot ask twice.'
-          : 'While the garden is open, on this device — in another tab, or with the screen off. It cannot reach you once the page is closed.'}
-      </span>
+{/*
+        The caveat, only when it is one.
+
+        Refused is worth explaining, because there is something to go and do
+        about it and no other way to find out. The working case is not: "while
+        the garden is open, on this device, in another tab, with the screen
+        off, but not once the page is closed" is four conditions in front of
+        somebody who has just ticked a box, and none of them change what they
+        would do next.
+      */}
+      {blocked ? (
+        <span className="pot-why">
+          This browser is refusing notifications for the garden. It has to be
+          turned back on in the browser&rsquo;s own settings for this site — a
+          page cannot ask twice.
+        </span>
+      ) : null}
     </p>
   )
 }
@@ -230,6 +243,7 @@ export function ProfileSheet() {
             </p>
 
             <Telling />
+            <MySound />
 
             <p className="door-trouble" role="status" aria-live="polite">
               {trouble ?? ''}

@@ -292,6 +292,25 @@ export interface Memory {
 // ---------------------------------------------------------------------------
 
 /** One piece of music either of you has put in the garden. */
+/**
+ * Every number the ambience-tuning document may carry.
+ *
+ * Written down once, here, because it was written down three times and they
+ * drifted: the writer, the mock's loader and the security rules each had their
+ * own copy of "the five places", and when the open garden and the five
+ * garden-bleed numbers were added, two of those copies silently dropped them.
+ * The write then succeeded — the keys it *did* know about were fine — so the
+ * control room said "saved" and the value came back at its default. A control
+ * that does nothing, and no error anywhere to say why.
+ *
+ * The rules in `firestore.rules` are the fourth copy and cannot import this;
+ * they must be kept in step by hand, and `npm run rules` prints them out.
+ */
+export const AMBIENCE_KEYS = [
+  'garden', 'tree', 'river', 'hollow', 'stars', 'glasshouse',
+  'bleedTree', 'bleedRiver', 'bleedHollow', 'bleedStars', 'bleedGlasshouse',
+] as const
+
 export interface Track {
   id: string
   title: string

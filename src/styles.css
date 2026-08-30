@@ -10641,3 +10641,44 @@ body.on-the-road .broke-what {
   background: rgba(240, 178, 106, 0.06);
   color: var(--ink);
 }
+
+/* ---- your own three faders, in the profile sheet -------------------------- */
+/*
+  See `ui/MySound`. The same three questions dev7731 asks about the world, in
+  the one place that is about you rather than about the garden — so they are
+  laid out like the rest of the sheet and not like a control room.
+*/
+.my-sound {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.9rem 0 0;
+}
+
+.my-sound label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.my-sound-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  color: var(--ink-dim);
+}
+
+/* The number, which is the only part worth reading twice. */
+.my-sound-name b {
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.my-sound input[type='range'] {
+  width: 100%;
+}

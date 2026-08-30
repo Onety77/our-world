@@ -100,6 +100,7 @@ import {
   type QuestionRound,
   type VoiceLight,
 } from './types'
+import { AMBIENCE_KEYS } from './types'
 import { newId } from './ids'
 import {
   QUESTION_DAY,
@@ -1651,8 +1652,21 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
 
     async setAmbienceTuning(values) {
       if (me !== 'warm') throw new Error('Only the warm account sets how the places sound.')
+      /*
+        Everything the rules accept, not five hard-coded names.
+
+        This list was written when there were five places and nothing else, and
+        it silently dropped anything it did not recognise. So the open garden's
+        level and the five "how much garden reaches here" numbers were thrown
+        away *here*, before the wire — the write then succeeded, because the
+        five it did know about were fine, and the panel said "saved". Reopen it
+        and the garden was back at full, because it had never been sent.
+
+        Which is exactly what a control that does nothing looks like from the
+        outside, and why it read as the sound being beyond anybody's reach.
+      */
       const clean: Record<string, number> = {}
-      for (const key of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+      for (const key of AMBIENCE_KEYS) {
         const value = values[key]
         if (typeof value === 'number' && Number.isFinite(value)) {
           clean[key] = Math.max(0, Math.min(1, value))

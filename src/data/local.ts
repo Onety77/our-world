@@ -44,7 +44,7 @@ import {
   voiceClipFromStore,
 } from './voiceClips'
 import { newId } from './ids'
-import { GROWN_DAYS, USER_IDS } from './types'
+import { AMBIENCE_KEYS, GROWN_DAYS, USER_IDS } from './types'
 import { localDateKey } from '@/systems/time'
 import {
   QUESTION_DAY,
@@ -462,7 +462,7 @@ function loadAmbienceTuning(): Record<string, number> {
     const raw = JSON.parse(localStorage.getItem(AMBIENCE_TUNING_KEY) ?? '{}') as unknown
     if (raw === null || typeof raw !== 'object') return {}
     const out: Record<string, number> = {}
-    for (const key of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+    for (const key of AMBIENCE_KEYS) {
       const value = (raw as Record<string, unknown>)[key]
       if (typeof value === 'number' && Number.isFinite(value)) {
         out[key] = Math.max(0, Math.min(1, value))
@@ -1314,8 +1314,21 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
     },
 
     async setAmbienceTuning(values) {
+      /*
+        Everything the rules accept, not five hard-coded names.
+
+        This list was written when there were five places and nothing else, and
+        it silently dropped anything it did not recognise. So the open garden's
+        level and the five "how much garden reaches here" numbers were thrown
+        away *here*, before the wire — the write then succeeded, because the
+        five it did know about were fine, and the panel said "saved". Reopen it
+        and the garden was back at full, because it had never been sent.
+
+        Which is exactly what a control that does nothing looks like from the
+        outside, and why it read as the sound being beyond anybody's reach.
+      */
       const clean: Record<string, number> = {}
-      for (const key of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+      for (const key of AMBIENCE_KEYS) {
         const value = values[key]
         if (typeof value === 'number' && Number.isFinite(value)) {
           clean[key] = Math.max(0, Math.min(1, value))

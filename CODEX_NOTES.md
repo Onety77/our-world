@@ -435,3 +435,22 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Browser audio telemetry after the full crossfade reports air/leaves at zero
   in all three places, with their place-specific layers still active. No runtime
   errors appeared and the production build passes.
+
+## 30 August 2026 - Codex - Tap-away dismissal across the world
+
+- Added one shared outside-tap behavior and applied it to the folded message
+  composer, music list, Stars composer, voice-light drawer, thought/pot/profile
+  sheets, and current/archive/plant-question sheets. Letter reading and message
+  action menus already had equivalent dismissal and were left intact.
+- Unsaved work is protected deliberately: profile and question forms stop
+  accepting outside dismissal once edited; voice recording/review/saving never
+  accepts it. Thought, pot and message drafts remain mounted and therefore keep
+  their text when folded.
+- The complete pointer sequence is consumed when empty world dismisses a
+  surface. This prevents the same tap from also entering a place or picking an
+  object underneath. A tap aimed at another actual control still passes through,
+  allowing messages to fold and music to open in one gesture.
+- Live browser checks covered inside taps, empty-world dismissal, cross-control
+  switching, retained unfinished text and prevention of accidental place entry.
+  No runtime errors appeared; TypeScript and the production build pass. The
+  established Firebase bundle warning remains unchanged.
