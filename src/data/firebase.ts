@@ -123,6 +123,9 @@ const LETTERS = 'letters'
 const CONTRIBUTIONS = 'contributions'
 /** One document per round; one document per move underneath it. See below. */
 const TRACKS = 'tracks'
+
+/** What `storage.rules` will accept for `music/`. Kept in step by hand. */
+const MUSIC_MAX = 25 * 1024 * 1024
 const MESSAGES = 'messages'
 const MEMORIES = 'memories'
 const ROUNDS = 'rounds'
@@ -1093,6 +1096,67 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
           .sort((a, b) => a.title.localeCompare(b.title))
         listener(tracks)
       })
+    },
+
+    async addTrack({ title, file, duration }) {
+      const name = title.trim()
+      if (name === '') throw new Error('A song needs a name.')
+      if (name.length > 300) throw new Error('That name is too long for the garden to keep.')
+      /*
+        Checked here as well as in the rules, and the reason is the message.
+
+        The rules will refuse a video file or a forty-megabyte one, but they
+        refuse it as a permission error after the whole thing has gone up the
+        wire — which on a phone is a minute of waiting to be told "unauthorised"
+        about a file whose only problem is that it is a film.
+      */
+      if (!file.type.startsWith('audio/')) {
+        throw new Error(`That is a ${file.type || 'file of some kind'}, not audio.`)
+      }
+      if (file.size >= MUSIC_MAX) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1)
+        throw new Error(`That is ${mb}MB. The garden takes songs up to 25MB.`)
+      }
+
+      const path = `music/${newId()}`
+      await uploadBytes(storageRef(store, path), file, {
+        contentType: file.type,
+        // A song never changes under its own path, and it is listened to often.
+        cacheControl: 'private, max-age=31536000, immutable',
+      })
+      const url = await getDownloadURL(storageRef(store, path))
+      try {
+        await setDoc(doc(db, TRACKS, newId()), {
+          title: name,
+          by: me,
+          duration: Math.max(0, Math.round(duration * 100) / 100),
+          url,
+          path,
+          at: now(),
+        })
+      } catch (error) {
+        /*
+          The document is what makes the file a song. Without it the audio is
+          twenty megabytes nobody can see, nobody can play and nobody will ever
+          think to delete — so if the second half fails, the first half goes.
+        */
+        await deleteObject(storageRef(store, path)).catch(() => {})
+        throw error
+      }
+    },
+
+    async removeTrack(id) {
+      const at = doc(db, TRACKS, id)
+      const held = await getDoc(at)
+      const path = str(held.data()?.path, '')
+      await deleteDoc(at)
+      /*
+        Document first, then bytes, and it is that way round on purpose. The
+        document is what anybody can see; a file left behind is invisible waste,
+        but a document pointing at a file that is gone is a song in the list
+        that plays silence.
+      */
+      if (path !== '') await deleteObject(storageRef(store, path)).catch(() => {})
     },
 
     /*

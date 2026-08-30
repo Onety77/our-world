@@ -51,6 +51,24 @@ export const useCorner = create<CornerState>((set, get) => ({
 }))
 
 /**
+ * Can this device put the corner away by hand?
+ *
+ * A finger, and nothing else. Where `cornerIsInTheWay` asks whether the corner
+ * is *currently* a problem — and only tucks it for you when it is — this asks
+ * whether the person holding the phone should be *allowed* to decide, which
+ * they always should. The handle was gated on the same three conditions as the
+ * automatic tuck, so on a phone held upright, in the Hollow, with a list of
+ * songs over the middle of the screen, there was no way to move it: the one
+ * situation the whole thing was built for.
+ *
+ * Still not on a laptop. There is room there, and a pointer that can go round.
+ */
+export function cornerCanBeTucked(): boolean {
+  if (typeof matchMedia === 'undefined') return false
+  return matchMedia('(pointer: coarse)').matches
+}
+
+/**
  * Is the corner in the way right now?
  *
  * Three things at once, and it needs all three. A finger, because this is

@@ -36,6 +36,7 @@ import type {
   VoiceLightGarden,
 } from './types'
 import { forgetPicture, forgetPictures, pictureFromStore, putPicture } from './pictures'
+import { forgetSong, putSong, songFromStore } from './songs'
 import {
   forgetVoiceClip,
   forgetVoiceClips,
@@ -185,6 +186,16 @@ export interface LocalDataLayer extends DataLayer {
 
 const LISTENING_KEY = 'garden:listening:v1'
 const TRACKS_KEY = 'garden:tracks:v1'
+/*
+  Which IndexedDB key each track's audio is under.
+
+  Kept beside the tracks rather than inside them because the `url` on a track
+  is an object URL, and an object URL is dead the moment the tab is closed. The
+  path is the thing that survives; the URL is made again from it on the way
+  back in. On the real backend both are one field, because there the URL is a
+  download link and lasts.
+*/
+const SONG_PATHS_KEY = 'garden:song-paths:v1'
 const MESSAGES_KEY = 'garden:messages:v1'
 const QUESTIONS_KEY = 'garden:questions:v1'
 const VOICE_LIGHTS_KEY = 'garden:voice-lights:v1'
@@ -276,6 +287,19 @@ function questionView(
  * transport and the two-device sync all run on the clock, so the moment real
  * audio is uploaded it plays and nothing above this line changes.
  */
+function loadSongPaths(): Record<string, string> {
+  if (typeof localStorage === 'undefined') return {}
+  try {
+    const raw = JSON.parse(localStorage.getItem(SONG_PATHS_KEY) ?? 'null')
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return raw as Record<string, string>
+    }
+  } catch {
+    /* nothing kept */
+  }
+  return {}
+}
+
 function loadTracks(): Track[] {
   if (typeof localStorage === 'undefined') return []
   try {
@@ -525,7 +549,40 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
   const roundWatchers = new Map<string, Set<(r: Round | null) => void>>()
 
   let tracks = loadTracks()
+  let songPaths = loadSongPaths()
+
+
+  function keepSongs() {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(TRACKS_KEY, JSON.stringify(tracks))
+      localStorage.setItem(SONG_PATHS_KEY, JSON.stringify(songPaths))
+    } catch {
+      /* storage full; the songs still play until the tab closes */
+    }
+  }
   const trackWatchers = new Set<(t: Track[]) => void>()
+
+  /** Object URLs die with the tab; the bytes do not. Point the tracks back. */
+  void (async () => {
+    const found = await Promise.all(
+      tracks.map(async (t) => {
+        const path = songPaths[t.id]
+        if (!path) return t
+        try {
+          return { ...t, url: await songFromStore(path) }
+        } catch {
+          // The bytes are gone — cleared site data, another device. Leave the
+          // song in the list with nothing to play rather than making it vanish.
+          return { ...t, url: null }
+        }
+      }),
+    )
+    if (found.some((t, i) => t.url !== tracks[i]?.url)) {
+      tracks = found
+      for (const watcher of trackWatchers) watcher(tracks)
+    }
+  })()
 
   let listening = loadListening()
   const listeningWatchers = new Set<(l: Listening) => void>()
@@ -977,6 +1034,50 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       return () => {
         trackWatchers.delete(listener)
       }
+    },
+
+    async addTrack({ title, file, duration }) {
+      const name = title.trim()
+      if (name === '') throw new Error('A song needs a name.')
+      if (!file.type.startsWith('audio/')) {
+        throw new Error(`That is a ${file.type || 'file of some kind'}, not audio.`)
+      }
+      if (file.size >= 25 * 1024 * 1024) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1)
+        throw new Error(`That is ${mb}MB. The garden takes songs up to 25MB.`)
+      }
+
+      /*
+        The same shape as the real layer, with IndexedDB where the bucket is.
+
+        `url` is an object URL rather than a download link, which is exactly
+        what the player wants either way: something an `<audio>` element can
+        be pointed at. It does not survive a reload — the key does, so the
+        track is rebuilt from the store on the way back in. See `hydrate`.
+      */
+      const path = newId()
+      await putSong(path, file)
+      const track: Track = {
+        id: newId(),
+        title: name,
+        by: me,
+        duration: Math.max(0, Math.round(duration * 100) / 100),
+        url: await songFromStore(path),
+      }
+      tracks = [...tracks, track].sort((a, b) => a.title.localeCompare(b.title))
+      songPaths = { ...songPaths, [track.id]: path }
+      keepSongs()
+      for (const watcher of trackWatchers) watcher(tracks)
+    },
+
+    async removeTrack(id) {
+      const path = songPaths[id]
+      tracks = tracks.filter((t) => t.id !== id)
+      const { [id]: _gone, ...rest } = songPaths
+      songPaths = rest
+      keepSongs()
+      for (const watcher of trackWatchers) watcher(tracks)
+      if (path) await forgetSong(path).catch(() => {})
     },
 
     watchListening(listener) {

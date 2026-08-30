@@ -10022,10 +10022,19 @@ body:has(.rally-running) .player {
   appearance: none;
 }
 
+/*
+  Tall enough to read as "the thing that was here".
+
+  It was a 2.4rem stub, which is findable if you already know it is there and
+  invisible if you do not — and once the handle became the everyday way to move
+  the music rather than a rescue for one landscape edge case, it had to say
+  what it is standing in for. A line about the height of the folded corner
+  does that without becoming a wall down the side of the garden.
+*/
 .corner-tab span {
   display: block;
   width: 3px;
-  height: 2.4rem;
+  height: 5rem;
   border-radius: 2px;
   background: rgba(255, 226, 184, 0.34);
   transition: background 180ms ease, height 220ms ease;
@@ -10041,6 +10050,19 @@ body:has(.rally-running) .player {
 .corner-tab:not(.tucked) span {
   height: 1.4rem;
   background: rgba(255, 226, 184, 0.2);
+}
+
+/*
+  Sideways is the tuck; up and down still belongs to the song list.
+
+  `touch-action: none` here would take the gesture cleanly and also stop you
+  scrolling through your own music, which is the one thing inside this column
+  that scrolls. `pan-y` is exactly the division wanted. See `ui/cornerSwipe`.
+*/
+@media (pointer: coarse) {
+  .corner > * {
+    touch-action: pan-y;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -10446,4 +10468,122 @@ body.on-the-road .broke-what {
 @media (prefers-reduced-motion: reduce) {
   /* It does not move, but it is a motion cue, and it is not load-bearing. */
   .rally-rush { display: none; }
+}
+
+/* ---- putting music in the garden ----------------------------------------- */
+/*
+  See `ui/AddMusic`. Deliberately plain — this is the control room, not the
+  garden, and the one thing it has to be is obvious at the end of a long day.
+*/
+.music-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  margin: 0.2rem 0 0.9rem;
+  padding: 1.15rem 1rem;
+  border: 1px dashed rgba(240, 216, 178, 0.28);
+  border-radius: 0.7rem;
+  background: rgba(240, 216, 178, 0.03);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.music-drop b {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 400;
+}
+
+.music-drop small {
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+}
+
+.music-drop:hover,
+.music-drop:focus-visible,
+.music-drop.over {
+  border-color: rgba(240, 178, 106, 0.62);
+  background: rgba(240, 178, 106, 0.08);
+}
+
+.music-waiting,
+.music-have {
+  list-style: none;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.music-waiting li,
+.music-have li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.32rem 0;
+  border-bottom: 1px solid rgba(240, 216, 178, 0.07);
+}
+
+/* The title is the only thing here worth any width. */
+.music-waiting input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.32rem 0.5rem;
+  border: 1px solid rgba(240, 216, 178, 0.14);
+  border-radius: 0.35rem;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 0.92rem;
+}
+
+.music-waiting input:disabled {
+  opacity: 0.55;
+  border-color: transparent;
+  background: none;
+}
+
+.music-state {
+  flex: none;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-align: right;
+  color: var(--ink-faint);
+}
+
+/* Refused and done are the two a person needs to pick out without reading. */
+.music-waiting li.refused .music-state { color: #e0885f; }
+.music-waiting li.done .music-state { color: #8fc7a3; }
+.music-waiting li.done input { opacity: 0.4; }
+
+.music-drop-one {
+  flex: none;
+  padding: 0 0.35rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.music-have-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--serif);
+  font-size: 0.94rem;
+}
+
+.music-have-len {
+  flex: none;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
 }

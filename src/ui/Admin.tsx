@@ -40,6 +40,7 @@ import { Hearing } from './Hearing'
 import { Volumes } from './Volumes'
 import { Outdoors } from './Outdoors'
 import { useSay } from '@/systems/useSay'
+import { AddMusic } from './AddMusic'
 import { useRemembered } from './remember'
 
 /** Somewhere to start from. Any IANA name works — this is just convenience. */
@@ -95,6 +96,7 @@ const TABS = [
   { id: 'car', name: 'car', blurb: 'how the rally car drives' },
   { id: 'world', name: 'world', blurb: 'the sky, the hour, and where to land' },
   { id: 'you', name: 'you two', blurb: 'both people, and what you leave each other' },
+  { id: 'music', name: 'music', blurb: 'what the two of you can listen to' },
   { id: 'device', name: 'device', blurb: 'this machine, and starting it over' },
 ] as const
 
@@ -374,6 +376,8 @@ export function Admin() {
         {me !== 'warm' ? <p className="admin-note">Only the warm account owns this hidden setting.</p> : null}
       </section>
       )}
+
+      {tab === 'music' && <AddMusic />}
 
       {tab === 'you' && (
       <section>

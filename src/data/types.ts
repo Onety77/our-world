@@ -882,6 +882,36 @@ export interface DataLayer {
   watchTracks(listener: (tracks: Track[]) => void): () => void
 
   /**
+   * Put a song in the garden.
+   *
+   * The audio goes into storage and a document goes into `tracks` pointing at
+   * it, and this is the only thing that does both. Until now nothing did:
+   * adding a song meant uploading a file in the Firebase console and then
+   * writing the document by hand next to it, which is why the storage rule for
+   * `music/` still says "uploaded by hand rather than by the app". It is not,
+   * any more.
+   *
+   * `duration` is read off the file by whoever calls this, because the only
+   * thing that knows how long an audio file is, is an audio element that has
+   * loaded it — and doing that here would mean the data layer building DOM.
+   * Zero is allowed and means *not known*; see `Track.duration`.
+   *
+   * Rejects on a file that is not audio, or is over the size the rules accept,
+   * rather than letting the upload fail at the door with a permission error
+   * that says nothing about what was wrong.
+   */
+  addTrack(input: { title: string; file: Blob; duration: number }): Promise<void>
+
+  /**
+   * Take one out again, audio and all.
+   *
+   * Both of you may remove either of yours — see the note in `firestore.rules`:
+   * a track is furniture rather than something somebody said, and furniture
+   * only its owner may move is furniture in the way.
+   */
+  removeTrack(id: string): Promise<void>
+
+  /**
    * What is playing, shared between the two of you.
    *
    * Fires immediately with what is known. Whether the garden actually *follows*

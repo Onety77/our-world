@@ -188,19 +188,18 @@ export interface AmbienceHandle {
   the whole ambient bed down with it. Adding a place means adding a column
   here, and nothing else in this file.
 
-  **The Glasshouse is built entirely out of layers that already existed**, which
-  is worth saying because the brief asked for "wind, distant birds, glass
-  resonance and occasional water drops" and it sounds like four new
-  synthesisers. It is not: it is the garden's wind heard from inside, the wood
-  through the broken roof, the room tone of somewhere with walls, a little of
-  the river for the wet floor, and the Stars' rare tones — which are struck
-  glass already, and were only ever called shimmer because that is where they
-  were first used.
+  Broad meadow air and its leaf bed belong to the garden, the Tree and the
+  river. The Hollow, Stars and Glasshouse use only their own room layers. The
+  Glasshouse still has water for the wet floor, enclosed resonance and the
+  Stars' rare tones as struck glass; none need meadow wind underneath them.
 */
 const MIX: Record<string, Record<Place, number>> = {
   //         garden  tree  river  hollow  stars  glasshouse
-  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0.015, stars: 0.42, glasshouse: 0.55 },
-  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0.1,  glasshouse: 0.72 },
+  // The meadow's continuous wind and leaf bed stop at the threshold of the
+  // enclosed/otherworldly places. Their own layers below must establish the
+  // room; otherwise every one sounds like the garden at a different volume.
+  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0,    stars: 0,    glasshouse: 0 },
+  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0,    glasshouse: 0 },
   water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    glasshouse: 0.12 },
   fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 0.26, stars: 0,    glasshouse: 0 },
   room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  glasshouse: 0.78 },

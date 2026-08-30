@@ -1,6 +1,15 @@
-import { Suspense, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from 'react'
 import { CornerTab } from '@/ui/CornerTab'
-import { cornerIsInTheWay, useCorner } from '@/systems/corner'
+import { cornerCanBeTucked, cornerIsInTheWay, useCorner } from '@/systems/corner'
+import { useTuckOnSwipe } from '@/ui/cornerSwipe'
 import { DataProvider, useData, useWorldSlice } from '@/data/provider'
 import { ambience, type Place } from '@/systems/ambience'
 import { paletteAt } from '@/systems/palette'
@@ -127,7 +136,34 @@ function Garden() {
     return () => query.removeEventListener('change', check)
   }, [takenOver])
 
+  /*
+    Whether this device gets to put the corner away at all.
+
+    Separate from `inTheWay` on purpose: that one decides whether to tuck it
+    *for* you, and only fires in the narrow case it was built for — a landscape
+    phone with a game on the screen. Being *allowed* to move it is a different
+    question with a much simpler answer, and gating both on the same three
+    conditions is why there was no way to shift it in the Hollow.
+  */
   const tucked = useCorner((s) => s.tucked)
+  const [byThumb, setByThumb] = useState(cornerCanBeTucked)
+  useEffect(() => {
+    if (typeof matchMedia === 'undefined') return
+    const query = matchMedia('(pointer: coarse)')
+    const check = () => setByThumb(query.matches)
+    query.addEventListener('change', check)
+    return () => query.removeEventListener('change', check)
+  }, [])
+
+  /* A shove to the right does what the handle does. See `ui/cornerSwipe`. */
+  const cornerNode = useRef<HTMLDivElement>(null)
+  useTuckOnSwipe(cornerNode, {
+    on: byThumb && !tucked,
+    tuck: useCallback(() => {
+      if (!useCorner.getState().tucked) useCorner.getState().toggle()
+    }, []),
+  })
+
   useEffect(() => {
     // A new takeover is a new screen; last time's decision does not carry.
     if (!takenOver) useCorner.getState().forget()
@@ -339,8 +375,11 @@ function Garden() {
         be sitting on a game's menu, and after that it does what you last told
         it to.
       */}
-      <CornerTab show={inTheWay} />
-      <div className={`${corner}${tucked && inTheWay ? ' tucked' : ''}`}>
+      <CornerTab show={byThumb} />
+      <div
+        ref={cornerNode}
+        className={`${corner}${tucked && byThumb ? ' tucked' : ''}`}
+      >
         <Whisper />
         <Player />
       </div>

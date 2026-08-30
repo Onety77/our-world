@@ -416,3 +416,22 @@ shared-file changes, measurements, and anything another agent should preserve.
 - No-incremental TypeScript, generated-rule validation, the production build,
   a draft/publish/shared-update simulation and the local data-layer round trip
   all pass. The established Firebase chunk warning remains unchanged.
+
+## 30 August 2026 - Codex - Garden sound sealed at section thresholds
+
+- Root cause: the audio lifecycle was changing places correctly, but the Stars
+  and Glasshouse recipes explicitly reused 42–55% of the garden's continuous
+  wind and 10–72% of its leaf bed. Hollow also retained a small air layer.
+  Turning a section up or down therefore changed its volume without giving it
+  a genuinely separate acoustic identity.
+- The garden air and leaf generators now reach zero inside Hollow, Stars and
+  Glasshouse. Hollow keeps its fire and cave resonance; Stars keeps its low sky
+  resonance and rare tones; Glasshouse keeps wet-floor water, enclosed glass
+  resonance and struck-glass tones.
+- Confirmed the visual lifecycle independently: entering any section unmounts
+  `GardenHub`; Hollow and Stars also remove the shared sky and ground. The one
+  Canvas that remains is rendering the entered section, not a hidden duplicate
+  garden.
+- Browser audio telemetry after the full crossfade reports air/leaves at zero
+  in all three places, with their place-specific layers still active. No runtime
+  errors appeared and the production build passes.
