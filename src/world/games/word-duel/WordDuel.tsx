@@ -37,8 +37,11 @@
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useLobby } from '@/systems/useLobby'
+import { readSitting } from '@/systems/lobby'
 import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
+import { useData, useWorldSlice } from '@/data/provider'
+import { otherUser } from '@/data/types'
 import { RaceRoom } from '@/ui/RaceRoom'
 import { ambience } from '@/systems/ambience'
 import type { GameProps } from '../types'
@@ -95,7 +98,10 @@ export default function WordDuel({
     See `systems/lobby`.
   */
   const liveKey = usePlaying((s) => s.race)
+  const openRace = usePlaying((s) => s.openRace)
   const lobby = useLobby(race ? liveKey : null)
+  const data = useData()
+  const presence = useWorldSlice((s) => s.presence)
 
   /*
     The moment, kept once it has happened — see `go` and `flagAt` in the hook.
@@ -211,9 +217,78 @@ export default function WordDuel({
     return () => clearInterval(id)
   }, [race, deadline])
 
-  const done =
-    target !== null && (finished(myGuesses, target) || (race && outOfTime))
-  const won = target !== null && solved(myGuesses, target)
+  /*
+    ===========================================================================
+    A time challenge ends the moment one of you has it.
+
+    It used to end only for *you* — she would get there, the line above the
+    board would say so, and your six rows carried on accepting words as though
+    something were still at stake. There is not: the whole shape of this mode
+    is first-to-the-word, and a race you can keep running after it has been won
+    is not a race, it is homework. Worse, that line arrived while you were mid
+    guess, over the board, which is where it was found to be sitting behind two
+    rows of stones.
+
+    So one flag for the pair of you, and the round hands over to a result — see
+    `RaceOver`. Only in a race: the ordinary duel is asynchronous and hers
+    finishing has no bearing at all on yours.
+
+    Her win is read from her guesses, which are open in a race for the same
+    reason yours are. The seal only ever withholds an *opening* move, so the
+    one case this cannot see is her taking it on her very first guess before
+    you have made any — and that resolves the moment you lay one down.
+    ===========================================================================
+  */
+  /*
+    The word, and the round it belongs to, under `?shot=1`.
+
+    Same switch and same reason as `window.__glass` and `window.__local`: the
+    end of a time challenge is a screen that cannot be reached by driving the
+    interface, because reaching it means somebody guessing a word only the
+    module knows. With this and `playMoveAs`, a checker can have her solve it
+    and then look at what the loser is actually shown — which is the half of
+    this game that had never been seen by anybody until it went wrong in front
+    of the two of you.
+
+    Development builds only, mock only, and it reads rather than writes.
+  */
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    if (!new URLSearchParams(location.search).has('shot')) return
+    ;(window as unknown as Record<string, unknown>).__duel = {
+      target,
+      roundId: round?.id ?? null,
+    }
+  }, [target, round])
+
+  /*
+    Going again, and it is the same move the racer makes — see `raceAgain` in
+    `EmberRally`. A new key is a new room, `useLobby` announces you into
+    whichever one you are holding, and the flag drops for the pair of you.
+
+    If she has already asked, her key is in her presence and the only correct
+    move is to take it exactly as it is. Inventing a second one would leave the
+    two of you in separate rooms, each waiting for somebody who is not coming.
+
+    Up here with the rest of the hooks, and it has to be: there are three
+    conditional returns between this point and where the answer is wanted, and
+    a hook below any of them is a hook that runs on some renders and not
+    others. React counts them, and it stopped the whole game when they did not
+    match — which the boundary in `ui/WhenItBreaks` at least turned into a page
+    that says so rather than a blank screen.
+  */
+  const herNextRoom = useMemo(() => {
+    if (!race) return null
+    const hers = readSitting(presence[otherUser(me)]?.racing)?.key ?? null
+    return hers && hers !== liveKey ? hers : null
+  }, [race, presence, me, liveKey])
+
+  const iSolved = target !== null && solved(myGuesses, target)
+  const sheSolved = race && target !== null && solved(herGuesses, target)
+  const raceOver = race && target !== null && (iSolved || sheSolved || outOfTime)
+
+  const done = target !== null && (finished(myGuesses, target) || raceOver)
+  const won = iSolved
 
   /*
     Her board.
@@ -471,6 +546,28 @@ export default function WordDuel({
           </button>
         </div>
       </div>
+    )
+  }
+
+  if (raceOver && target) {
+    return (
+      <RaceOver
+        target={target}
+        theirName={theirName}
+        myGuesses={myGuesses}
+        herGuesses={herGuesses}
+        // Elapsed from the flag, not from the document — the same instant the
+        // clock on the board was counting down from.
+        mineMs={finishedAt.mine === null ? null : finishedAt.mine - (deadline - RACE_MS)}
+        theirsMs={finishedAt.theirs === null ? null : finishedAt.theirs - (deadline - RACE_MS)}
+        outOfTime={outOfTime}
+        againLabel={herNextRoom ? `join ${theirName}` : 'play again'}
+        onAgain={() => {
+          ambience.cue('ember', 0.7)
+          openRace('word-duel', herNextRoom ?? String(data.now()))
+        }}
+        onLeave={onLeave}
+      />
     )
   }
 
@@ -741,6 +838,120 @@ function raceHeadline({
   if (outOfTime) return 'Neither of you. It was ' + answer + '.'
   if (done && !won) return 'Out of guesses. It was ' + answer + '.'
   return null
+}
+
+/**
+ * How a time challenge ended.
+ *
+ * ---------------------------------------------------------------------------
+ * A screen, rather than a line above a board you can still type into.
+ *
+ * The race used to end the way an asynchronous duel ends — a sentence appears,
+ * everything else stays where it was — which is right for a game played a
+ * guess a day and wrong for one where the whole question is who gets there
+ * first. Once that question is answered there is nothing left to do on the
+ * board, and leaving six live rows under the answer invites you to keep
+ * playing a race that is over.
+ *
+ * So it says the four things a finished race has to say, in the order they are
+ * wanted: who, how long it took them, what the word was, and both boards —
+ * because the shape of how somebody got there in four guesses is most of the
+ * pleasure of losing to them. Then the same two doors the racer offers at the
+ * end of a run: go again, or go back.
+ * ---------------------------------------------------------------------------
+ */
+function RaceOver({
+  target,
+  theirName,
+  myGuesses,
+  herGuesses,
+  mineMs,
+  theirsMs,
+  outOfTime,
+  againLabel,
+  onAgain,
+  onLeave,
+}: {
+  target: string
+  theirName: string
+  myGuesses: string[]
+  herGuesses: string[]
+  /** Milliseconds from the flag to the winning guess, or null if never found. */
+  mineMs: number | null
+  theirsMs: number | null
+  outOfTime: boolean
+  againLabel: string
+  onAgain(): void
+  onLeave(): void
+}) {
+  /*
+    Read from the stamps rather than from the boards.
+
+    Both of you hold the same moves with the same server timestamps on them, so
+    both devices reach the same winner without having to agree about anything —
+    which matters, because a result screen that disagrees between two phones is
+    worse than no result screen.
+  */
+  const iWon = mineMs !== null && (theirsMs === null || mineMs <= theirsMs)
+  const sheWon = theirsMs !== null && !iWon
+  const winner = iWon ? mineMs : sheWon ? theirsMs : null
+
+  return (
+    <div className="game duel duel-over">
+      <div className="duel-over-head">
+        <p className="duel-over-kicker">
+          {winner === null ? 'the five minutes are gone' : 'back at the fire'}
+        </p>
+
+        {winner === null ? (
+          <h1 className="duel-over-nobody">Nobody</h1>
+        ) : (
+          <>
+            <p className={`duel-over-placing ${iWon ? 'first' : 'second'}`}>
+              {iWon ? 'first' : 'second'}
+            </p>
+            <h1>{clockFace(winner)}</h1>
+            <p className="duel-over-who">
+              {iWon ? 'you' : theirName}
+              {/* The loser of a first-to-the-word never finishes, so there is
+                  usually no second time to print — only when the clock ran out
+                  on somebody who had already found it. */}
+              {iWon && theirsMs !== null ? (
+                <>
+                  {' · '}
+                  {theirName} {clockFace(theirsMs)}
+                </>
+              ) : null}
+              {!iWon && mineMs !== null ? <>{' · you ' + clockFace(mineMs)}</> : null}
+            </p>
+          </>
+        )}
+
+        <p className="duel-over-word">
+          The word was <b>{target.toUpperCase()}</b>.
+        </p>
+        {winner !== null && !iWon && !outOfTime ? (
+          <p className="duel-over-note">{theirName} got there first.</p>
+        ) : null}
+      </div>
+
+      <div className="duel-boards">
+        <Board guesses={myGuesses} answer={target} typed="" strike={{ at: -1, n: 0 }} />
+        <TheirShape guesses={herGuesses} answer={target} done won={sheWon} />
+      </div>
+
+      <div className="duel-foot">
+        <div className="duel-actions">
+          <button type="button" className="put-back" onClick={onAgain}>
+            {againLabel}
+          </button>
+          <button type="button" className="put-back quiet" onClick={onLeave}>
+            back out to the fire
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /** Which stone was just put down, and how many have been put down since. */

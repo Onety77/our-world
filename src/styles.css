@@ -3698,7 +3698,17 @@ canvas {
 .duel-boards {
   position: relative;
   display: flex;
-  align-items: center;
+  /*
+    `safe` is the whole point of this line.
+
+    Plain `center` on a box smaller than what is in it centres anyway, which
+    means half the overflow goes upward — out of the top of the row and over
+    whatever is above it. `safe center` centres while it fits and falls back to
+    the top edge when it does not, so the board can never again climb over the
+    line that says who won. The stone sizing above should mean it never gets
+    close; this is what happens if it ever does.
+  */
+  align-items: safe center;
   justify-content: center;
   min-height: 0;
 }
@@ -3730,15 +3740,16 @@ canvas {
   width: 100%;
 }
 
+/* The gaps travel with the stones, or a shrunk board becomes five stripes. */
 .board {
   display: flex;
   flex-direction: column;
-  gap: clamp(0.25rem, 1.2vw, 0.5rem);
+  gap: clamp(0.16rem, min(1.2vw, 0.7dvh), 0.5rem);
 }
 
 .word {
   display: flex;
-  gap: clamp(0.25rem, 1.2vw, 0.5rem);
+  gap: clamp(0.16rem, min(1.2vw, 0.7dvh), 0.5rem);
 }
 
 /* --- a stone --- */
@@ -3871,14 +3882,37 @@ canvas {
   }
 }
 
+/*
+  ---------------------------------------------------------------------------
+  Sized off the height as well as the width, and that is not a nicety.
+
+  A board is six rows tall, and it sat in the middle row of a three-row grid
+  whose middle row is `1fr` with `min-height: 0` — which lets the row shrink
+  below what is in it. A flex box centred inside a row too small for it does
+  not scroll and does not shrink: it spills, evenly, out of *both* ends. So on
+  any window short enough — a laptop with the browser dragged down, a phone
+  turned sideways — the board grew straight up through the line above it and
+  straight down through the keyboard.
+
+  Which is what "Tife got it. It was MOUSE." was doing behind two rows of
+  stones. Nothing was mispositioned; there was simply more board than window,
+  and no rule anywhere said what should give.
+
+  Now the stone does. It was `11vw` with a floor of 2.1rem, so it only ever
+  answered to width — on a wide, short window it stayed at its full size and
+  the six rows had nowhere to go. Adding the height term means the board is
+  always at most about forty per cent of the window tall, whatever shape the
+  window is, and the floor is low enough that it can actually reach that.
+  ---------------------------------------------------------------------------
+*/
 .stone {
   position: relative;
-  width: clamp(2.1rem, 11vw, 3.1rem);
-  height: clamp(2.1rem, 11vw, 3.1rem);
+  width: clamp(1.5rem, min(11vw, 6.4dvh), 3.1rem);
+  height: clamp(1.5rem, min(11vw, 6.4dvh), 3.1rem);
   display: grid;
   place-items: center;
   font-family: var(--serif);
-  font-size: clamp(1.05rem, 4.6vw, 1.5rem);
+  font-size: clamp(0.82rem, min(4.6vw, 2.7dvh), 1.5rem);
   line-height: 1;
   letter-spacing: 0.02em;
   color: var(--ink-dim);
@@ -11593,4 +11627,108 @@ body.on-the-road .broke-what {
 
 .duel-handed .rally-copy {
   max-width: 34ch;
+}
+
+/* --------------------------------------------------------------------------
+   Word duel: how a time challenge ended
+
+   Its own screen, in the same three-row frame the board uses — head, boards,
+   foot — so the boards land exactly where they were a moment ago and only the
+   words around them change. Nothing slides, and the shape of how she got there
+   in four is still in front of you while you read that she did.
+
+   Deliberately not the racer's `.rally-*` classes, close as the language is.
+   Those belong to a different game and would tie two result screens together
+   that only happen to look alike today.
+   -------------------------------------------------------------------------- */
+.duel-over {
+  text-align: center;
+}
+
+.duel-over-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: drift-in 0.9s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.duel-over-kicker {
+  margin: 0 0 0.5rem;
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  line-height: 1.5;
+  letter-spacing: 0.15em;
+  text-transform: lowercase;
+  color: #d89555;
+}
+
+.duel-over-placing {
+  margin: 0 0 0.1rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.duel-over-placing.first { color: #f0b26a; }
+/* Not red. Second, to somebody you like, is not a failure. */
+.duel-over-placing.second { color: rgba(191, 215, 239, 0.72); }
+
+.duel-over h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2rem, min(8vw, 9dvh), 3.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-shadow: var(--lift);
+}
+
+.duel-over-nobody {
+  color: var(--ink-dim) !important;
+}
+
+.duel-over-who {
+  margin: 0.25rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  /* No case transform: her name is Tife, and a screen that announces the
+     winner in lower case is a screen that has renamed her to say it. */
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.duel-over-word {
+  margin: 0.7rem 0 0;
+  font-family: var(--serif);
+  font-size: clamp(1rem, min(3.6vw, 4dvh), 1.35rem);
+  color: var(--ink-dim);
+  text-shadow: var(--lift);
+}
+
+/* The word itself is the one thing on this screen worth reading twice. */
+.duel-over-word b {
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.duel-over-note {
+  margin: 0.3rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+
+/* The boards are done, so they are a record rather than a thing to play. */
+.duel-over .duel-boards {
+  opacity: 0.92;
+}
+
+.duel-over .duel-foot {
+  justify-content: flex-end;
 }
