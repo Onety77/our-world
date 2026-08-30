@@ -3703,9 +3703,22 @@ canvas {
   min-height: 0;
 }
 
+/*
+  Beside your board — measured from your board, not from the window.
+
+  This was pinned to `right: 0`, which is the right-hand edge of the row, which
+  is the right-hand edge of the screen. Your board is centred and stops growing
+  at 17.5rem, so on anything wider than a laptop her shape drifted further and
+  further away from the thing it is meant to be read against, until the two of
+  them were at opposite ends of a 27-inch monitor with a field of empty brown
+  between.
+
+  Anchored half a board's width out from the middle instead, so it sits the
+  same short distance from your last column no matter how wide the window gets.
+*/
 .duel-boards .shape {
   position: absolute;
-  right: 0;
+  left: calc(50% + 9.6rem);
   top: 50%;
   transform: translateY(-50%);
 }
@@ -3933,7 +3946,26 @@ canvas {
 
 /* --- her board, shape only --- */
 
+/*
+  One knob, and everything here hangs off it.
+
+  A pip and the space between pips have to move together — grow one without the
+  other and the grid stops reading as a grid and starts reading as either a
+  cluster of dots or a sparse scatter of them. The size itself is set once, in
+  `--pip`, and every rule below is written in terms of it, so there is exactly
+  one number to change per screen width.
+
+  This is sized in `vw` because the board beside it is. Which is fine on a
+  phone and quietly wrong on a desktop: `vw` caps out, so her whole board came
+  to rest at about a fifth of the width of a single one of your stones — small
+  enough that the pattern it exists to show could not actually be read. See the
+  wide-screen block further down for what it becomes there.
+*/
 .shape {
+  --pip: clamp(0.4rem, 1.9vw, 0.6rem);
+  --pip-gap: clamp(0.16rem, 0.7vw, 0.3rem);
+  --pip-note: 0.58rem;
+
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3949,17 +3981,17 @@ canvas {
 .shape-grid {
   display: flex;
   flex-direction: column;
-  gap: clamp(0.16rem, 0.7vw, 0.3rem);
+  gap: var(--pip-gap);
 }
 
 .shape-row {
   display: flex;
-  gap: clamp(0.16rem, 0.7vw, 0.3rem);
+  gap: var(--pip-gap);
 }
 
 .pip {
-  width: clamp(0.4rem, 1.9vw, 0.6rem);
-  height: clamp(0.4rem, 1.9vw, 0.6rem);
+  width: var(--pip);
+  height: var(--pip);
   border-radius: 46% 54% 51% 49% / 52% 47% 53% 48%;
   background: rgba(242, 239, 230, 0.07);
   transition: background 0.45s ease;
@@ -3971,12 +4003,12 @@ canvas {
 
 .shape-note {
   font-family: var(--sans);
-  font-size: 0.58rem;
+  font-size: var(--pip-note, 0.58rem);
   letter-spacing: 0.1em;
   text-transform: lowercase;
   color: var(--ink-faint);
   text-align: center;
-  max-width: 9ch;
+  max-width: 11ch;
   line-height: 1.4;
 }
 
@@ -5836,6 +5868,75 @@ canvas {
 
 .hollow-selector .game-else button { position: relative; }
 
+/* --------------------------------------------------------------------------
+   One way in
+
+   `.game-ways` is a grid built to hold a primary invitation on one side and
+   the two quieter ones on the other, and it is reshaped again at two widths.
+   A game played only together has none of that to arrange — one label and one
+   button — so this is its own small column rather than that grid with most of
+   its cells empty and the single button pinned to an edge of a row it no
+   longer shares with anything.
+
+   The button is `.game-live`, the same one that is a quiet third option
+   elsewhere, so it is given the weight the primary way in usually carries. It
+   keeps its own two behaviours untouched: the small print underneath, and
+   going dim and unpressable until she is actually here.
+   -------------------------------------------------------------------------- */
+.game-ways-one {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.15rem;
+  padding-block: 0.6rem;
+}
+
+.game-ways-one .game-live {
+  position: relative;
+  padding: 0.34rem 0.9rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: clamp(1.02rem, 2vw, 1.25rem);
+  color: var(--ink);
+  text-shadow: var(--lift);
+  transition: color 0.25s ease, text-shadow 0.25s ease;
+}
+
+/* The same beam of light every other way-in in the garden is underlined with. */
+.game-ways-one .game-live::after {
+  content: '';
+  display: block;
+  height: 1px;
+  width: 100%;
+  margin-top: 0.4rem;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  opacity: 0.55;
+  transition: opacity 0.4s ease;
+}
+
+.game-ways-one .game-live.is-selected,
+.game-ways-one .game-live:enabled:hover,
+.game-ways-one .game-live:focus-visible {
+  color: #ffd49f;
+  text-shadow: 0 0 1rem rgba(255, 137, 49, 0.5), var(--lift);
+  outline: none;
+}
+
+.game-ways-one .game-live.is-selected::after,
+.game-ways-one .game-live:enabled:hover::after { opacity: 1; }
+
+/* Room for a thumb, like every other way in on a phone. */
+@media (max-width: 680px) {
+  .game-ways-one .game-live {
+    min-height: 2.9rem;
+    justify-content: center;
+    padding: 0.5rem 0.9rem;
+  }
+}
+
 .hollow-selector .game-marks { margin-top: 0.55rem; }
 
 .game-key-guide {
@@ -7011,6 +7112,26 @@ canvas {
 
 .standing-both .standing-game {
   color: var(--ink);
+}
+
+/*
+  Finished, and therefore quiet.
+
+  `.standing-both` lights her cool because "she has been" is the good news this
+  list exists for. On a round you have already played out that same light was
+  reading as a summons — you would go in to see what was wanted and find your
+  own spent board. So a done row keeps its words and gives up its colour: still
+  there, still openable, no longer asking. It comes after the state rules so it
+  wins over both of them.
+*/
+.standing.is-done .standing-state,
+.standing.is-done .standing-game {
+  color: var(--ink-faint);
+}
+
+.standing.is-done:hover .standing-game,
+.standing.is-done:focus-visible .standing-game {
+  color: var(--ink-dim);
 }
 
 .challenges-back {
@@ -10270,6 +10391,34 @@ body:has(.rally-running) .player {
 }
 
 /* --------------------------------------------------------------------------
+   Her board, on a screen with room
+
+   Above the same breakpoint, her shape moves back beside yours — and that is
+   where it needs to be bigger, not smaller.
+
+   The sizes above are in `vw`, matching the board they sit next to, which is
+   right on a phone and wrong on a desktop: `vw` stops growing at the cap, so
+   on a wide screen her whole six-by-five grid came out around a fifth the
+   width of one of your stones. The pattern of her guesses is the entire point
+   of showing it — which row she got close on, whether she is walking it in or
+   flailing — and at that size there was nothing to read.
+
+   Roughly a third of one of your stones. Deliberately not half: this is a
+   glance across the table, not the board you are playing. It stays dimmer than
+   yours (`.shape` sets the opacity) for the same reason, and the two together
+   are what keep it subordinate without it having to be tiny.
+   -------------------------------------------------------------------------- */
+@media (min-width: 48.0625rem) {
+  .shape {
+    --pip: clamp(0.72rem, 1.15vw, 1.05rem);
+    --pip-gap: clamp(0.3rem, 0.45vw, 0.42rem);
+    --pip-note: 0.7rem;
+
+    gap: 0.7rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
    Wheel to wheel: the room before the road
 
    Two names, their states, and one number. Nothing else belongs on this screen
@@ -11276,11 +11425,20 @@ body.on-the-road .broke-what {
   more things for a phone to composite every frame, and this is a corner that
   is on screen the entire time you are in the garden.
 */
+/*
+  Only what was *said*. Not the furniture around it.
+
+  The first pass put a bed on the fold label, the line you type into and the
+  way out as well, on the grounds that fixing only the messages would leave
+  everything under them still washed out. That was the wrong call: those are
+  chrome, they are the same few words every time, and giving each of them its
+  own dark chip turned a corner of a garden into a row of buttons. The
+  messages are the only part that is *content* — arbitrary text, arriving over
+  whatever the world happens to be doing — and they are the only part that
+  needed it.
+*/
 .whisper-ink,
-.whisper-who,
-.whisper-none,
-.whisper-fold-words,
-.whisper-fold-mobile {
+.whisper-who {
   padding: 0.08em 0.4em 0.14em;
   border-radius: 0.45em;
   background: rgba(8, 12, 11, 0.5);
@@ -11301,38 +11459,6 @@ body.on-the-road .broke-what {
 .whisper-said.mine .whisper-who,
 .whisper-said.hers .whisper-who {
   background: rgba(8, 12, 11, 0.55);
-}
-
-/*
-  And the rest of the corner, for the same reason.
-
-  Fixing only the messages would leave the line you type into, the send, and
-  the way out sitting unreadable directly underneath four legible ones — which
-  looks less like a design and more like something half done. The composer gets
-  a bed as a row rather than per word: it is a control, it has a fixed shape,
-  and a control that changes width as you type is a control that moves while
-  you are aiming at it.
-*/
-.whisper-write {
-  padding: 0.3rem 0.5rem;
-  border-radius: 0.55rem;
-  background: rgba(8, 12, 11, 0.5);
-}
-
-/*
-  The placeholder is the faintest thing in the corner and it sits on the sky.
-  It has to stay quiet — it is a prompt, not a message — but quiet against the
-  bed behind it rather than quiet against whatever the world is doing.
-*/
-.whisper-field::placeholder {
-  color: rgba(242, 239, 230, 0.5);
-}
-
-.whisper-fold-away {
-  align-self: flex-start;
-  padding: 0.1em 0.45em 0.16em;
-  border-radius: 0.45em;
-  background: rgba(8, 12, 11, 0.44);
 }
 
 /* The hearts belong to the line they are on, so they sit on it too. */
@@ -11434,4 +11560,37 @@ body.on-the-road .broke-what {
 .player-step.apart .player-both {
   background: rgba(242, 239, 230, 0.26);
   animation: none;
+}
+
+/* ---- the beat after you hand a word over --------------------------------- */
+/*
+  See `justGave` in `WordDuel`. Laid out like the racer's briefings rather than
+  like the board, because it is the same kind of moment: something is finished,
+  and here are the two things there are to do about it.
+*/
+.duel-handed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 60vh;
+  text-align: center;
+}
+
+/*
+  Your own word, spaced out like the board it was typed on — it is the thing
+  you just did, and seeing it is how you know it went.
+*/
+.duel-handed h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(2rem, 9vw, 3.4rem);
+  font-weight: 400;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+}
+
+.duel-handed .rally-copy {
+  max-width: 34ch;
 }

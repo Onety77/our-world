@@ -253,19 +253,38 @@ export default function WordDuel({
   )
 
   // Nobody chooses a word in a race, so there is no giving step at all.
+  /*
+    A moment after you hand a word over, before anything else happens.
+
+    Pressing enter on a word for her used to do one of two silent things. If
+    she had not left you one, the board simply changed underneath you into a
+    waiting screen — no acknowledgement that the thing you had just done had
+    worked. And if she *had*, you were dropped straight into playing hers,
+    which is worse: the round you came here to start disappears into the round
+    you did not know was waiting, and you never find out your word arrived.
+
+    So there is a beat now, and it is the same beat either way: your word is
+    with her, and here is what there is to do next. It is state rather than
+    something derived, because it is about what *just happened* — nothing in
+    the round can tell you whether the word landed a second ago or last night.
+  */
+  const [justGave, setJustGave] = useState(false)
+
   const choosing = solo || race ? false : myWord === null
   const waiting = solo || race ? dealt === null : !choosing && target === null
   const typing = choosing || (!waiting && !done)
 
   // ---- doing things --------------------------------------------------------
 
+  /** Resolves true when the move actually landed, so callers can react to it. */
   const send = useCallback(
-    async (move: DuelMove) => {
+    async (move: DuelMove): Promise<boolean> => {
       setSending(true)
       try {
         await play(move)
         setTyped('')
         setComplaint(null)
+        return true
       } catch (error) {
         /*
           A move that does not land has to say so.
@@ -284,6 +303,7 @@ export default function WordDuel({
             ? `That did not reach the fire — ${error.message}`
             : 'That did not reach the fire. Try it again.',
         )
+        return false
       } finally {
         setSending(false)
       }
@@ -301,7 +321,9 @@ export default function WordDuel({
     }
 
     if (choosing) {
-      void send({ kind: 'word', word })
+      void send({ kind: 'word', word }).then((landed) => {
+        if (landed) setJustGave(true)
+      })
       return
     }
     if (!target) return
@@ -397,6 +419,57 @@ export default function WordDuel({
     return (
       <div className="game duel">
         <p className="door-waiting">turning out the word bag...</p>
+      </div>
+    )
+  }
+
+  /*
+    The beat after handing a word over. See `justGave`.
+
+    Both halves of it are the same screen on purpose: what you did is settled
+    either way, and the only thing that differs is whether there is something
+    of hers waiting. Telling somebody "she has not left one yet" is a real
+    answer to the question they came here with; dropping them onto a board with
+    no word on it is not.
+  */
+  if (justGave && !solo && !race) {
+    return (
+      <div className="game duel duel-handed">
+        <p className="rally-kicker">{say('your word is with {her}')}</p>
+        <h1>{(myWord ?? '').toUpperCase()}</h1>
+        <p className="rally-copy">
+          {target !== null
+            ? say(
+                '{She} left you one too. Play it now, or come back to it whenever you like.',
+              )
+            : say(
+                '{She} has not left you a word yet. Come back when {she} has — or take one from the pile and play now.',
+              )}
+        </p>
+        <div className="duel-actions">
+          {target !== null ? (
+            <button type="button" className="put-back" onClick={() => setJustGave(false)}>
+              {say('play {their} word')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="put-back"
+              disabled={sending || !pileWord}
+              onClick={() => {
+                if (!pileWord) return
+                void send({ kind: 'guess', guess: '', target: pileWord }).then((landed) => {
+                  if (landed) setJustGave(false)
+                })
+              }}
+            >
+              take one from the pile
+            </button>
+          )}
+          <button type="button" className="put-back quiet" onClick={onLeave}>
+            back out to the fire
+          </button>
+        </div>
       </div>
     )
   }

@@ -267,6 +267,17 @@ const DRIFT_BLEND_OUT = 5
 const DRIFT_ANGLE_COST = 0.45
 /** How hard the ceiling pulls, per second. Fast enough to be the entry cost. */
 const DRIFT_CEILING_RATE = 1.3
+/*
+  And how hard it gathers back *up* to it.
+
+  Higher than it looks like it needs to be, because it is not acting alone: the
+  scrub is still taking its cut every frame, and the two of them settle at
+  `ceiling × b / (a + b)` where `a` is the scrub's bite and `b` is this. At
+  0.85 that landed at 53 km/h against a dial reading 72 — better than the crawl
+  it replaced, and still not what the dial says. This is high enough that the
+  scrub is the small term and the dial is the answer.
+*/
+const DRIFT_SETTLE_RATE = 4.2
 /** The most the slide will aim across the road to get back to its line, radians. */
 const DRIFT_AIM = 0.42
 /** How briskly the course is steered onto the aim, per second. */
@@ -1295,6 +1306,39 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
       const over = (kept - ceiling) / Math.max(1, ceiling)
       const rate = DRIFT_CEILING_RATE * (1 + Math.min(3, over) * 9)
       kept += (ceiling - kept) * (1 - Math.exp(-rate * dt)) * car.driftBlend
+    } else if (car.throttle > 0.12) {
+      /*
+        ------------------------------------------------------------------------
+        And **up** to it, which the dial has always claimed and the car never did.
+
+        The dial is called "the speed a drift settles at". Only half of that was
+        built: the ceiling caught you coming down and nothing held you there, so
+        `driftScrub` went on eating a held slide all the way to the floor.
+        Measured, holding one direction for eight seconds against a dial reading
+        72 km/h:
+
+          63 · 57 · 54 · 50 · 47 · 50 · 53 · 56
+
+        — decaying to a crawl, and then that rise at the end, which is the
+        engine finally out-pulling the scrub once the car is slow enough. It
+        arrives from nowhere, it is not asked for, and it is worse than simply
+        stopping would have been, because a car that stops is at least telling
+        the truth about what a drift costs.
+
+        A powered slide is not a car coasting sideways. The rear tyres are
+        spinning and driving it, and what settles is the balance between that
+        drive and the scrub — so the honest model is an equilibrium, and the
+        dial is where it sits. Gentler than the fall on purpose: dropping to the
+        ceiling is the *entry*, and should be felt in about a second, while
+        gathering back up to it is the slide finding its feet and wants two.
+
+        Only while the throttle is asking. Lift mid-drift and the scrub has it
+        all its own way again, which is how you slow a drift down on purpose —
+        and without that check this would be a car that speeds up when you let
+        go of the accelerator.
+        ------------------------------------------------------------------------
+      */
+      kept += (ceiling - kept) * (1 - Math.exp(-DRIFT_SETTLE_RATE * dt)) * car.driftBlend
     }
     kept = Math.max(1, kept)
 

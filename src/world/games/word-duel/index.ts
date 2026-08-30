@@ -1,6 +1,7 @@
 import { later } from '@/systems/later'
 import type { GameDefinition } from '../types'
 import WordDuelEmblem from './emblem'
+import { finished, TRIES } from './words'
 
 /**
  * What you chose for her. The opening move, and the security rules hold it
@@ -54,6 +55,25 @@ export default {
 
   makeSetup(seed) {
     return { seed }
+  },
+
+  /**
+   * You are done when the word is found or the six are spent.
+   *
+   * The target is read off your own first guess rather than off her word,
+   * because that is what the board is actually playing against — the whole
+   * point of `target` on `Guessed` is that it is fixed at the first guess and
+   * cannot change underneath you. Falling back to her word covers the round
+   * where she left one and you have not started yet, which is not done either
+   * way, so the fallback only ever has to be right about "no".
+   */
+  isDone({ mine, theirs }) {
+    const guesses = mine.filter((m): m is Guessed => m.kind === 'guess')
+    if (guesses.length === 0) return false
+    const target =
+      guesses[0].target ?? theirs.find((m): m is ChoseWord => m.kind === 'word')?.word
+    if (!target) return guesses.length >= TRIES
+    return finished(guesses.map((g) => g.guess), target)
   },
 
   Emblem: WordDuelEmblem,

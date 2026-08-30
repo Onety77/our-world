@@ -139,6 +139,57 @@ export function turnOf(round: Round | null, me: UserId): Turn {
 }
 
 /**
+ * A game the standings list watches. Only the three fields it needs, so the
+ * pure part below can be exercised without building a whole definition.
+ */
+export interface Listed {
+  id: string
+  cadence: GameCadence
+  isDone?(state: { mine: never[]; theirs: never[] }): boolean
+}
+
+/**
+ * Whose move it is, *and* whether you are finished with it.
+ *
+ * ---------------------------------------------------------------------------
+ * Two separate facts, because they are separately true and the list needs both.
+ *
+ * `turnOf` counts moves, which is all the seal lets it do, and by that measure
+ * "you have both been here today" is the end of the story. It is not: you can
+ * have spent all six guesses an hour ago and the line would still read as
+ * though the game were sitting there with something in it for you. That is the
+ * one state the list was getting wrong, and it is the state you are in every
+ * time you actually finish something.
+ *
+ * The game answers the second half — see `isDone` on GameDefinition — because
+ * only it knows what over means. A game that doesn't answer is never done, and
+ * the list reads exactly as it did before.
+ * ---------------------------------------------------------------------------
+ */
+export interface Standing {
+  turn: Turn
+  /** Your side of it is over. Says nothing about hers. */
+  done: boolean
+}
+
+/** Pure, so it is testable. */
+export function standingOf(
+  round: Round | null,
+  me: UserId,
+  isDone?: Listed['isDone'],
+): Standing {
+  const turn = turnOf(round, me)
+  // Nothing opened, or you have not played: there is nothing to be done with.
+  if (!round || !isDone || turn === 'nothing' || turn === 'yours') {
+    return { turn, done: false }
+  }
+  const them = me === 'warm' ? 'cool' : 'warm'
+  const pick = (who: UserId) =>
+    round.moves.filter((m) => m.by === who).map((m) => m.data) as never[]
+  return { turn, done: Boolean(isDone({ mine: pick(me), theirs: pick(them) })) }
+}
+
+/**
  * Where today's round stands in every game at once.
  *
  * One hook and one effect for all of them, rather than a hook per game. Two
@@ -151,16 +202,17 @@ export function turnOf(round: Round | null, me: UserId): Turn {
  * Keyed by game id. A game with no round yet is simply absent, which reads as
  * 'nothing'.
  */
-export function useStandings(games: readonly { id: string; cadence: GameCadence }[]): Record<string, Turn> {
+export function useStandings(games: readonly Listed[]): Record<string, Standing> {
   const data = useData()
   const me = data.me
   const zone = useWorldSlice((s) => s.profiles[me].timeZone)
-  const [turns, setTurns] = useState<Record<string, Turn>>({})
+  const [turns, setTurns] = useState<Record<string, Standing>>({})
 
   const ids = useMemo(
     () =>
       games.map((game) => ({
         game: game.id,
+        isDone: game.isDone,
         // The same key `ui/Playing` opens, so these are genuinely the rounds
         // you would walk into rather than a second idea of which is today's.
         id: `${game.id}:${game.cadence === 'daily' ? localDateKey(zone) : 'current'}`,
@@ -170,9 +222,9 @@ export function useStandings(games: readonly { id: string; cadence: GameCadence 
 
   useEffect(() => {
     setTurns({})
-    const offs = ids.map(({ game, id }) =>
+    const offs = ids.map(({ game, id, isDone }) =>
       data.watchRound(id, (round) =>
-        setTurns((prev) => ({ ...prev, [game]: turnOf(round, me) })),
+        setTurns((prev) => ({ ...prev, [game]: standingOf(round, me, isDone) })),
       ),
     )
     return () => offs.forEach((off) => off())

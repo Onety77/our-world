@@ -135,6 +135,20 @@ export interface Track {
   grade: Float32Array
   /** Roll of the road surface into the corner, radians. */
   bank: Float32Array
+  /**
+   * How loose the surface is, 0 stone to 1 sand.
+   *
+   * A property of the *place*, not of a band, because it is what the road is
+   * made of rather than something that changes along it — the Rootway is dust
+   * over rock from end to end and the Firstlight is a canyon floor.
+   *
+   * It exists because a tyre on tarmac only marks the road when it is being
+   * scrubbed, and a tyre on sand marks it by *rolling*: the surface moves out
+   * of the way whatever the tyre is doing. With this at zero every road was
+   * being drawn as though it were paved, so on the two that are not, the car
+   * left nothing behind it and never looked attached to the ground.
+   */
+  loose: number
   /** Where a quick driver would put the car, metres off the middle. */
   line: Float32Array
   /**
@@ -992,6 +1006,31 @@ function stormcrownBands(): Band[] {
  * in the game and it is deliberately put where the car is quickest.
  * ---------------------------------------------------------------------------
  */
+/**
+ * Fixed geography for the Firstlight.
+ *
+ * The distances are shared by the road, its dressing and the verification
+ * script. This course used to have a nominal side channel with no identity of
+ * its own and no stable landmarks; named acts make its vertical story and its
+ * difficulty measurable instead of leaving them as comments beside bands.
+ */
+export const FIRSTLIGHT = {
+  rim: { from: 0, to: 220 },
+  drop: { from: 220, to: 775 },
+  narrows: { from: 775, to: 1091 },
+  fork: { from: 1105, to: 2731 },
+  slipstone: { from: 1091, to: 1607 },
+  coldfall: { from: 1607, to: 2091 },
+  gallery: { from: 2091, to: 2731 },
+  suncoil: { from: 2731, crown: 2954, shelf: 3042, drop: 3134, to: 3201 },
+  terrace: { from: 3201, to: 3691 },
+  lastCut: { from: 3691, to: 4391 },
+  floor: { from: 4391, to: 4781 },
+  // A visible, staggered obstacle rhythm on the broad terrace. These are
+  // fixed because a precision gate that moves with the daily seed is luck.
+  fallenGate: [3570, 3594, 3620],
+} as const
+
 function firstlightBands(): Band[] {
   /*
     A slot: narrow, tall, close. `room` stands the walls back from the verge,
@@ -1037,7 +1076,10 @@ function firstlightBands(): Band[] {
     // --- Slipstone -----------------------------------------------------------
     // Two switchbacks stacked down the canyon wall, and the reason the side
     // channel is worth taking: this is the long way round, and it is long.
-    cut({ length: 90, grade: -0.05, curv: 0, width: 5.6, room: 0.4 }),
+    // The fork is a broad piece of canyon floor, not a hole in a side wall.
+    // Staying centred continues onto Slipstone; moving deliberately right
+    // takes the lower wash. Both roads are visible until the stone nose.
+    cut({ length: 90, grade: -0.05, curv: 0, width: 8.4, room: 1, ceiling: 38 }),
     cut({ length: 26, grade: -0.03, curv: 0.014, width: 6.4, room: 0.6 }),
     cut({ length: 58, grade: -0.015, curv: 0.040, width: 7.6, room: 0.9 }),
     cut({ length: 26, grade: -0.03, curv: 0.013, width: 6.4, room: 0.6 }),
@@ -1076,6 +1118,24 @@ function firstlightBands(): Band[] {
     // The lid runs out over a compression, which is where the speed you have
     // been carrying stops being free.
     cut({ length: 80, grade: 0.03, curv: 0, width: 5.6, ceiling: 20, room: 0.5 }),
+
+    // --- The Suncoil --------------------------------------------------------
+    // Firstlight's new vertical set piece. The road curls almost a complete
+    // turn around a sandstone spine while climbing nineteen metres, breaks
+    // onto a narrow upper shelf, then pays the height back through one severe
+    // descending hairpin. It is not a painted ramp: the sampled road, camera,
+    // tyres and ghost all occupy the higher level for real.
+    cut({ length: 45, grade: 0.05, curv: 0.001, width: 5.4, ceiling: 38, room: 0.82 }),
+    cut({ length: 18, grade: 0.07, curv: 0.008, width: 6.0, ceiling: 44, room: 0.95 }),
+    cut({ length: 160, grade: 0.115, curv: 0.030, width: 6.8, ceiling: 52, room: 1 }),
+    cut({ length: 18, grade: 0.07, curv: 0.008, width: 5.8, ceiling: 46, room: 0.9 }),
+    // The high shelf is deliberately narrower than the ordinary canyon floor.
+    // There is room for a correct line and almost none for indecision.
+    cut({ length: 70, grade: 0, curv: -0.007, width: 4.15, ceiling: 48, room: 0.36 }),
+    cut({ length: 14, grade: -0.005, curv: -0.016, width: 6.2, ceiling: 42, room: 0.82 }),
+    cut({ length: 42, grade: -0.012, curv: -0.046, width: 7.45, ceiling: 40, room: 1 }),
+    cut({ length: 14, grade: -0.035, curv: -0.016, width: 6.0, ceiling: 36, room: 0.78 }),
+    cut({ length: 89, grade: -0.125, curv: 0.006, width: 5.1, ceiling: 32, room: 0.58 }),
 
     // --- The Sun Terrace -----------------------------------------------------
     // The only climb, and it is short. The canyon opens, the light arrives from
@@ -1261,39 +1321,163 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     ],
     gate: [],
     split: null,
+    /*
+      What each road is underfoot.
+
+      The Moonbreak is a laid stone causeway and marks like one. The Stormcrown
+      is a mountain road — grit washed over rock, and wet most of the way. The
+      other two are dust and sand, and are the two this was added for.
+    */
+    loose:
+      stage === 'moonbreak' ? 0.12
+      : stage === 'stormcrown' ? 0.4
+      : stage === 'firstlight' ? 1
+      : 0.85,
   }
 
   if (stage === 'rootway' && dealtMouth !== null) {
     track.split = makeRootSplit(track, dealtMouth)
   } else if (stage === 'firstlight') {
     /*
-      The dry channel, cutting Slipstone.
+      The lower wash. It is a second road, not a six-second cut across a bend.
 
-      Fixed rather than dealt, because unlike the Rootwake this is not hidden:
-      the canyon splits in daylight and you can see both ways from the fork.
-      What makes it a decision is that the short way is narrow, unlit and
-      rougher, and the long way is two switchbacks you already know how to
-      drive. It leaves just after the Narrows and is back before Coldfall.
+      The ordinary canyon continues straight and broad through Slipstone,
+      Coldfall and the Gallery. A deliberate right move falls into the wash,
+      which disappears below those roads and stays there for roughly a third
+      of the lap. Mastering its narrow gates earns time; merely finding it does
+      not. Both roads meet again below the Suncoil.
     */
-    track.split = makeRootSplit(track, 1085, {
-      until: 1615,
-      // A slot cut lower than the terrace it leaves, not a tunnel under it.
-      dip: 7,
-      // Half the Rootwake's wandering: this is a channel, not a labyrinth.
-      wild: 0.42,
-      // Narrow enough that the two hundred metres it saves are all spent
-      // again on the two hundred it has to be driven carefully through.
-      width: 4.05,
-      ceiling: 26,
-      room: 0.09,
-      wet: 0.2,
+    track.split = makeRootSplit(track, FIRSTLIGHT.fork.from, {
+      until: FIRSTLIGHT.fork.to,
+      dip: 22,
+      wild: 0.82,
+      width: 3.45,
+      ceiling: 34,
+      entryCeiling: 8,
+      entryRise: 250,
+      room: 0.14,
+      wet: 0.04,
+      // Firstlight has room for a real Y: the choice happens on common ground,
+      // then the channel takes long enough to peel away that neither road cuts
+      // through the other's wall or roof.
+      portalN: 3.2,
+      commitAfter: 52,
+      separateAfter: 92,
     })
   }
 
   if (stage === 'moonbreak') dressMoonbreak(track, random(seed ^ 0x6d2b79))
   else if (stage === 'stormcrown') dressStormcrown(track, random(seed ^ 0x7a36c1))
+  else if (stage === 'firstlight') dressFirstlight(track, random(seed ^ 0x4f19a5))
   else dressTrack(track, random(seed ^ 0x9c31d7))
   return track
+}
+
+/**
+ * Firstlight is an exposed sandstone road, so none of Rootway's roots, stone
+ * teeth or cave-fire clutter belongs here. Its sparse sunstones are driving
+ * punctuation; three fixed fallen slabs make the terrace a visible chicane.
+ */
+function dressFirstlight(track: Track, rng: () => number) {
+  const count = track.x.length
+  let sinceStone = 0
+
+  for (let i = 20; i < count - 20; i++) {
+    const s = i * STEP
+    if (s > track.finishAt - 35) break
+    sinceStone += STEP
+    const turning = Math.abs(track.curv[i]) > 0.007
+    const spacing = turning ? 24 : 42
+    if (sinceStone < spacing) continue
+    sinceStone = 0
+    const side = turning ? -Math.sign(track.curv[i]) : rng() < 0.5 ? -1 : 1
+    track.lanterns.push({
+      s,
+      n: side * (track.width[i] + 1.15 + rng() * 0.55),
+      y: 0.28 + rng() * 0.35,
+      size: turning ? 0.78 + rng() * 0.22 : 0.5 + rng() * 0.18,
+      warm: 0.92,
+    })
+  }
+
+  const split = track.split
+  if (split) {
+    // The normal road owns the centre. A short row of low amber stones bends
+    // right into the wash; it reads as an invitation, never a mandatory gate.
+    track.lanterns.push(
+      { s: split.from + 14, n: split.portalN + 1.25, y: 0.35, size: 0.8, warm: 1 },
+      { s: split.from + 48, shortcut: true, n: 2.45, y: 0.42, size: 1.05, warm: 1 },
+      { s: split.from + 76, shortcut: true, n: 2.1, y: 0.48, size: 1.2, warm: 1 },
+    )
+    // A broad natural island hides the moment the two swept canyon walls
+    // become independent. Main road passes to its left, lower wash to its
+    // right; the split therefore reads as one rock dividing a real Y, not two
+    // pieces of tunnel geometry beginning in mid-air.
+    track.boulders.push(
+      { s: split.separateAt - 2, n: 14.2, size: 7.2, seed: 6113 },
+      { s: split.separateAt + 18, n: 14.8, size: 7.8, seed: 6271 },
+    )
+  }
+
+  // Coldfall holds the course's wet rock. These shallow pools telegraph the
+  // grip change rather than surprising the driver in the braking zone.
+  for (let s = FIRSTLIGHT.coldfall.from + 70; s < FIRSTLIGHT.coldfall.to - 45; s += 62) {
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    track.puddles.push({
+      s,
+      n: (rng() * 2 - 1) * Math.max(0.4, track.width[i] - 2),
+      radius: 0.65 + rng() * 0.55,
+    })
+  }
+
+  // A sandstone spine occupies the inside of the rising Suncoil. It is made
+  // from the same authored rocks as the canyon, but far beyond collision range:
+  // the road visibly climbs around a landmark instead of floating in space.
+  const spine = [2770, 2825, 2880, 2935, 2985]
+  for (let j = 0; j < spine.length; j++) {
+    track.boulders.push({
+      s: spine[j],
+      n: 24 + j * 1.8,
+      size: 17 + j * 2.4,
+      seed: 4100 + j * 137,
+    })
+  }
+
+  // The Fallen Gate: three huge, staggered pieces with one clean alternating
+  // line through them. It is visible from the broad terrace and never random.
+  const gateN = [-2.6, 2.55, -2.5]
+  const gateSize = [1.78, 1.92, 1.82]
+  FIRSTLIGHT.fallenGate.forEach((s, j) => {
+    track.boulders.push({ s, n: gateN[j], size: gateSize[j], seed: 7300 + j * 211 })
+  })
+
+  // Sparse off-road stone gives the exposed canyon scale without putting
+  // invisible procedural hazards on a precision course.
+  for (let s = 130; s < track.finishAt - 60; s += 92 + rng() * 76) {
+    if (s > FIRSTLIGHT.suncoil.from - 40 && s < FIRSTLIGHT.suncoil.to + 40) continue
+    if (FIRSTLIGHT.fallenGate.some(gate => Math.abs(gate - s) < 55)) continue
+    const i = Math.min(count - 1, Math.round(s / STEP))
+    const side = rng() < 0.5 ? -1 : 1
+    track.boulders.push({
+      s,
+      n: side * (track.width[i] + 1.4 + rng() * 2.4),
+      size: 0.55 + rng() * 1.15,
+      seed: Math.floor(rng() * 65536),
+    })
+  }
+
+  for (const hearth of track.hearths) {
+    track.lanterns.push({ s: hearth.s, n: hearth.n, y: 0.55, size: 3.4, warm: 1, fire: true })
+  }
+  const finish = roadAt(track, track.finishAt)
+  track.gate.push(
+    { s: track.finishAt, n: -(finish.width + 0.85) },
+    { s: track.finishAt, n: finish.width + 0.85 },
+  )
+  for (const post of track.gate) {
+    track.lanterns.push({ s: post.s, n: post.n, y: 1.15, size: 1.35, warm: 1 })
+  }
+  track.lanterns.sort((a, b) => a.s - b.s)
 }
 
 /**
@@ -1957,8 +2141,18 @@ interface SideRoute {
   wild?: number
   width?: number
   ceiling?: number
+  /** Low wall height at an open branch mouth; omitted for a full tunnel. */
+  entryCeiling?: number
+  /** Metres over which the branch walls grow to their authored height. */
+  entryRise?: number
   room?: number
   wet?: number
+  /** Lateral distance needed to choose this road while both routes are shared. */
+  portalN?: number
+  /** Metres after `from` at which the route choice becomes final. */
+  commitAfter?: number
+  /** Metres after `from` at which the two roads have separate walls. */
+  separateAfter?: number
 }
 
 function makeRootSplit(track: Track, from: number, side: SideRoute = {}): RootSplit {
@@ -1968,8 +2162,13 @@ function makeRootSplit(track: Track, from: number, side: SideRoute = {}): RootSp
     wild = 1,
     width: deckWidth = 3.7,
     ceiling: deckCeiling = 3.62,
+    entryCeiling = deckCeiling,
+    entryRise = 0,
     room: deckRoom = 0.035,
     wet: deckWet = 0.45,
+    portalN = 2.3,
+    commitAfter = 34,
+    separateAfter = 58,
   } = side
   const to = until ?? Math.max(from + 900, track.finishAt - 285)
   const span = to - from
@@ -2000,7 +2199,7 @@ function makeRootSplit(track: Track, from: number, side: SideRoute = {}): RootSp
   const throat = span
   const startGrade = Math.max(-0.12, Math.min(0.12, start.grade))
   const endGrade = Math.max(-0.12, Math.min(0.12, end.grade))
-  const separateAt = from + 58
+  const separateAt = from + Math.max(commitAfter + 8, separateAfter)
   const entryBegins = 12 / span
   const entrySeparated = (separateAt - from) / span
   const entrySettled = Math.min(0.19, entrySeparated + 96 / span)
@@ -2090,7 +2289,11 @@ function makeRootSplit(track: Track, from: number, side: SideRoute = {}): RootSp
       rather than a tunnel under a garden.
     */
     width[i] = deckWidth
-    ceiling[i] = deckCeiling + Math.sin(t * Math.PI * 7) * (deckCeiling * 0.066)
+    const entryWall = entryRise > 0
+      ? smoothstep((t - entrySeparated) / (entryRise / span))
+      : 1
+    const wallHeight = entryCeiling + (deckCeiling - entryCeiling) * entryWall
+    ceiling[i] = wallHeight + Math.sin(t * Math.PI * 7) * (wallHeight * 0.066)
     room[i] = deckRoom
     wet[i] = deckWet + Math.sin(t * 13.1) * (deckWet * 0.36)
   }
@@ -2151,10 +2354,10 @@ function makeRootSplit(track: Track, from: number, side: SideRoute = {}): RootSp
     shortcut: { from, to },
     // The choice is made while both cars are still on the common, wide floor.
     // The branch only starts pulling hard away after this point.
-    commitAt: from + 34,
+    commitAt: from + commitAfter,
     separateAt,
     rejoinAt: to - 2,
-    portalN: 2.3,
+    portalN,
     mainLength: span,
     shortcutLength,
     hardAt: hardest(0.2, 0.52),

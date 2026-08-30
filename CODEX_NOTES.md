@@ -499,3 +499,26 @@ shared-file changes, measurements, and anything another agent should preserve.
   sizes verified Rootway-to-Moonbreak navigation, Enter activation, the live
   room receiving Moonbreak, no Vite error overlay and no runtime page errors.
   The existing Three.Clock deprecation and Firebase bundle-size warning remain.
+
+## 30 August 2026 - Codex - The Firstlight rebuilt as the expert road
+
+- Extended Firstlight to 4.78 km and roughly three minutes at expert pace. Its
+  new Suncoil climbs 21.7 metres around a sandstone spine, crosses a narrow high
+  shelf, then falls through a radius-21.8-metre descending hairpin.
+- Replaced the tiny side cut with a real 1,296-metre lower wash. The normal road
+  remains broad and straight at the Y; a deliberate right move enters a route
+  that stays as much as 18.7 metres below the main canyon for 47.2 seconds and
+  rewards a mastered run by about 11.8 seconds.
+- Rebuilt the fork visually around one sandstone island and a low, open ledge.
+  The two canyon shells now separate only after the route decision, without a
+  hanging roof, wall-through-road seam or forced shortcut entrance.
+- Gave Firstlight its own exposed sandstone palette and dressing instead of
+  inheriting Rootway roots, stalactites and cave lanterns. Added Coldfall pools,
+  sparse sunrise guidance stones, a fixed three-rock terrace chicane and the
+  central Suncoil landmark.
+- Added a repeatable Firstlight course audit covering total time, vertical
+  range, tightest radius, route length/depth/time advantage, fork opening and
+  accidental cave-dressing leakage.
+- TypeScript, the rally physics/course suite and the production build pass.
+  Browser checks covered the road picker, start, rebuilt fork, Suncoil and
+  Fallen Gate. The established Firebase bundle-size warning remains unchanged.

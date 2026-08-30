@@ -11,6 +11,22 @@ import type { Round, UserId } from '@/data/types'
  * sliver at each end of the day. A game that needs two people at once is a
  * game you will play four times and then stop. Live games are the treat for
  * the evenings that line up, not the foundation.
+ *
+ * ---------------------------------------------------------------------------
+ * **`live` is now enforced, not merely declared.** It used to be a label the
+ * Hollow never read: every game got all three ways in — leave her one, on your
+ * own, and the live round — whatever it said here.
+ *
+ * For some games the first two are simply not the game. Scattergories is
+ * twelve categories and a letter, and all of its pleasure is in the reveal:
+ * comparing two sheets, striking each other's stretches, arguing about whether
+ * "Ondo" counts. Written alone it is a vocabulary test with nobody to disagree
+ * with, and the word bag makes a poor opponent because it is not trying.
+ *
+ * So a `live` game offers one way in, and it is the one that waits until you
+ * are both actually here. Fewer doors, and none of them opens onto a worse
+ * version of the thing.
+ * ---------------------------------------------------------------------------
  */
 export type GameMode = 'live' | 'async'
 
@@ -190,6 +206,27 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
 
   /** Override the generic "both moved" rule for multi-stage games. */
   isSettled?(state: { mine: MoveData[]; theirs: MoveData[]; solo: boolean }): boolean
+
+  /**
+   * Is *your* side of this round over?
+   *
+   * -------------------------------------------------------------------------
+   * Not the same question as `isSettled`, which asks whether the round is done
+   * with *both* of you. This one is only about you, and it exists because the
+   * Hollow's list was telling people things they had already dealt with.
+   *
+   * The list is built from moves alone — it counts who has played and says so.
+   * But "she has been" and "you have used all six guesses" are both true at
+   * the same time, and only one of them is worth reading: a line that keeps
+   * announcing a game you finished an hour ago reads as something still asking
+   * for you. Whether a round is over is a thing only the game knows — six
+   * guesses, or the word found, or two sheets written — so it is asked here.
+   *
+   * Left out, the list behaves exactly as it did: no game is ever "done", and
+   * every standing is about whose move it is.
+   * -------------------------------------------------------------------------
+   */
+  isDone?(state: { mine: MoveData[]; theirs: MoveData[] }): boolean
 
   /**
    * The game, as one small object, for the row you choose it from.

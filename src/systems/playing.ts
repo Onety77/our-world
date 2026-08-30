@@ -34,6 +34,17 @@ interface PlayingState {
    * come to be holding the same key is `Presence.racing`; see the note there.
    */
   race: string | null
+  /**
+   * The last game opened, kept after it is closed.
+   *
+   * `gameId` is null the moment you leave, which is right — nothing is being
+   * played. But the row of games at the fire had nothing else to go on, so it
+   * started at the first card every time: come out of a race and the Hollow
+   * would be offering you Word Duel again, with the road you had just been on
+   * three cards to the right. Coming back to where you were is the whole job
+   * of a row you can walk along.
+   */
+  lastPlayed: string | null
   open(gameId: string, solo?: boolean): void
   /** Open a live round. Both of you must call this with the same key. */
   openRace(gameId: string, race: string): void
@@ -42,9 +53,10 @@ interface PlayingState {
 
 export const usePlaying = create<PlayingState>((set) => ({
   gameId: null,
+  lastPlayed: null,
   solo: false,
   race: null,
-  open: (gameId, solo = false) => set({ gameId, solo, race: null }),
-  openRace: (gameId, race) => set({ gameId, solo: false, race }),
+  open: (gameId, solo = false) => set({ gameId, lastPlayed: gameId, solo, race: null }),
+  openRace: (gameId, race) => set({ gameId, lastPlayed: gameId, solo: false, race }),
   close: () => set({ gameId: null, solo: false, race: null }),
 }))

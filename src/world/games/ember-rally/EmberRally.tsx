@@ -124,9 +124,9 @@ const COURSES: Record<StageId, {
   firstlight: {
     name: 'The Firstlight',
     place: 'sun and cut stone',
-    short: 'A slot canyon, driven down at sunrise. Steep, narrow, and the only road here with a way through the wall.',
+    short: 'The expert road: a lower wash, a rising suncoil, a knife-edge shelf and the hardest descent in the garden.',
     soloTitle: 'Something went down before the sun did',
-    soloCopy: 'The canyon does the telling on this road: the rim above a corner shows you which way it goes long before the corner does. It falls the whole way, so the brakes are what you run out of, not the road. Get Coldfall wrong once and you will remember where the water is.',
+    soloCopy: 'Stay high through Slipstone, Coldfall and the dark Gallery—or move deliberately right and commit to the long lower wash. Both roads meet beneath the Suncoil. Climb it around the sandstone spine, hold the upper shelf, survive the descending hairpin, then thread the three fallen stones. The canyon gives every warning once.',
     spirit: 'the dawn-spirit',
     returnTo: 'return to the low fire',
     setTitle: 'Leave a line down the cut',

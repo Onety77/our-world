@@ -170,6 +170,17 @@ const ROOTWAKE_MOUTH = new Color('#71583f')
 const CHASM_WALL = new Color('#171310')
 const ROOTWAKE_OCHRE = new Color('#6e452d')
 const ROOTWAKE_QUARTZ = new Color('#736b5d')
+// Firstlight is sun-warmed cut stone, not another brown cave. These stay muted
+// enough for the headlamps and amber guidance stones to remain readable.
+const FIRSTLIGHT_ROAD = new Color('#8c7560')
+const FIRSTLIGHT_WORN = new Color('#58473a')
+const FIRSTLIGHT_SAND = new Color('#74513a')
+const FIRSTLIGHT_EDGE = new Color('#8f6848')
+const FIRSTLIGHT_LOW = new Color('#5b3e32')
+const FIRSTLIGHT_MID = new Color('#8a5d43')
+const FIRSTLIGHT_HIGH = new Color('#b07d58')
+const FIRSTLIGHT_WASH = new Color('#5a4238')
+const FIRSTLIGHT_SCAR = new Color('#d0a36e')
 
 const scratchColor = new Color()
 const scratchPoint = new Vector3()
@@ -545,6 +556,7 @@ export function buildTunnel(track: Track): TunnelChunk[] {
   const basis: RoadBasis = { ...scratchBasis }
   const point = new Vector3()
   const rng = random(track.seed ^ 0x2b7f11)
+  const firstlight = track.stage === 'firstlight'
 
   const chunkOf = (s: number) =>
     Math.max(0, Math.min(chunkCount - 1, Math.floor(s / CHUNK)))
@@ -589,20 +601,28 @@ export function buildTunnel(track: Track): TunnelChunk[] {
           const worn =
             (1 - Math.min(1, Math.max(0, (away - 0.4) / 0.95))) *
             (0.3 + Math.min(1, Math.abs(road.curv) * 95) * 0.7)
-          scratchColor.copy(STONE_ROAD).lerp(STONE_WORN, worn * 0.7)
+          scratchColor
+            .copy(firstlight ? FIRSTLIGHT_ROAD : STONE_ROAD)
+            .lerp(firstlight ? FIRSTLIGHT_WORN : STONE_WORN, worn * 0.7)
           // dirt gathers at the edges of any road
           const edge = Math.min(1, Math.max(0, (Math.abs(n) / road.width - 0.68) / 0.32))
-          scratchColor.lerp(EARTH, edge * 0.45)
+          scratchColor.lerp(firstlight ? FIRSTLIGHT_SAND : EARTH, edge * 0.45)
         } else if (k === 9 || k === 10 || k === 20 || k === 21) {
           rough = 1
           wet = road.wet * 0.5
-          scratchColor.copy(EARTH).lerp(MOSS, hash3(i, k, 7) * 0.55)
+          scratchColor
+            .copy(firstlight ? FIRSTLIGHT_SAND : EARTH)
+            .lerp(firstlight ? FIRSTLIGHT_EDGE : MOSS, hash3(i, k, 7) * 0.55)
         } else {
           const up = Math.min(1, y / Math.max(1, road.ceiling))
           rough = 0.6
           wet = road.wet * 0.7
-          scratchColor.copy(ROCK_LOW).lerp(ROCK_MID, Math.min(1, up * 1.8))
-          if (up > 0.5) scratchColor.lerp(ROCK_HIGH, (up - 0.5) * 1.6)
+          scratchColor
+            .copy(firstlight ? FIRSTLIGHT_LOW : ROCK_LOW)
+            .lerp(firstlight ? FIRSTLIGHT_MID : ROCK_MID, Math.min(1, up * 1.8))
+          if (up > 0.5) {
+            scratchColor.lerp(firstlight ? FIRSTLIGHT_HIGH : ROCK_HIGH, (up - 0.5) * 1.6)
+          }
           scratchColor.multiplyScalar(0.84 + hash3(i, k, 17) * 0.3)
         }
 
@@ -614,12 +634,17 @@ export function buildTunnel(track: Track): TunnelChunk[] {
         for (let k = 0; k < PROFILE; k++) {
           const k2 = (k + 1) % PROFILE
           const junctionOpen = track.split && (
-            (s >= track.split.from + 34 && s <= track.split.separateAt + 12) ||
+            (s >= track.split.commitAt - 2 &&
+              s <= track.split.separateAt + (firstlight ? 86 : 12)) ||
             (s >= track.split.rejoinAt - 48 && s <= track.split.to + 5)
           )
           // The right wall opens twice: into the hidden throat and where that
           // throat returns. Everywhere between, this remains a closed cave.
           if (junctionOpen && k >= 9 && k <= 13) continue
+          // Tall Firstlight sections are real open canyon. Lower bands retain
+          // their roof and become the Gallery; the change is visible and also
+          // lets sunlight guide the exposed road without a fake glowing line.
+          if (firstlight && road.ceiling >= 22 && k >= 13 && k <= 16) continue
           mesh.quad(previous + k, previous + k2, base + k2, base + k)
         }
       }
@@ -655,15 +680,17 @@ export function buildTunnel(track: Track): TunnelChunk[] {
           const n = offset[k]
           const y = height[k]
           roadPoint(road, n, y, point, basis)
-          let colour = CHASM_WALL
+          let colour = firstlight ? FIRSTLIGHT_LOW : CHASM_WALL
           let wet = road.wet * 0.72
           let rough = 0.95
           if (k < ROAD_POINTS) {
             const edge = Math.min(1, Math.max(0, (Math.abs(n) / road.width - 0.62) / 0.38))
             const inMouth = s < split.separateAt
-            scratchColor.copy(inMouth ? ROOTWAKE_MOUTH : SHORTCUT_STONE).lerp(EARTH, edge * 0.52)
+            scratchColor
+              .copy(firstlight ? FIRSTLIGHT_WASH : inMouth ? ROOTWAKE_MOUTH : SHORTCUT_STONE)
+              .lerp(firstlight ? FIRSTLIGHT_SAND : EARTH, edge * 0.52)
             const worn = Math.max(0, 1 - Math.abs(n - road.line) / 1.25)
-            scratchColor.lerp(STONE_WORN, worn * 0.38)
+            scratchColor.lerp(firstlight ? FIRSTLIGHT_WORN : STONE_WORN, worn * 0.38)
             scratchColor.multiplyScalar(
               (inMouth ? 0.92 : 0.74) + hash3(Math.round(s), k, 91) * (inMouth ? 0.12 : 0.22),
             )
@@ -671,18 +698,27 @@ export function buildTunnel(track: Track): TunnelChunk[] {
             wet = road.wet
             rough = 0.42
           } else if (k === 9 || k === 10 || k === 20 || k === 21) {
-            scratchColor.copy(EARTH).multiplyScalar(0.58 + hash3(Math.round(s), k, 72) * 0.2)
+            scratchColor
+              .copy(firstlight ? FIRSTLIGHT_SAND : EARTH)
+              .multiplyScalar(0.58 + hash3(Math.round(s), k, 72) * 0.2)
             colour = scratchColor
           } else {
             const inMouth = s < split.separateAt
             scratchColor
-              .copy(inMouth ? ROCK_LOW : CHASM_WALL)
-              .lerp(ROCK_MID, hash3(Math.round(s / 2), k, 63) * (inMouth ? 0.52 : 0.38))
+              .copy(firstlight ? FIRSTLIGHT_LOW : inMouth ? ROCK_LOW : CHASM_WALL)
+              .lerp(
+                firstlight ? FIRSTLIGHT_MID : ROCK_MID,
+                hash3(Math.round(s / 2), k, 63) * (inMouth ? 0.52 : 0.38),
+              )
             // Headlights catch two natural scars before the demanding bends:
             // ochre through the hard S, one cold quartz rib at the blind
             // reverse. They are landmarks, not a luminous racing line.
-            if (hardScar > 0) scratchColor.lerp(ROOTWAKE_OCHRE, hardScar * 0.54)
-            if (blindScar > 0) scratchColor.lerp(ROOTWAKE_QUARTZ, blindScar * 0.68)
+            if (hardScar > 0) {
+              scratchColor.lerp(firstlight ? FIRSTLIGHT_SCAR : ROOTWAKE_OCHRE, hardScar * 0.54)
+            }
+            if (blindScar > 0) {
+              scratchColor.lerp(firstlight ? FIRSTLIGHT_HIGH : ROOTWAKE_QUARTZ, blindScar * 0.68)
+            }
             colour = scratchColor
           }
           mesh.vertex(point.x, point.y, point.z, colour, wet, rough)
@@ -691,11 +727,13 @@ export function buildTunnel(track: Track): TunnelChunk[] {
         if (previous >= 0) {
           for (let k = 0; k < PROFILE; k++) {
             const k2 = (k + 1) % PROFILE
-            const intoFork = s - split.from
             // The broad main chamber is the only floor until the right-hand
             // lane has actually moved beyond its edge.
-            if (intoFork < 36) continue
-            const entranceOpen = s < split.separateAt
+            if (s < split.commitAt) continue
+            // Firstlight stays an open ledge beyond the sandstone island. Its
+            // lower-wash walls begin after the ledge has curved out of view,
+            // so no sliced-off cross-section is presented at the route choice.
+            const entranceOpen = s < split.separateAt + (firstlight ? 22 : 0)
             const exitOpen = s >= split.rejoinAt - 48
             /*
               While the lane is leaving the chamber, draw only its outer half:
@@ -710,14 +748,25 @@ export function buildTunnel(track: Track): TunnelChunk[] {
             // Only the outer half-shell exists in the open chamber: half the
             // worn deck, its wall, and the roof up to the shared centre seam.
             // The missing inner half is supplied by the main cave.
-            if (entranceOpen && (k < 4 || k >= 16)) continue
+            if (entranceOpen) {
+              if (firstlight) {
+                // Firstlight begins as one broad, continuous canyon floor. Do
+                // not grow the wash's outer wall and half-roof while that floor
+                // is still inside the main road — those faces formed the tall
+                // hanging slab that made the choice look broken. The wall rises
+                // only once the two centrelines are genuinely separate.
+                if (k > 8) continue
+              } else if (k < 4 || k >= 16) continue
+            }
             if (
+              !firstlight &&
               s >= split.separateAt &&
               s < split.separateAt + 14 &&
               k >= 16 && k <= 21
             ) continue
             // At the far merge only the branch's inside half needs to open.
             if (exitOpen && k >= 16 && k <= 21) continue
+            if (firstlight && k >= 13 && k <= 16) continue
             mesh.quad(previous + k, previous + k2, base + k2, base + k)
           }
         }
@@ -833,7 +882,7 @@ export function buildTunnel(track: Track): TunnelChunk[] {
       boulder.size,
       0.62,
       boulder.seed,
-      ROCK_MID,
+      firstlight ? FIRSTLIGHT_MID : ROCK_MID,
       road.wet * 0.6,
     )
   }

@@ -39,8 +39,8 @@ export default {
       options: [
         { id: 'rootway', name: 'The Rootway', note: 'fire and stone · close, changing, lantern-lit' },
         { id: 'moonbreak', name: 'The Moonbreak', note: 'water and open sky · fast and exposed' },
-        { id: 'stormcrown', name: 'The Stormcrown', note: 'rain and high stone · longest and hardest' },
-        { id: 'firstlight', name: 'The Firstlight', note: 'sun and cut stone · steep, narrow descent' },
+        { id: 'stormcrown', name: 'The Stormcrown', note: 'rain and high stone · weather at the limit' },
+        { id: 'firstlight', name: 'The Firstlight', note: 'sun and cut stone · lower wash, high shelf, hardest road' },
       ],
     },
   },

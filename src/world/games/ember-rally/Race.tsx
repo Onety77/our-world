@@ -117,6 +117,15 @@ const COUNTDOWN = 3.1
 const RUSH_FROM = 0.34
 
 /**
+ * Grains of sand a second off the back of the car, flat out on the loosest road.
+ *
+ * Low on purpose. This is the thin trail that says the tyres are touching the
+ * ground, not a rally car on a gravel special — and everything else that throws
+ * dust (the drift, the verge, the wheelspin) is still there on top of it.
+ */
+const SAND_RATE = 26
+
+/**
  * How high the air goes, in metres above the road.
  *
  * The band a driver looks through. Above this a mote is weather rather than
@@ -682,6 +691,8 @@ class Driving {
   private engine: EngineVoice | null = null
 
   private countdown = COUNTDOWN
+  /** Counts down to the next grain of sand off a rear wheel. See `throwDust`. */
+  private sandDue = 0
   /** 0..1, eased. How far the edges of the frame have closed in. */
   private rush = 0
   private shownRush = -1
@@ -1685,6 +1696,33 @@ class Driving {
     const { delta } = args
     const drifting = Math.abs(slip) > 0.13 && speed > 9
 
+    /*
+      Sand off the back wheels, the whole time the car is moving.
+
+      `throwLooseEarth` below only fires when a wheel is actually *off* the
+      road, and the grit further down only when the car is sliding — so on the
+      two roads made of sand, driving normally down the middle of them threw
+      nothing at all. A rear tyre on a canyon floor is always lifting a little
+      of it, and that thin trail behind the car is most of what says the wheels
+      are touching the ground rather than hovering over a picture of it.
+
+      Rate rather than a per-frame count, so it is the same trail at thirty
+      frames a second as at a hundred and twenty. Scaled by speed *and* by
+      throttle, because a car being driven kicks up more than one rolling to a
+      stop, and squared against the road's own looseness so the Moonbreak's
+      stone causeway gets essentially nothing.
+    */
+    const loose = args.track.loose
+    if (loose > 0.05 && speed > 3) {
+      const want = loose * loose * (0.6 + car.throttle * 0.8) * Math.min(1, speed / 18)
+      this.sandDue -= delta * want * SAND_RATE
+      while (this.sandDue < 0) {
+        this.sandDue += 1
+        this.colour.copy(car.road.wet > 0.45 ? WET_GRIT : GRIT)
+        this.spitOne(args.dust, args.mine, this.colour, 0.1 + speed * 0.003, 0.9, 2.4)
+      }
+    }
+
     this.throwLooseEarth(args, car, speed)
     this.throwSilencerHaze(args, car, speed)
     this.throwNitro(args, car, speed)
@@ -2110,13 +2148,37 @@ class Driving {
         Math.abs(wheel.slipAngle) - 0.075,
         Math.abs(wheel.slipRatio) - 0.14,
       )
-      if (scrub <= 0) {
+
+      /*
+        On sand, a rolling tyre marks the road too.
+
+        The threshold above is the right one for tarmac: an ordinary tyre at
+        speed carries a couple of degrees of slip and half a per cent of slip
+        ratio, and on stone none of that should leave rubber. On a canyon floor
+        or a dust road it is the wrong question entirely — the surface moves out
+        of the way of the tyre whatever the tyre is doing, so a car driven dead
+        straight still leaves two lines behind it. Without this the Rootway and
+        the Firstlight had a car that never touched them.
+
+        Rear wheels only, and far apart. Four wheels marking every twenty-five
+        centimetres is four hundred and eighty marks a second at speed, against
+        a pool of four hundred and twenty that holds twelve seconds — the whole
+        trail would recycle inside a second and vanish behind the car. Two
+        wheels every couple of metres is a continuous pair of tracks that lasts
+        as long as it is meant to. The strips stretch to cover their own gap
+        anyway, so wider spacing is not a dashed line.
+      */
+      const rear = i >= 2
+      const rolling = rear ? args.track.loose : 0
+      if (scrub <= 0 && rolling <= 0) {
         this.markDue[i] = 0
         continue
       }
 
       this.markDue[i] += speed * args.delta
-      if (this.markDue[i] < 0.25) continue
+      // Close together where rubber is actually being torn off; far apart when
+      // this is only the ground giving way under a rolling wheel.
+      if (this.markDue[i] < (scrub > 0 ? 0.25 : 1.9)) continue
       /*
         Each mark is as long as the gap it is filling.
 
@@ -2140,7 +2202,13 @@ class Driving {
       // Laid *behind* the wheel, because that is the ground it has covered.
       this.point.addScaledVector(this.heading, -gap * 0.5)
 
-      const strength = Math.min(0.8, scrub * 2.4) * (1 - car.road.wet * 0.5)
+      /*
+        A rolling track is a faint one. It is the ground remembering a wheel,
+        not a tyre being destroyed, and if it comes out anywhere near as dark
+        as a drift mark then every road looks permanently abused.
+      */
+      const strength =
+        Math.max(Math.min(0.8, scrub * 2.4), rolling * 0.16) * (1 - car.road.wet * 0.5)
       args.marks.lay(
         this.point.x, this.point.y, this.point.z,
         this.heading.x * half, this.heading.y * half, this.heading.z * half,

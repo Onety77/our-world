@@ -32,6 +32,7 @@ import {
 } from '../src/world/games/ember-rally/physics'
 import { TUNE } from '../src/world/games/ember-rally/tuning'
 import {
+  FIRSTLIGHT,
   MOONBREAK,
   STORMCROWN,
   makeTrack,
@@ -482,6 +483,75 @@ function theStormcrown(): string {
     `  spirit contact   ${((wall / Math.max(1, guard)) * 100).toFixed(1)}% of steps; ${car.strikes} strikes`,
     `  sector seconds   ${sectorTimes.map((time) => Number.isFinite(time) ? time.toFixed(1) : '—').join(' · ')}`,
     `                   rainwood+climb · gale · shelf · stair · eye · fall · home`,
+  ].join(NEWLINE)
+}
+
+/** Firstlight must be a three-minute expert road with two substantial routes. */
+function theFirstlight(): string {
+  const track = makeTrack(1, 'firstlight')
+  const split = track.split
+  if (!split) return '  NO LOWER WASH — Firstlight needs its second road'
+
+  const run = (takeWash: boolean) => {
+    const car = createCar(track)
+    const drive = spiritDriver(track, 0x4f19, 0.82, true)
+    let entered = 0
+    let left = 0
+    let wall = 0
+    let guard = 0
+    while (!car.finished && guard++ < 45_000) {
+      if (takeWash && !car.shortcut && car.s >= split.from + 6 && car.s < split.rejoinAt) {
+        car.shortcut = true
+        car.n = Math.min(car.n, 0.35)
+      }
+      advanceCar(track, car, drive(car, DT), DT)
+      if (!entered && car.s >= split.from) entered = car.elapsed
+      if (!left && car.s >= split.to) left = car.elapsed
+      if (car.touching) wall++
+    }
+    return { car, sector: left - entered, wall: wall * DT }
+  }
+
+  const main = run(false)
+  const wash = run(true)
+  let high = -Infinity
+  let low = Infinity
+  let narrowest = Infinity
+  let hardest = 0
+  for (let i = 0; i < track.y.length; i++) {
+    high = Math.max(high, track.y[i])
+    low = Math.min(low, track.y[i])
+    narrowest = Math.min(narrowest, track.width[i] * 2)
+    hardest = Math.max(hardest, Math.abs(track.curv[i]))
+  }
+
+  let washLow = Infinity
+  let washHardest = 0
+  for (let s = split.from + 100; s < split.to - 100; s += 2) {
+    const mainRoad = roadAt(track, s)
+    const washRoad = shortcutRoadAt(split, s)
+    washLow = Math.min(washLow, washRoad.y - mainRoad.y)
+    washHardest = Math.max(washHardest, Math.abs(washRoad.curv))
+  }
+  const coilRise = roadAt(track, FIRSTLIGHT.suncoil.crown).y - roadAt(track, FIRSTLIGHT.suncoil.from).y
+  const forkOpening = [split.from + 12, split.commitAt, split.separateAt].map((s) => {
+    const mainRoad = roadAt(track, s)
+    const washRoad = shortcutRoadAt(split, s)
+    return Math.hypot(mainRoad.x - washRoad.x, mainRoad.y - washRoad.y, mainRoad.z - washRoad.z)
+  })
+  const durationGood = main.car.elapsed >= 172 && main.car.elapsed <= 195
+  const washLong = wash.sector >= 35 && split.shortcutLength >= 1100
+  const noCaveClutter = track.roots.length === 0 && track.spikes.length === 0
+
+  return [
+    `  road             ${(track.length / 1000).toFixed(2)} km · spirit ${main.car.elapsed.toFixed(1)}s ${durationGood ? '(the three-minute road)' : '(DURATION MISSED)'}`,
+    `  vertical story   ${(high - low).toFixed(1)}m range · Suncoil rises ${coilRise.toFixed(1)}m to its crown`,
+    `  main difficulty  ${narrowest.toFixed(1)}m narrowest deck · r${(1 / hardest).toFixed(1)}m tightest bend · ${main.car.strikes} strikes`,
+    `  lower wash       ${split.shortcutLength.toFixed(0)}m actual road · ${wash.sector.toFixed(1)}s driven ${washLong ? '(substantial)' : '(TOO SHORT)'}`,
+    `                   ${(-washLow).toFixed(1)}m below the main road · r${(1 / washHardest).toFixed(1)}m tightest bend · ${wash.car.strikes} strikes`,
+    `  route choice     fork opens ${forkOpening.map(value => value.toFixed(1)).join(' → ')}m; main stays ${main.car.shortcut ? 'BROKEN: IN WASH' : 'on the canyon floor'}`,
+    `  route result     wash ${wash.car.elapsed.toFixed(1)}s vs main ${main.car.elapsed.toFixed(1)}s · ${(main.car.elapsed - wash.car.elapsed).toFixed(1)}s earned`,
+    `  authored world   ${FIRSTLIGHT.fallenGate.length} fallen gates · ${track.puddles.length} Coldfall pools · ${noCaveClutter ? 'no Rootway clutter' : 'ROOTS OR SPIKES LEAKED IN'}`,
   ].join(NEWLINE)
 }
 
@@ -1013,6 +1083,34 @@ function driftMode() {
       `kept ${fixed((flick.speed / entrySpeed) * 100, 0)}% of ${fixed(entrySpeed, 0)} m/s`,
   )
 
+  /*
+    5. And now the one that was never measured: **hold it**.
+
+    Everything above is a second or two long, which is exactly how the fault
+    stayed invisible — a drift that decays slowly looks fine for two seconds
+    and is a crawl after eight. The dial calls itself "the speed a drift
+    settles at", so a drift held for eight seconds should be sitting on it.
+  */
+  {
+    const long = createCar(track)
+    windUpTo(track, long, 30)
+    advanceCar(track, long, { steer: 1, throttle: 0.9, brake: 0, handbrake: true, boost: false }, DT)
+    const at: number[] = []
+    for (let second = 0; second < 8; second++) {
+      for (let i = 0; i < Math.round(1 / DT); i++) {
+        advanceCar(track, long, { steer: 1, throttle: 0.9, brake: 0, handbrake: false, boost: false }, DT)
+      }
+      at.push(speedOf(long))
+    }
+    rows.push(
+      `  hold it for eight     ${at.map((v) => fixed(v * 3.6, 0)).join(' · ')} km/h`,
+    )
+    rows.push(
+      `  the dial says         ${fixed(TUNE.driftTopSpeed * 3.6, 0)} km/h · ` +
+        `${long.drifting ? 'still drifting' : 'DROPPED OUT'}`,
+    )
+  }
+
   // 4a. The ember cancels it.
   swing(1, { steer: -1, throttle: 0.6, brake: 0, handbrake: false, boost: true })
   const afterBoost = car.drifting
@@ -1363,6 +1461,7 @@ const sections: [string, () => string][] = [
   ['The Rootwake', theSplit],
   ['The Drowned Mile', theDrownedMile],
   ['The Stormcrown', theStormcrown],
+  ['The Firstlight', theFirstlight],
   ['The meters survive a restart', metersSurviveRestart],
 ]
 

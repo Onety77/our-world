@@ -57,15 +57,29 @@ export default {
   name: 'Scattergories',
   blurb:
     'One letter, twelve categories, three minutes. Whatever you both wrote scores nothing.',
-  mode: 'async',
+  /*
+    Two people, at the same time, or not at all.
+
+    This was `async`, with a "roll for {them}" that wrote your three minutes
+    now and let her write hers whenever she next came down. It worked, and it
+    was the wrong game.
+
+    Everything Scattergories is for happens *after* both sheets exist: reading
+    hers, striking the ones you think she has stretched, finding you both wrote
+    Kano for a city and scoring nothing for it. Written a day apart that
+    payoff arrives to one person at a time, cold, with nobody to argue with —
+    and playing it alone against the letter bag is worse still, because the bag
+    is not trying to beat you.
+
+    So the only way in is the live one, and `mode: 'live'` is what tells the
+    Hollow to offer that one and nothing else. It waits until you are both
+    actually here, which for this game is not a restriction — it is the game.
+  */
+  mode: 'live',
   cadence: 'daily',
   duration: 'two rounds, three minutes each',
   order: 2,
 
-  invite: {
-    name: 'roll for {them}',
-    tip: 'You write your three minutes now, {she} writes {hers} whenever {she} comes',
-  },
   live: {
     // Two, because `ROUNDS` is two. It said four for as long as nobody had
     // played it through — and "at the same moment" was the same kind of claim

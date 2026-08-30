@@ -1686,12 +1686,43 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       let exists = false
       let moves: Move[] = []
 
+      /*
+        A round is its moves.
+
+        The document only carries the label — the setup, and the moment the
+        round opened. Both of those are worked out locally as well, because
+        both devices have to agree on them without asking each other; that is
+        what `makeSetup(seedFromId(id))` is for, and `useRound` already
+        prefers the derived one when the stored one is absent.
+
+        This used to report `null` the moment the document was missing, which
+        threw away moves that had been read back perfectly well — and that is
+        how "on your own" and "time challenge" died.
+
+        Those two round ids are opened by one device, once. The daily round is
+        opened by either of you, so a create that doesn't land is covered by
+        the other person arriving; nobody is coming to open a solo round but
+        you. And a round can only ever be *created* — `allow update: if false`
+        — so a create that didn't land can never be repaired afterwards. From
+        then on every guess was written, stored, and read back correctly, and
+        then dropped here, one line before it reached the board. Which is
+        precisely what "the word disappears and the row goes empty, no matter
+        how many I type" looks like from the outside, and why the tries left
+        never moved.
+
+        So: nothing to report only when there is genuinely nothing — no label
+        and no moves. That keeps the Hollow's "neither of you has opened this"
+        exactly as it was, since that case has no moves either.
+      */
       const tell = () => {
-        if (!exists) {
+        if (!exists && moves.length === 0) {
           listener(null)
           return
         }
-        listener({ id, gameId: id.split(':')[0], setup, startedAt, moves })
+        // Sorted oldest first, so the first move is a fair stand-in for when
+        // the round began if the document that would have said so never came.
+        const opened = startedAt || (moves.length > 0 ? moves[0].at : 0)
+        listener({ id, gameId: id.split(':')[0], setup, startedAt: opened, moves })
       }
 
       const offRound = onSnapshot(roundRef, (snap) => {
@@ -1726,8 +1757,18 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
           seenSeq.set(id, mineHighest)
           tell()
         },
-        () => {
-          moves = []
+        (error) => {
+          /*
+            Coming back short here is expected before your own opening move
+            lands — that is the seal working, not a fault.
+
+            What it must not do is blank a board that is already being played.
+            A listener is finished once it errors; it does not retry. Wiping
+            the moves on the way out would strand the round on nothing at all,
+            which is the same failure this file just spent thirty lines
+            explaining. Keep what was last read and say so instead.
+          */
+          if (import.meta.env.DEV) console.warn('[round] moves listener stopped', id, error)
           tell()
         },
       )
@@ -1741,6 +1782,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     async openRound({ id, gameId, setup }) {
       const roundRef = doc(db, ROUNDS, id)
       const snap = await getDoc(roundRef)
+      let refused: unknown = null
 
       if (!snap.exists()) {
         // Both devices may reach this at the same moment. Whoever lands second
@@ -1749,12 +1791,28 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         // enforced in the rules; here we simply ignore the loss.
         try {
           await setDoc(roundRef, { gameId, setup, startedAt: now() })
-        } catch {
+        } catch (error) {
           /* someone else opened it first; theirs stands */
+          refused = error
         }
       }
 
       const settled = await getDoc(roundRef)
+      if (!settled.exists() && import.meta.env.DEV) {
+        /*
+          Losing the race is fine: the winner's document is there and the read
+          above just found it. Coming back to *nothing* is a different thing —
+          the round never got its label, and it can never get one later,
+          because the rules allow a create and nothing else.
+
+          The round still plays; its moves are the game, and `watchRound` no
+          longer waits on this document to say so. But it was being swallowed
+          whole by the catch above, and a create that quietly evaporates —
+          rolled back after an offline write, or refused outright — is worth
+          hearing about rather than inferring from a board that does nothing.
+        */
+        console.warn('[round] never opened', id, refused ?? '(create reported success)')
+      }
       const d = (settled.data() ?? {}) as Record<string, unknown>
       return {
         id,

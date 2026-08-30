@@ -7,7 +7,7 @@
  * game adds another invitation without rebuilding this shell.
  */
 
-import { useCallback, useEffect, useRef, useState, type RefCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
@@ -23,7 +23,7 @@ import { standing, useMemories } from '@/systems/memories'
 import { usePlaying } from '@/systems/playing'
 import { GAMES } from '@/world/games/registry'
 import { theRoom } from '@/systems/waiting'
-import { useStandings, type Turn } from '@/world/games/useRound'
+import { useStandings, type Standing } from '@/world/games/useRound'
 import { useQuestions } from '@/systems/questions'
 import { ambience } from '@/systems/ambience'
 
@@ -342,19 +342,23 @@ function LiveWayIn({
  */
 function Waiting({
   name,
-  turn,
+  standing,
   them,
   onPlay,
 }: {
   name: string
-  turn: Turn
+  standing: Standing
   them: string
   onPlay(): void
 }) {
   return (
-    <button type="button" className={`standing standing-${turn}`} onClick={onPlay}>
+    <button
+      type="button"
+      className={`standing standing-${standing.turn}${standing.done ? ' is-done' : ''}`}
+      onClick={onPlay}
+    >
       <span className="standing-game">{name}</span>
-      <span className="standing-state">{WORDS[turn](them)}</span>
+      <span className="standing-state">{words(standing, them)}</span>
     </button>
   )
 }
@@ -362,24 +366,44 @@ function Waiting({
 /**
  * What each state is called, in the second person.
  *
- * Not a lookup for its own sake — these four strings are the whole honesty
- * surface of the feature and they belong somewhere they can be read together
- * and checked against `useStanding`.
+ * -----------------------------------------------------------------------------
+ * Not a lookup for its own sake — these strings are the whole honesty surface of
+ * the feature and they belong somewhere they can be read together and checked
+ * against `standingOf`.
+ *
+ * **Being finished is a state, and it was missing.** The list was built out of
+ * whose move it is, so the most it could ever say about a game you had played
+ * to the end was "Onety has been" — which is the *nice* line, the one this
+ * whole screen exists for, and reading it above a round where you have already
+ * spent all six guesses turns it into a summons. You go in to see what is
+ * wanted and find your own finished board.
+ *
+ * So when your side is over the line says so first, and then still says the
+ * good part. "Onety has been" is worth knowing whether or not you are done with
+ * the game; it is only wrong as the *whole* sentence.
+ * -----------------------------------------------------------------------------
  */
-const WORDS: Record<Turn, (them: string) => string> = {
-  nothing: () => 'nothing opened today',
-  yours: () => 'your move',
-  hers: (them) => `waiting for ${them}`,
-  both: (them) => `${them} has been`,
+function words({ turn, done }: Standing, them: string): string {
+  if (done) {
+    // Deliberately not "you both are" — her being here is not her being
+    // finished, and nothing on this screen may claim more than it knows.
+    return turn === 'both' ? `done · ${them} has been` : `done · waiting for ${them}`
+  }
+  if (turn === 'nothing') return 'nothing opened today'
+  if (turn === 'yours') return 'your move'
+  if (turn === 'hers') return `waiting for ${them}`
+  return `${them} has been`
 }
 
 function Challenges({
+  games,
   turns,
   them,
   onPlay,
   onBack,
 }: {
-  turns: Record<string, Turn>
+  games: readonly { id: string; name: string }[]
+  turns: Record<string, Standing>
   them: string
   onPlay(id: string): void
   onBack(): void
@@ -392,29 +416,29 @@ function Challenges({
       if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
       if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
         event.preventDefault()
-        setSelected((at) => Math.min(GAMES.length - 1, at + 1))
+        setSelected((at) => Math.min(games.length - 1, at + 1))
       } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
         event.preventDefault()
         setSelected((at) => Math.max(0, at - 1))
       } else if (event.key === 'Enter' && !event.repeat) {
         event.preventDefault()
-        const game = GAMES[selected]
+        const game = games[selected]
         if (game) onPlay(game.id)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onPlay, selected])
+  }, [games, onPlay, selected])
 
   return (
     <div className="challenges">
       <span className="threshold-whisper">where everything stands, today</span>
       <div className="challenges-list">
-        {GAMES.map((game, index) => (
+        {games.map((game, index) => (
           <span key={game.id} className={index === selected ? 'is-selected' : ''}>
             <Waiting
               name={game.name}
-              turn={turns[game.id] ?? 'nothing'}
+              standing={turns[game.id] ?? NOTHING}
               them={them}
               onPlay={() => onPlay(game.id)}
             />
@@ -437,14 +461,23 @@ function Challenges({
  * outranks the news that she has been, because one is a thing to do and the
  * other is a thing to enjoy.
  */
-function summary(turns: Record<string, Turn>, them: string): string {
+function summary(turns: Record<string, Standing>, them: string): string {
   const all = Object.values(turns)
-  const yours = all.filter((t) => t === 'yours').length
+  const yours = all.filter((s) => s.turn === 'yours').length
   if (yours > 0) return `${yours} for you`
-  if (all.includes('both')) return `${them} has been`
-  if (all.includes('hers')) return `waiting for ${them}`
+
+  // A game you have finished is not news about that game any more, so it does
+  // not get to speak for the label — otherwise the way in goes on advertising
+  // rounds you closed hours ago and the whole line stops being worth reading.
+  const open = all.filter((s) => !s.done)
+  if (open.some((s) => s.turn === 'both')) return `${them} has been`
+  if (open.some((s) => s.turn === 'hers')) return `waiting for ${them}`
+  if (all.some((s) => s.done)) return 'all done today'
   return 'nothing yet'
 }
+
+/** The standing of a game whose round nobody has opened. */
+const NOTHING: Standing = { turn: 'nothing', done: false }
 
 function TheHollow() {
   const play = usePlaying((s) => s.open)
@@ -467,7 +500,17 @@ function TheHollow() {
     waiting before you have opened it. Read-only: looking must never open a
     round. See `useStandings`.
   */
-  const turns = useStandings(GAMES)
+  /*
+    Only the games that have an asynchronous round to stand in.
+
+    A live game's rounds are named for the moment the two of you agreed on one,
+    not for the day, so there is no `scattergories:2026-08-30` for this list to
+    look at and there never will be. Watching for it anyway meant one permanent
+    "nothing opened today" in a list whose entire job is to be worth glancing
+    at — plus a listener on a document that cannot exist.
+  */
+  const listed = useMemo(() => GAMES.filter((g) => g.mode !== 'live'), [])
+  const turns = useStandings(listed)
 
   /*
     Tell the room, so the fire can say it too.
@@ -482,7 +525,7 @@ function TheHollow() {
     time so it can decide how many sparks to draw is a real cost on somebody's
     phone for a decorative one. See `theRoom`.
   */
-  const yours = Object.values(turns).filter((turn) => turn === 'yours').length
+  const yours = Object.values(turns).filter((s) => s.turn === 'yours').length
   useEffect(() => {
     theRoom.waitingForYou = yours
     // Quiet again on the way out, or the fire stays awake in an empty room.
@@ -491,8 +534,16 @@ function TheHollow() {
     }
   }, [yours])
 
-  // One past the end is the "more coming" card, which is always there.
-  const [at, setAt] = useState(0)
+  /*
+    Where the row starts: the last game you were in, not the first one.
+
+    One past the end is the "more coming" card, which is always there.
+  */
+  const [at, setAt] = useState(() => {
+    const last = usePlaying.getState().lastPlayed
+    const where = last === null ? -1 : GAMES.findIndex((g) => g.id === last)
+    return where < 0 ? 0 : where
+  })
   const [way, setWay] = useState(0)
   const [choosingLiveRoad, setChoosingLiveRoad] = useState(false)
   const last = GAMES.length
@@ -524,9 +575,97 @@ function TheHollow() {
     return swipe
   }, [go, showing])
 
+  /*
+    ---------------------------------------------------------------------------
+    Swiping the row *is* choosing.
+
+    The row is a real scroll container with `scroll-snap-type: x mandatory` on
+    it, so a thumb-flick slides it and the browser lands it dead centre on the
+    next card — and nothing told React any of that had happened. `at` still
+    pointed at the card you swiped away from. So the game now filling the
+    screen was drawn as a neighbour: dimmed, no glow, and labelled "bring to
+    the fire" rather than "enter to choose". Tapping it selected it, and only a
+    second tap opened it.
+
+    Two taps, and the first one appeared to do nothing except brighten a card
+    that was already the only one you could see.
+
+    Reading the scroll position back fixes it at the source, rather than by
+    adding another gesture: whatever card the row has settled on is the card
+    you have chosen, however it got there — thumb, trackpad, arrow key or the
+    two chevrons. One tap enters, because by then it is already selected.
+    ---------------------------------------------------------------------------
+  */
+  /** `at` readable from a listener without re-subscribing it on every card. */
+  const atNow = useRef(at)
+  atNow.current = at
+  /** The move came from the row itself, so it is already where it belongs. */
+  const fromScroll = useRef(false)
+  /** A scroll we started. Its own events must not be read back as a swipe. */
+  const gliding = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (showing !== 'games') return
+    const row = track.current?.querySelector('.game-row')
+    if (!(row instanceof HTMLElement)) return
+
+    let frame = 0
+    const settle = () => {
+      frame = 0
+      // Ignore the scrolling we asked for ourselves. A smooth `scrollIntoView`
+      // passes over every card between here and where it is going, and reading
+      // those would drag `at` through them on the way.
+      if (gliding.current !== null) return
+      const middle = row.scrollLeft + row.clientWidth / 2
+      let nearest = 0
+      let best = Infinity
+      cards.current.forEach((card, index) => {
+        if (!card) return
+        const from = Math.abs(card.offsetLeft + card.offsetWidth / 2 - middle)
+        if (from < best) {
+          best = from
+          nearest = index
+        }
+      })
+      if (nearest === atNow.current) return
+      fromScroll.current = true
+      setAt(nearest)
+    }
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(settle)
+    }
+
+    row.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      row.removeEventListener('scroll', onScroll)
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [showing])
+
+  useEffect(() => () => { if (gliding.current !== null) clearTimeout(gliding.current) }, [])
+
   useEffect(() => {
     setWay(0)
-    cards.current[at]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+
+    /*
+      Only drive the row when something other than the row moved it.
+
+      An arrow key or a chevron has to be carried over to the scroll position.
+      A swipe must not be: the browser is already snapping the card into place,
+      and scrolling it again from here would fight that animation and, worse,
+      hold the listener shut for the length of it — so a second quick flick
+      would go unread.
+    */
+    if (fromScroll.current) {
+      fromScroll.current = false
+    } else {
+      // Held a little past the animation, so its tail is not mistaken for a
+      // swipe. Reset on every move, so flicking through never sticks it shut.
+      if (gliding.current !== null) clearTimeout(gliding.current)
+      gliding.current = setTimeout(() => { gliding.current = null }, 620)
+      cards.current[at]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    }
 
     /*
       And fetch the game you are looking at, before you ask for it.
@@ -566,7 +705,10 @@ function TheHollow() {
         game
       ) {
         e.preventDefault()
-        const count = game.live ? 3 : 2
+        // A live-only game has exactly one way in, so there is nothing to
+        // move between and the arrows must not park the cursor on a button
+        // that was never rendered.
+        const count = game.mode === 'live' ? 1 : game.live ? 3 : 2
         setWay((current) =>
           e.key === 'ArrowDown' || e.key === 'ArrowRight'
             ? (current + 1) % count
@@ -590,6 +732,7 @@ function TheHollow() {
     return (
       <div className="threshold hollow-threshold">
         <Challenges
+          games={listed}
           turns={turns}
           them={them.name}
           onPlay={(id) => {
@@ -610,7 +753,7 @@ function TheHollow() {
               genuinely open: nothing today, and waiting on her.
               ------------------------------------------------------------------
             */
-            const standing = turns[id] ?? 'nothing'
+            const standing = (turns[id] ?? NOTHING).turn
             if (standing === 'yours' || standing === 'both') {
               ambience.cue('ember', 0.38)
               begin(id, false)
@@ -646,42 +789,69 @@ function TheHollow() {
           <small>{game.duration}</small>
         </header>
 
-        <div className="game-ways" role="group" aria-label={`ways to enter ${game.name}`}>
-          <span className="game-way-label">now choose how you enter</span>
-          <button
-            ref={(node) => { ways.current[0] = node }}
-            type="button"
-            className={`game-go${way === 0 ? ' is-selected' : ''}`}
-            onFocus={() => setWay(0)}
-            onClick={() => begin(game.id, false)}
-            title={game.invite ? say(game.invite.tip) : undefined}
-          >
-            {game.invite ? say(game.invite.name) : `play with ${them.name}`}
-          </button>
-          <div className="game-else">
-            <button
-              ref={(node) => { ways.current[1] = node }}
-              type="button"
-              className={`quiet${way === 1 ? ' is-selected' : ''}`}
-              onFocus={() => setWay(1)}
-              onClick={() => begin(game.id, true)}
-            >
-              on your own
-            </button>
-            {game.live ? (
-              <LiveWayIn
-                game={game.id}
-                them={them.name}
-                live={game.live}
-                selected={way === 2}
-                buttonRef={(node) => { ways.current[2] = node }}
-                onFocus={() => setWay(2)}
-                onChoosing={setChoosingLiveRoad}
-              />
-            ) : null}
+        {/*
+          A live-only game gets one door, and it is the one that waits.
+
+          Not three doors with two of them greyed out: an option you can see
+          and cannot take is a question the interface is asking and refusing to
+          answer. There is nothing to choose between here, so the screen stops
+          pretending there is and says the one true thing instead — this is
+          played together, and it opens when you are both here. `LiveWayIn`
+          already knows how to say that and how to stay shut until it is true.
+        */}
+        {game.mode === 'live' && game.live ? (
+          <div className="game-ways-one" role="group" aria-label={`enter ${game.name}`}>
+            <span className="game-way-label">this one is played together</span>
+            <LiveWayIn
+              game={game.id}
+              them={them.name}
+              live={game.live}
+              selected={way === 0}
+              buttonRef={(node) => { ways.current[0] = node }}
+              onFocus={() => setWay(0)}
+              onChoosing={setChoosingLiveRoad}
+            />
           </div>
-        </div>
-        <p className="game-key-guide">↑ ↓ choose · enter confirm · escape back</p>
+        ) : (
+          <div className="game-ways" role="group" aria-label={`ways to enter ${game.name}`}>
+            <span className="game-way-label">now choose how you enter</span>
+            <button
+              ref={(node) => { ways.current[0] = node }}
+              type="button"
+              className={`game-go${way === 0 ? ' is-selected' : ''}`}
+              onFocus={() => setWay(0)}
+              onClick={() => begin(game.id, false)}
+              title={game.invite ? say(game.invite.tip) : undefined}
+            >
+              {game.invite ? say(game.invite.name) : `play with ${them.name}`}
+            </button>
+            <div className="game-else">
+              <button
+                ref={(node) => { ways.current[1] = node }}
+                type="button"
+                className={`quiet${way === 1 ? ' is-selected' : ''}`}
+                onFocus={() => setWay(1)}
+                onClick={() => begin(game.id, true)}
+              >
+                on your own
+              </button>
+              {game.live ? (
+                <LiveWayIn
+                  game={game.id}
+                  them={them.name}
+                  live={game.live}
+                  selected={way === 2}
+                  buttonRef={(node) => { ways.current[2] = node }}
+                  onFocus={() => setWay(2)}
+                  onChoosing={setChoosingLiveRoad}
+                />
+              ) : null}
+            </div>
+          </div>
+        )}
+        <p className="game-key-guide">
+          {game.mode === 'live' ? 'enter confirm · escape back' : '↑ ↓ choose · enter confirm · escape back'}
+        </p>
       </div>
     )
   }
@@ -820,7 +990,17 @@ function TheHollow() {
 function alongTheRow(el: HTMLElement, go: (by: 1 | -1) => void): () => void {
   let from: number | null = null
   const down = (e: PointerEvent) => {
-    if ((e.target as HTMLElement)?.closest('button')) return
+    const target = e.target as HTMLElement | null
+    if (target?.closest('button')) return
+    /*
+      Not on the row itself — the row scrolls, and reports where it landed.
+
+      This recogniser is for the rest of the screen: the heading, the space
+      around the cards, anywhere a drag has nothing else to mean. Letting it
+      fire over the row as well moved the carousel twice for one gesture, once
+      by scrolling and once by counting.
+    */
+    if (target?.closest('.game-row')) return
     from = e.clientX
   }
   const up = (e: PointerEvent) => {
