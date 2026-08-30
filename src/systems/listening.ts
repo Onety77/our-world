@@ -56,6 +56,21 @@ interface ListeningState {
   mine: Listening
   /** True while she is here too. */
   together: boolean
+  /**
+   * You have stepped out of the shared music on purpose.
+   *
+   * Being in the same room is not the same as wanting the same sound in it.
+   * She is on a bus with headphones; you are in an office, or a lecture, or
+   * beside somebody asleep — and until this existed the garden simply started
+   * playing at you, because she pressed play and you were both online. Being
+   * together was doing the deciding, which is not a thing a room should do.
+   *
+   * This device only, and remembered here rather than sent: it is nobody
+   * else's business that you have gone quiet, and she should not get a
+   * notification about it.
+   */
+  apart: boolean
+  setApart(apart: boolean): void
   /** The player is open rather than folded away. */
   open: boolean
 
@@ -72,19 +87,50 @@ export const useListening = create<ListeningState>((set) => ({
   shared: quiet(),
   mine: quiet(),
   together: false,
+  apart: readApart(),
   open: false,
 
   setTracks: (tracks) => set({ tracks }),
   setShared: (shared) => set({ shared }),
   setMine: (mine) => set({ mine }),
   setTogether: (together) => set({ together }),
+  setApart(apart) {
+    try {
+      localStorage.setItem(APART_KEY, apart ? '1' : '')
+    } catch {
+      /* it still holds for this session */
+    }
+    set({ apart })
+  },
   toggleOpen: () => set((s) => ({ open: !s.open })),
   close: () => set({ open: false }),
 }))
 
-/** Whichever anchor is in charge right now. */
+const APART_KEY = 'garden:listening-apart:v1'
+
+function readApart(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  try {
+    return localStorage.getItem(APART_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whichever anchor is in charge right now.
+ *
+ * Three states rather than two. Together and in step, together but listening
+ * on your own, and simply alone — and the middle one is the whole reason
+ * `apart` exists: her being here is a fact, and joining her is a choice.
+ */
 export function current(s: ListeningState): Listening {
-  return s.together ? s.shared : s.mine
+  return s.together && !s.apart ? s.shared : s.mine
+}
+
+/** In step with her right now, as opposed to merely both being here. */
+export function inStep(s: ListeningState): boolean {
+  return s.together && !s.apart
 }
 
 /**

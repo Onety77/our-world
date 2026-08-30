@@ -26,6 +26,7 @@ import { attempt } from '@/systems/trouble'
 import {
   clock,
   current,
+  inStep,
   positionOf,
   progressOf,
   step,
@@ -51,6 +52,7 @@ export function Player() {
 
   const tracks = useListening((s) => s.tracks)
   const together = useListening((s) => s.together)
+  const apart = useListening((s) => s.apart)
   const open = useListening((s) => s.open)
   const toggleOpen = useListening((s) => s.toggleOpen)
   const close = useListening((s) => s.close)
@@ -101,7 +103,15 @@ export function Player() {
     */
     state.setMine({ ...next, by: me, since: data.now() })
 
-    if (state.together) {
+    /*
+      Only when you are actually in step, not merely both here.
+
+      `together` says she is online; `inStep` says the two of you are sharing
+      the sound. Writing to the shared anchor while somebody has stepped out
+      would reach across and move *her* music from a device that is no longer
+      following it — which is the one thing stepping out is supposed to stop.
+    */
+    if (inStep(state)) {
       await attempt('the music didn’t move', () => data.setListening(next))
     }
   }
@@ -231,6 +241,40 @@ export function Player() {
     }
   }, [playPause, skip])
 
+  /*
+    The end of a song is not the end of the music.
+
+    It used to simply stop: the element ran out, paused itself, and the anchor
+    went on claiming to be playing for ever — so the corner said one thing and
+    the silence said another, and the only way out was to press something.
+
+    `ended` rather than watching the clock, because the element is the only
+    thing that knows when the file has actually finished — the anchor's idea of
+    the position keeps counting past the end of a track whose length nobody
+    ever measured, and a `duration` of 0 means *not known* by design.
+
+    Both of you fire this at nearly the same moment when you are in step, and
+    both write the same answer: `step` is a pure function of the same track
+    list and the same current id, so whichever write lands second is identical
+    to the first. The last song stops, and stops honestly — the anchor is told
+    it is no longer playing rather than being left claiming it is.
+  */
+  useEffect(() => {
+    const el = audio.current
+    if (!el) return
+    const onEnded = () => {
+      const state = useListening.getState()
+      const next = step(state.tracks, anchor.trackId, 1)
+      if (next === null || next === anchor.trackId) {
+        void move({ trackId: anchor.trackId, playing: false, at: 0 })
+        return
+      }
+      void move({ trackId: next, playing: true, at: 0 })
+    }
+    el.addEventListener('ended', onEnded)
+    return () => el.removeEventListener('ended', onEnded)
+  })
+
   useEffect(() => {
     const el = audio.current
     if (!el) return
@@ -303,16 +347,37 @@ export function Player() {
 
       {open && (
         <div className="player-list">
-          <p className="player-where">
-            {together ? (
-              <>
-                <span className="player-both" />
-                together — {them.name} hears this too
-              </>
-            ) : (
-              `on your own · ${them.name} isn’t here`
-            )}
-          </p>
+          {/*
+            The two lights were only ever a *label*, and they should not have
+            been.
+
+            While you were both online the garden simply put you in step: she
+            pressed play and your phone started playing, wherever you happened
+            to be sitting. Being in the same room was doing the deciding, which
+            is not a thing a room gets to do — she is on a bus with headphones
+            and you are in a lecture, and the honest answer is that her being
+            here is a fact and joining her is a choice.
+
+            So it is a button now. Bigger, too: it was the smallest mark in the
+            panel and it is the only control in it that reaches another person.
+          */}
+          {together ? (
+            <button
+              type="button"
+              className={`player-where player-step${apart ? ' apart' : ''}`}
+              aria-pressed={!apart}
+              onClick={() => useListening.getState().setApart(!apart)}
+            >
+              <span className="player-both" />
+              {apart ? (
+                <>on your own · {them.name} is here, listening separately</>
+              ) : (
+                <>together — {them.name} hears this too</>
+              )}
+            </button>
+          ) : (
+            <p className="player-where">on your own · {them.name} isn’t here</p>
+          )}
 
           {/*
             `player-all` turns off the fade at the bottom of the list.

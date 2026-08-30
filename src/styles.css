@@ -11377,3 +11377,61 @@ body.on-the-road .broke-what {
   font-style: normal;
   color: var(--ink-faint);
 }
+
+/* ---- in step with her, or listening on your own -------------------------- */
+/*
+  See the note in `Player`. This was a label with two little lights on it, and
+  it is a control now — the only one in the panel that reaches another person's
+  device, and previously the smallest mark in it.
+
+  Sized like something you press: a real target, a border that says so, and the
+  lights grown enough to be read as two people rather than as a dash.
+*/
+.player-step {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0 0 0.55rem;
+  padding: 0.42rem 0.6rem;
+  border: 1px solid rgba(240, 216, 178, 0.14);
+  border-radius: 0.55rem;
+  background: rgba(240, 178, 106, 0.07);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: right;
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.player-step:hover,
+.player-step:focus-visible {
+  border-color: rgba(240, 178, 106, 0.42);
+  background: rgba(240, 178, 106, 0.12);
+}
+
+.player-step .player-both {
+  width: 1.5rem;
+  height: 0.6rem;
+  border-radius: 0.6rem;
+}
+
+/*
+  Stepped out: the lights go grey and stop breathing, and the row goes quiet.
+  She is still here — that is why the button is still here — but nothing about
+  this device is following her any more, and it should not look as if it is.
+*/
+.player-step.apart {
+  border-color: rgba(240, 216, 178, 0.1);
+  background: none;
+  color: var(--ink-dim);
+}
+
+.player-step.apart .player-both {
+  background: rgba(242, 239, 230, 0.26);
+  animation: none;
+}
