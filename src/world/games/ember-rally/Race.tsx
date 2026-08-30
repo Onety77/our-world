@@ -100,7 +100,7 @@ import { useData } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { FirstlightWorld } from './Firstlight'
 import { useRace } from './session'
-import { KEEPALIVE_MS, Rolling, readCar, writeCar } from './wire'
+import { KEEPALIVE_MS, Rolling, readCar, readClock, stamp, writeCar } from './wire'
 import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
 
 /** Seconds of lamps coming up before the road opens. */
@@ -248,7 +248,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     let sentAt = 0
     live.current = {
       rolling,
-      send(text) {
+      send(text, elapsedMs) {
         /*
           Skip a repeat, but never go quiet.
 
@@ -262,15 +262,43 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
           you would both be looking at the grid.
         */
         const now = performance.now()
+        // Deduped on the car alone. The clock on the end changes every frame
+        // by design, so including it here would defeat the whole check and
+        // turn a parked car into a write every frame.
         if (text === sent && now - sentAt < KEEPALIVE_MS) return
         sent = text
         sentAt = now
-        data.publishPresence({ driving: text })
+        data.publishPresence({ driving: stamp(text, elapsedMs) })
       },
     }
+    /*
+      ==========================================================================
+      Only when it is actually new — and this is what made her car judder.
+
+      `subscribe` fires on every change to the world, and one of the things
+      that changes the world is *you writing your own presence*, which happens
+      six times a second all race long. Every one of those woke this listener,
+      which read her `driving` field — unchanged, because she had not sent
+      anything since — and pushed it in again as though it were fresh.
+
+      A repeat is poison to the smoother. It works out how fast she is going
+      from the distance between two samples, and two copies of one sample are
+      no distance at all: her speed came out as **zero**. Which stops the dead
+      reckoning that carries her between updates, so her car parks itself until
+      a genuinely new sample lands and jumps it forward. Several times a second,
+      for the whole race.
+
+      That is the whole of the lag. Not the network, not the six-times-a-second
+      — the car was being told, over and over, that she had stopped.
+      ==========================================================================
+    */
+    let seen = ''
     const stop = data.subscribe((world) => {
-      const sample = readCar(world.presence[them]?.driving)
-      if (sample) rolling.push(sample, performance.now())
+      const text = world.presence[them]?.driving ?? ''
+      if (text === seen) return
+      seen = text
+      const sample = readCar(text)
+      if (sample) rolling.push(sample, performance.now(), readClock(text))
     })
     return () => {
       stop()
@@ -645,7 +673,8 @@ function buildLanterns(track: Track) {
  */
 interface LiveWheel {
   rolling: Rolling
-  send(text: string): void
+  /** The four-integer car, and her own elapsed race time to stamp it with. */
+  send(text: string, elapsedMs: number): void
 }
 
 interface FrameArgs {
@@ -1344,7 +1373,7 @@ class Driving {
     */
     if (args.live && (phase === 'ready' || phase === 'running')) {
       const packed = packCar(car)
-      args.live.send(writeCar(packed.n, packed.s, packed.psi, packed.state))
+      args.live.send(writeCar(packed.n, packed.s, packed.psi, packed.state), car.elapsed * 1000)
     }
 
     // --- her -----------------------------------------------------------------

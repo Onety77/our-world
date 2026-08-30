@@ -19,6 +19,8 @@ import {
   LOST_MS,
   Rolling,
   readCar,
+  readClock,
+  stamp,
   writeCar,
 } from '../src/world/games/ember-rally/wire'
 import { SAMPLE_BOOST, SAMPLE_BRAKE, type RunSample } from '../src/world/games/ember-rally/model'
@@ -60,11 +62,23 @@ check('nothing at all', readCar(undefined), null)
 check('an empty field', readCar(''), null)
 check('a key from some other build', readCar('1730000000000.moonbreak'), null)
 check('three numbers', readCar('1,2,3'), null)
-check('five', readCar('1,2,3,4,5'), null)
+check('six', readCar('1,2,3,4,5,6'), null)
 check('words', readCar('a,b,c,d'), null)
 check('a NaN, which would empty the screen', readCar('NaN,2,3,4'), null)
 check('an infinity', readCar('1,Infinity,3,4'), null)
 check('something far too long', readCar('1'.repeat(DRIVING_MAX + 1)), null)
+
+console.log('\nHer own clock, on the end of the car\n')
+
+{
+  const car = writeCar(-19.999, 3999.99, -3.141, 511)
+  const stamped = stamp(car, 599_999)
+  check('the far end of the longest road, ten minutes in, still fits',
+    stamped.length <= DRIVING_MAX, true)
+  check('and it is still the same car underneath', readCar(stamped)?.s, readCar(car)?.s)
+  check('her elapsed time comes back', readClock(stamped), 599_999)
+  check('an older four-field car simply has no clock', readClock(car), null)
+}
 
 console.log('\nBetween updates, she is still a car\n')
 
@@ -98,6 +112,48 @@ for (let t = 0; t <= 4000; t += 160) {
   for (let f = 0; f < 10; f++) long.at(t + f * 16)
 }
 near('still beside you after four seconds', long.at(4000)?.s ?? 0, where - 4.8, 2.5)
+
+console.log('\nThe same car twice, which is what a shared world does\n')
+
+/*
+  The bug this is here to stop coming back.
+
+  `subscribe` fires on every change to the world, and writing your own presence
+  is a change to the world — six or sixteen times a second, all race. Each one
+  woke the receiver, which read her *unchanged* field and pushed it in again.
+
+  Two copies of one sample are no distance apart, so her speed came out as
+  zero, the dead reckoning that carries her between real updates stopped, and
+  her car parked until the next genuine sample jumped it forward. Several times
+  a second. That is what "the other player isn't smooth" was.
+
+  Guarded twice now, and both are checked here: the receiver drops a repeat
+  before it ever gets this far, and her own clock means an identical sample is
+  the same instant rather than a standstill.
+*/
+{
+  const echo = new Rolling()
+  echo.push(sample(300), 0, 0)
+  echo.push(sample(304.8), 160, 160)
+  // The same one again, four more times, as the world churns underneath.
+  for (const at of [180, 200, 220, 240]) echo.push(sample(304.8), at, 160)
+  near('a repeat does not tell her she has stopped', echo.at(320)?.s ?? 0, 309.6, 1.2)
+}
+
+/*
+  And the speed is hers, not the network's.
+
+  Two updates she sent 160ms apart can land 30ms apart after a long hop. Timed
+  by arrival that is five times her real speed, and her car leaps a car's length
+  and gets held still while the truth catches up — the surge-and-stall that
+  reads as a bad connection when the connection is fine.
+*/
+{
+  const bursty = new Rolling()
+  bursty.push(sample(500), 0, 0)
+  bursty.push(sample(504.8), 30, 160)
+  near('a burst of arrivals is not a burst of speed', bursty.at(190)?.s ?? 0, 509.6, 1.2)
+}
 
 console.log('\nAnd when she stops sending\n')
 

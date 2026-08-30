@@ -154,6 +154,36 @@ const presencePath = (id: UserId) => `presence/${id}`
  */
 const PRESENCE_INTERVAL = 160
 
+/**
+ * And how often while a car is on the road.
+ *
+ * ---------------------------------------------------------------------------
+ * A body walking a garden and a car at a hundred and forty are not the same
+ * question. Six a second is a metre and a half between updates at racing speed,
+ * and while the smoother carries her *along* the road between them, it does not
+ * guess at her steering — a car changing lane is doing something deliberate,
+ * and extrapolating that swings her into the rock. So the width of the road and
+ * the angle of the car are always up to a sixth of a second stale, which at
+ * speed is what reads as her wobbling rather than driving.
+ *
+ * Sixteen a second, and only while `driving` is in the patch. Everything else
+ * in the garden keeps the walking rate.
+ *
+ * **What it costs, since that was the question.** The whole presence object is
+ * about 215 bytes, so this is roughly 3.5 KB a second while a car is moving,
+ * and a two-minute race is about 0.9 MB downloaded across the pair of you. The
+ * Realtime Database is billed on download, and the free allowance is 10 GB a
+ * month — something like eleven thousand races. Past that it is five dollars a
+ * gigabyte, so a thousand races is about four and a half dollars. Racing every
+ * evening does not reach the free allowance.
+ *
+ * Which is worth saying plainly: the rate was never what made her car lag. See
+ * the note in `Race.tsx` on the repeat that was telling the smoother she had
+ * stopped. This is the polish on top of that fix, and it is affordable.
+ * ---------------------------------------------------------------------------
+ */
+const RACE_INTERVAL = 60
+
 /** After this long without a word, treat them as gone even if onDisconnect didn't fire. */
 const PRESENCE_STALE = 45_000
 
@@ -828,8 +858,11 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         },
       })
 
+      // A car on the road gets the faster cadence; everything else in the
+      // garden keeps the walking one. See `RACE_INTERVAL`.
+      const wait = patch.driving ? RACE_INTERVAL : PRESENCE_INTERVAL
       const since = Date.now() - lastSent
-      if (since >= PRESENCE_INTERVAL) {
+      if (since >= wait) {
         flush()
         return
       }
@@ -837,7 +870,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       sendTimer = setTimeout(() => {
         sendTimer = null
         flush()
-      }, PRESENCE_INTERVAL - since)
+      }, wait - since)
     },
 
     async writeLetter({ body, placeId, position }) {
@@ -1733,12 +1766,43 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         tell()
       })
 
-      // Before your own opening move lands, this listener is *expected* to
-      // come back short, or to error with permission-denied. Neither is a
-      // fault; it is the seal on seq 0 working.
-      const offMoves = onSnapshot(
+      /*
+        ------------------------------------------------------------------------
+        Before your own opening move lands, this listener is *expected* to come
+        back short, or to fail outright with permission-denied. Neither is a
+        fault: it is the seal on seq 0 working, and the rules deny the whole
+        listen rather than quietly leaving her document out of it.
+
+        **What was a fault is that it never came back.** A Firestore listener is
+        finished once it errors. It does not retry. So the moment the seal
+        refused one — which is precisely while you have not yet moved — the
+        round went deaf for as long as you stayed on the screen, and your own
+        move landing was exactly the thing that would have lifted the seal.
+
+        In a wheel-to-wheel race that produced a result which looked like
+        favouritism. Whoever crossed the line **second** never saw the other's
+        time: her run arrived in his collection while he was still driving, was
+        refused because he had not finished, and killed his listener. He came
+        home to "she is still on the road" and no placing, for ever. The one who
+        finished first saw everything, because by the time the other's move
+        arrived his own already existed and nothing was ever refused.
+
+        So it re-attaches. Backing off, because the seal is a *reason* to be
+        refused and not a glitch — it can legitimately refuse for as long as it
+        takes somebody to play their move, and hammering it in the meantime is
+        just spending someone's phone battery on being told no.
+        ------------------------------------------------------------------------
+      */
+      let attempt = 0
+      let retry: ReturnType<typeof setTimeout> | null = null
+      let dropped = false
+      let offMoves = watchMoves()
+
+      function watchMoves() {
+        return onSnapshot(
         collection(db, ROUNDS, id, MOVES),
         (snap) => {
+          attempt = 0
           moves = snap.docs
             .map((m) => {
               const d = m.data() as Record<string, unknown>
@@ -1759,21 +1823,34 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         },
         (error) => {
           /*
-            Coming back short here is expected before your own opening move
-            lands — that is the seal working, not a fault.
+            Keep whatever was last read, and go back for more.
 
-            What it must not do is blank a board that is already being played.
-            A listener is finished once it errors; it does not retry. Wiping
-            the moves on the way out would strand the round on nothing at all,
-            which is the same failure this file just spent thirty lines
-            explaining. Keep what was last read and say so instead.
+            Blanking `moves` here would strand a board that is already being
+            played on nothing at all — the same failure the note above spends
+            thirty lines on. So the last good read stands, and a fresh listener
+            is opened to replace the one that just died.
           */
           if (import.meta.env.DEV) console.warn('[round] moves listener stopped', id, error)
           tell()
+          if (dropped) return
+          // A second, then two, four, eight, and settling at sixteen. Long
+          // enough that a permanently sealed round is not a background task,
+          // short enough that a seal lifting is noticed while you are still
+          // looking at the screen it lifted on.
+          const wait = Math.min(16_000, 1000 * 2 ** attempt++)
+          if (retry) clearTimeout(retry)
+          retry = setTimeout(() => {
+            retry = null
+            if (dropped) return
+            offMoves = watchMoves()
+          }, wait)
         },
       )
+      }
 
       return () => {
+        dropped = true
+        if (retry) clearTimeout(retry)
         offRound()
         offMoves()
       }

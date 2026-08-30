@@ -5,10 +5,12 @@ import { makeTrack } from './track'
 import { driveSpirit } from './spirit'
 import { useRace } from './session'
 import { usePublishedTuning } from './tuningSync'
-import { stageOfKey } from '@/systems/lobby'
+import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
 import { useLobby } from '@/systems/useLobby'
 import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
+import { useData, useWorldSlice } from '@/data/provider'
+import { otherUser } from '@/data/types'
 import { Wheel } from './Wheel'
 import { TouchDriving } from './TouchDriving'
 import { drivingWithThumbs } from './touch'
@@ -277,6 +279,7 @@ export default function EmberRally({
     one run each. See `Wheel` and `systems/lobby`.
   */
   const say = useSay()
+  const data = useData()
   const live = variant === 'race'
   const liveKey = usePlaying((s) => s.race)
   const lobby = useLobby(live ? liveKey : null)
@@ -425,6 +428,49 @@ export default function EmberRally({
     setView('menu')
   }
 
+  /*
+    ===========================================================================
+    Going again, without going back to the fire.
+
+    A wheel-to-wheel round is one key, one flag, one run each — `lobby.go`
+    latches true and stays true, which is what stops the road restarting under
+    somebody mid-corner. It also meant a race was over for good: the only way
+    to have another was for both of you to walk out to the Hollow, find each
+    other's invitation again, and agree a road you had both just driven.
+
+    A new key is a new room. `useLobby` announces you into whichever one you
+    are holding, so publishing a fresh key puts you back on the ready screen
+    with the lamps and the countdown, exactly as if you had just been invited —
+    and the road comes along with it, because the road is *in* the key.
+
+    Both halves of it are here. If she has already asked for another, her key
+    is sitting in her presence and the only correct move is to take it as it
+    is; inventing a second one would leave the two of you in separate rooms
+    each waiting for somebody who is not coming. That is the same rule, and the
+    same reason, as joining her from the Hollow — see `LiveWayIn`.
+    ===========================================================================
+  */
+  const openRace = usePlaying((s) => s.openRace)
+  const presence = useWorldSlice((s) => s.presence)
+  /** A room she is holding that is not the one this race was run in. */
+  const herNextRoom = useMemo(() => {
+    if (!live) return null
+    const hers = readSitting(presence[otherUser(me)]?.racing)?.key ?? null
+    return hers && hers !== liveKey ? hers : null
+  }, [live, presence, me, liveKey])
+
+  const raceAgain = () => {
+    const next = herNextRoom ?? raceKey(data.now(), activeStage)
+    // The flag has already dropped once this round. Let the next one drop.
+    flagDropped.current = false
+    setLastRun(null)
+    setFault('')
+    // Anything but the road, or the room has nowhere to appear — see the
+    // `live && !lobby.go` branch below.
+    setView('menu')
+    openRace('ember-rally', next)
+  }
+
   const choose = (next: StageId) => {
     setStage(next)
     setLastRun(null)
@@ -547,7 +593,22 @@ export default function EmberRally({
             saving={saving}
             fault={fault}
             onDone={backToFire}
-            onAgain={!solo && kind === 'qualifying' ? null : () => start(kind)}
+            /*
+              Wheel to wheel goes back to the room, not straight back onto the
+              road. The two of you have to agree on another one — the flag drops
+              once, for both, and that is the whole promise of the mode. See
+              `raceAgain`.
+            */
+            onAgain={
+              live
+                ? raceAgain
+                : !solo && kind === 'qualifying'
+                  ? null
+                  : () => start(kind)
+            }
+            againLabel={
+              live ? (herNextRoom ? `join ${theirName}` : 'race again') : 'run it again'
+            }
             returnLabel={course.returnTo}
             cleanWord={course.cleanWord}
             /*
@@ -1508,6 +1569,7 @@ function RunOver({
   fault,
   onDone,
   onAgain,
+  againLabel,
   returnLabel,
   cleanWord,
   against,
@@ -1518,6 +1580,8 @@ function RunOver({
   fault: string
   onDone(): void
   onAgain: (() => void) | null
+  /** What going again is called here — a solo lap and a rematch are not it. */
+  againLabel: string
   returnLabel: string
   /** "through the Rootway", "across the Moonbreak" — the road, in words. */
   cleanWord: string
@@ -1588,7 +1652,7 @@ function RunOver({
       <RallyActions actions={[
         { label: returnLabel, onChoose: onDone, disabled: saving },
         ...(onAgain
-          ? [{ label: 'run it again', onChoose: onAgain, disabled: saving, quiet: true }]
+          ? [{ label: againLabel, onChoose: onAgain, disabled: saving, quiet: true }]
           : []),
       ]} />
     </div>

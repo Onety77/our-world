@@ -47,9 +47,14 @@
 
         "//driving": [
           "Her car on the road, while a live race is running: four integers in",
-          "the same encoding a recorded run is stored in. Six writes a second",
-          "and none of them matter a moment later, which is exactly what this",
-          "channel is for. See src/world/games/ember-rally/wire.ts."
+          "the same encoding a recorded run is stored in, plus her own elapsed",
+          "race time on the end so the far side can work out her speed without",
+          "the network getting a vote in it. Sixteen writes a second while a car",
+          "is moving, and none of them matter a moment later, which is exactly",
+          "what this channel is for. See src/world/games/ember-rally/wire.ts.",
+          "",
+          "The rule itself has not changed and does not need republishing — it",
+          "is a length, and the stamped form still fits inside it."
         ],
         "driving": { ".validate": "newData.isString() && newData.val().length <= 64" },
 

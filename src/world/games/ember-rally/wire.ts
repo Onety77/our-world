@@ -57,6 +57,36 @@ export function writeCar(n: number, s: number, psi: number, state: number): stri
 }
 
 /**
+ * Her own clock, stuck on the end.
+ *
+ * ---------------------------------------------------------------------------
+ * How fast she is going has to be worked out from two positions and the time
+ * between them, and *which* time that is decides whether her car looks like a
+ * car.
+ *
+ * It used to be the gap between the two arriving here, which is not the gap
+ * she drove. Presence goes out every so many milliseconds and comes back over
+ * a network shared between Kano and Shanghai: two updates leave 160ms apart
+ * and land 40ms apart, then the next one takes 300. Divide real movement by
+ * those arrival gaps and the speed swings by a factor of four in either
+ * direction — so the car guesses forward far too fast, gets held still while
+ * the truth catches up, and then lurches again. Every bit of that reads as a
+ * bad connection, and none of it was.
+ *
+ * She stamps each one with her own elapsed race time instead. Two numbers she
+ * wrote, from one clock, with no network in between — so the speed is the
+ * speed she was actually doing, however the packets happen to arrive.
+ *
+ * Appended rather than folded in, and parsed as optional, so a phone still
+ * running the older four-field build is understood rather than dropped: it
+ * simply falls back to arrival times, which is where this started.
+ * ---------------------------------------------------------------------------
+ */
+export function stamp(car: string, elapsedMs: number): string {
+  return car + ',' + Math.max(0, Math.round(elapsedMs))
+}
+
+/**
  * Back into a sample, or null.
  *
  * Null for anything that is not four finite numbers, because this arrives over
@@ -66,7 +96,7 @@ export function writeCar(n: number, s: number, psi: number, state: number): stri
 export function readCar(text: string | undefined): RunSample | null {
   if (!text || text.length > DRIVING_MAX) return null
   const parts = text.split(',')
-  if (parts.length !== 4) return null
+  if (parts.length !== 4 && parts.length !== 5) return null
   const [n, s, psi, state] = parts.map(Number)
   if (![n, s, psi, state].every((value) => Number.isFinite(value))) return null
   return {
@@ -80,6 +110,21 @@ export function readCar(text: string | undefined): RunSample | null {
     spinning: (state & SAMPLE_SLIDE) !== 0,
     shortcut: (state & SAMPLE_SHORTCUT) !== 0,
   }
+}
+
+/**
+ * Her elapsed race time off the end of a car, or null if it is not carrying one.
+ *
+ * Read separately rather than hung on the sample, because a `RunSample` is the
+ * recorder's shape and a recorded run has no use for the clock of the phone
+ * that sent it. See `stamp`.
+ */
+export function readClock(text: string | undefined): number | null {
+  if (!text || text.length > DRIVING_MAX) return null
+  const parts = text.split(',')
+  if (parts.length !== 5) return null
+  const clock = Number(parts[4])
+  return Number.isFinite(clock) && clock >= 0 ? clock : null
 }
 
 /** Below this, two arrivals are the same instant and there is no speed in it. */
@@ -127,22 +172,53 @@ export const KEEPALIVE_MS = 900
 export class Rolling {
   private latest: RunSample | null = null
   private latestAt = 0
+  /** Her own elapsed time on the last sample, if she sent one. See `stamp`. */
+  private latestClock: number | null = null
   private speed = 0
   private shown: RunSample | null = null
   private shownAt = 0
   /** How far the car being drawn is ahead of where the truth says she is. */
   private error = 0
 
-  /** A sample as it arrives, stamped with this device's own clock. */
-  push(sample: RunSample, at: number) {
+  /**
+   * A sample as it arrives, stamped with this device's own clock — and, if she
+   * sent one, with hers.
+   */
+  push(sample: RunSample, at: number, clock: number | null = null) {
+    /*
+      The same instant twice is not news, and must not be treated as any.
+
+      A repeat carries her own clock unchanged, which is how it is known for
+      one. Taking it would move `latestAt` forward without moving her along the
+      road, and everything below reckons from that pair — so she would be
+      carried forward from a later and later moment while the truth stayed put,
+      and quietly fall behind by however long the repeats went on.
+
+      A car genuinely parked on the grid is a different thing and still lands
+      here: it sends the same four integers, but its clock has moved, so the
+      speed comes out as the zero it really is. See `KEEPALIVE_MS`.
+    */
+    if (clock !== null && clock === this.latestClock) return
+
     if (this.latest !== null) {
-      const gap = at - this.latestAt
-      if (gap > SAME_INSTANT) {
-        const speed = (sample.s - this.latest.s) / gap
+      /*
+        Her clock for how fast, this device's for how long ago.
+
+        They answer different questions. The speed is a thing that happened on
+        her road, between two moments she measured, and the network must not
+        get a vote in it — see `stamp`. How long to carry her forward *from*
+        that sample is a question about now, and only this device can answer
+        that.
+      */
+      const drove =
+        clock !== null && this.latestClock !== null ? clock - this.latestClock : at - this.latestAt
+      if (drove > SAME_INSTANT) {
+        const speed = (sample.s - this.latest.s) / drove
         // Backwards, or impossibly fast, means a restart or a bad packet.
         this.speed = speed >= 0 && speed < FASTEST ? speed : 0
       }
     }
+    this.latestClock = clock
 
     /*
       Keep the drawn car exactly where it is and move the error instead.

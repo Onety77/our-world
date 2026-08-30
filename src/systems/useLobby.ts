@@ -184,6 +184,31 @@ export function useLobby(key: string | null): Lobby {
     return () => window.clearTimeout(timer)
   }, [dropped, startAt, data])
 
+  /*
+    ==========================================================================
+    A different key is a different room, and it gets its own flag.
+
+    `dropped` is deliberately a latch — once the flag has fallen it is never
+    consulted again, so presence being cleared cannot un-drop it underneath a
+    race already being driven. But it belonged to the hook rather than to the
+    key, so it survived changing rooms: ask for a rematch, take a fresh key,
+    and the new room opened with its flag already down. No lamps, no waiting
+    for her, no countdown — straight onto the road on your own, which is the
+    exact failure the room was built to fix.
+
+    Reset while rendering rather than in an effect. React throws away this
+    render and immediately does another with the new values, so there is no
+    frame in between where the old flag is still down over the new room.
+    ==========================================================================
+  */
+  const [roomKey, setRoomKey] = useState(key)
+  if (key !== roomKey) {
+    setRoomKey(key)
+    setFlag(null)
+    setFlagAt(null)
+    setDropped(false)
+  }
+
   return {
     sheIsHere,
     sheIsReady,
