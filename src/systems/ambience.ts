@@ -43,7 +43,26 @@ import { gardenBleedNow, placeLevelsNow } from './outdoors'
 
 export type { EngineState, EngineVoice } from './engine'
 
-const NOISE_SECONDS = 4
+/*
+  How long the shared noise loop is, in seconds.
+
+  It was four, and four is short enough to hear. A seam that has been made
+  seamless is still a *repeat*: the particular shape of a given four seconds of
+  filtered noise is a pattern, the ear finds it within two or three laps, and
+  from then on the garden is a tape rather than a place. It is worst on the
+  layers played fast, because the period is `NOISE_SECONDS / rate` —
+
+    the leaf bed      rate 1.35  ->  it came round every 3.0 s
+    the river riffle  rate 1.9   ->  every 2.1 s
+
+  — and a two-second hiss repeating is exactly what it sounded like.
+
+  Nineteen is long enough that no layer's period is under eight seconds and
+  none of them line up with each other, so nothing recurs at a rate anyone can
+  hold in their head. It costs about three and a half megabytes of float
+  samples, once, shared by every layer in the world.
+*/
+const NOISE_SECONDS = 19
 
 /**
  * The garden's one unlocked audio graph, for place-specific synthesisers.
@@ -300,6 +319,13 @@ export function createAmbience(): AmbienceHandle {
   let place: Place = 'garden'
   /** Eases toward 1 for the current place and 0 for the one before it. */
   let blend = 1
+  /*
+    The gust, where it is going, and how long until it changes its mind.
+    Started mid-range so the first minute is not a lull. See `tick`.
+  */
+  let gust = 1
+  let gustNow = 1
+  let gustFor = 12
   let from: Place = 'garden'
 
   /** 0 normally, 1 while something louder than the world is happening. */
@@ -560,7 +586,29 @@ export function createAmbience(): AmbienceHandle {
     const dt = Math.min(0.1, Math.max(0, (wall - lastTick) / 1000))
     lastTick = wall
 
-    currentWind += (targetWind - currentWind) * 0.02
+    /*
+      Weather, rather than a number.
+
+      `targetWind` comes off the hour's palette, which means it is a constant
+      for hours at a time — so the bed had exactly one strength all evening and
+      the only thing moving in it was each layer's own slow swell. Real air is
+      not like that: it gusts, it drops away to nothing for a while, it picks
+      up again, and the not-knowing-when is most of what makes it read as
+      outside rather than as a recording.
+
+      So the hour sets the *weather*, and this wanders around inside it. A new
+      intention every twenty to seventy seconds, eased into over several of
+      them, going as low as a third of the hour's wind and as high as half
+      again. Slow enough that nothing is ever heard to change; wide enough that
+      no two minutes are the same.
+    */
+    gustFor -= dt
+    if (gustFor <= 0) {
+      gustFor = 20 + Math.random() * 50
+      gust = 0.34 + Math.random() * 1.16
+    }
+    gustNow += (gust - gustNow) * (1 - Math.exp(-dt / 9))
+    currentWind += (targetWind * gustNow - currentWind) * 0.02
     if (blend < 1) blend = Math.min(1, blend + dt / CROSSFADE)
     duck += ((engines > 0 ? 1 : 0) - duck) * (1 - Math.exp(-3.5 * dt))
     const open = 1 - duck * 0.94

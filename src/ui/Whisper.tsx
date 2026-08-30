@@ -46,6 +46,7 @@ import { useSaidGestures } from './Said'
 import type { Message, UserId } from '@/data/types'
 import { useSections } from '@/systems/sections'
 import { SECTIONS } from '@/sections/registry'
+import { useDismissOutside } from './useDismissOutside'
 
 /** How many of the most recent are worth showing in a corner. */
 const RECENT = 4
@@ -116,6 +117,11 @@ export function Whisper() {
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
   const [draft, setDraft] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+
+  // Folding keeps the draft in this mounted component, so an outside tap is
+  // convenient without risking words that have not been sent yet.
+  useDismissOutside(open, () => setOpen(false), [panel])
 
   const recent = useMemo(() => messages.slice(-RECENT), [messages])
   const answering = messageById(messages, replyTo)
@@ -221,7 +227,7 @@ export function Whisper() {
   }
 
   return (
-    <div className="whisper open">
+    <div ref={panel} className="whisper open">
       <div className="whisper-recent">
         {recent.length === 0 ? (
           <p className="whisper-none">

@@ -32,6 +32,7 @@ import {
   useListening,
 } from '@/systems/listening'
 import type { Listening } from '@/data/types'
+import { useDismissOutside } from './useDismissOutside'
 
 /**
  * How many songs the list shows before it starts scrolling.
@@ -52,6 +53,10 @@ export function Player() {
   const together = useListening((s) => s.together)
   const open = useListening((s) => s.open)
   const toggleOpen = useListening((s) => s.toggleOpen)
+  const close = useListening((s) => s.close)
+  const panel = useRef<HTMLDivElement>(null)
+
+  useDismissOutside(open, close, [panel])
 
   // Re-read as a whole so `current` sees a consistent pair.
   const anchor = useListening(current)
@@ -221,7 +226,7 @@ export function Player() {
   const nothing = tracks.length === 0
 
   return (
-    <div className={`player ${open ? 'open' : ''}`}>
+    <div ref={panel} className={`player ${open ? 'open' : ''}`}>
       {/* No controls of its own — the anchor drives it. Muted until a real
           file exists, so a missing src can never make a browser complain. */}
       <audio ref={audio} preload="none" />

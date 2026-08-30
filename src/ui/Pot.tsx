@@ -19,6 +19,7 @@ import { format, parseMajor, progressToward } from '@/data/money'
 import { usePot } from '@/systems/pot'
 import { useQuestions } from '@/systems/questions'
 import { ambience } from '@/systems/ambience'
+import { useDismissOutside } from './useDismissOutside'
 
 export function PotForm() {
   const data = useData()
@@ -31,6 +32,12 @@ export function PotForm() {
   const [rate, setRate] = useState('1')
   const [note, setNote] = useState('')
   const field = useRef<HTMLInputElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
+  const untouched =
+    amount === '' && note === '' && currency === state.pot.currency && rate === '1'
+
+  useDismissOutside(open && untouched, close, [sheet, actions])
 
   useEffect(() => {
     if (open) field.current?.focus()
@@ -78,7 +85,7 @@ export function PotForm() {
 
   return (
     <div className="reader composing">
-      <div className="sheet" role="presentation">
+      <div ref={sheet} className="sheet" role="presentation">
         <div className="sheet-scroll">
           <div className="sheet-body">
             <p className="addressed">into the pot</p>
@@ -142,7 +149,7 @@ export function PotForm() {
         </div>
       </div>
 
-      <div className="sheet-actions">
+      <div ref={actions} className="sheet-actions">
         <button
           type="button"
           className="put-back"

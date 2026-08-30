@@ -11,11 +11,12 @@
  * something down that the other person will read.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
 import { parseCoordinates } from '@/systems/geo'
 import { isValidTimeZone, localTimeLabel } from '@/systems/time'
 import { useProfileSheet } from '@/systems/profileSheet'
+import { useDismissOutside } from './useDismissOutside'
 import { useNotify } from '@/systems/notify'
 import { useSay } from '@/systems/useSay'
 
@@ -91,6 +92,17 @@ export function ProfileSheet() {
   const [zone, setZone] = useState(profile.timeZone)
   const [where, setWhere] = useState('')
   const [trouble, setTrouble] = useState<string | null>(null)
+  const sheet = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
+  const savedWhere =
+    profile.lat === null || profile.lon === null ? '' : `${profile.lat}, ${profile.lon}`
+  const untouched =
+    name === profile.name &&
+    city === profile.city &&
+    zone === profile.timeZone &&
+    where === savedWhere
+
+  useDismissOutside(open && untouched, close, [sheet, actions])
 
   // Refill from the world each time it opens, so an abandoned edit doesn't
   // come back later looking like it was saved.
@@ -155,7 +167,7 @@ export function ProfileSheet() {
 
   return (
     <div className="reader composing">
-      <div className="sheet" role="presentation">
+      <div ref={sheet} className="sheet" role="presentation">
         <div className="sheet-scroll">
           <div className="sheet-body">
             <p className="addressed">who you are</p>
@@ -226,7 +238,7 @@ export function ProfileSheet() {
         </div>
       </div>
 
-      <div className="sheet-actions">
+      <div ref={actions} className="sheet-actions">
         <button type="button" className="put-back" onClick={() => void save()}>
           that’s me
         </button>

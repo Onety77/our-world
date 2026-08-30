@@ -356,7 +356,7 @@ service cloud.firestore {
         && me() == 'warm'
         && id == 'ours'
         && request.resource.data.keys().hasOnly([
-          'tree', 'river', 'hollow', 'stars', 'glasshouse',
+          'garden', 'tree', 'river', 'hollow', 'stars', 'glasshouse',
           /*
             And how much of the open garden reaches inside each of them.
 

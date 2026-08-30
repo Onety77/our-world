@@ -31,6 +31,7 @@ import { useTakenOver } from '@/systems/attention'
 import { heartedBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
 import { useSaidGestures } from './Said'
 import { shouldTell, tell } from '@/systems/notify'
+import { useDismissOutside } from './useDismissOutside'
 
 /** How many messages carry legible words at once, above and below the head. */
 const ABOVE = 7
@@ -454,6 +455,11 @@ export function Talking() {
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
+  const composer = useRef<HTMLDivElement>(null)
+
+  // The draft lives above the conditional render, so folding the composer
+  // does not throw away an unfinished message.
+  useDismissOutside(here && composing, stopWriting, [composer])
 
   useEffect(() => {
     if (composing) field.current?.focus()
@@ -561,7 +567,7 @@ export function Talking() {
       )}
 
       {composing ? (
-        <div className="saying">
+        <div ref={composer} className="saying">
           {/*
             What you are answering, over the field you are answering it in.
 

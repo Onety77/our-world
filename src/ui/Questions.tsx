@@ -4,6 +4,7 @@ import { otherUser, type QuestionRound } from '@/data/types'
 import { attempt } from '@/systems/trouble'
 import { useQuestions } from '@/systems/questions'
 import { ambience } from '@/systems/ambience'
+import { useDismissOutside } from './useDismissOutside'
 
 /** The question sheets are the same paper as thoughts, so they use the same nib. */
 function soundOfWriting(before: string, after: string) {
@@ -33,9 +34,15 @@ function RoundSheet({ round }: { round: QuestionRound }) {
   const history = useWorldSlice((state) => state.questions.history)
   const [body, setBody] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
   const mine = round.answered[data.me]
   const both = round.answered.warm && round.answered.cool
   const them = useWorldSlice((state) => state.profiles[otherUser(data.me)].name)
+
+  // Completed and waiting questions are readers. An unanswered question is
+  // dismissible only until somebody has begun writing on it.
+  useDismissOutside(Boolean(mine || both || body.trim() === ''), close, [sheet, actions])
 
   useEffect(() => {
     if (!mine) field.current?.focus()
@@ -68,7 +75,7 @@ function RoundSheet({ round }: { round: QuestionRound }) {
 
   return (
     <div className="reader question-reader">
-      <div className="sheet question-sheet">
+      <div ref={sheet} className="sheet question-sheet">
         <div className="sheet-scroll">
           <div className="sheet-body">
             <p className="addressed">the Tree is asking</p>
@@ -100,7 +107,7 @@ function RoundSheet({ round }: { round: QuestionRound }) {
         </div>
       </div>
 
-      <div className="sheet-actions question-actions">
+      <div ref={actions} className="sheet-actions question-actions">
         {!mine && !both ? (
           <button type="button" className="put-back" onClick={() => void answer()} disabled={!body.trim()}>
             seal my answer
@@ -124,6 +131,10 @@ function PlantQuestion() {
   const seeds = useWorldSlice((state) => state.questions.availableSeeds)
   const [prompt, setPrompt] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
+
+  useDismissOutside(prompt.trim() === '', close, [sheet, actions])
 
   useEffect(() => field.current?.focus(), [])
   useEffect(() => {
@@ -146,7 +157,7 @@ function PlantQuestion() {
 
   return (
     <div className="reader composing question-reader">
-      <div className="sheet question-sheet question-planting">
+      <div ref={sheet} className="sheet question-sheet question-planting">
         <div className="sheet-scroll">
           <div className="sheet-body">
             <p className="addressed">a question for some unknown day</p>
@@ -169,7 +180,7 @@ function PlantQuestion() {
           </div>
         </div>
       </div>
-      <div className="sheet-actions">
+      <div ref={actions} className="sheet-actions">
         <button type="button" className="put-back" onClick={() => void plant()} disabled={!prompt.trim() || seeds < 1}>
           plant it · {seeds} {seeds === 1 ? 'seed' : 'seeds'}
         </button>

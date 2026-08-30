@@ -12,6 +12,7 @@ import {
   voiceWaveform,
   whyNoMicrophone,
 } from '@/systems/voiceRecording'
+import { useDismissOutside } from './useDismissOutside'
 
 interface Review {
   blob: Blob
@@ -67,6 +68,11 @@ export function VoiceLights() {
   const cancelled = useRef(false)
   const audio = useRef<HTMLAudioElement>(null)
   const playbackFrame = useRef(0)
+  const dock = useRef<HTMLElement>(null)
+
+  // A passive drawer can fold when the sky is touched. Recording, reviewing,
+  // and saving are deliberate acts and must never be cancelled by accident.
+  useDismissOutside(open && !recording && !review && !saving, () => setOpen(false), [dock])
 
   useEffect(
     () => data.watchVoiceLights((garden) =>
@@ -285,7 +291,7 @@ export function VoiceLights() {
           <small>{mine.length} of {limit} yours</small>
         </button>
       ) : (
-        <section className="voice-dock" aria-label="voice-lights">
+        <section ref={dock} className="voice-dock" aria-label="voice-lights">
           <header>
             <div>
               <p>held in the Stars</p>

@@ -4,16 +4,17 @@ import { useState } from 'react'
 import { useData } from '@/data/provider'
 import { attempt } from '@/systems/trouble'
 import {
-  INSIDES,
+  EVERYWHERE,
   OPEN,
   bleedKeys,
   samePlaceLevels,
   useOutdoors,
-  type InsidePlace,
+  type AnyPlace,
 } from '@/systems/outdoors'
 import { usePublishedOutdoors } from '@/systems/outdoorsSync'
 
-const NAMES: Record<InsidePlace, string> = {
+const NAMES: Record<AnyPlace, string> = {
+  garden: 'the open garden',
   tree: 'the Tree',
   river: 'the Wellspring',
   hollow: 'the Hollow',
@@ -21,7 +22,8 @@ const NAMES: Record<InsidePlace, string> = {
   glasshouse: 'the Glasshouse',
 }
 
-const HEARD: Record<InsidePlace, string> = {
+const HEARD: Record<AnyPlace, string> = {
+  garden: 'the meadow — wind and the leaf bed under it, everywhere outside a place',
   tree: 'wind, leaves and the low woodland room beneath them',
   river: 'water, air, leaves and the valley underneath the river',
   hollow: 'the cave fire, its crackles, the rock rumble and the small air leak',
@@ -51,7 +53,7 @@ export function Outdoors() {
   async function save() {
     setSending(true)
     setOldRules(false)
-    const asked = Object.fromEntries(INSIDES.map((place) => [place, levels[place]]))
+    const asked = Object.fromEntries(EVERYWHERE.map((place) => [place, levels[place]]))
 
     /*
       The full write first, and the old one if the rules refuse it.
@@ -115,7 +117,7 @@ export function Outdoors() {
         )}
       </p>
 
-{INSIDES.map((place) => (
+{EVERYWHERE.map((place) => (
         <div className="admin-place" key={place}>
           <b>{NAMES[place]}</b>
           <span className="admin-note admin-sub">{HEARD[place]}</span>
@@ -136,6 +138,12 @@ export function Outdoors() {
             />
           </label>
 
+          {/*
+            Nothing reaches into the garden — it is the thing everything else
+            is measured against, so it has no bleed of its own.
+          */}
+          {place === 'garden' ? null : (
+          <>
           {/*
             The one that kept being asked for.
 
@@ -161,6 +169,8 @@ export function Outdoors() {
               onChange={(event) => store.setBleed(place, Number(event.target.value))}
             />
           </label>
+          </>
+          )}
         </div>
       ))}
 

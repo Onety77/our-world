@@ -16,6 +16,7 @@ import { attempt } from '@/systems/trouble'
 import { useData, useWorldSlice } from '@/data/provider'
 import { useReading } from '@/systems/reading'
 import { thoughtSpot } from '@/sections/tree/layout'
+import { useDismissOutside } from './useDismissOutside'
 
 function when(at: number): string {
   const date = new Date(at)
@@ -152,6 +153,12 @@ export function Writing() {
   }
   const [rising, setRising] = useState<string | null>(null)
   const field = useRef<HTMLTextAreaElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
+
+  // An untouched sheet is disposable. Once there are words on it, closing is
+  // kept explicit so a stray tap cannot hide work in progress.
+  useDismissOutside(composing && body.trim() === '', stopWriting, [sheet, actions])
 
   const them = profiles[data.me === 'warm' ? 'cool' : 'warm']
 
@@ -196,7 +203,7 @@ export function Writing() {
 
   return (
     <div className="reader composing">
-      <div className="sheet" role="presentation">
+      <div ref={sheet} className="sheet" role="presentation">
         <PaperGrain />
         <div className="sheet-scroll">
           <div className="sheet-body">
@@ -214,7 +221,7 @@ export function Writing() {
         </div>
       </div>
 
-      <div className="sheet-actions">
+      <div ref={actions} className="sheet-actions">
         <button
           type="button"
           className="put-back"

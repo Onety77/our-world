@@ -20,9 +20,22 @@
 import { create } from 'zustand'
 import type { Place } from './ambience'
 
-/** Every place you can enter. The open garden keeps the personal world level. */
+/** Every place you can enter. */
 export const INSIDES = ['tree', 'river', 'hollow', 'stars', 'glasshouse'] as const
 export type InsidePlace = (typeof INSIDES)[number]
+
+/*
+  And the open garden, which now has a fader of its own.
+
+  It was the one place with no control, on the grounds that it *is* the world
+  and the personal world fader covers it. That was wrong in the way that
+  matters: turning the world fader down takes the car, the rain and everything
+  else with it, so there was no way to answer the one question worth asking —
+  *what does this place sound like with the meadow off?* Every other place
+  could be silenced and checked. The garden could not.
+*/
+export const EVERYWHERE = ['garden', ...INSIDES] as const
+export type AnyPlace = (typeof EVERYWHERE)[number]
 
 export type PlaceLevels = Record<Place, number>
 
@@ -97,7 +110,7 @@ function clean(raw: unknown): PlaceLevels {
   const out: PlaceLevels = { ...QUIET }
   if (raw === null || typeof raw !== 'object') return out
   const source = raw as Record<string, unknown>
-  for (const place of INSIDES) {
+  for (const place of EVERYWHERE) {
     const value = source[place]
     if (typeof value === 'number' && Number.isFinite(value)) {
       out[place] = Math.max(0, Math.min(1, value))
@@ -127,7 +140,7 @@ function writeDraft(value: PlaceLevels | null): void {
 }
 
 export function samePlaceLevels(a: PlaceLevels, b: PlaceLevels): boolean {
-  return INSIDES.every((place) => Math.abs(a[place] - b[place]) <= 1e-9)
+  return EVERYWHERE.every((place) => Math.abs(a[place] - b[place]) <= 1e-9)
 }
 
 function writeBleed(value: PlaceLevels): void {
@@ -181,7 +194,7 @@ interface PlaceVolumeState {
   /** The last of those that both of you have. */
   publishedBleed: PlaceLevels
   setBleed(place: InsidePlace, value: number): void
-  set(place: InsidePlace, value: number): void
+  set(place: AnyPlace, value: number): void
   toDefaults(): void
   dropDraft(): void
   receivePublished(values: Record<string, number>): void
