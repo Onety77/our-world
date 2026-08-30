@@ -8,12 +8,13 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type RefCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { SECTIONS } from '@/sections/registry'
 import { useSections } from '@/systems/sections'
 import { raceKey, readSitting, roundOfKey } from '@/systems/lobby'
-import type { GameDefinition } from '@/world/games/types'
+import type { GameDefinition, LiveChoice } from '@/world/games/types'
 import { useSay } from '@/systems/useSay'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
@@ -61,6 +62,141 @@ import { ambience } from '@/systems/ambience'
  * no agreement, and settles in one frame.
  * ---------------------------------------------------------------------------
  */
+function LiveChoiceStage({
+  prompt,
+  options,
+  onChoose,
+  onBack,
+}: {
+  prompt: string
+  options: readonly LiveChoice[]
+  onChoose(id: string): void
+  onBack(): void
+}) {
+  const [selected, setSelected] = useState(0)
+  const stage = useRef<HTMLDivElement>(null)
+  const last = options.length - 1
+  const option = options[selected]
+
+  useEffect(() => {
+    stage.current?.focus({ preventScroll: true })
+  }, [])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+        event.preventDefault()
+        setSelected((at) => Math.min(last, at + 1))
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        setSelected((at) => Math.max(0, at - 1))
+      } else if (event.key === 'Enter' && !event.repeat && option) {
+        event.preventDefault()
+        onChoose(option.id)
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        onBack()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [last, onBack, onChoose, option])
+
+  if (!option) return null
+
+  return createPortal(
+    <div
+      ref={stage}
+      className="live-choice-stage"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="live-choice-title"
+      tabIndex={-1}
+    >
+      <button type="button" className="live-choice-back" onClick={onBack}>
+        ← ways to enter
+      </button>
+
+      <header className="live-choice-heading">
+        <span>ember rally · wheel to wheel</span>
+        <h2 id="live-choice-title">Choose the road first</h2>
+        <p>{prompt.charAt(0).toUpperCase() + prompt.slice(1)}. Your invitation will open on this road.</p>
+      </header>
+
+      <div className="live-choice-browser">
+        <button
+          type="button"
+          className="live-choice-step previous"
+          aria-label="show previous road"
+          disabled={selected === 0}
+          onClick={() => setSelected((at) => Math.max(0, at - 1))}
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
+
+        <div className="live-choice-window">
+          <div
+            className="live-choice-track"
+            style={{ transform: `translate3d(-${selected * 100}%, 0, 0)` }}
+          >
+            {options.map((road, index) => (
+              <div
+                key={road.id}
+                className={`live-choice-road ${road.id}`}
+                aria-hidden={selected !== index}
+              >
+                <span className="live-choice-scene" aria-hidden="true">
+                  <i className="live-choice-horizon" />
+                  <i className="live-choice-roadway" />
+                  <i className="live-choice-lights"><b /><b /></i>
+                </span>
+                <span className="live-choice-count">
+                  {String(index + 1).padStart(2, '0')} / {String(options.length).padStart(2, '0')}
+                </span>
+                <strong>{road.name}</strong>
+                {road.note ? <small>{road.note}</small> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="live-choice-step next"
+          aria-label="show next road"
+          disabled={selected === last}
+          onClick={() => setSelected((at) => Math.min(last, at + 1))}
+        >
+          <span aria-hidden="true">›</span>
+        </button>
+      </div>
+
+      <div className="live-choice-marks" role="group" aria-label="choose a road">
+        {options.map((road, index) => (
+          <button
+            type="button"
+            key={road.id}
+            className={selected === index ? 'on' : ''}
+            aria-label={`show ${road.name}`}
+            aria-pressed={selected === index}
+            onClick={() => setSelected(index)}
+          />
+        ))}
+      </div>
+
+      <button
+        type="button"
+        className="live-choice-confirm"
+        onClick={() => onChoose(option.id)}
+      >
+        invite her to {option.name}
+      </button>
+      <p className="live-choice-keys">← → choose · enter invite · escape back</p>
+    </div>,
+    document.body,
+  )
+}
+
 function LiveWayIn({
   game,
   them,
@@ -68,6 +204,7 @@ function LiveWayIn({
   selected,
   buttonRef,
   onFocus,
+  onChoosing,
 }: {
   game: string
   them: string
@@ -75,6 +212,7 @@ function LiveWayIn({
   selected: boolean
   buttonRef: RefCallback<HTMLButtonElement>
   onFocus?(): void
+  onChoosing(choosing: boolean): void
 }) {
   const data = useData()
   const say = useSay()
@@ -112,8 +250,11 @@ function LiveWayIn({
   const joining = Boolean(waiting)
   const [picking, setPicking] = useState(false)
 
+  useEffect(() => () => onChoosing(false), [onChoosing])
+
   const enter = (choice?: string) => {
     if (!bothHere) return
+    onChoosing(false)
     /*
       Join hers if there is one, otherwise open your own.
 
@@ -139,6 +280,7 @@ function LiveWayIn({
     */
     if (!joining && live.choose && live.choose.options.length > 0) {
       setPicking(true)
+      onChoosing(true)
       return
     }
     enter()
@@ -146,22 +288,15 @@ function LiveWayIn({
 
   if (picking && live.choose) {
     return (
-      <div className="game-live-choose">
-        <span className="game-way-label">{live.choose.prompt}</span>
-        {live.choose.options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className="quiet"
-            onClick={() => enter(option.id)}
-          >
-            {option.name}
-          </button>
-        ))}
-        <button type="button" className="quiet" onClick={() => setPicking(false)}>
-          not now
-        </button>
-      </div>
+      <LiveChoiceStage
+        prompt={live.choose.prompt}
+        options={live.choose.options}
+        onChoose={enter}
+        onBack={() => {
+          setPicking(false)
+          onChoosing(false)
+        }}
+      />
     )
   }
 
@@ -359,6 +494,7 @@ function TheHollow() {
   // One past the end is the "more coming" card, which is always there.
   const [at, setAt] = useState(0)
   const [way, setWay] = useState(0)
+  const [choosingLiveRoad, setChoosingLiveRoad] = useState(false)
   const last = GAMES.length
   const game = GAMES[at]
   const begin = useCallback((gameId: string, solo: boolean) => {
@@ -413,6 +549,9 @@ function TheHollow() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // The road carousel owns the keyboard while it is open. Without this,
+      // one arrow press moves both the road and the mode hidden underneath it.
+      if (choosingLiveRoad) return
       const focused = document.activeElement
       if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
       if (showing === 'games' && e.key === 'ArrowRight') {
@@ -445,7 +584,7 @@ function TheHollow() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [at, chooseGame, game, go, showing, way])
+  }, [at, chooseGame, choosingLiveRoad, game, go, showing, way])
 
   if (showing === 'waiting') {
     return (
@@ -537,6 +676,7 @@ function TheHollow() {
                 selected={way === 2}
                 buttonRef={(node) => { ways.current[2] = node }}
                 onFocus={() => setWay(2)}
+                onChoosing={setChoosingLiveRoad}
               />
             ) : null}
           </div>

@@ -317,6 +317,16 @@ export interface Track {
   /** Who added it. Shown quietly; never a score. */
   by: UserId
   /**
+   * Who made it. Empty when nobody said.
+   *
+   * Not the same question as `by`, which is which of the two of you carried it
+   * in. This one exists because a phone asks it: the lock screen, the car
+   * stereo and the watch all want a title *and* an artist, and given only a
+   * title they fall back to the name of the app — so every song in the garden
+   * was announced to the whole phone as "the garden".
+   */
+  artist: string
+  /**
    * Seconds. `0` means *not known yet* — the file has not been read. The
    * player must show nothing rather than guess a length, or a progress line
    * ends up lying about where you are in a song.
@@ -919,7 +929,13 @@ export interface DataLayer {
    * rather than letting the upload fail at the door with a permission error
    * that says nothing about what was wrong.
    */
-  addTrack(input: { title: string; file: Blob; duration: number }): Promise<void>
+  addTrack(input: {
+    title: string
+    /** Empty is fine and common; half a music folder has no artist in it. */
+    artist: string
+    file: Blob
+    duration: number
+  }): Promise<void>
 
   /**
    * Take one out again, audio and all.

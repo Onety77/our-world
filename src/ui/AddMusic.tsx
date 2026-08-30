@@ -38,6 +38,7 @@ interface Waiting {
   key: string
   file: File
   title: string
+  artist: string
   /** Seconds. 0 while it is still being asked. */
   duration: number
   state: 'reading' | 'ready' | 'going' | 'done' | 'refused'
@@ -53,6 +54,26 @@ interface Waiting {
  * and a guess that mangles a real title is worse than one that leaves a little
  * tidying to do.
  */
+/**
+ * A filename, as an artist and a song.
+ *
+ * Half the music in the world is filed as `Artist - Title.mp3`, so the dash is
+ * worth reading: it saves typing the artist for most of a folder, and both
+ * halves land in boxes you can correct before anything is uploaded.
+ *
+ * Only the *first* dash, and only with something on both sides of it. A song
+ * called "Sunday - Bloody Sunday" splits wrong whatever you do, and an artist
+ * that is wrong is easier to notice and fix than a title that is.
+ */
+function namesFrom(filename: string): { artist: string; title: string } {
+  const whole = titleFrom(filename)
+  const at = whole.indexOf(' - ')
+  if (at <= 0) return { artist: '', title: whole }
+  const artist = whole.slice(0, at).trim()
+  const title = whole.slice(at + 3).trim()
+  return artist && title ? { artist, title } : { artist: '', title: whole }
+}
+
 function titleFrom(name: string): string {
   return name
     .replace(/\.[a-z0-9]+$/i, '')
@@ -126,7 +147,7 @@ export function AddMusic() {
     const added: Waiting[] = [...files].map((file) => ({
       key: `${file.name}:${file.size}:${file.lastModified}:${Math.random()}`,
       file,
-      title: titleFrom(file.name),
+      ...namesFrom(file.name),
       duration: 0,
       state: tooBig(file) ? 'refused' : 'reading',
       why: tooBig(file)
@@ -166,7 +187,12 @@ export function AddMusic() {
     for (const one of ready) {
       setWaiting((was) => was.map((w) => (w.key === one.key ? { ...w, state: 'going' } : w)))
       const landed = await attempt(`${one.title} did not go in`, () =>
-        data.addTrack({ title: one.title, file: one.file, duration: one.duration }),
+        data.addTrack({
+          title: one.title,
+          artist: one.artist,
+          file: one.file,
+          duration: one.duration,
+        }),
       )
       if (!alive.current) return
       setWaiting((was) =>
@@ -229,13 +255,35 @@ export function AddMusic() {
         <ul className="music-waiting">
           {waiting.map((w) => (
             <li key={w.key} className={w.state}>
+              {/*
+                Two boxes, because a phone asks two questions.
+
+                The lock screen, the car and the watch all want a title *and*
+                an artist, and given only a title they show the name of the app
+                instead — so every song in here was announced to the whole
+                phone as "the garden". Guessed from the filename where it can
+                be, and empty is fine: plenty of music has no artist on it.
+              */}
               <input
+                className="music-title"
                 value={w.title}
                 aria-label={`name for ${w.file.name}`}
                 disabled={w.state === 'going' || w.state === 'done'}
                 onChange={(event) =>
                   setWaiting((was) =>
                     was.map((x) => (x.key === w.key ? { ...x, title: event.target.value } : x)),
+                  )
+                }
+              />
+              <input
+                className="music-artist"
+                value={w.artist}
+                placeholder="who made it"
+                aria-label={`artist for ${w.file.name}`}
+                disabled={w.state === 'going' || w.state === 'done'}
+                onChange={(event) =>
+                  setWaiting((was) =>
+                    was.map((x) => (x.key === w.key ? { ...x, artist: event.target.value } : x)),
                   )
                 }
               />
@@ -279,7 +327,10 @@ export function AddMusic() {
         <ul className="music-have">
           {tracks.map((t) => (
             <li key={t.id}>
-              <span className="music-have-title">{t.title}</span>
+              <span className="music-have-title">
+                {t.title}
+                {t.artist ? <i> · {t.artist}</i> : null}
+              </span>
               <span className="music-have-len">{clock(t.duration)}</span>
               {/*
                 No confirmation, and there should not be one. Putting it back

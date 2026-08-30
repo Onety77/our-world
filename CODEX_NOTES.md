@@ -478,3 +478,24 @@ shared-file changes, measurements, and anything another agent should preserve.
   verified the main garden, the redesigned profile paper, visible volume labels
   and successful entry into the Tree. The only console output was Three's
   existing `THREE.Clock` deprecation warning.
+
+## 30 August 2026 - Codex - Ember Rally road flow rebuilt
+
+- Replaced the multi-card race-level arrangement with one continuous horizontal
+  road carousel on desktop and mobile. Exactly one road is in view; explicit
+  previous/next arrows, position marks and the existing road artwork move as a
+  single line without changing any track, physics or saved run data.
+- The main road carousel now supports bounded Arrow-key navigation and Enter to
+  open the selected road. Inactive off-screen roads are removed from the tab and
+  accessibility order until they are visible.
+- Replaced Wheel-to-Wheel's four inline road links with a dedicated full-screen
+  road-choice step. Every road has its own visual threshold and short character
+  note, then one clear invitation action.
+- Wheel-to-Wheel now supports Arrow keys, Enter and Escape throughout road
+  selection, while suspending the mode screen's keyboard listener underneath.
+  The selected road is still encoded into the live invitation before the room
+  opens, so both devices arrive on the same track.
+- TypeScript and the production build pass. Browser checks at desktop and phone
+  sizes verified Rootway-to-Moonbreak navigation, Enter activation, the live
+  room receiving Moonbreak, no Vite error overlay and no runtime page errors.
+  The existing Three.Clock deprecation and Firebase bundle-size warning remain.

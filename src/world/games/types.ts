@@ -37,6 +37,8 @@ export interface LiveChoice {
   /** Goes into the round key, so it must be short and URL-ish. */
   id: string
   name: string
+  /** A short distinction for a one-at-a-time choice screen. */
+  note?: string
 }
 
 /**

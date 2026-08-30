@@ -91,7 +91,18 @@ function Line({
   return (
     <p className={`whisper-said ${mine ? 'mine' : 'hers'}`} {...gestures}>
       <span className="whisper-who">{mine ? 'you' : theirName}</span>
-      <span className="whisper-body">{message.body}</span>
+      {/*
+        Two spans, and the inner one is not decoration.
+
+        The outer clamps to two lines, which needs `display: -webkit-box` and
+        so cannot carry a background that hugs the words. The inner one is
+        inline, which can: with `box-decoration-break: clone` every wrapped
+        line gets its own bed, shaped to what was actually said. See
+        `.whisper-ink`.
+      */}
+      <span className="whisper-body">
+        <span className="whisper-ink">{message.body}</span>
+      </span>
       {(yours || hers) && (
         <span className="said-hearts" aria-label="hearted">
           {yours && <i className="mine" aria-hidden="true">♥</i>}

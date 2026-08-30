@@ -1087,6 +1087,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
             return {
               id: d.id,
               title,
+              artist: str(raw.artist, ''),
               by: userId(raw.by),
               // 0 means "not known yet" — never guess a length.
               duration: Math.max(0, num(raw.duration, 0)),
@@ -1099,7 +1100,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       })
     },
 
-    async addTrack({ title, file, duration }) {
+    async addTrack({ title, artist, file, duration }) {
       const name = title.trim()
       if (name === '') throw new Error('A song needs a name.')
       if (name.length > 300) throw new Error('That name is too long for the garden to keep.')
@@ -1129,6 +1130,9 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       try {
         await setDoc(doc(db, TRACKS, newId()), {
           title: name,
+          // The rules on `tracks` check the title and nothing else, so this
+          // needs no rules change — see the note on furniture in firestore.rules.
+          artist: artist.trim().slice(0, 200),
           by: me,
           duration: Math.max(0, Math.round(duration * 100) / 100),
           url,

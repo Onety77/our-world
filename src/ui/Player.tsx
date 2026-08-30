@@ -161,6 +161,76 @@ export function Player() {
     return () => window.removeEventListener('garden:voice-light', duck)
   }, [])
 
+  /*
+    ==========================================================================
+    Telling the phone what is playing.
+
+    A page that plays audio gets a Now Playing card — on the iOS lock screen,
+    in Android's shade, on a watch, in a car. Given nothing, the card falls
+    back to the name of the thing playing it, so every song in the garden was
+    announced to the entire phone as **"the garden"**, with the app icon and no
+    artist, which is what it looked like: a two-hour album called the garden.
+
+    Two halves, and both matter.
+
+    `metadata` is what it *says*. Title and artist, and the album is the
+    garden, which is true — this is a shared shelf of songs rather than a
+    streaming service, and saying so on the lock screen is nicer than leaving
+    it blank.
+
+    `setActionHandler` is what its *buttons do*. Without them a browser offers
+    the only thing it can do on its own, which is seek ten seconds, and that is
+    why the card had ⟲10 and ⟳10 instead of next and previous. Registering the
+    two track handlers turns them into the buttons a music player should have,
+    and — because they go through `skip`, the same path the corner uses — a
+    press on the lock screen moves the song for *both of you*, exactly as if it
+    had been pressed in the garden.
+    ==========================================================================
+  */
+  useEffect(() => {
+    const media = navigator.mediaSession
+    if (!media) return
+    if (!track) {
+      media.metadata = null
+      media.playbackState = 'none'
+      return
+    }
+    media.metadata = new MediaMetadata({
+      title: track.title,
+      // Empty rather than a guess. A card that says "Unknown artist" is worse
+      // than one that says nothing, because it is a sentence nobody wrote.
+      artist: track.artist,
+      album: 'the garden',
+      artwork: [
+        { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
+    })
+    media.playbackState = anchor.playing ? 'playing' : 'paused'
+  }, [track, anchor.playing])
+
+  useEffect(() => {
+    const media = navigator.mediaSession
+    if (!media) return
+    const set = (action: MediaSessionAction, handler: (() => void) | null) => {
+      try {
+        media.setActionHandler(action, handler)
+      } catch {
+        // Not every browser has every action, and asking for one it does not
+        // know throws rather than being ignored.
+      }
+    }
+    set('play', () => playPause())
+    set('pause', () => playPause())
+    set('nexttrack', () => skip(1))
+    set('previoustrack', () => skip(-1))
+    return () => {
+      for (const action of ['play', 'pause', 'nexttrack', 'previoustrack'] as const) {
+        set(action, null)
+      }
+    }
+  }, [playPause, skip])
+
   useEffect(() => {
     const el = audio.current
     if (!el) return

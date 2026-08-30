@@ -175,7 +175,7 @@ const COURSES: Record<StageId, {
 const CONTROLS = 'up to go · down to brake · arrows to steer · space to slide · shift for the ember'
 
 /** Arrow selection plus Enter, while leaving native button activation intact. */
-function useMenuKeys(count: number, activate: (index: number) => void) {
+function useMenuKeys(count: number, activate: (index: number) => void, loop = true) {
   const [selected, setSelected] = useState(0)
   const activateRef = useRef(activate)
   activateRef.current = activate
@@ -190,7 +190,10 @@ function useMenuKeys(count: number, activate: (index: number) => void) {
       ) {
         event.preventDefault()
         const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown'
-        setSelected((at) => (at + (forward ? 1 : -1) + count) % count)
+        setSelected((at) => {
+          const next = at + (forward ? 1 : -1)
+          return loop ? (next + count) % count : Math.max(0, Math.min(count - 1, next))
+        })
       } else if (event.key === 'Enter' && !event.repeat) {
         if (focused instanceof HTMLButtonElement) return
         event.preventDefault()
@@ -199,7 +202,7 @@ function useMenuKeys(count: number, activate: (index: number) => void) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [count, selected])
+  }, [count, loop, selected])
 
   return [selected, setSelected] as const
 }
@@ -855,55 +858,10 @@ function CoursePicker({
   const [selected, setSelected] = useMenuKeys(STAGES.length, (index) => {
     const stage = STAGES[index]
     if (stage) onChoose(stage)
-  })
-  const courseTrack = useRef<HTMLDivElement>(null)
-  const courseDoors = useRef<(HTMLButtonElement | null)[]>([])
+  }, false)
 
-  /*
-    The phone turns the three roads into one horizontal horizon. Keep keyboard
-    selection and that horizon looking at the same road; otherwise ArrowRight
-    would change the hidden state while the previous landscape stayed in view.
-  */
-  useEffect(() => {
-    courseDoors.current[selected]?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-      inline: 'center',
-    })
-  }, [selected])
-
-  /* A swipe is also a choice. Once the native snap has settled, find the road
-     nearest the centre and let the marks and keyboard state follow it. Waiting
-     for the scroll to settle avoids fighting a smooth move requested by a dot
-     or an arrow key. */
-  useEffect(() => {
-    const track = courseTrack.current
-    if (!track) return
-    let settle: ReturnType<typeof setTimeout> | undefined
-    const followVisibleRoad = () => {
-      if (settle) clearTimeout(settle)
-      settle = setTimeout(() => {
-        const centre = track.getBoundingClientRect().left + track.clientWidth / 2
-        let nearest = 0
-        let distance = Infinity
-        courseDoors.current.forEach((door, index) => {
-          if (!door) return
-          const box = door.getBoundingClientRect()
-          const next = Math.abs(box.left + box.width / 2 - centre)
-          if (next < distance) {
-            nearest = index
-            distance = next
-          }
-        })
-        setSelected((current) => current === nearest ? current : nearest)
-      }, 90)
-    }
-    track.addEventListener('scroll', followVisibleRoad, { passive: true })
-    return () => {
-      track.removeEventListener('scroll', followVisibleRoad)
-      if (settle) clearTimeout(settle)
-    }
-  }, [setSelected])
+  const showPrevious = () => setSelected((at) => Math.max(0, at - 1))
+  const showNext = () => setSelected((at) => Math.min(STAGES.length - 1, at + 1))
 
   return (
     <div className="rally rally-courses">
@@ -915,12 +873,28 @@ function CoursePicker({
         <h1>Where do you want the engine?</h1>
       </div>
 
-      <div ref={courseTrack} className="rally-course-doors">
+      <div className="rally-course-browser">
         <button
-          ref={(node) => { courseDoors.current[0] = node }}
+          type="button"
+          className="rally-course-step previous"
+          aria-label="show previous road"
+          disabled={selected === 0}
+          onClick={showPrevious}
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
+
+        <div className="rally-course-window">
+          <div
+            className="rally-course-doors"
+            style={{ transform: `translate3d(-${selected * 100}%, 0, 0)` }}
+          >
+        <button
           type="button"
           className={`rally-course rootway${selected === 0 ? ' is-selected' : ''}`}
           aria-current={selected === 0 ? 'true' : undefined}
+          aria-hidden={selected !== 0}
+          tabIndex={selected === 0 ? 0 : -1}
           onFocus={() => setSelected(0)}
           onClick={() => onChoose('rootway')}
         >
@@ -938,10 +912,11 @@ function CoursePicker({
         </button>
 
         <button
-          ref={(node) => { courseDoors.current[1] = node }}
           type="button"
           className={`rally-course moonbreak${selected === 1 ? ' is-selected' : ''}`}
           aria-current={selected === 1 ? 'true' : undefined}
+          aria-hidden={selected !== 1}
+          tabIndex={selected === 1 ? 0 : -1}
           onFocus={() => setSelected(1)}
           onClick={() => onChoose('moonbreak')}
         >
@@ -960,10 +935,11 @@ function CoursePicker({
         </button>
 
         <button
-          ref={(node) => { courseDoors.current[2] = node }}
           type="button"
           className={`rally-course stormcrown${selected === 2 ? ' is-selected' : ''}`}
           aria-current={selected === 2 ? 'true' : undefined}
+          aria-hidden={selected !== 2}
+          tabIndex={selected === 2 ? 0 : -1}
           onFocus={() => setSelected(2)}
           onClick={() => onChoose('stormcrown')}
         >
@@ -993,10 +969,11 @@ function CoursePicker({
           the road its name landing on the floor.
         */}
         <button
-          ref={(node) => { courseDoors.current[3] = node }}
           type="button"
           className={`rally-course firstlight${selected === 3 ? ' is-selected' : ''}`}
           aria-current={selected === 3 ? 'true' : undefined}
+          aria-hidden={selected !== 3}
+          tabIndex={selected === 3 ? 0 : -1}
           onFocus={() => setSelected(3)}
           onClick={() => onChoose('firstlight')}
         >
@@ -1014,7 +991,24 @@ function CoursePicker({
           <span className="rally-course-copy">{COURSES.firstlight.short}</span>
           <span className="rally-course-enter">go down the cut</span>
         </button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="rally-course-step next"
+          aria-label="show next road"
+          disabled={selected === STAGES.length - 1}
+          onClick={showNext}
+        >
+          <span aria-hidden="true">›</span>
+        </button>
       </div>
+
+      <p className="rally-course-position" aria-live="polite">
+        {String(selected + 1).padStart(2, '0')} / {String(STAGES.length).padStart(2, '0')}
+        <span> · {COURSES[STAGES[selected] ?? 'rootway'].name}</span>
+      </p>
 
       <div className="rally-course-marks" role="group" aria-label="choose a road">
         {STAGES.map((stage, index) => (

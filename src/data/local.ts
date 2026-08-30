@@ -320,10 +320,10 @@ function loadTracks(): Track[] {
  */
 function seedTracks(): Track[] {
   return [
-    { id: 'track-1', title: 'the first one', by: 'warm', duration: 214, url: null },
-    { id: 'track-2', title: 'the long drive', by: 'cool', duration: 187, url: null },
-    { id: 'track-3', title: 'something slow', by: 'warm', duration: 246, url: null },
-    { id: 'track-4', title: 'for the mornings', by: 'cool', duration: 173, url: null },
+    { id: 'track-1', title: 'the first one', artist: '', by: 'warm', duration: 214, url: null },
+    { id: 'track-2', title: 'the long drive', artist: '', by: 'cool', duration: 187, url: null },
+    { id: 'track-3', title: 'something slow', artist: '', by: 'warm', duration: 246, url: null },
+    { id: 'track-4', title: 'for the mornings', artist: '', by: 'cool', duration: 173, url: null },
   ]
 }
 
@@ -1036,7 +1036,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       }
     },
 
-    async addTrack({ title, file, duration }) {
+    async addTrack({ title, artist, file, duration }) {
       const name = title.trim()
       if (name === '') throw new Error('A song needs a name.')
       if (!file.type.startsWith('audio/')) {
@@ -1060,6 +1060,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       const track: Track = {
         id: newId(),
         title: name,
+        artist: artist.trim().slice(0, 200),
         by: me,
         duration: Math.max(0, Math.round(duration * 100) / 100),
         url: await songFromStore(path),
