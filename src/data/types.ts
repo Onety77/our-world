@@ -11,6 +11,48 @@ export const USER_IDS: readonly UserId[] = ['warm', 'cool'] as const
 export const otherUser = (id: UserId): UserId => (id === 'warm' ? 'cool' : 'warm')
 
 // ---------------------------------------------------------------------------
+// Doors that are shut for now
+// ---------------------------------------------------------------------------
+
+/**
+ * Who a closed door is closed to.
+ *
+ * ---------------------------------------------------------------------------
+ * **This exists because the garden is lived in while it is being built.**
+ *
+ * She has the app on her phone. When a road is being rebuilt, or a game is
+ * half way through a change, the honest thing is not to ship it broken and
+ * hope she does not open it — it is to take it off the wall until it is ready.
+ *
+ * Two answers, and only two are useful. `them` closes it to her and leaves it
+ * open here, which is the ordinary case: something is being worked on and the
+ * person working on it still needs to get in. `both` closes it to everybody,
+ * for when it is broken enough that opening it at all is a mistake.
+ *
+ * There is deliberately no "just me". A door only you cannot open is not a
+ * door, it is a preference, and preferences belong on the device.
+ * ---------------------------------------------------------------------------
+ */
+export type LockedTo = 'them' | 'both'
+
+/**
+ * What is shut, by key.
+ *
+ * `game:<id>` for a whole game and `road:<stage>` for one of the racer's roads.
+ * A key that is not here is open — absence is the only way to say "fine", so
+ * there is no state where a door is recorded as unlocked and might disagree
+ * with itself.
+ */
+export type Locks = Record<string, LockedTo>
+
+/** Is this door shut for me? `warm` is the only account that can lock. */
+export function shutFor(locks: Locks, key: string, me: UserId): boolean {
+  const to = locks[key]
+  if (!to) return false
+  return to === 'both' || me !== 'warm'
+}
+
+// ---------------------------------------------------------------------------
 // People
 // ---------------------------------------------------------------------------
 
@@ -829,6 +871,14 @@ export interface DataLayer {
 
   /** Publish a complete set of per-section ambience levels. Warm account only. */
   setAmbienceTuning(values: Record<string, number>): Promise<void>
+
+  // ---- doors that are shut for now -----------------------------------------
+
+  /** Watch which games and roads are closed, and to whom. */
+  watchLocks(listener: (locks: Locks) => void): () => void
+
+  /** Publish the complete set of locks. Warm account only. */
+  setLocks(locks: Locks): Promise<void>
 
   // ---- the Glasshouse ------------------------------------------------------
 

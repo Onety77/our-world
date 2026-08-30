@@ -58,6 +58,7 @@ import { takenOverNow, useTakenOver } from '@/systems/attention'
 import { useMemories } from '@/systems/memories'
 import { atTheDoor, useHourOverride } from '@/systems/dev'
 import { later } from '@/systems/later'
+import { useWatchLocks } from '@/systems/locks'
 import { usePublishedOutdoors } from '@/systems/outdoorsSync'
 
 /**
@@ -99,6 +100,8 @@ function Garden() {
   // Shared world tuning must arrive before and while the ambience graph runs.
   // A local draft still wins on this device until it is saved or dropped.
   usePublishedOutdoors()
+  // And what is shut while it is being worked on — see systems/locks.
+  useWatchLocks()
   const me = data.me
   const profiles = useWorldSlice((s) => s.profiles)
 

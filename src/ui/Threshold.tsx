@@ -24,6 +24,7 @@ import { usePlaying } from '@/systems/playing'
 import { GAMES } from '@/world/games/registry'
 import { theRoom } from '@/systems/waiting'
 import { useStandings, type Standing } from '@/world/games/useRound'
+import { gameKey, roadKey, useDoorman } from '@/systems/locks'
 import { useQuestions } from '@/systems/questions'
 import { ambience } from '@/systems/ambience'
 
@@ -250,6 +251,21 @@ function LiveWayIn({
   const joining = Boolean(waiting)
   const [picking, setPicking] = useState(false)
 
+  /*
+    A road that is shut cannot be invited to either.
+
+    The choice screen is the *other* door onto the racer's roads — the picker
+    inside the game is not the only way to reach one — so a road taken off the
+    wall has to come off here too, or the one way in that skipped the picker
+    would still hand out invitations to it.
+  */
+  const shut = useDoorman()
+  const choices = useMemo(
+    () => live.choose?.options.filter((road) => !shut(roadKey(road.id))) ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see `useDoorman`
+    [live.choose, shut],
+  )
+
   useEffect(() => () => onChoosing(false), [onChoosing])
 
   const enter = (choice?: string) => {
@@ -278,7 +294,7 @@ function LiveWayIn({
       must be in the key before it is published — see `LiveChoice`. One extra
       tap, and she is never invited to a round that does not know where it is.
     */
-    if (!joining && live.choose && live.choose.options.length > 0) {
+    if (!joining && live.choose && choices.length > 0) {
       setPicking(true)
       onChoosing(true)
       return
@@ -290,7 +306,7 @@ function LiveWayIn({
     return (
       <LiveChoiceStage
         prompt={live.choose.prompt}
-        options={live.choose.options}
+        options={choices}
         onChoose={enter}
         onBack={() => {
           setPicking(false)
@@ -509,7 +525,22 @@ function TheHollow() {
     "nothing opened today" in a list whose entire job is to be worth glancing
     at — plus a listener on a document that cannot exist.
   */
-  const listed = useMemo(() => GAMES.filter((g) => g.mode !== 'live'), [])
+  /*
+    Games that are not shut for you right now.
+
+    A locked game is *gone*, not greyed out — see `systems/locks`. Which means
+    the row's numbering, its swipe and its "next fire" card all follow along
+    without any of them knowing that locking exists.
+  */
+  const shut = useDoorman()
+  const open = useMemo(
+    () => GAMES.filter((g) => !shut(gameKey(g.id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shut is rebuilt
+    // every render by design; the locks themselves are the dependency.
+    [shut],
+  )
+
+  const listed = useMemo(() => open.filter((g) => g.mode !== 'live'), [open])
   const turns = useStandings(listed)
 
   /*
@@ -541,13 +572,13 @@ function TheHollow() {
   */
   const [at, setAt] = useState(() => {
     const last = usePlaying.getState().lastPlayed
-    const where = last === null ? -1 : GAMES.findIndex((g) => g.id === last)
+    const where = last === null ? -1 : open.findIndex((g) => g.id === last)
     return where < 0 ? 0 : where
   })
   const [way, setWay] = useState(0)
   const [choosingLiveRoad, setChoosingLiveRoad] = useState(false)
-  const last = GAMES.length
-  const game = GAMES[at]
+  const last = open.length
+  const game = open[at]
   const begin = useCallback((gameId: string, solo: boolean) => {
     ambience.cue('ember', 0.78)
     play(gameId, solo)
@@ -557,7 +588,7 @@ function TheHollow() {
     [last],
   )
   const chooseGame = useCallback((index: number) => {
-    if (!GAMES[index]) return
+    if (!open[index]) return
     ambience.cue('ember', 0.38)
     setAt(index)
     setWay(0)
@@ -679,7 +710,7 @@ function TheHollow() {
       thing is one flick away, and the flick is faster than a network.
     */
     for (const near of [at, at - 1, at + 1]) {
-      const game = GAMES[near]
+      const game = open[near]
       if (!game) continue
       game.Component.warm()
       game.Stage?.warm()
@@ -759,7 +790,7 @@ function TheHollow() {
               begin(id, false)
               return
             }
-            const index = GAMES.findIndex((candidate) => candidate.id === id)
+            const index = open.findIndex((candidate) => candidate.id === id)
             if (index >= 0) chooseGame(index)
           }}
           onBack={() => setShowing('games')}
@@ -877,7 +908,7 @@ function TheHollow() {
           ‹
         </button>
         <div className="game-row" role="group" aria-label="games in the Hallow">
-        {GAMES.map((g, index) => (
+        {open.map((g, index) => (
           <button
             ref={(node) => { cards.current[index] = node }}
             type="button"
@@ -945,7 +976,7 @@ function TheHollow() {
       <p className="game-next" aria-hidden="true">
         {at < last ? (
           <>
-            next · <em>{at + 1 === last ? 'the next fire' : GAMES[at + 1].name}</em>
+            next · <em>{at + 1 === last ? 'the next fire' : open[at + 1].name}</em>
           </>
         ) : null}
       </p>

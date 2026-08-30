@@ -350,6 +350,35 @@ service cloud.firestore {
       the same mix. Explicit fields and 0..1 bounds keep a broken control room
       from turning an AudioParam into NaN or an unsafe gain.
     */
+    /*
+      Doors that are shut for now.
+
+      The garden is lived in while it is being built, and this is how a road or
+      a game comes off the wall while it is being worked on rather than being
+      shipped half-finished and hoped over. `them` closes it to her and leaves
+      it open here; `both` closes it to everybody.
+
+      Read by both, written only by warm — the same shape as the two tuning
+      documents above and for the same reason: it changes what the other person
+      can see, so it is not something either of you should be able to do to the
+      other by accident.
+
+      The keys are open on purpose. A key is `game:<id>` or `road:<stage>`, and
+      pinning that list here would mean a rules deployment every time a road is
+      added — which is exactly the moment somebody wants to lock one. Nothing
+      is trusted from the value: the app only understands two strings and
+      ignores anything else. Sizes are capped so this can never become storage.
+    */
+    match /locks/{id} {
+      allow read: if isOneOfUs() && id == 'ours';
+      allow create, update: if isOneOfUs()
+        && me() == 'warm'
+        && id == 'ours'
+        && request.resource.data.keys().size() <= 40
+        && request.resource.data.values().hasOnly(['them', 'both']);
+      allow delete: if false;
+    }
+
     match /ambienceTuning/{id} {
       allow read: if isOneOfUs() && id == 'ours';
       allow create, update: if isOneOfUs()

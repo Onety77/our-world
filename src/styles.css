@@ -11670,3 +11670,110 @@ body.on-the-road .broke-what {
 .duel-over .duel-foot {
   justify-content: flex-end;
 }
+
+/* --------------------------------------------------------------------------
+   The control room: what is closed
+
+   One row per door — the thing on the left, three states on the right. The
+   three read as one control rather than three buttons, because they are one
+   answer: open, shut to her, shut to both.
+   -------------------------------------------------------------------------- */
+.lock-list {
+  list-style: none;
+  margin: 0.7rem 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lock-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #23292e;
+  border-radius: 2px;
+  background: #14181b;
+}
+
+/* A shut door is marked on the row, not only on the button that shut it —
+   otherwise scanning the list means reading three buttons per line. */
+.lock-list li.is-shut {
+  border-color: #4a3a24;
+  background: #191512;
+}
+
+.lock-what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.lock-what b {
+  font-weight: 500;
+  color: #cfd4d8;
+}
+
+.lock-what small {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+  color: #6f7f8c;
+}
+
+.lock-choices {
+  display: flex;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+
+.admin .lock-choices button {
+  min-height: 1.9rem;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+/*
+  Warm means shut, and only shut.
+
+  All three states used the same lit style, which made every row warm — the
+  ones that were closed and the ones that were open, because "open" was lit
+  too. The list is read by scanning it for what you have taken down, and that
+  only works if the colour means one thing. So an open door is marked as chosen
+  in plain grey, and warm is reserved for a door that is actually closed.
+*/
+.admin .lock-list li:not(.is-shut) .lock-choices button.on {
+  border-color: #46525c;
+  background: #232a30;
+  color: #dfe4e8;
+}
+
+.admin .lock-list li.is-shut .lock-choices button.on {
+  border-color: #6b5029;
+  background: #241a10;
+  color: #f0c489;
+}
+
+.lock-fault {
+  color: #e0a06a;
+}
+
+@media (max-width: 30rem) {
+  .lock-list li {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .lock-choices {
+    width: 100%;
+  }
+
+  .admin .lock-choices button {
+    flex: 1 1 auto;
+  }
+}

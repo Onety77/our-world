@@ -38,6 +38,7 @@ import { CarSettings } from './CarSettings'
 import { ThumbLayout } from './ThumbLayout'
 import { Hearing } from './Hearing'
 import { Volumes } from './Volumes'
+import { LockedDoors } from './Locks'
 import { Outdoors } from './Outdoors'
 import { useSay } from '@/systems/useSay'
 import { AddMusic } from './AddMusic'
@@ -129,6 +130,12 @@ const TABS = [
     name: 'music',
     blurb: 'what the two of you can listen to',
     reach: 'Shared. Putting a song in is the saving — it is in the garden when the row says so.',
+  },
+  {
+    id: 'locked',
+    name: 'what is closed',
+    blurb: 'take a game or a road off the wall while you work on it',
+    reach: 'Shared, and only from your account — but nothing moves until you save.',
   },
   {
     id: 'device',
@@ -270,6 +277,7 @@ export function Admin() {
       {tab === 'device' && <Volumes />}
       {tab === 'device' && <Hearing />}
       {tab === 'world' && <Outdoors />}
+      {tab === 'locked' && <LockedDoors />}
 
       {tab === 'device' && (
       <section>

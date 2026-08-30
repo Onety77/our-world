@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { GameProps } from '../types'
 import { useGameStage } from '../stage'
 import { makeTrack } from './track'
@@ -6,6 +6,7 @@ import { driveSpirit } from './spirit'
 import { useRace } from './session'
 import { usePublishedTuning } from './tuningSync'
 import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
+import { roadKey, useDoorman } from '@/systems/locks'
 import { useLobby } from '@/systems/useLobby'
 import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
@@ -95,6 +96,8 @@ const COURSES: Record<StageId, {
   finishPlace: string
   /** How a spotless run through this one is described. */
   cleanWord: string
+  /** What the card in the picker says on the way in. */
+  enter: string
 }> = {
   rootway: {
     name: 'The Rootway',
@@ -111,6 +114,7 @@ const COURSES: Record<StageId, {
     resultKicker: 'two lines through one dark',
     finishPlace: 'the fire',
     cleanWord: 'through the Rootway',
+    enter: 'go below',
   },
   moonbreak: {
     name: 'The Moonbreak',
@@ -127,6 +131,7 @@ const COURSES: Record<StageId, {
     resultKicker: 'two wakes under one moon',
     finishPlace: 'the moonwell',
     cleanWord: 'across the Moonbreak',
+    enter: 'take the high road',
   },
   stormcrown: {
     name: 'The Stormcrown',
@@ -143,7 +148,46 @@ const COURSES: Record<StageId, {
     resultKicker: 'two lights under one storm',
     finishPlace: 'the stormfire',
     cleanWord: 'over the Stormcrown',
+    enter: 'climb into weather',
   },
+}
+
+/**
+ * The little landscape on each road's card in the picker.
+ *
+ * Pure decoration, made of the same handful of gradients the emblems are — a
+ * vault and two lamps for the tunnel, a moon over water for the causeway, three
+ * peaks and rain for the mountain. Kept beside `COURSES` rather than inline in
+ * the picker so that a road is one entry in two tables and nothing else.
+ */
+const SCENES: Record<StageId, ReactNode> = {
+  rootway: (
+    <>
+      <i className="course-vault one" />
+      <i className="course-vault two" />
+      <i className="course-road" />
+      <i className="course-lamps"><b /><b /></i>
+    </>
+  ),
+  moonbreak: (
+    <>
+      <i className="course-moon" />
+      <i className="course-arch one" />
+      <i className="course-arch two" />
+      <i className="course-water" />
+      <i className="course-road" />
+    </>
+  ),
+  stormcrown: (
+    <>
+      <i className="course-lightning" />
+      <i className="course-peak one" />
+      <i className="course-peak two" />
+      <i className="course-peak three" />
+      <i className="course-rain" />
+      <i className="course-road" />
+    </>
+  ),
 }
 
 /**
@@ -906,19 +950,53 @@ function CoursePicker({
   theirName: string
   solo: boolean
 }) {
-  const [selected, setSelected] = useMenuKeys(STAGES.length, (index) => {
-    const stage = STAGES[index]
+  /*
+    Only the roads that are open to you.
+
+    A road being rebuilt comes off the wall rather than being shipped
+    half-finished — see `systems/locks`. Everything below counts off this list,
+    so the heading, the arrows, the marks underneath and the keyboard all agree
+    without any of them knowing that locking exists.
+  */
+  const shut = useDoorman()
+  const roads = STAGES.filter((stage) => !shut(roadKey(stage)))
+
+  const [selected, setSelected] = useMenuKeys(roads.length, (index) => {
+    const stage = roads[index]
     if (stage) onChoose(stage)
   }, false)
 
   const showPrevious = () => setSelected((at) => Math.max(0, at - 1))
-  const showNext = () => setSelected((at) => Math.min(STAGES.length - 1, at + 1))
+  const showNext = () => setSelected((at) => Math.min(roads.length - 1, at + 1))
+
+  /*
+    Every road shut at once.
+
+    Rare, and it has to say something rather than show an empty carousel with
+    "00 / 00" under it. Deliberately does not say *who* shut them or why: from
+    her side this is a road being worked on, which is the whole truth she needs
+    and the only one that will still be true tomorrow.
+  */
+  if (roads.length === 0) {
+    return (
+      <div className="rally rally-centre">
+        <p className="rally-kicker">ember rally</p>
+        <h1>The roads are closed.</h1>
+        <p className="rally-copy">
+          Every one of them is being worked on. They will be back.
+        </p>
+        <button type="button" className="rally-course-leave" onClick={onLeave}>
+          back to the games
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="rally rally-courses">
       <div className="rally-course-heading">
         {/* Counted from the actual road list so this cannot become stale. */}
-        <p className="rally-kicker">ember rally · {STAGES.length} roads</p>
+        <p className="rally-kicker">ember rally · {roads.length} roads</p>
         <h1>Where do you want the engine?</h1>
       </div>
 
@@ -938,74 +1016,40 @@ function CoursePicker({
             className="rally-course-doors"
             style={{ transform: `translate3d(-${selected * 100}%, 0, 0)` }}
           >
-        <button
-          type="button"
-          className={`rally-course rootway${selected === 0 ? ' is-selected' : ''}`}
-          aria-current={selected === 0 ? 'true' : undefined}
-          aria-hidden={selected !== 0}
-          tabIndex={selected === 0 ? 0 : -1}
-          onFocus={() => setSelected(0)}
-          onClick={() => onChoose('rootway')}
-        >
-          <span className="rally-course-scene" aria-hidden="true">
-            <i className="course-vault one" />
-            <i className="course-vault two" />
-            <i className="course-road" />
-            <i className="course-lamps"><b /><b /></i>
-          </span>
-          <span className="rally-course-name">The Rootway</span>
-          <CourseState stage="rootway" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
-          <CourseBest stage="rootway" />
-          <span className="rally-course-copy">{COURSES.rootway.short}</span>
-          <span className="rally-course-enter">go below</span>
-        </button>
+        {/*
+          One card per open road, rather than one block of markup per road.
 
-        <button
-          type="button"
-          className={`rally-course moonbreak${selected === 1 ? ' is-selected' : ''}`}
-          aria-current={selected === 1 ? 'true' : undefined}
-          aria-hidden={selected !== 1}
-          tabIndex={selected === 1 ? 0 : -1}
-          onFocus={() => setSelected(1)}
-          onClick={() => onChoose('moonbreak')}
-        >
-          <span className="rally-course-scene" aria-hidden="true">
-            <i className="course-moon" />
-            <i className="course-arch one" />
-            <i className="course-arch two" />
-            <i className="course-water" />
-            <i className="course-road" />
-          </span>
-          <span className="rally-course-name">The Moonbreak</span>
-          <CourseState stage="moonbreak" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
-          <CourseBest stage="moonbreak" />
-          <span className="rally-course-copy">{COURSES.moonbreak.short}</span>
-          <span className="rally-course-enter">take the high road</span>
-        </button>
+          These were three hand-written buttons carrying the positions 0, 1 and
+          2 in eight places each. That was survivable while every road was
+          always shown and stopped being so the moment one could be taken off
+          the wall: with the Rootway locked, position 0 is the Moonbreak, and
+          every one of those literals is describing a different road from the
+          one the arrows and the marks are on.
 
-        <button
-          type="button"
-          className={`rally-course stormcrown${selected === 2 ? ' is-selected' : ''}`}
-          aria-current={selected === 2 ? 'true' : undefined}
-          aria-hidden={selected !== 2}
-          tabIndex={selected === 2 ? 0 : -1}
-          onFocus={() => setSelected(2)}
-          onClick={() => onChoose('stormcrown')}
-        >
-          <span className="rally-course-scene" aria-hidden="true">
-            <i className="course-lightning" />
-            <i className="course-peak one" />
-            <i className="course-peak two" />
-            <i className="course-peak three" />
-            <i className="course-rain" />
-            <i className="course-road" />
-          </span>
-          <span className="rally-course-name">The Stormcrown</span>
-          <CourseState stage="stormcrown" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
-          <CourseBest stage="stormcrown" />
-          <span className="rally-course-copy">{COURSES.stormcrown.short}</span>
-          <span className="rally-course-enter">climb into weather</span>
-        </button>
+          Mapped, the index is wherever the road actually is, and adding a
+          fourth road is a line in `SCENES` rather than a fourth copy of this.
+        */}
+        {roads.map((stage, index) => (
+          <button
+            key={stage}
+            type="button"
+            className={`rally-course ${stage}${selected === index ? ' is-selected' : ''}`}
+            aria-current={selected === index ? 'true' : undefined}
+            aria-hidden={selected !== index}
+            tabIndex={selected === index ? 0 : -1}
+            onFocus={() => setSelected(index)}
+            onClick={() => onChoose(stage)}
+          >
+            <span className="rally-course-scene" aria-hidden="true">
+              {SCENES[stage]}
+            </span>
+            <span className="rally-course-name">{COURSES[stage].name}</span>
+            <CourseState stage={stage} mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
+            <CourseBest stage={stage} />
+            <span className="rally-course-copy">{COURSES[stage].short}</span>
+            <span className="rally-course-enter">{COURSES[stage].enter}</span>
+          </button>
+        ))}
 
           </div>
         </div>
@@ -1014,7 +1058,7 @@ function CoursePicker({
           type="button"
           className="rally-course-step next"
           aria-label="show next road"
-          disabled={selected === STAGES.length - 1}
+          disabled={selected === roads.length - 1}
           onClick={showNext}
         >
           <span aria-hidden="true">›</span>
@@ -1022,12 +1066,12 @@ function CoursePicker({
       </div>
 
       <p className="rally-course-position" aria-live="polite">
-        {String(selected + 1).padStart(2, '0')} / {String(STAGES.length).padStart(2, '0')}
-        <span> · {COURSES[STAGES[selected] ?? 'rootway'].name}</span>
+        {String(selected + 1).padStart(2, '0')} / {String(roads.length).padStart(2, '0')}
+        <span> · {COURSES[roads[selected] ?? 'rootway'].name}</span>
       </p>
 
       <div className="rally-course-marks" role="group" aria-label="choose a road">
-        {STAGES.map((stage, index) => (
+        {roads.map((stage, index) => (
           <button
             type="button"
             key={stage}

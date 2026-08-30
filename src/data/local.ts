@@ -15,6 +15,7 @@ import type {
   Contribution,
   Decor,
   Letter,
+  Locks,
   DataLayer,
   Money,
   Move,
@@ -202,6 +203,7 @@ const VOICE_LIGHTS_KEY = 'garden:voice-lights:v1'
 const VOICE_LIGHT_LIMIT_KEY = 'garden:voice-light-limit:v1'
 const RALLY_TUNING_KEY = 'garden:rally-tuning:v1'
 const AMBIENCE_TUNING_KEY = 'garden:ambience-tuning:v1'
+const LOCKS_KEY = 'garden:locks:v1'
 
 interface StoredQuestionSeed {
   id: string
@@ -456,6 +458,23 @@ function loadRallyTuning(): Record<string, number> {
   }
 }
 
+function loadLocks(): Locks {
+  if (typeof localStorage === 'undefined') return {}
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCKS_KEY) ?? '{}') as unknown
+    if (raw === null || typeof raw !== 'object') return {}
+    const out: Locks = {}
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (value === 'them' || value === 'both') out[key] = value
+    }
+    return out
+  } catch {
+    // Site data blocked, or something else wrote here. Nothing locked is the
+    // safe answer — see the note on the real layer's listener.
+    return {}
+  }
+}
+
 function loadAmbienceTuning(): Record<string, number> {
   if (typeof localStorage === 'undefined') return {}
   try {
@@ -648,6 +667,8 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
   let rallyTuning = loadRallyTuning()
   const rallyTuningWatchers = new Set<(values: Record<string, number>) => void>()
+  let locks: Locks = loadLocks()
+  const lockWatchers = new Set<(locks: Locks) => void>()
   let ambienceTuning = loadAmbienceTuning()
   const ambienceTuningWatchers = new Set<(values: Record<string, number>) => void>()
 
@@ -1306,6 +1327,24 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         localStorage.setItem(RALLY_TUNING_KEY, JSON.stringify(rallyTuning))
       }
       for (const watcher of rallyTuningWatchers) watcher(rallyTuning)
+    },
+
+    watchLocks(listener) {
+      lockWatchers.add(listener)
+      listener(locks)
+      return () => lockWatchers.delete(listener)
+    },
+
+    async setLocks(next) {
+      const clean: Locks = {}
+      for (const [key, value] of Object.entries(next)) {
+        if (value === 'them' || value === 'both') clean[key] = value
+      }
+      locks = clean
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(LOCKS_KEY, JSON.stringify(locks))
+      }
+      for (const watcher of lockWatchers) watcher(locks)
     },
 
     watchAmbienceTuning(listener) {

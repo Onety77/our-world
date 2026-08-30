@@ -86,6 +86,7 @@ import {
   type Decor,
   type DataLayer,
   type Letter,
+  type Locks,
   type Memory,
   type Message,
   type Money,
@@ -140,6 +141,8 @@ const VOICE_LIGHTS = 'voiceLights'
 const VOICE_LIGHT_CONFIG = 'voiceLightConfig'
 const RALLY_TUNING = 'rallyTuning'
 const AMBIENCE_TUNING = 'ambienceTuning'
+/** Which games and roads are shut, and to whom. One document: `ours`. */
+const LOCKS = 'locks'
 
 /** Presence is per person, under a path only that person may write. */
 const presencePath = (id: UserId) => `presence/${id}`
@@ -1710,6 +1713,41 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         }
       }
       await setDoc(doc(db, AMBIENCE_TUNING, 'ours'), clean)
+    },
+
+    watchLocks(listener) {
+      return onSnapshot(
+        doc(db, LOCKS, 'ours'),
+        (snap) => {
+          const raw = (snap.data() ?? {}) as Record<string, unknown>
+          const locks: Locks = {}
+          for (const [key, value] of Object.entries(raw)) {
+            if (value === 'them' || value === 'both') locks[key] = value
+          }
+          listener(locks)
+        },
+        /*
+          Nothing readable means nothing is locked, and that is the right way
+          round.
+
+          A door that fails open is a game she can play while it is being
+          worked on, which is a bad evening. A door that fails *shut* is a
+          garden that empties itself the first time a phone loses signal, which
+          is worse — she opens the Hollow on a train and everything is gone,
+          with no way to tell that from it having been taken away on purpose.
+        */
+        () => listener({}),
+      )
+    },
+
+    async setLocks(locks) {
+      const clean: Locks = {}
+      for (const [key, value] of Object.entries(locks)) {
+        if (value === 'them' || value === 'both') clean[key] = value
+      }
+      // Written whole, like the two tunings above: unlocking is the *absence*
+      // of a key, so a merge could never remove one.
+      await setDoc(doc(db, LOCKS, 'ours'), clean)
     },
 
     watchRound(id, listener) {
