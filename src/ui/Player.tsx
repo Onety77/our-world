@@ -292,27 +292,32 @@ export function Player() {
   }, [track])
 
   /*
-    Keep the element on the anchor.
+    Keep the element on the anchor, but do not poll it at display speed.
 
-    Corrected rather than driven: the anchor is the truth and the element is
-    chasing it. Seeking only when it has drifted more than half a second stops
-    a stream of tiny corrections turning the audio into a stutter, which is
-    what happens if you set currentTime every tick.
+    An audio element owns a precise media clock of its own. Checking it sixty
+    or a hundred and twenty times a second cannot make it more precise; it only
+    wakes the main thread that often. Correct on anchor changes, visibility
+    changes, visibility changes and the media element's own low-rate
+    `timeupdate`. A half-second drift still gets the same correction, without
+    turning a folded player into a render loop.
   */
   useEffect(() => {
     const el = audio.current
     if (!el) return
-    let raf = 0
-    const tick = () => {
-      raf = requestAnimationFrame(tick)
+    const sync = () => {
       if (!el.src) return
       const want = positionOf(anchor, data.now())
       if (Math.abs(el.currentTime - want) > 0.5) el.currentTime = want
       if (anchor.playing && el.paused) void el.play().catch(() => {})
       if (!anchor.playing && !el.paused) el.pause()
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    sync()
+    el.addEventListener('timeupdate', sync)
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      el.removeEventListener('timeupdate', sync)
+      document.removeEventListener('visibilitychange', sync)
+    }
   }, [anchor, data])
 
   // --- the beam, written straight to the DOM -------------------------------
@@ -320,9 +325,8 @@ export function Player() {
   const elapsed = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
-    let raf = 0
-    const tick = () => {
-      raf = requestAnimationFrame(tick)
+    const el = audio.current
+    const paint = () => {
       const now = data.now()
       const p = progressOf(anchor, track, now)
       if (beam.current) {
@@ -333,8 +337,18 @@ export function Player() {
         elapsed.current.textContent = clock(anchor.trackId ? positionOf(anchor, now) : null)
       }
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    paint()
+
+    // Browsers emit `timeupdate` at a battery-conscious cadence while real
+    // audio is advancing. The slow timer also covers a shared anchor whose
+    // file has not reached this device yet. Neither exists while paused.
+    const mediaEvents = ['timeupdate', 'durationchange', 'loadedmetadata', 'seeked'] as const
+    for (const name of mediaEvents) el?.addEventListener(name, paint)
+    const timer = anchor.playing ? window.setInterval(paint, 500) : null
+    return () => {
+      if (timer !== null) window.clearInterval(timer)
+      for (const name of mediaEvents) el?.removeEventListener(name, paint)
+    }
   }, [anchor, track, data])
 
   const nothing = tracks.length === 0

@@ -32,6 +32,8 @@ import { Sky } from './Sky'
 import { Clouds } from './Clouds'
 import { Ground } from './Ground'
 import { Horizon } from './Horizon'
+import { useActivity, useActivityMonitor } from '@/systems/activity'
+import { useRace } from '@/world/games/ember-rally/session'
 
 /** `?shot=1` — see the `gl` options on the Canvas below. */
 const SHOTS =
@@ -181,10 +183,21 @@ function WarmTheRest() {
   return null
 }
 
-/** Steps quality down once if the device is clearly struggling. */
+/** Steps quality down while active work is genuinely missing its budget. */
 function FrameWatchdog() {
   const watch = useMemo(() => createFrameWatchdog(), [])
-  useFrame((_, delta) => watch(delta))
+  const visible = useActivity((s) => s.visible)
+  const idle = useActivity((s) => s.idle)
+  const covered = useTakenOver()
+  const stage = useGameStage((s) => s.taken)
+  const paused = useRace((s) => s.paused)
+  const phase = useRace((s) => s.phase)
+  const measuring =
+    visible &&
+    !idle &&
+    !(covered && !stage) &&
+    !(stage && (paused || phase === 'finished'))
+  useFrame((_, delta) => watch(delta, measuring))
   return null
 }
 
@@ -440,6 +453,12 @@ const FRAMES: Record<Tier, number> = { low: 30, medium: 45, high: 60 }
  */
 const HIDDEN_FRAMES = 8
 
+/** Motion that is still alive, but no longer spending a phone to prove it. */
+const IDLE_FRAMES = 12
+
+/** A stopped road only has its pause/result furniture and slow weather. */
+const STOPPED_ROAD_FRAMES = 12
+
 /**
  * The most time one frame is allowed to carry, in milliseconds.
  *
@@ -460,6 +479,7 @@ const LONGEST_STEP_MS = 100
  * calls `invalidate`.
  */
 function Pacer() {
+  useActivityMonitor()
   const advance = useThree((state) => state.advance)
   /** Seconds handed to R3F. Ours, not the wall clock. See the note below. */
   const seconds = useRef(0)
@@ -472,7 +492,20 @@ function Pacer() {
   */
   const covered = useTakenOver()
   const stage = useGameStage((s) => s.taken)
-  const wanted = covered && !stage ? HIDDEN_FRAMES : FRAMES[tier]
+  const visible = useActivity((s) => s.visible)
+  const idle = useActivity((s) => s.idle)
+  const racePaused = useRace((s) => s.paused)
+  const racePhase = useRace((s) => s.phase)
+  const stoppedRoad = stage && (racePaused || racePhase === 'finished')
+  const wanted = !visible
+    ? 0
+    : stoppedRoad
+      ? STOPPED_ROAD_FRAMES
+      : covered && !stage
+        ? HIDDEN_FRAMES
+        : idle && !stage
+          ? IDLE_FRAMES
+          : FRAMES[tier]
 
   /*
     ==========================================================================
@@ -507,6 +540,13 @@ function Pacer() {
     ==========================================================================
   */
   useEffect(() => {
+    // A hidden page has no translucent edge to keep alive. Do not even keep a
+    // requestAnimationFrame chain around: visibility changing re-runs this
+    // effect and starts a fresh one without carrying the hidden time through.
+    if (wanted === 0) {
+      lastAdvance.current = 0
+      return
+    }
     let frame = 0
     // A millisecond of slack, or a 60 Hz panel asked for 60 fps drops every
     // other frame to 30 because the deadline lands a hair late every time.
@@ -547,9 +587,13 @@ export function World({ hourOverride }: { hourOverride: number | null }) {
     costs one reallocation on the way onto the road and one on the way off.
   */
   const meadowDpr = useQuality((q) => q.dpr)
+  const starsDpr = useQuality((q) => q.starsDpr)
   const roadDpr = useQuality((q) => q.roadDpr)
   const onTheRoad = useGameStage((s) => s.taken)
-  const dpr = onTheRoad ? roadDpr : meadowDpr
+  const inStars = useSections(
+    (s) => s.shown.entered && SECTIONS[s.shown.section]?.id === 'stars',
+  )
+  const dpr = onTheRoad ? roadDpr : inStars ? starsDpr : meadowDpr
 
   /*
     Nothing on the screen is text while the road owns it.

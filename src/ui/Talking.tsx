@@ -32,6 +32,7 @@ import { heartedBy, messageById, toNewest, useTalking, walk } from '@/systems/ta
 import { useSaidGestures } from './Said'
 import { shouldTell, tell } from '@/systems/notify'
 import { useDismissOutside } from './useDismissOutside'
+import { onActivity, useActivity, wakeWorld } from '@/systems/activity'
 
 /** How many messages carry legible words at once, above and below the head. */
 const ABOVE = 7
@@ -203,6 +204,7 @@ export function Talking() {
   const answer = useTalking((s) => s.answer)
   const profiles = useWorldSlice((s) => s.profiles)
   const lastReadAt = useWorldSlice((s) => s.lastReadAt)
+  const idle = useActivity((s) => s.idle)
 
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
 
@@ -246,6 +248,9 @@ export function Talking() {
     heard.current = newest.id
     if (first || newest.by === me) return
 
+    // Network activity has no pointer event to wake the visual governor. Let
+    // the arriving line and its light move at the active cadence for a moment.
+    wakeWorld()
     ambience.said(false)
     if (shouldTell(here)) tell(them.name, newest.body)
   }, [messages, me, here, them.name])
@@ -374,8 +379,24 @@ export function Talking() {
     }
     window.addEventListener('resize', remeasure)
 
-    const tick = () => {
-      raf = requestAnimationFrame(tick)
+    let lastFrame = 0
+    let settledFrames = 0
+    let previousWalk = Number.NaN
+    let previousYaw = Number.NaN
+    let previousPitch = Number.NaN
+    const start = () => {
+      if (raf === 0) raf = requestAnimationFrame(tick)
+    }
+    const tick = (now: number) => {
+      raf = 0
+      // During a quiet reading spell, match the Canvas's low cadence. Once the
+      // walk and gaze have truly settled, stop altogether; the next input
+      // wakes it through the shared imperative activity signal.
+      if (idle && now - lastFrame < 1000 / 12) {
+        start()
+        return
+      }
+      lastFrame = now
       const root = column.current
       if (!root) return
 
@@ -443,14 +464,26 @@ export function Talking() {
         // invisible ones.
         el.style.pointerEvents = fade > 0.5 ? 'auto' : 'none'
       }
+
+      const still =
+        Math.abs(walk.at - previousWalk) < 0.0002 &&
+        Math.abs(gaze.yaw - previousYaw) < 0.0002 &&
+        Math.abs(gaze.pitch - previousPitch) < 0.0002
+      previousWalk = walk.at
+      previousYaw = gaze.yaw
+      previousPitch = gaze.pitch
+      settledFrames = still ? settledFrames + 1 : 0
+      if (settledFrames < 4) start()
     }
-    raf = requestAnimationFrame(tick)
+    const stopListening = onActivity(start)
+    start()
     return () => {
       cancelAnimationFrame(raf)
+      stopListening()
       watch.disconnect()
       window.removeEventListener('resize', remeasure)
     }
-  }, [here, messages, composing])
+  }, [here, messages, composing, idle])
 
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')

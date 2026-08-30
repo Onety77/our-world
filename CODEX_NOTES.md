@@ -522,3 +522,49 @@ shared-file changes, measurements, and anything another agent should preserve.
 - TypeScript, the rally physics/course suite and the production build pass.
   Browser checks covered the road picker, start, rebuilt fork, Suncoil and
   Fallen Gate. The established Firebase bundle-size warning remains unchanged.
+
+## 30 August 2026 - Codex - Phone heat and background-work pass
+
+- Added one device-activity governor for the entire world. After five quiet
+  seconds a visible non-game scene drops to a 12-fps weather cadence; a hidden
+  page stops advancing the Canvas entirely. Any touch, pointer, wheel, key or
+  remotely arriving message wakes it immediately.
+- Game menus remain behind their existing 8-fps covered-world budget. Ember
+  Rally countdown, driving and replay stay at the active tier rate; pause and
+  finished screens now reduce the road to 12 fps. The quality watchdog can
+  continue high -> medium -> low when a road genuinely misses budget, but no
+  longer mistakes intentional idle/covered/paused cadence for poor hardware.
+  The racer already scales tyre particles, sparks and marks with that tier, so
+  the repeated step-down also reduces those and road resolution together.
+- Gave Stars a phone-specific maximum DPR of 1.1 while retaining the existing
+  desktop value. Its full-screen procedural dome is therefore no longer shaded
+  at the grass meadow's 1.35 DPR on an ordinary touch phone; DOM conversation
+  text remains native-resolution and unchanged.
+- Removed the music player's two permanent requestAnimationFrame loops. The
+  audio element now corrects shared playback from its own `timeupdate` events
+  and visibility/anchor changes; the beam updates from media events plus one
+  500-ms timer only while music is actually playing. Paused music performs no
+  recurring player work.
+- Made the Stars text placement and global place-title settlement loops
+  demand-driven. They cancel after walk/gaze/slide motion settles and restart
+  imperatively on the next activity, instead of remaining alive for the whole
+  visit.
+- Environmental synthesis is now independent of the chosen song's lifecycle.
+  Hidden pages fade and suspend the shared Web Audio context and stop its
+  control timer, while the separate music element may continue. Visible
+  weather control runs at 20 Hz rather than display rate and falls to 2 Hz
+  when the current authored room is silent or world sound is muted; loose
+  burbles/crackles/shimmers are not created into a muted bus.
+- Fixed a hidden-presence contradiction found during the same audit: the page
+  correctly wrote offline on hide, but its 20-second heartbeat could write
+  online again while still hidden. Hidden heartbeats are now no-ops, and the
+  half-minute sky clock also sleeps until the page is visible.
+- Reviewed the remaining global Firebase listeners. Messages, shared music,
+  presence and the small world-document collections intentionally remain live:
+  they deliver changes rather than polling, and scoping them would break the
+  features that must reach a person outside their section. They are not a
+  meaningful steady thermal cost compared with WebGL and were left intact.
+- Browser telemetry in an idle Stars visit reported about 10 fps on the
+  headless 60-Hz/software renderer (the requested cap is 12), 10 draw calls and
+  1,838 triangles. The full five-place audio suite, shader suite, Rally physics
+  and course audit, tuning connectivity, TypeScript and production build pass.

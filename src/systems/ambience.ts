@@ -64,6 +64,10 @@ export type { EngineState, EngineVoice } from './engine'
 */
 const NOISE_SECONDS = 19
 
+/** AudioParams smooth between decisions; weather does not need display FPS. */
+const CONTROL_FPS = 20
+const MUTED_CONTROL_FPS = 2
+
 /**
  * The garden's one unlocked audio graph, for place-specific synthesisers.
  *
@@ -143,6 +147,8 @@ export interface AmbienceHandle {
   }
   /** 0..1, drops when the tab is hidden. */
   setMaster(value: number): void
+  /** Suspend synthesis while no page can hear it. Music uses another element. */
+  setSuspended(suspended: boolean): void
   /** The world and effects faders. Music is applied at the player. */
   setLevels(levels: { world: number; effects: number }): void
   /**
@@ -332,7 +338,12 @@ export function createAmbience(): AmbienceHandle {
   let duck = 0
   let engines = 0
 
-  let raf = 0
+  let controlTimer = 0
+  let suspendTimer: ReturnType<typeof setTimeout> | null = null
+  let sleeping = typeof document === 'undefined' ? false : document.hidden
+  let masterLevel = 0.85
+  let worldEnabled = levelsNow().world > 0.001
+  let worldHasOutput = worldEnabled
   let lastTick = 0
   let burbleDue = 0
   let crackleDue = 0
@@ -578,11 +589,19 @@ export function createAmbience(): AmbienceHandle {
   }
 
   function tick() {
-    raf = requestAnimationFrame(tick)
+    if (sleeping) {
+      controlTimer = 0
+      return
+    }
+    const wall = performance.now()
+    const controlFps = worldHasOutput || engines > 0 ? CONTROL_FPS : MUTED_CONTROL_FPS
+    controlTimer = window.setTimeout(tick, 1000 / controlFps)
     if (!ctx || !master) return
 
+    worldHasOutput =
+      worldEnabled &&
+      (blend < 1 || Object.keys(MIX).some((name) => levelOf(name) > 0.001))
     const now = ctx.currentTime
-    const wall = performance.now()
     const dt = Math.min(0.1, Math.max(0, (wall - lastTick) / 1000))
     lastTick = wall
 
@@ -619,13 +638,14 @@ export function createAmbience(): AmbienceHandle {
       if (gain) gain.gain.setTargetAtTime(value * open, now, 0.35)
     }
 
-    set('air', levelOf('air') * (0.1 + currentWind * 0.2))
-    set('leaves', levelOf('leaves') * (0.012 + currentWind * 0.05))
-    set('water', levelOf('water') * 0.19)
-    set('fire', levelOf('fire') * 0.16)
-    set('room', levelOf('room') * 0.13)
+    const audible = worldHasOutput ? 1 : 0
+    set('air', levelOf('air') * (0.1 + currentWind * 0.2) * audible)
+    set('leaves', levelOf('leaves') * (0.012 + currentWind * 0.05) * audible)
+    set('water', levelOf('water') * 0.19 * audible)
+    set('fire', levelOf('fire') * 0.16 * audible)
+    set('room', levelOf('room') * 0.13 * audible)
     // The shimmer bed is only a bus for its tones; it carries no noise itself.
-    set('shimmer', levelOf('shimmer'))
+    set('shimmer', levelOf('shimmer') * audible)
 
     if (leafFilter) {
       leafFilter.frequency.setTargetAtTime(900 + currentWind * 1400, now, 0.9)
@@ -638,7 +658,7 @@ export function createAmbience(): AmbienceHandle {
     }
 
     // --- the loose events ----------------------------------------------------
-    const water = levelOf('water') * open
+    const water = levelOf('water') * open * audible
     if (water > 0.02 && beds.water) {
       burbleDue -= dt * BURBLE_RATE * water
       while (burbleDue < 0) {
@@ -661,7 +681,7 @@ export function createAmbience(): AmbienceHandle {
       }
     }
 
-    const fire = levelOf('fire') * open
+    const fire = levelOf('fire') * open * audible
     if (fire > 0.02 && beds.fire) {
       crackleDue -= dt * CRACKLE_RATE * fire
       while (crackleDue < 0) {
@@ -689,7 +709,7 @@ export function createAmbience(): AmbienceHandle {
       }
     }
 
-    const sky = levelOf('shimmer') * open
+    const sky = levelOf('shimmer') * open * audible
     if (sky > 0.05 && beds.shimmer) {
       shimmerDue -= dt * SHIMMER_RATE * sky
       while (shimmerDue < 0) {
@@ -1034,16 +1054,19 @@ function aWeight(hz: number): number {
       from = place
 
       // fade in over a few seconds — sound that snaps on is startling
-      master.gain.setTargetAtTime(0.85, ctx.currentTime, 1.8)
+      master.gain.setTargetAtTime(sleeping ? 0 : masterLevel, ctx.currentTime, 1.8)
 
       running = true
       lastTick = performance.now()
-      tick()
+      if (sleeping) void ctx.suspend().catch(() => {})
+      else tick()
     },
 
     stop() {
-      cancelAnimationFrame(raf)
-      raf = 0
+      clearTimeout(controlTimer)
+      controlTimer = 0
+      if (suspendTimer !== null) clearTimeout(suspendTimer)
+      suspendTimer = null
       running = false
       void ctx?.close()
       ctx = null
@@ -1073,6 +1096,14 @@ function aWeight(hz: number): number {
       from = blend < 1 ? from : place
       place = next
       blend = 0
+      // A silent room may be opening onto an audible one. Do not make that
+      // crossfade wait on the silent two-Hz control cadence.
+      worldHasOutput = worldEnabled
+      if (running && !sleeping) {
+        clearTimeout(controlTimer)
+        controlTimer = 0
+        tick()
+      }
     },
 
     hearing() {
@@ -1092,6 +1123,7 @@ function aWeight(hz: number): number {
      * never enters this context, so its fader is applied where it plays.
      */
     setLevels(levels) {
+      worldEnabled = levels.world > 0.001
       if (!ctx) return
       const now = ctx.currentTime
       // Eased, because a fader dragged in the control room while the garden is
@@ -1101,8 +1133,37 @@ function aWeight(hz: number): number {
     },
 
     setMaster(value) {
+      masterLevel = Math.max(0, Math.min(1, value))
+      if (!ctx || !master || sleeping) return
+      master.gain.setTargetAtTime(masterLevel, ctx.currentTime, 0.4)
+    },
+
+    setSuspended(suspended) {
+      sleeping = suspended
+      if (suspendTimer !== null) clearTimeout(suspendTimer)
+      suspendTimer = null
       if (!ctx || !master) return
-      master.gain.setTargetAtTime(Math.max(0, Math.min(1, value)), ctx.currentTime, 0.4)
+
+      if (suspended) {
+        clearTimeout(controlTimer)
+        controlTimer = 0
+        master.gain.setTargetAtTime(0, ctx.currentTime, 0.08)
+        // Let the short fade reach silence before stopping the audio clock.
+        const context = ctx
+        suspendTimer = setTimeout(() => {
+          suspendTimer = null
+          if (sleeping && context.state !== 'closed') void context.suspend().catch(() => {})
+        }, 300)
+        return
+      }
+
+      const context = ctx
+      void context.resume().then(() => {
+        if (sleeping || ctx !== context || !master) return
+        master.gain.setTargetAtTime(masterLevel, context.currentTime, 0.22)
+        lastTick = performance.now()
+        if (controlTimer === 0) tick()
+      }).catch(() => {})
     },
 
     /*

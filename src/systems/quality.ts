@@ -60,6 +60,8 @@ interface QualityState {
   grassCount: number
   flowerCount: number
   dpr: number
+  /** Full-screen procedural sky: capped separately on touch screens. */
+  starsDpr: number
   /** What to draw at while a game owns the whole frame. See `TIERS`. */
   roadDpr: number
   /** True once we've stepped down, so the control room can say so. */
@@ -78,11 +80,17 @@ interface QualityState {
 
 function shape(tier: Tier, degraded: boolean): Omit<QualityState, 'degrade' | 'setTier'> {
   const t = TIERS[tier]
+  const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
   return {
     tier,
     grassCount: t.grass,
     flowerCount: t.flowers,
     dpr: t.dpr,
+    // The Stars shades every pixel with procedural noise. On a phone, 1.35 DPR
+    // means 82% more fragment work than 1 with no extra scene information.
+    // Desktop keeps the established value; touch screens keep a small amount
+    // of supersampling without paying the meadow's grass-oriented budget.
+    starsDpr: coarse ? Math.min(t.dpr, 1.1) : t.dpr,
     /*
       Never past the pixels the screen has, and never below the meadow's.
 
@@ -120,10 +128,16 @@ export const useQuality = create<QualityState>((set, get) => ({
 export function createFrameWatchdog() {
   let slowFrames = 0
   let elapsed = 0
-  let fired = false
+  let coolingDown = 0
 
-  return function tick(delta: number) {
-    if (fired) return
+  return function tick(delta: number, enabled = true) {
+    if (!enabled) {
+      elapsed = 0
+      slowFrames = 0
+      return
+    }
+    coolingDown = Math.max(0, coolingDown - delta)
+    if (coolingDown > 0) return
     elapsed += delta
     if (delta > 1 / 34) slowFrames++
     if (elapsed < 4) return
@@ -131,7 +145,10 @@ export function createFrameWatchdog() {
     // more than half the last four seconds spent under ~34fps
     if (slowFrames > 4 / (1 / 30) / 2) {
       useQuality.getState().degrade()
-      fired = true
+      // Let the new geometry/DPR settle before judging it. A high-tier device
+      // may need high -> medium -> low; the old one-shot watchdog could only
+      // make the first of those decisions.
+      coolingDown = 8
     }
     elapsed = 0
     slowFrames = 0

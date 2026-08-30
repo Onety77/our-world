@@ -134,7 +134,22 @@ const main = async () => {
 
   for (const section of list) {
     await send('Page.navigate', { url: `http://localhost:${PORT}/?section=${section}&shot=1&mock=1` }, S)
+    // Hidden pages now correctly suspend the ambience AudioContext. CDP
+    // targets are not guaranteed to be the foreground target merely because
+    // they were navigated, so make this an honest listening test first.
+    await send('Page.bringToFront', {}, S)
     await wait(11000)
+    // Production deliberately allows every inside to be authored all the way
+    // down to silence. A listening test cannot use that user-owned setting as
+    // its input, so open every authored place locally before measuring it.
+    await ev(`(() => {
+      const outdoors = window.__outdoors?.getState()
+      outdoors?.toDefaults()
+      for (const place of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+        outdoors?.setBleed(place, 1)
+      }
+      return true
+    })()`)
     // The door has to be opened before there is any audio at all.
     const door = await ev(`(() => {
       const el = [...document.querySelectorAll('button')].find((b) => /come in/i.test(b.textContent))
@@ -143,6 +158,13 @@ const main = async () => {
         .map((b) => b.textContent.trim()).slice(0, 4).join(' / ')
     })()`)
     if (door !== 'opened') console.log('  ' + section + ': ' + door)
+    const state = await ev(`JSON.stringify({
+      visibility: document.visibilityState,
+      running: window.__ambience?.running ?? false,
+      volume: localStorage.getItem('garden:volume:v1'),
+      hearing: window.__ambience?.hearing?.()
+    })`)
+    if (process.argv.includes('--debug')) console.log('  ' + section + ': ' + state)
     // Long enough for the crossfade between places to have finished.
     await wait(8000)
     const heard = JSON.parse(
@@ -167,6 +189,9 @@ const main = async () => {
         step()
       })`),
     )
+    if (process.argv.includes('--debug')) {
+      console.log('  ' + section + ' frame: ' + await ev(`JSON.stringify(window.__frame ?? null)`))
+    }
     rows.push(heard)
   }
 

@@ -224,7 +224,11 @@ function Garden() {
   */
   const sectionId = SECTIONS[useSections((s) => s.index)]?.id ?? 'garden'
   useEffect(() => {
-    const here = () => data.publishPresence({ placeId: sectionId, online: true })
+    // A hidden phone is not present, and must not wake every twenty seconds to
+    // undo the offline write made by `visibilitychange`.
+    const here = () => {
+      if (!document.hidden) data.publishPresence({ placeId: sectionId, online: true })
+    }
     here()
     const beat = setInterval(here, 20_000)
 
@@ -249,8 +253,15 @@ function Garden() {
   // wind and the ambient bed have to agree with what is on screen.
   const [tick, setTick] = useState(() => Date.now())
   useEffect(() => {
-    const id = setInterval(() => setTick(Date.now()), 30_000)
-    return () => clearInterval(id)
+    const update = () => {
+      if (!document.hidden) setTick(Date.now())
+    }
+    const id = setInterval(update, 30_000)
+    document.addEventListener('visibilitychange', update)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', update)
+    }
   }, [])
 
   const whose = useWhoseHour((w) => w.whose)
@@ -320,8 +331,14 @@ function Garden() {
   }, [entered, sectionId])
   useEffect(() => {
     const onVisibility = () => {
-      ambience.setMaster(document.hidden ? 0 : 0.85)
+      const hidden = document.hidden
+      // The chosen song is a real <audio> element and may keep playing with
+      // the screen off. The procedural weather is ours, and has no reason to
+      // keep its AudioContext or animation loop alive where nobody can hear it.
+      ambience.setSuspended(hidden)
+      ambience.setMaster(hidden ? 0 : 0.85)
     }
+    onVisibility()
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])

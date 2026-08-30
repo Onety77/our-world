@@ -12,9 +12,10 @@
 import { useEffect, useState } from 'react'
 import { takenOverNow, useTakenOver } from '@/systems/attention'
 import { SECTIONS } from '@/sections/registry'
-import { slidePosition, useSections } from '@/systems/sections'
+import { slide, slidePosition, useSections } from '@/systems/sections'
 import { grabbed } from '@/systems/swipe'
 import { useSay } from '@/systems/useSay'
+import { onActivity } from '@/systems/activity'
 
 export function Places() {
   const say = useSay()
@@ -76,14 +77,25 @@ export function Places() {
    */
   const [settled, setSettled] = useState(true)
   useEffect(() => {
+    const near = () => Math.abs(slidePosition() - index) < 0.04
     let raf = 0
+    let still = 0
     const check = () => {
-      const near = Math.abs(slidePosition() - index) < 0.04
-      setSettled((was) => (was === near ? was : near))
-      raf = requestAnimationFrame(check)
+      raf = 0
+      const isNear = near()
+      setSettled((was) => (was === isNear ? was : isNear))
+      still = isNear && !slide.grabbing ? still + 1 : 0
+      if (still < 4) raf = requestAnimationFrame(check)
     }
-    raf = requestAnimationFrame(check)
-    return () => cancelAnimationFrame(raf)
+    const start = () => {
+      if (raf === 0) raf = requestAnimationFrame(check)
+    }
+    const stopListening = onActivity(start)
+    start()
+    return () => {
+      cancelAnimationFrame(raf)
+      stopListening()
+    }
   }, [index])
 
   const here = SECTIONS[index]
