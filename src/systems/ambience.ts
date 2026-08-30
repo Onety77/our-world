@@ -39,7 +39,7 @@
 
 import { createEngineVoice, type EngineVoice } from './engine'
 import { gainOf, levelsNow } from './volume'
-import { placeLevelsNow } from './outdoors'
+import { gardenBleedNow, placeLevelsNow } from './outdoors'
 
 export type { EngineState, EngineVoice } from './engine'
 
@@ -205,6 +205,16 @@ const MIX: Record<string, Record<Place, number>> = {
   room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  glasshouse: 0.78 },
   shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    glasshouse: 0.5 },
 }
+
+/*
+  The layers that are the open garden, rather than a place's own voice.
+
+  Wind and the leaf bed under it. Everything else in `MIX` belongs to
+  somewhere: the fire is the Hollow's, the shimmer is the Stars', the water is
+  the Wellspring's. These two are the meadow, and they are the only ones a
+  slider called "how much of the garden reaches here" has any business moving.
+*/
+const OF_THE_GARDEN = new Set(['air', 'leaves'])
 
 /** How often the loose events fire, per second, at full strength. */
 const BURBLE_RATE = 3.4
@@ -406,14 +416,24 @@ export function createAmbience(): AmbienceHandle {
    * How much of a layer this place wants, including its published/draft place
    * level and blended exactly across the crossfade.
    */
+
   function levelOf(name: string): number {
     const row = MIX[name]
     if (!row) return 0
     const levels = placeLevelsNow()
-    return (
-      row[from] * (levels[from] ?? 1) * (1 - blend) +
-      row[place] * (levels[place] ?? 1) * blend
-    )
+    /*
+      Two multipliers, and they answer different questions.
+
+      `levels` is how loud this place is at all; `bleed` is how much of the
+      open garden is allowed inside it. Both are blended across the crossfade
+      exactly like the mix itself, or walking through a doorway would step
+      rather than fade. A layer that is not the garden's ignores the second
+      one entirely — see `OF_THE_GARDEN`.
+    */
+    const bleed = OF_THE_GARDEN.has(name) ? gardenBleedNow() : null
+    const at = (which: Place) =>
+      row[which] * (levels[which] ?? 1) * (bleed ? (bleed[which] ?? 1) : 1)
+    return at(from) * (1 - blend) + at(place) * blend
   }
 
   /**

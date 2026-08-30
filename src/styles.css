@@ -10587,3 +10587,57 @@ body.on-the-road .broke-what {
   letter-spacing: 0.1em;
   color: var(--ink-faint);
 }
+
+/* ---- a place, and how much garden is in it -------------------------------- */
+/*
+  See `ui/PlaceVolumes`. Grouped rather than a flat run of ten sliders, because
+  the two numbers under each name answer different questions about the same
+  place and reading them apart is the whole point of having both.
+*/
+.admin-place {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0 0.1rem;
+  border-top: 1px solid rgba(240, 216, 178, 0.09);
+}
+
+.admin-place > b {
+  font-family: var(--serif);
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.admin-place > .admin-sub {
+  margin: 0 0 0.35rem;
+}
+
+/*
+  The handle sits where it was put down.
+
+  `.corner-tab` is pinned to the bottom by default, which is where the panel
+  lives — and not where the gesture happened. When a position has been set the
+  bottom pin has to be released, or the two fight and `top` silently loses.
+  Translated back by half its own height so the mark is centred on the thumb
+  rather than starting at it.
+*/
+.corner-tab.placed {
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+/*
+  Who a tab's changes reach. See the note on `TABS` in `ui/Admin`.
+
+  Marked rather than merely written, because it is the answer to a question
+  asked while looking for a save button — and a sentence in the same grey as
+  everything else is a sentence you read after you have given up looking.
+*/
+.admin-reach {
+  margin: -0.35rem 0 0.9rem;
+  padding: 0.4rem 0.6rem;
+  border-left: 2px solid rgba(240, 178, 106, 0.5);
+  background: rgba(240, 178, 106, 0.06);
+  color: var(--ink);
+}

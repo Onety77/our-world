@@ -6,6 +6,7 @@ import { attempt } from '@/systems/trouble'
 import {
   INSIDES,
   OPEN,
+  bleedKeys,
   samePlaceLevels,
   useOutdoors,
   type InsidePlace,
@@ -34,22 +35,61 @@ export function Outdoors() {
 
   const levels = useOutdoors((state) => state.howMuch)
   const published = useOutdoors((state) => state.published)
+  const bleed = useOutdoors((state) => state.bleed)
+  const publishedBleed = useOutdoors((state) => state.publishedBleed)
   const draft = useOutdoors((state) => state.draft)
   const store = useOutdoors.getState()
   const [sending, setSending] = useState(false)
 
-  const unsent = draft !== null && !samePlaceLevels(levels, published)
+  const unsent =
+    (draft !== null && !samePlaceLevels(levels, published)) ||
+    !samePlaceLevels(bleed, publishedBleed)
   const nonstandard = !samePlaceLevels(levels, OPEN)
+
+  const [oldRules, setOldRules] = useState(false)
 
   async function save() {
     setSending(true)
+    setOldRules(false)
+    const asked = Object.fromEntries(INSIDES.map((place) => [place, levels[place]]))
+
+    /*
+      The full write first, and the old one if the rules refuse it.
+
+      `bleedTree` and its four siblings are new keys, and the rule that guards
+      this document lists the keys it will accept — so until those rules are
+      republished the whole write is rejected, *including the levels*, which
+      have worked for months. Adding a feature must not break the thing beside
+      it because a file somewhere else has not been pasted yet.
+
+      So: try both, and on a refusal fall back to the five numbers that were
+      always allowed, and say plainly which half did not land.
+    */
+    try {
+      await data.setAmbienceTuning({ ...asked, ...bleedKeys(bleed) })
+      setSending(false)
+      store.markPublished(levels)
+      return
+    } catch {
+      /* almost certainly the rules; the fallback below finds out */
+    }
+
     const saved = await attempt('those sound levels did not reach the garden', () =>
-      data.setAmbienceTuning(
-        Object.fromEntries(INSIDES.map((place) => [place, levels[place]])),
-      ),
+      /*
+        Both numbers for every place, in one write.
+
+        How loud a place is and how much meadow is allowed into it are two
+        answers about the same room, and saving one without the other would
+        leave the two of you standing in different ones. See `bleedKeys`.
+      */
+      data.setAmbienceTuning(asked),
     )
     setSending(false)
-    if (saved) store.markPublished(levels)
+    if (saved) {
+      // The levels are hers; the bleed is not, and it must not claim to be.
+      setOldRules(true)
+      store.markPublished(levels)
+    }
   }
 
   return (
@@ -75,23 +115,53 @@ export function Outdoors() {
         )}
       </p>
 
-      {INSIDES.map((place) => (
-        <label key={place}>
-          <span className="k">
-            {NAMES[place]} · {Math.round(levels[place] * 100)}%
-            {levels[place] === 0 ? ' — silent' : ''}
-          </span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={levels[place]}
-            aria-label={`complete ambience in ${NAMES[place]}`}
-            onChange={(event) => store.set(place, Number(event.target.value))}
-          />
-          <span className="admin-note">{HEARD[place]}</span>
-        </label>
+{INSIDES.map((place) => (
+        <div className="admin-place" key={place}>
+          <b>{NAMES[place]}</b>
+          <span className="admin-note admin-sub">{HEARD[place]}</span>
+
+          <label>
+            <span className="k">
+              this place itself · {Math.round(levels[place] * 100)}%
+              {levels[place] === 0 ? ' — silent' : ''}
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={levels[place]}
+              aria-label={`complete ambience in ${NAMES[place]}`}
+              onChange={(event) => store.set(place, Number(event.target.value))}
+            />
+          </label>
+
+          {/*
+            The one that kept being asked for.
+
+            The meadow's wind was reported inside the sections five times over;
+            each time the mix table was changed and each time it came back,
+            because nothing here could say whether the wind was actually
+            present. It is not — this reading zero is the proof — and what is
+            left in an enclosed place is that place's own bed, which is the
+            slider above.
+          */}
+          <label>
+            <span className="k">
+              garden reaching in · {Math.round(bleed[place] * 100)}%
+              {bleed[place] === 0 ? ' — none' : ''}
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={bleed[place]}
+              aria-label={`how much garden reaches ${NAMES[place]}`}
+              onChange={(event) => store.setBleed(place, Number(event.target.value))}
+            />
+          </label>
+        </div>
       ))}
 
       <div className="row">
@@ -114,6 +184,15 @@ export function Outdoors() {
           every place back to full
         </button>
       </div>
+
+      {oldRules ? (
+        <p className="admin-note">
+          The <b>levels</b> were saved, but <b>garden reaching in</b> was not:
+          this project&rsquo;s Firestore rules do not accept it yet. Run{' '}
+          <b>npm run rules</b> and publish <b>rules-out/firestore.rules</b>,
+          then save again.
+        </p>
+      ) : null}
 
       {data.me !== 'warm' ? (
         <p className="admin-note">

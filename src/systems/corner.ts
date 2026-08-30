@@ -32,6 +32,14 @@ interface CornerState {
    * not keep doing it after you have pulled it back out.
    */
   decided: boolean
+  /**
+   * How far down the screen the handle sits, 0..1, or null for its usual place.
+   *
+   * Set by whatever put the panel away, so a shove near the top leaves the
+   * handle near the top. See the note in the store.
+   */
+  at: number | null
+  putAt(at: number | null): void
   toggle(): void
   /** Tuck it, but only if nobody has expressed an opinion yet. */
   tuckOnce(): void
@@ -42,12 +50,28 @@ interface CornerState {
 export const useCorner = create<CornerState>((set, get) => ({
   tucked: false,
   decided: false,
+  /*
+    Where the handle sits, as a fraction down the screen.
+
+    It used to be pinned to the bottom right, which is where the corner lives —
+    and that is not where the gesture happened. Shove the panel away with a
+    thumb near the top of the screen and the thing it turns into appeared six
+    inches lower, which reads as the panel not having gone anywhere and a
+    different mark arriving somewhere else. A handle is a thing you put down;
+    it should be where you put it.
+
+    Null until something has been put down, and back to null when the panel is
+    pulled out again — the next tuck decides afresh rather than inheriting a
+    position from an hour ago.
+  */
+  at: null,
+  putAt: (at) => set({ at }),
   toggle: () => set({ tucked: !get().tucked, decided: true }),
   tuckOnce: () => {
     if (get().decided) return
     set({ tucked: true, decided: true })
   },
-  forget: () => set({ tucked: false, decided: false }),
+  forget: () => set({ tucked: false, decided: false, at: null }),
 }))
 
 /**

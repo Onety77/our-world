@@ -356,7 +356,18 @@ service cloud.firestore {
         && me() == 'warm'
         && id == 'ours'
         && request.resource.data.keys().hasOnly([
-          'tree', 'river', 'hollow', 'stars', 'glasshouse'
+          'tree', 'river', 'hollow', 'stars', 'glasshouse',
+          /*
+            And how much of the open garden reaches inside each of them.
+
+            Two numbers per place, in one document, because they are two
+            answers about the same room: how loud it is, and how much meadow
+            is allowed in. Saving one without the other would leave the two
+            of you standing in different rooms. Only the five names above
+            carry an explicit range check here; the bleed is bounded to 0..1
+            on the way in and clamped again on the way out by the reader.
+          */
+          'bleedTree', 'bleedRiver', 'bleedHollow', 'bleedStars', 'bleedGlasshouse'
         ])
         && request.resource.data.tree is number
         && request.resource.data.tree >= 0

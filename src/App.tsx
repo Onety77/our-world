@@ -159,8 +159,11 @@ function Garden() {
   const cornerNode = useRef<HTMLDivElement>(null)
   useTuckOnSwipe(cornerNode, {
     on: byThumb && !tucked,
-    tuck: useCallback(() => {
-      if (!useCorner.getState().tucked) useCorner.getState().toggle()
+    tuck: useCallback((at: number) => {
+      const corner = useCorner.getState()
+      if (corner.tucked) return
+      corner.putAt(at)
+      corner.toggle()
     }, []),
   })
 

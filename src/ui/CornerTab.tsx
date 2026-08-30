@@ -16,6 +16,8 @@ import { useCorner } from '@/systems/corner'
 export function CornerTab({ show }: { show: boolean }) {
   const tucked = useCorner((s) => s.tucked)
   const toggle = useCorner((s) => s.toggle)
+  const at = useCorner((s) => s.at)
+  const putAt = useCorner((s) => s.putAt)
   const node = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -40,6 +42,13 @@ export function CornerTab({ show }: { show: boolean }) {
       const wantsIn = moved > 18
       if (wantsOut && !tucked) return
       if (wantsIn && tucked) return
+      /*
+        Putting it away from the handle leaves the handle where the handle is;
+        pulling it out forgets the position, so the next shove decides afresh
+        rather than inheriting where a thumb happened to be an hour ago.
+      */
+      if (tucked) putAt(null)
+      else putAt(event.clientY / Math.max(1, window.innerHeight))
       toggle()
     }
 
@@ -50,7 +59,7 @@ export function CornerTab({ show }: { show: boolean }) {
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointerup', up)
     }
-  }, [tucked, toggle])
+  }, [tucked, toggle, putAt])
 
   if (!show) return null
 
@@ -58,7 +67,13 @@ export function CornerTab({ show }: { show: boolean }) {
     <button
       ref={node}
       type="button"
-      className={`corner-tab${tucked ? ' tucked' : ''}`}
+      className={`corner-tab${tucked ? ' tucked' : ''}${at === null ? '' : ' placed'}`}
+      /*
+        Where the thumb left it. A percentage rather than pixels so turning the
+        phone keeps it in the same place on the screen rather than the same
+        number of pixels from a bottom edge that has moved.
+      */
+      style={at === null ? undefined : { top: `${(at * 100).toFixed(2)}%` }}
       aria-label={tucked ? 'show the music and the conversation' : 'tuck the music and the conversation away'}
       aria-expanded={!tucked}
     >

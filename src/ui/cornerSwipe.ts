@@ -32,7 +32,7 @@ const DECIDED = 10
 
 export function useTuckOnSwipe(
   ref: RefObject<HTMLElement | null>,
-  { on, tuck }: { on: boolean; tuck(): void },
+  { on, tuck }: { on: boolean; tuck(at: number): void },
 ) {
   useEffect(() => {
     const el = ref.current
@@ -78,7 +78,9 @@ export function useTuckOnSwipe(
       // If the finger went down on nothing clickable, no click ever arrives
       // and the listener would sit there waiting for the next honest tap.
       window.setTimeout(() => el.removeEventListener('click', stopTheClick, true), 0)
-      tuck()
+      // Where it was let go, so the handle can be left there rather than in
+      // the corner the panel happens to live in. See `CornerTab`.
+      tuck(event.clientY / Math.max(1, window.innerHeight))
     }
 
     const stopTheClick = (event: Event) => {

@@ -92,12 +92,50 @@ const SHE_SAYS = [
  * it about why that is load-bearing rather than polish.
  * ---------------------------------------------------------------------------
  */
+/*
+  Every tab says who its changes reach, and that is not decoration.
+
+  Three different things live in here and they look identical: settings that go
+  to both of you when you press a button, settings that go to both of you the
+  moment you touch them, and settings that never leave this phone. Not saying
+  which is which meant "did that save?" was a question the panel could not
+  answer — and the honest answer differs per tab.
+
+  `reach` is that answer, in one line, at the top of whatever you are looking
+  at. If a tab ever gains a control with a different reach from the rest of it,
+  that tab needs splitting rather than this line needs hedging.
+*/
 const TABS = [
-  { id: 'car', name: 'car', blurb: 'how the rally car drives' },
-  { id: 'world', name: 'world', blurb: 'the sky, the hour, and where to land' },
-  { id: 'you', name: 'you two', blurb: 'both people, and what you leave each other' },
-  { id: 'music', name: 'music', blurb: 'what the two of you can listen to' },
-  { id: 'device', name: 'device', blurb: 'this machine, and starting it over' },
+  {
+    id: 'car',
+    name: 'car',
+    blurb: 'how the rally car drives',
+    reach: 'Yours until you press send — then {hers} too, car and buttons together.',
+  },
+  {
+    id: 'world',
+    name: 'world',
+    blurb: 'the sky, the hour, and how each place sounds',
+    reach: 'The sound of the places is shared, and has its own save. The rest is this device.',
+  },
+  {
+    id: 'you',
+    name: 'you two',
+    blurb: 'both people, and what you leave each other',
+    reach: 'Shared the moment you change it. There is nothing to press.',
+  },
+  {
+    id: 'music',
+    name: 'music',
+    blurb: 'what the two of you can listen to',
+    reach: 'Shared. Putting a song in is the saving — it is in the garden when the row says so.',
+  },
+  {
+    id: 'device',
+    name: 'device',
+    blurb: 'this machine, and starting it over',
+    reach: 'This phone only. None of it is ever sent, and none of it needs saving.',
+  },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -214,13 +252,24 @@ export function Admin() {
       <p className="admin-note admin-tab-blurb">
         {TABS.find((entry) => entry.id === tab)?.blurb}
       </p>
+      <p className="admin-note admin-reach">
+        {say(TABS.find((entry) => entry.id === tab)?.reach ?? '')}
+      </p>
 
       {tab === 'car' && <CarSettings />}
       {tab === 'car' && <ThumbLayout />}
 
+      {/*
+        Device-only things stay on the device tab; the shared mix does not.
+
+        `Outdoors` publishes to both of you and had been filed under "device",
+        which is the last tab anybody would open looking for how the world
+        sounds — which is most of why it was reported as missing. It is world
+        tuning, so it lives with the world.
+      */}
       {tab === 'device' && <Volumes />}
-      {tab === 'device' && <Outdoors />}
       {tab === 'device' && <Hearing />}
+      {tab === 'world' && <Outdoors />}
 
       {tab === 'device' && (
       <section>
