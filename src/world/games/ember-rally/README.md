@@ -509,7 +509,7 @@ driving there is not a plan. Same argument as `&at=` on the turntable.
 
 `?stage=moonbreak` opens that road and skips the course picker and the menu,
 which is the fourth of these and exists for the same reason as the other three:
-there are two roads now, one of them is two minutes long, and the interesting
+there are three roads now, some of them are several minutes long, and the interesting
 part of it is nine hundred metres in. With `?rally=ride&from=1250` that is one
 URL instead of four screens and a minute of driving. It deliberately skips only
 the *menus* — not the countdown, not where the car starts, not how anything

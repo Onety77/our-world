@@ -50,7 +50,7 @@ function clean(raw: unknown): Bests {
   if (raw === null || typeof raw !== 'object') return {}
   const source = raw as Record<string, unknown>
   const out: Bests = {}
-  for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'firstlight'] as const) {
+  for (const stage of ['rootway', 'moonbreak', 'stormcrown'] as const) {
     const value = source[stage]
     if (value === null || typeof value !== 'object') continue
     const it = value as Record<string, unknown>

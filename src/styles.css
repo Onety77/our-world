@@ -4864,12 +4864,27 @@ canvas {
 .player-beam {
   display: block;
   height: 100%;
-  /* Fills from the right, toward the edge the player is anchored to. */
-  transform-origin: 100% 50%;
+  /*
+    From the left, like every other progress bar anybody has ever seen.
+
+    This used to grow from the right, on the reasoning that it should fill
+    toward the edge the corner is anchored to. That is a fact about the panel's
+    position and has nothing to do with what the line means: it is elapsed time,
+    and time is read left to right. Anchoring it to the furniture made a song
+    look like it was counting down to nothing.
+  */
+  transform-origin: 0 50%;
   /* Written every frame from Player.tsx — nothing here may transition it. */
   transform: scaleX(0);
+  /*
+    Warm at the leading edge, not the trailing one.
+
+    `scaleX` squashes the whole gradient into whatever is showing, so this end
+    is always the playhead. It was 270deg — pointing left — which put the bright
+    amber at the tail and the pale end where the music actually is.
+  */
   background: linear-gradient(
-    270deg,
+    90deg,
     rgba(242, 239, 230, 0.35),
     rgba(240, 169, 75, 0.85)
   );
@@ -10786,16 +10801,6 @@ body:has(.rally-running) .player {
   box-shadow: 0 0 1.3rem 0.24rem rgba(189, 228, 233, 0.42);
 }
 
-.live-choice-road.firstlight .live-choice-scene {
-  background: radial-gradient(circle at 50% 24%, #ffe0a0 0 4%, rgba(238, 149, 75, 0.26) 5% 17%, transparent 31%), linear-gradient(#5d3040, #be7452 55%, #40271f);
-}
-
-.live-choice-road.firstlight .live-choice-horizon {
-  inset: 20% 0 20%;
-  clip-path: polygon(0 0, 43% 28%, 45% 100%, 0 100%, 0 0, 100% 0, 57% 28%, 55% 100%, 100% 100%);
-  background: linear-gradient(90deg, #3b211d, #81503b 48%, #3c211c);
-}
-
 .live-choice-road strong {
   font-family: var(--serif);
   font-size: clamp(1.8rem, 4vw, 2.55rem);
@@ -11370,73 +11375,6 @@ body.on-the-road .broke-what {
   font-size: 0.95rem;
   letter-spacing: 0;
   color: var(--ink);
-}
-
-/* ---- the fourth door: the Firstlight -------------------------------------- */
-/*
-  Two walls leaning in, a low sun between them, and the one shaft of light that
-  gives the road its name landing on the floor. Drawn rather than generated,
-  like the other three — the little scene above a name is the only picture of a
-  road anybody sees before choosing it, and four grey rectangles would say
-  nothing about which is which.
-*/
-.rally-course.firstlight .rally-course-scene {
-  background: linear-gradient(180deg, #f0b06a 0%, #c9713c 46%, #4d2418 100%);
-}
-
-.rally-course.firstlight .course-sun {
-  position: absolute;
-  z-index: 1;
-  top: 30%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: clamp(2.2rem, 5.5vw, 3.6rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: #fff3cf;
-  box-shadow: 0 0 3.4rem rgba(255, 226, 160, 0.85);
-}
-
-/* The walls. Sheer, leaning in, and dark because the sun is behind them. */
-.rally-course.firstlight .course-wall {
-  position: absolute;
-  z-index: 2;
-  top: -6%;
-  bottom: 0;
-  width: 44%;
-  background: linear-gradient(180deg, #7a3d22 0%, #2e1610 100%);
-}
-
-.rally-course.firstlight .course-wall.one {
-  left: -6%;
-  clip-path: polygon(0 0, 100% 0, 72% 100%, 0 100%);
-}
-
-.rally-course.firstlight .course-wall.two {
-  right: -6%;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 28% 100%);
-}
-
-/* The shaft: a wedge of lit dust, widest where it comes through the gap. */
-.rally-course.firstlight .course-shaft {
-  position: absolute;
-  z-index: 3;
-  top: 0;
-  left: 42%;
-  width: 22%;
-  height: 88%;
-  background: linear-gradient(180deg, rgba(255, 236, 190, 0.62), rgba(255, 214, 150, 0));
-  clip-path: polygon(34% 0, 66% 0, 100% 100%, 0 100%);
-}
-
-.rally-course.firstlight .course-sand {
-  position: absolute;
-  z-index: 3;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 24%;
-  background: linear-gradient(180deg, #b9793f 0%, #7d4a26 100%);
 }
 
 /* ---- reading a whisper against a bright morning --------------------------- */

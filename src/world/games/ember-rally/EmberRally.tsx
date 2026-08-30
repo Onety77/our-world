@@ -50,7 +50,12 @@ import {
 
 type View = 'courses' | 'menu' | 'road' | 'replay'
 type RaceKind = 'qualifying' | 'chase'
-const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown', 'firstlight']
+const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown']
+
+/** Old saved rounds may still name a road that no longer exists. */
+function availableStage(value: unknown): StageId {
+  return STAGES.includes(value as StageId) ? (value as StageId) : 'rootway'
+}
 
 /**
  * `?stage=moonbreak` opens that road and drops you straight onto it.
@@ -122,22 +127,6 @@ const COURSES: Record<StageId, {
     resultKicker: 'two wakes under one moon',
     finishPlace: 'the moonwell',
     cleanWord: 'across the Moonbreak',
-  },
-  firstlight: {
-    name: 'The Firstlight',
-    place: 'sun and cut stone',
-    short: 'The expert road: a lower wash, a rising suncoil, a knife-edge shelf and the hardest descent in the garden.',
-    soloTitle: 'Something went down before the sun did',
-    soloCopy: 'Stay high through Slipstone, Coldfall and the dark Gallery—or move deliberately right and commit to the long lower wash. Both roads meet beneath the Suncoil. Climb it around the sandstone spine, hold the upper shelf, survive the descending hairpin, then thread the three fallen stones. The canyon gives every warning once.',
-    spirit: 'the dawn-spirit',
-    returnTo: 'return to the low fire',
-    setTitle: 'Leave a line down the cut',
-    setCopy: 'Learn where the light lands and leave your marks on the sand. {Their} run down stays under the rock until yours is beside it — and yours stays there until {hers} is.',
-    sealedTitle: 'The canyon keeps it.',
-    chaseHome: 'home to the canyon floor',
-    resultKicker: 'two lines down one cut',
-    finishPlace: 'the low fire',
-    cleanWord: 'down the Firstlight',
   },
   stormcrown: {
     name: 'The Stormcrown',
@@ -347,9 +336,10 @@ export default function EmberRally({
     picker either: the two of you have to be on the same road and the key is
     the only thing you both hold.
   */
-  const liveStage = live && liveKey ? (stageOfKey(liveKey, 'rootway') as StageId) : null
-  const activeStage =
-    liveStage ?? stage ?? challenged ?? setup?.stage ?? 'rootway'
+  const liveStage = live && liveKey ? stageOfKey(liveKey, 'rootway') : null
+  const activeStage = availableStage(
+    liveStage ?? stage ?? challenged ?? setup?.stage,
+  )
   const track = useMemo(() => makeTrack(seed, activeStage), [seed, activeStage])
   // Only when there is nobody to race. Driving a whole lap costs about a tenth
   // of a second, and in a two-player round nothing ever looks at it.
@@ -927,9 +917,7 @@ function CoursePicker({
   return (
     <div className="rally rally-courses">
       <div className="rally-course-heading">
-        {/* Counted, not written down. It said "three roads" for a while
-            after there were four, which is the sort of thing only the person
-            who added the fourth ever notices. */}
+        {/* Counted from the actual road list so this cannot become stale. */}
         <p className="rally-kicker">ember rally · {STAGES.length} roads</p>
         <h1>Where do you want the engine?</h1>
       </div>
@@ -1019,39 +1007,6 @@ function CoursePicker({
           <span className="rally-course-enter">climb into weather</span>
         </button>
 
-        {/*
-          The canyon, in five shapes.
-
-          Each of these doors is drawn rather than mapped, and that is on
-          purpose: the little scene above each name is the only picture of a
-          road anybody sees before choosing it, and four generated rectangles
-          would say nothing about which one is which. This one is two walls
-          leaning in, a low sun between them, and the single shaft that gives
-          the road its name landing on the floor.
-        */}
-        <button
-          type="button"
-          className={`rally-course firstlight${selected === 3 ? ' is-selected' : ''}`}
-          aria-current={selected === 3 ? 'true' : undefined}
-          aria-hidden={selected !== 3}
-          tabIndex={selected === 3 ? 0 : -1}
-          onFocus={() => setSelected(3)}
-          onClick={() => onChoose('firstlight')}
-        >
-          <span className="rally-course-scene" aria-hidden="true">
-            <i className="course-sun" />
-            <i className="course-wall one" />
-            <i className="course-wall two" />
-            <i className="course-shaft" />
-            <i className="course-sand" />
-            <i className="course-road" />
-          </span>
-          <span className="rally-course-name">The Firstlight</span>
-          <CourseState stage="firstlight" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
-          <CourseBest stage="firstlight" />
-          <span className="rally-course-copy">{COURSES.firstlight.short}</span>
-          <span className="rally-course-enter">go down the cut</span>
-        </button>
           </div>
         </div>
 

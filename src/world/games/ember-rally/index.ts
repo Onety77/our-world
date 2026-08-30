@@ -6,7 +6,7 @@ import type { RallyMove, RallySetup } from './model'
 export default {
   id: 'ember-rally',
   name: 'Ember Rally',
-  blurb: 'Choose a road, set a line, then chase {hers} through fire, moonlight, storm or first light.',
+  blurb: 'Choose a road, set a line, then chase {hers} through fire, moonlight or storm.',
   mode: 'async',
   cadence: 'daily',
   duration: 'one long road, twice',
@@ -40,7 +40,6 @@ export default {
         { id: 'rootway', name: 'The Rootway', note: 'fire and stone · close, changing, lantern-lit' },
         { id: 'moonbreak', name: 'The Moonbreak', note: 'water and open sky · fast and exposed' },
         { id: 'stormcrown', name: 'The Stormcrown', note: 'rain and high stone · weather at the limit' },
-        { id: 'firstlight', name: 'The Firstlight', note: 'sun and cut stone · lower wash, high shelf, hardest road' },
       ],
     },
   },
@@ -81,7 +80,7 @@ export default {
       direction. Still both people, still a real race, and it no longer insists
       on a symmetry the game no longer has.
     */
-    return (['rootway', 'moonbreak', 'stormcrown', 'firstlight'] as const).some((stage) => {
+    return (['rootway', 'moonbreak', 'stormcrown'] as const).some((stage) => {
       if (solo) return on(mine, stage, 'chase')
       const raced = (a: RallyMove[], b: RallyMove[]) =>
         on(a, stage, 'qualifying') && on(b, stage, 'chase')
@@ -93,7 +92,7 @@ export default {
   Emblem: EmberRallyEmblem,
   /*
     Both halves fetched, and this is the folder that most needed it: the road
-    itself, the tyre model, the two courses, the car, the materials and the
+    itself, the tyre model, the three courses, the car, the materials and the
     sound are a quarter of the garden's own code, and none of it has anything
     to say to somebody who never comes down here.
   */

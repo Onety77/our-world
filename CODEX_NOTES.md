@@ -568,3 +568,18 @@ shared-file changes, measurements, and anything another agent should preserve.
   headless 60-Hz/software renderer (the requested cap is 12), 10 draw calls and
   1,838 triangles. The full five-place audio suite, shader suite, Rally physics
   and course audit, tuning connectivity, TypeScript and production build pass.
+
+## 30 August 2026 - Codex - Firstlight removed
+
+- Removed the Firstlight from both Ember Rally course pickers and from the
+  shared stage model, leaving Rootway, Moonbreak and Stormcrown in the linear
+  three-road browser.
+- Deleted its world component, full track/band definition, lower-wash route,
+  sandstone geometry branches, course-card art and dedicated rally audit. The
+  removal cuts more than eight hundred source lines rather than merely hiding
+  the road from the menu.
+- Old saved rounds or live keys that still name the removed road now fall back
+  safely to Rootway, so stale Firebase data cannot open an undefined course or
+  crash the rally screen.
+- TypeScript, the production build and the complete remaining-road simulation
+  pass after the removal.
