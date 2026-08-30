@@ -82,36 +82,200 @@ console.log('\nHer own clock, on the end of the car\n')
 
 console.log('\nBetween updates, she is still a car\n')
 
-const sample = (s: number, n = 0): RunSample => ({
-  n, s, yaw: 0, drift: 0, boost: false, rough: false,
+const sample = (s: number, n = 0, yaw = 0): RunSample => ({
+  n, s, yaw, drift: 0, boost: false, rough: false,
   braking: false, spinning: false, shortcut: false,
 })
 
-/* Thirty metres a second — quick, and about what the Rootway is driven at. */
-const rolling = new Rolling()
-check('nothing has arrived, so there is nothing to draw', rolling.at(0), null)
+/*
+  A whole race, sixteen updates a second, driven at a frame a sixtieth.
 
-rolling.push(sample(100), 1000)
-rolling.push(sample(104.8), 1160)
+  Everything below runs her through this: a sender that writes on her own even
+  clock, arrivals that land whenever the helper says they land, and a viewer
+  drawing every frame in between. Positions come from a function of *her* time,
+  so the truth is always known and can be compared against.
+*/
+function drive({
+  road,
+  until = 4000,
+  every = 60,
+  lands = (t: number) => t,
+  frame = 1000 / 60,
+  after = 0,
+}: {
+  road: (ms: number) => number
+  until?: number
+  every?: number
+  /** When an update sent at `t` lands here. Never out of order: one socket. */
+  lands?: (t: number) => number
+  frame?: number
+  /** How long to keep drawing after the last update was sent. */
+  after?: number
+}) {
+  const car = new Rolling()
+  const drawn: { at: number; s: number }[] = []
+  const sends: { t: number; at: number }[] = []
+  let landed = 0
+  for (let t = 0; t <= until; t += every) {
+    landed = Math.max(landed + 1, lands(t))
+    sends.push({ t, at: landed })
+  }
+
+  let next = 0
+  for (let now = 0; now <= landed + after; now += frame) {
+    while (next < sends.length && sends[next].at <= now) {
+      const one = sends[next++]
+      car.push(sample(road(one.t)), one.at, one.t)
+    }
+    const at = car.at(now)
+    if (at) drawn.push({ at: now, s: at.s })
+  }
+  return { car, drawn }
+}
+
+/** Every step she was seen to take, once she is properly under way. */
+function steps(drawn: { at: number; s: number }[], from = 1200) {
+  const out: number[] = []
+  for (let i = 1; i < drawn.length; i++) {
+    if (drawn[i].at < from) continue
+    out.push(drawn[i].s - drawn[i - 1].s)
+  }
+  return out
+}
+
+const nothing = new Rolling()
+check('nothing has arrived, so there is nothing to draw', nothing.at(0), null)
+
+/* Thirty metres a second — quick, and about what the Rootway is driven at. */
+{
+  const { drawn } = drive({ road: (ms) => 200 + ms * 0.03 })
+  const each = steps(drawn)
+  const mean = each.reduce((a, b) => a + b, 0) / each.length
+  near('she moves every frame, by about the same amount', mean, 0.03 * (1000 / 60), 0.02)
+  check('and never stands still', each.every((d) => d > 0), true)
+}
 
 /*
-  The half-step. This is the whole point of the class: at the moment exactly
-  between two updates she has to be *between* them, not still sitting on the
-  last one. A car that waits and jumps is the slideshow this exists to avoid.
-*/
-let seen = 0
-for (let t = 1160; t <= 1320; t += 16) seen = rolling.at(t)?.s ?? 0
-near('carried forward through the gap', seen, 109.6, 1.2)
+  ===========================================================================
+  Braking, which is the whole reason any of this was rewritten.
 
-/* And she keeps up over a long stretch of updates rather than falling behind. */
-const long = new Rolling()
-let where = 200
-for (let t = 0; t <= 4000; t += 160) {
-  long.push(sample(where), t)
-  where += 4.8
-  for (let f = 0; f < 10; f++) long.at(t + f * 16)
+  The old smoother carried her forward at her last speed and then refused to
+  pull her back, because a car visibly reversing looks wrong — so every time
+  she slowed it surged past and then *froze* until the truth caught up. Once a
+  corner, all race. That is what "the other player isn't smooth" was after the
+  repeats were fixed, and no amount of sending more often would have touched
+  it.
+
+  So: a hard brake from thirty metres a second to eight, and the demand is that
+  nothing she is seen to do is either a stop or a jump.
+  ===========================================================================
+*/
+{
+  const brake = (ms: number) => {
+    const from = 1500
+    if (ms <= from) return 200 + ms * 0.03
+    const t = Math.min(1, (ms - from) / 900)
+    // Thirty down to eight, smoothly, over nine tenths of a second.
+    const v = 0.03 + (0.008 - 0.03) * t
+    return 200 + from * 0.03 + ((0.03 + v) / 2) * (ms - from)
+  }
+  const { drawn } = drive({ road: brake })
+  const each = steps(drawn, 1400)
+  const mean = each.reduce((a, b) => a + b, 0) / each.length
+  const most = Math.max(...each)
+  const least = Math.min(...each)
+  check('braking never freezes her', least > 0, true)
+  check('and never throws her forward', most < mean * 2.2, true)
 }
-near('still beside you after four seconds', long.at(4000)?.s ?? 0, where - 4.8, 2.5)
+
+/*
+  And the same under a link that delivers unevenly, which is the other half of
+  what it looked like: two updates landing together and then a long wait.
+*/
+{
+  const bumpy = (t: number) => t + [0, 6, 52, 3, 90, 12, 0, 140][(t / 60) % 8 | 0]
+  const { drawn, car } = drive({ road: (ms) => 200 + ms * 0.03, lands: bumpy })
+  const each = steps(drawn, 1400)
+  const mean = each.reduce((a, b) => a + b, 0) / each.length
+  check('a bumpy link never freezes her', Math.min(...each) > 0, true)
+  check('and never throws her forward', Math.max(...each) < mean * 2.2, true)
+  const how = car.stats()
+  check('the buffer widened by itself to cover it', how.behind > 100, true)
+  check('and it says so', how.jitter > 10, true)
+}
+
+/* On an even link it settles near the floor rather than sitting back. */
+{
+  const { car } = drive({ road: (ms) => 200 + ms * 0.03, until: 8000 })
+  const how = car.stats()
+  check('an even link keeps the buffer tight', how.behind <= 110, true)
+  check('and it never has to guess', how.dry, 0)
+}
+
+/*
+  And when the buffer does run dry, the old behaviour is what is left.
+
+  She has genuinely stopped sending, so there is nothing to interpolate between
+  and carrying her forward at her last speed is the honest thing — until
+  `LOST_MS` takes her off the road entirely. A bad connection degrades to the
+  way this used to work, not to a car parked in the middle of the tarmac.
+*/
+{
+  const { car, drawn } = drive({ road: (ms) => 200 + ms * 0.03, after: 900 })
+  const how = car.stats()
+  check('a silence puts it on its own', how.dry > 0, true)
+  const tail = steps(drawn, drawn[drawn.length - 1].at - 300)
+  check('and she keeps rolling rather than stopping dead', Math.min(...tail) > 0, true)
+}
+
+console.log('\nShe is drawn where she was, not where she might be\n')
+
+{
+  const { car, drawn } = drive({ road: (ms) => 200 + ms * 0.03 })
+  const how = car.stats()
+  const last = drawn[drawn.length - 1]
+  // Where she truly was, that many milliseconds before the last frame drawn.
+  const truth = 200 + (last.at - how.behind) * 0.03
+  near('within a metre of where she really was, a moment ago', last.s, truth, 1)
+  check('which is behind her, never ahead', last.s < 200 + last.at * 0.03, true)
+}
+
+console.log('\nA spin, which is where an angle wraps\n')
+
+/** The same wrap the physics keeps `psi` in, for measuring turn rather than number. */
+const shortWay = (d: number) => d - Math.PI * 2 * Math.round(d / (Math.PI * 2))
+
+/*
+  `psi` is wrapped into ±π by the physics, so a car turning steadily through
+  straight-backwards steps from about +3.1 to about −3.1 — a fiftieth of a turn.
+  Blended as plain numbers that is *minus six radians*, and her car whips the
+  whole way round the wrong way at the one moment you are certainly watching
+  her. So the demand is not "no jumps" — a rotation may jump by exactly a turn
+  and look like nothing — it is that the total angle she is seen to travel is
+  the angle she actually turned, with no spare revolution in it.
+*/
+{
+  const spun = new Rolling()
+  const frames: number[] = []
+  let yaw = 2.6
+  let next = 0
+  let turned = 0
+  for (let now = 0; now <= 2400; now += 1000 / 60) {
+    while (next * 60 <= now) {
+      spun.push(sample(100 + next * 1.8, 0, yaw), next * 60, next * 60)
+      yaw = shortWay(yaw + 0.06)
+      turned += 0.06
+      next++
+    }
+    const at = spun.at(now)
+    if (at) frames.push(at.yaw)
+  }
+  let travelled = 0
+  for (let i = 1; i < frames.length; i++) travelled += Math.abs(shortWay(frames[i] - frames[i - 1]))
+  check('she crossed straight-backwards', frames.some((y) => y > 3) && frames.some((y) => y < -3), true)
+  check('and turned no further than she really did', travelled < turned + 0.5, true)
+  check('the long way round would have been six radians more', travelled < 5, true)
+}
 
 console.log('\nThe same car twice, which is what a shared world does\n')
 
@@ -119,40 +283,52 @@ console.log('\nThe same car twice, which is what a shared world does\n')
   The bug this is here to stop coming back.
 
   `subscribe` fires on every change to the world, and writing your own presence
-  is a change to the world — six or sixteen times a second, all race. Each one
-  woke the receiver, which read her *unchanged* field and pushed it in again.
+  is a change to the world — sixteen times a second, all race. Each one woke the
+  receiver, which read her *unchanged* field and pushed it in again. Two copies
+  of one sample were no distance apart, so her speed came out as zero and her
+  car parked until the next genuine one jumped it forward.
 
-  Two copies of one sample are no distance apart, so her speed came out as
-  zero, the dead reckoning that carries her between real updates stopped, and
-  her car parked until the next genuine sample jumped it forward. Several times
-  a second. That is what "the other player isn't smooth" was.
-
-  Guarded twice now, and both are checked here: the receiver drops a repeat
-  before it ever gets this far, and her own clock means an identical sample is
-  the same instant rather than a standstill.
+  Guarded three times over now, and the demand here is the strongest form of
+  it: a run with every sample delivered twice must be drawn *identically* to a
+  run with each delivered once. Not similar — the same, to the millimetre.
 */
 {
-  const echo = new Rolling()
-  echo.push(sample(300), 0, 0)
-  echo.push(sample(304.8), 160, 160)
-  // The same one again, four more times, as the world churns underneath.
-  for (const at of [180, 200, 220, 240]) echo.push(sample(304.8), at, 160)
-  near('a repeat does not tell her she has stopped', echo.at(320)?.s ?? 0, 309.6, 1.2)
+  /** The same race twice: once delivered cleanly, once with every echo. */
+  const run = (echoes: number[]) => {
+    const car = new Rolling()
+    const drawn: number[] = []
+    let next = 0
+    for (let now = 0; now <= 4000; now += 1000 / 60) {
+      while (next * 60 <= now) {
+        const t = next * 60
+        car.push(sample(200 + t * 0.03), t, t)
+        // And again, and again, exactly as the world used to.
+        for (const late of echoes) car.push(sample(200 + t * 0.03), t + late, t)
+        next++
+      }
+      const at = car.at(now)
+      if (at) drawn.push(at.s)
+    }
+    return drawn
+  }
+
+  const once = run([])
+  const thrice = run([4, 9])
+  const same =
+    once.length === thrice.length && once.every((s, i) => Math.abs(s - thrice[i]) < 1e-9)
+  check('every sample twice is drawn exactly as every sample once', same, true)
 }
 
 /*
-  And the speed is hers, not the network's.
-
-  Two updates she sent 160ms apart can land 30ms apart after a long hop. Timed
-  by arrival that is five times her real speed, and her car leaps a car's length
-  and gets held still while the truth catches up — the surge-and-stall that
-  reads as a bad connection when the connection is fine.
+  And the speed she is seen to do is the speed she did, whatever the network
+  makes of the delivery. Sent every sixty milliseconds, arriving in clumps.
 */
 {
-  const bursty = new Rolling()
-  bursty.push(sample(500), 0, 0)
-  bursty.push(sample(504.8), 30, 160)
-  near('a burst of arrivals is not a burst of speed', bursty.at(190)?.s ?? 0, 509.6, 1.2)
+  const clumps = (t: number) => t + [0, 4, 58, 2, 96, 8, 0, 120][(t / 60) % 8 | 0]
+  const { drawn } = drive({ road: (ms) => 200 + ms * 0.03, lands: clumps })
+  const each = steps(drawn, 1400)
+  const mean = each.reduce((a, b) => a + b, 0) / each.length
+  near('a burst of arrivals is not a burst of speed', mean, 0.03 * (1000 / 60), 0.02)
 }
 
 console.log('\nAnd when she stops sending\n')

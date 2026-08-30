@@ -292,6 +292,25 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       ==========================================================================
     */
     let seen = ''
+    /*
+      What the link is actually doing, under `?shot=1` and in development.
+
+      How far behind her car is drawn is not a number anybody picked — it is
+      measured from how evenly her updates arrive, and it settles somewhere
+      different on a good evening than a bad one. `__wheel()` is how that gets
+      looked at from a phone over remote debugging, rather than inferred from
+      whether the race felt smooth. Same switch and same reason as `__glass`,
+      `__local` and `__duel`.
+
+        behind  milliseconds the drawn car sits behind the newest sample
+        gap     mean milliseconds between her updates arriving
+        jitter  how much that gap wanders, which is what sets `behind`
+        dry     frames where nothing had arrived to interpolate between
+    */
+    if (import.meta.env.DEV) {
+      ;(globalThis as Record<string, unknown>).__wheel = () => rolling.stats()
+    }
+
     const stop = data.subscribe((world) => {
       const text = world.presence[them]?.driving ?? ''
       if (text === seen) return

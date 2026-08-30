@@ -1796,6 +1796,8 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       let attempt = 0
       let retry: ReturnType<typeof setTimeout> | null = null
       let dropped = false
+      /** Every move seen on this round, by document id. See the note below. */
+      const known = new Map<string, Move>()
       let offMoves = watchMoves()
 
       function watchMoves() {
@@ -1805,13 +1807,41 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
           attempt = 0
           moves = snap.docs
             .map((m) => {
+              /*
+                ----------------------------------------------------------------
+                The same move is the same object, for as long as the round is
+                open — and that is a correctness rule, not a saving.
+
+                A move can never change. `allow update, delete: if false` in
+                `firestore.rules` means a move document is written once and is
+                then a fact. So rebuilding one on every snapshot produces a new
+                object describing something that did not happen, and anything
+                downstream watching by identity is told a lie.
+
+                Which is exactly what restarted the chase. Ember Rally hands the
+                road `ghost` — her recorded run, read straight off her move —
+                and re-opens the road whenever that changes. Finishing a chase
+                writes *your* move, which fires a snapshot, which rebuilt *her*
+                move too, which handed the road a brand-new ghost object for the
+                same lap she drove last week. So the road opened again: the
+                lights went green and both cars set off, underneath the result
+                screen that was already up.
+
+                The mock never did this — `local.ts` keeps the old move objects
+                when it appends — so it only ever went wrong for the two of you.
+                ----------------------------------------------------------------
+              */
+              const had = known.get(m.id)
+              if (had) return had
               const d = m.data() as Record<string, unknown>
-              return {
+              const made = {
                 by: userId(d.by),
                 seq: Math.max(0, Math.round(num(d.seq, 0))),
                 at: num(d.at, 0),
                 data: d.data,
               }
+              known.set(m.id, made)
+              return made
             })
             .sort((a, b) => a.at - b.at || a.seq - b.seq)
           const mineHighest = moves.reduce(

@@ -1102,12 +1102,42 @@ function Road({
   */
   const phone = useRef(drivingWithThumbs()).current
 
+  /*
+    ===========================================================================
+    The road opens because you asked for it, never because the ghost moved.
+
+    `open()` counts a new attempt and puts the lights back to red, so anything
+    that runs it puts both cars on the start line. It used to run whenever any
+    of its arguments changed by identity — including `ghost`, which is her
+    recorded lap read straight off her move.
+
+    Two ways that goes wrong, and one of them was happening every single time.
+    Finishing a chase writes your own move, and the snapshot that comes back
+    used to rebuild *her* move object as well; a new object for a lap she drove
+    last week counted as a new ghost, the road re-opened, and the lights went
+    green under the result screen that was already up. That half is fixed at
+    the source — see the note in `watchRound`.
+
+    The other way is rarer and worse: she posts a new qualifying lap while you
+    are half way down the road chasing her old one, and your run restarts. That
+    is a real thing that can happen to two people in different timezones, and no
+    amount of care about object identity would prevent it.
+
+    So the road is identified by *the road*: which go this is, which stage, and
+    how it is being driven. The ghost is cargo, read when the road opens, and a
+    ghost arriving later is for the next run down.
+    ===========================================================================
+  */
+  const cargo = useRef({ ghost, ghostName })
+  cargo.current = { ghost, ghostName }
+  const road = `${attempt}:${track.stage}:${wheelToWheel}:${grid}`
+
   useEffect(() => {
     useGameStage.getState().take(true)
     useRace.getState().open({
       track,
-      ghost,
-      ghostName,
+      ghost: cargo.current.ghost,
+      ghostName: cargo.current.ghostName,
       wheelToWheel,
       grid,
       onFinish: (run) => {
@@ -1136,7 +1166,10 @@ function Road({
       useRace.getState().setSurface(null)
       useGameStage.getState().take(false)
     }
-  }, [attempt, track, ghost, ghostName, wheelToWheel, grid])
+    // `road` carries the attempt, the stage and how it is driven. `track` is
+    // memoised on the stage, so it moves with it and is here to be used, not
+    // to be watched.
+  }, [road, track])
 
   return (
     <div
