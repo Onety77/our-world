@@ -874,8 +874,17 @@ export interface DataLayer {
 
   // ---- doors that are shut for now -----------------------------------------
 
-  /** Watch which games and roads are closed, and to whom. */
-  watchLocks(listener: (locks: Locks) => void): () => void
+  /**
+   * Watch which games and roads are closed, and to whom.
+   *
+   * `read` is false when this is an *absence* rather than an answer — the
+   * rules are not published yet, or the phone cannot reach the database. The
+   * garden treats that as nothing being locked, because failing shut would
+   * empty it on a train; the control room shows it as unknown, because a
+   * panel that quietly says 'everything is open' when it has not managed to
+   * look is how a save comes to appear not to work.
+   */
+  watchLocks(listener: (locks: Locks, read: boolean) => void): () => void
 
   /** Publish the complete set of locks. Warm account only. */
   setLocks(locks: Locks): Promise<void>

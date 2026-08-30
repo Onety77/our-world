@@ -1716,28 +1716,62 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     },
 
     watchLocks(listener) {
-      return onSnapshot(
-        doc(db, LOCKS, 'ours'),
-        (snap) => {
-          const raw = (snap.data() ?? {}) as Record<string, unknown>
-          const locks: Locks = {}
-          for (const [key, value] of Object.entries(raw)) {
-            if (value === 'them' || value === 'both') locks[key] = value
-          }
-          listener(locks)
-        },
-        /*
-          Nothing readable means nothing is locked, and that is the right way
-          round.
+      /*
+        ------------------------------------------------------------------------
+        A listener that dies must come back, and while it is dead it must not
+        claim the garden is wide open.
 
-          A door that fails open is a game she can play while it is being
-          worked on, which is a bad evening. A door that fails *shut* is a
-          garden that empties itself the first time a phone loses signal, which
-          is worse — she opens the Hollow on a train and everything is gone,
-          with no way to tell that from it having been taken away on purpose.
-        */
-        () => listener({}),
-      )
+        Nothing readable means nothing is locked — that direction is right. A
+        door that fails *shut* would empty the garden the first time a phone
+        loses signal: she opens the Hollow on a train and everything is gone,
+        with no way to tell that from it having been taken away on purpose.
+
+        But a Firestore listener is finished once it errors; it does not retry.
+        So a single refusal — the rules not published yet, a moment offline —
+        used to mean this reported "nothing is locked" *for ever*, and the
+        control room then showed every door open however many you had just
+        closed. Exactly the failure `watchRound` had, and fixed the same way.
+
+        `false` on the second argument is how the caller is told this is an
+        absence rather than an answer. See `known` in `systems/locks`.
+        ------------------------------------------------------------------------
+      */
+      let attempt = 0
+      let retry: ReturnType<typeof setTimeout> | null = null
+      let dropped = false
+      let off = watch()
+
+      function watch() {
+        return onSnapshot(
+          doc(db, LOCKS, 'ours'),
+          (snap) => {
+            attempt = 0
+            const raw = (snap.data() ?? {}) as Record<string, unknown>
+            const locks: Locks = {}
+            for (const [key, value] of Object.entries(raw)) {
+              if (value === 'them' || value === 'both') locks[key] = value
+            }
+            listener(locks, true)
+          },
+          (error) => {
+            if (import.meta.env.DEV) console.warn('[locks] listener stopped', error)
+            listener({}, false)
+            if (dropped) return
+            const wait = Math.min(16_000, 1000 * 2 ** attempt++)
+            if (retry) clearTimeout(retry)
+            retry = setTimeout(() => {
+              retry = null
+              if (!dropped) off = watch()
+            }, wait)
+          },
+        )
+      }
+
+      return () => {
+        dropped = true
+        if (retry) clearTimeout(retry)
+        off()
+      }
     },
 
     async setLocks(locks) {

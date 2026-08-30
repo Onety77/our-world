@@ -32,15 +32,24 @@ import { shutFor, type Locks } from '@/data/types'
 
 interface Shut {
   locks: Locks
-  /** False until the first read has landed. Nothing is hidden before then. */
+  /**
+   * Whether that is an answer or an absence.
+   *
+   * False before the first read lands, and false again if the listener is
+   * refused — the rules not published yet, or no signal. The garden treats both
+   * as nothing locked, because failing shut would empty it on a train. The
+   * control room needs the difference, because a panel that says "everything is
+   * open" when it has not managed to look is indistinguishable from a save that
+   * did not work.
+   */
   known: boolean
-  set(locks: Locks): void
+  set(locks: Locks, read: boolean): void
 }
 
 const useShut = create<Shut>((set) => ({
   locks: {},
   known: false,
-  set: (locks) => set({ locks, known: true }),
+  set: (locks, read) => set({ locks, known: read }),
 }))
 
 /**
@@ -53,12 +62,17 @@ const useShut = create<Shut>((set) => ({
  */
 export function useWatchLocks() {
   const data = useData()
-  useEffect(() => data.watchLocks((locks) => useShut.getState().set(locks)), [data])
+  useEffect(
+    () => data.watchLocks((locks, read) => useShut.getState().set(locks, read)),
+    [data],
+  )
 }
 
 /** Everything currently shut, for the control room that edits it. */
-export function useLocks(): Locks {
-  return useShut((s) => s.locks)
+export function useLocks(): { locks: Locks; known: boolean } {
+  const locks = useShut((s) => s.locks)
+  const known = useShut((s) => s.known)
+  return { locks, known }
 }
 
 /** Is this door shut for me? */

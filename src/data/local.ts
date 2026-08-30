@@ -668,7 +668,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
   let rallyTuning = loadRallyTuning()
   const rallyTuningWatchers = new Set<(values: Record<string, number>) => void>()
   let locks: Locks = loadLocks()
-  const lockWatchers = new Set<(locks: Locks) => void>()
+  const lockWatchers = new Set<(locks: Locks, read: boolean) => void>()
   let ambienceTuning = loadAmbienceTuning()
   const ambienceTuningWatchers = new Set<(values: Record<string, number>) => void>()
 
@@ -1331,7 +1331,8 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
     watchLocks(listener) {
       lockWatchers.add(listener)
-      listener(locks)
+      // The mock can always look, so it is always an answer.
+      listener(locks, true)
       return () => lockWatchers.delete(listener)
     },
 
@@ -1344,7 +1345,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(LOCKS_KEY, JSON.stringify(locks))
       }
-      for (const watcher of lockWatchers) watcher(locks)
+      for (const watcher of lockWatchers) watcher(locks, true)
     },
 
     watchAmbienceTuning(listener) {

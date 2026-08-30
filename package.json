@@ -20,7 +20,8 @@
     "places": "node scripts/places.mjs",
     "wire": "npx --yes tsx scripts/wire-check.ts",
     "hollow": "node scripts/hollow-check.mjs",
-    "chase": "node scripts/chase-check.mjs"
+    "chase": "node scripts/chase-check.mjs",
+    "locks": "node scripts/locks-check.mjs"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",
