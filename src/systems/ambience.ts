@@ -116,6 +116,8 @@ export interface AmbienceHandle {
     blend: number
     levels: Record<string, number>
     loud: number
+    /** RMS of the master — everything on its way to the speaker. */
+    everything: number
     heard: number
     bright: number
     bands: Record<string, number>
@@ -259,6 +261,22 @@ export function createAmbience(): AmbienceHandle {
   */
   let worldEar: AnalyserNode | null = null
   let worldSamples: Float32Array<ArrayBuffer> | null = null
+  /*
+    A second ear, on everything.
+
+    `worldEar` hears the world bus, which is what the mix table and the place
+    faders control — and that is exactly why it is not enough. If something is
+    reaching the speaker on any other path, every reading off the world bus can
+    be perfect while the room is full of noise, and the numbers would agree
+    with each other and disagree with the person listening. Which is what has
+    been happening.
+
+    This one sits on the master, after both buses and before the limiter. If
+    `everything` is loud while `heard` is silent, the sound is not the world's
+    and no place fader will ever touch it.
+  */
+  let allEar: AnalyserNode | null = null
+  let allSamples: Float32Array<ArrayBuffer> | null = null
   /** Things that happen because of you: the car, the stones, the pen. */
   let effectsBus: GainNode | null = null
   let running = false
@@ -395,16 +413,46 @@ export function createAmbience(): AmbienceHandle {
     const gain = context.createGain()
     gain.gain.value = opts.gain
 
-    // a slow LFO on the gain gives the wind its swell — without it the bed is
-    // a flat hiss and the ear stops believing it after about ten seconds
+    /*
+      ==========================================================================
+      The swell is its own node, and this is the whole of a bug that survived
+      five rounds of being fixed somewhere else.
+
+      A slow LFO gives the wind its breath; without it the bed is a flat hiss
+      and the ear stops believing it after about ten seconds. It used to be
+      wired straight at the level node's parameter:
+
+          lfo.connect(lfoGain).connect(gain.gain)
+
+      An `AudioParam` is **its intrinsic value plus everything connected to
+      it**. So `gain.gain.setTargetAtTime(0, …)` — every mute in this file,
+      every place fader, the whole crossfade — only ever set the *intrinsic*
+      half to zero. The oscillator went on adding its swing underneath, at a
+      depth fixed when the layer was built, and the noise never stopped.
+
+      Which is exactly what it sounded like: a hiss breathing away in every
+      place, identical in all of them, that no change to the mix table, no
+      place level and no amount of crossfading could touch. Every one of those
+      controls was working perfectly on a number that was not the one making
+      the sound. Measured: with every place at zero, all six places came out at
+      the same 0.0125 at the speaker.
+
+      Multiplied now instead of added. `swell` sits at 1 and the LFO swings it
+      either side; `gain` is the level, and nothing is connected to it, so
+      setting it to zero is silence — really silence.
+      ==========================================================================
+    */
+    const swell = context.createGain()
+    swell.gain.value = 1
+
     const lfo = context.createOscillator()
     lfo.frequency.value = opts.lfoRate
     const lfoGain = context.createGain()
     lfoGain.gain.value = opts.lfoDepth
-    lfo.connect(lfoGain).connect(gain.gain)
+    lfo.connect(lfoGain).connect(swell.gain)
     lfo.start()
 
-    source.connect(filter).connect(gain)
+    source.connect(filter).connect(swell).connect(gain)
     source.start()
 
 
@@ -667,12 +715,13 @@ function aWeight(hz: number): number {
 
   function listen(): {
     loud: number
+    everything: number
     heard: number
     bright: number
     bands: Record<string, number>
   } {
     if (!worldEar || !worldSamples || !ctx) {
-      return { loud: 0, heard: 0, bright: 0, bands: {} }
+      return { loud: 0, everything: 0, heard: 0, bright: 0, bands: {} }
     }
     worldEar.getFloatTimeDomainData(worldSamples)
     let sum = 0
@@ -705,8 +754,17 @@ function aWeight(hz: number): number {
       bands[name] = total > 0 ? Number((sum / total).toFixed(3)) : 0
     }
 
+    let everything = 0
+    if (allEar && allSamples) {
+      allEar.getFloatTimeDomainData(allSamples)
+      let all = 0
+      for (const sample of allSamples) all += sample * sample
+      everything = Math.sqrt(all / allSamples.length)
+    }
+
     return {
       loud: Number(loud.toFixed(5)),
+      everything: Number(everything.toFixed(5)),
       heard: Number(Math.sqrt(heardPower).toFixed(5)),
       bright: total > 0 ? Math.round(weighted / total) : 0,
       bands,
@@ -767,6 +825,13 @@ function aWeight(hz: number): number {
         worldBus.connect(worldEar)
       }
       worldBus.connect(master)
+      if (import.meta.env.DEV) {
+        allEar = ctx.createAnalyser()
+        allEar.fftSize = 2048
+        allEar.smoothingTimeConstant = 0
+        allSamples = new Float32Array(allEar.fftSize)
+        master.connect(allEar)
+      }
 
       effectsBus = ctx.createGain()
       effectsBus.gain.value = gainOf(levelsNow().effects)

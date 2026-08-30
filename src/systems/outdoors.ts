@@ -26,6 +26,7 @@ export type InsidePlace = (typeof INSIDES)[number]
 
 export type PlaceLevels = Record<Place, number>
 
+/** Every place at the mix written in `ambience.ts`. The reset target. */
 export const OPEN: PlaceLevels = {
   garden: 1,
   tree: 1,
@@ -33,6 +34,28 @@ export const OPEN: PlaceLevels = {
   hollow: 1,
   stars: 1,
   glasshouse: 1,
+}
+
+/*
+  And where they start: nothing inside anything.
+
+  This is the default because it was asked for, more than once, after five
+  rounds of the same complaint — a sound present in every section that no
+  change ever seemed to touch. Every one of those rounds moved a number that
+  was already right and left the bed playing underneath, and the only honest
+  way to end that is to begin from silence and let it be built back up one
+  place at a time, by ear, with a slider.
+
+  The open garden keeps its own voice. It is the one place that is *supposed*
+  to sound like the garden.
+*/
+export const QUIET: PlaceLevels = {
+  garden: 1,
+  tree: 0,
+  river: 0,
+  hollow: 0,
+  stars: 0,
+  glasshouse: 0,
 }
 
 /** Kept at the old key so sliders already moved by the owner become a draft. */
@@ -71,7 +94,7 @@ export const NO_BLEED: PlaceLevels = {
 }
 
 function clean(raw: unknown): PlaceLevels {
-  const out: PlaceLevels = { ...OPEN }
+  const out: PlaceLevels = { ...QUIET }
   if (raw === null || typeof raw !== 'object') return out
   const source = raw as Record<string, unknown>
   for (const place of INSIDES) {
@@ -168,9 +191,9 @@ interface PlaceVolumeState {
 const firstDraft = readDraft()
 
 export const useOutdoors = create<PlaceVolumeState>((set, get) => ({
-  published: { ...OPEN },
+  published: { ...QUIET },
   draft: firstDraft,
-  howMuch: firstDraft ?? { ...OPEN },
+  howMuch: firstDraft ?? { ...QUIET },
   bleed: readBleed(),
   publishedBleed: { ...NO_BLEED },
 
@@ -253,6 +276,19 @@ export const useOutdoors = create<PlaceVolumeState>((set, get) => ({
     }))
   },
 }))
+
+/*
+  A handle on the place levels, in development, beside `window.__ambience`.
+
+  Five rounds of "the sound is still there" were argued from the mix table
+  rather than from the speaker, and a checker that can move a fader and then
+  measure what came out is the difference between believing that and knowing
+  it. See `scripts/places.mjs`.
+*/
+if (import.meta.env.DEV) {
+  const host = globalThis as typeof globalThis & { __outdoors?: typeof useOutdoors }
+  host.__outdoors = useOutdoors
+}
 
 /** Read on the ambience animation loop without causing React frame updates. */
 export function placeLevelsNow(): PlaceLevels {
