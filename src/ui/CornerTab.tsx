@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { useCorner } from '@/systems/corner'
+import { cornerHandleAt, useCorner } from '@/systems/corner'
 
 export function CornerTab({ show }: { show: boolean }) {
   const tucked = useCorner((s) => s.tucked)
@@ -48,16 +48,21 @@ export function CornerTab({ show }: { show: boolean }) {
         rather than inheriting where a thumb happened to be an hour ago.
       */
       if (tucked) putAt(null)
-      else putAt(event.clientY / Math.max(1, window.innerHeight))
+      else putAt(cornerHandleAt(event.clientY))
       toggle()
+    }
+
+    const cancel = () => {
+      from = null
     }
 
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', () => { from = null })
+    el.addEventListener('pointercancel', cancel)
     return () => {
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', cancel)
     }
   }, [tucked, toggle, putAt])
 
@@ -73,7 +78,9 @@ export function CornerTab({ show }: { show: boolean }) {
         phone keeps it in the same place on the screen rather than the same
         number of pixels from a bottom edge that has moved.
       */
-      style={at === null ? undefined : { top: `${(at * 100).toFixed(2)}%` }}
+      style={at === null ? undefined : {
+        top: `clamp(4.25rem, ${(at * 100).toFixed(2)}%, calc(100dvh - 4.25rem))`,
+      }}
       aria-label={tucked ? 'show the music and the conversation' : 'tuck the music and the conversation away'}
       aria-expanded={!tucked}
     >

@@ -98,6 +98,7 @@ import {
 import { MARK_LIFE, Marks } from './marks'
 import { useData } from '@/data/provider'
 import { otherUser } from '@/data/types'
+import { FirstlightWorld } from './Firstlight'
 import { useRace } from './session'
 import { KEEPALIVE_MS, Rolling, readCar, writeCar } from './wire'
 import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
@@ -290,6 +291,31 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       next.uniforms.uFogFar.value = 205
       next.uniforms.uHeadColor.value.set('#ffe0b2')
       next.uniforms.uSpotColor.value.set('#dcecef')
+    } else if (track.stage === 'firstlight') {
+      /*
+        The only road here lit by a sun.
+
+        Every other palette is a light you brought with you against a dark that
+        owns the place — cold ambient, cold fog, warm headlamps cutting it. This
+        one is the other way round: the rock is *already* lit, warmly, and the
+        headlamps have almost nothing to do. So the ambient is the strongest in
+        the game and the fog is a bright dust haze rather than a darkness, which
+        is what makes distance in a canyon read as air instead of as absence.
+
+        The veins go cool, and *dark*. They are added straight onto the rock,
+        so a bright colour here is a glowing colour — the Rootway's are a deep
+        teal for that reason and the first try at this road used a pale cyan,
+        which turned every wall into luminous graffiti. Dark slate reads as
+        what it is meant to be: mineral seams in shadow, the one cool thing on
+        a warm road, and the only way the eye can tell how deep a crack is.
+      */
+      next.uniforms.uAmbient.value.set('#c98d5a')
+      next.uniforms.uVeinColor.value.set('#20333d')
+      next.uniforms.uFogColor.value.set('#e0a267')
+      next.uniforms.uFogNear.value = 34
+      next.uniforms.uFogFar.value = 260
+      next.uniforms.uHeadColor.value.set('#fff0d2')
+      next.uniforms.uSpotColor.value.set('#ffd9a0')
     }
     return next
   }, [track.stage])
@@ -452,11 +478,20 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     <>
       <color
         attach="background"
-        args={[track.stage === 'moonbreak' ? '#172131' : track.stage === 'stormcrown' ? '#172126' : '#050403']}
+        args={[
+          track.stage === 'moonbreak'
+            ? '#172131'
+            : track.stage === 'stormcrown'
+              ? '#172126'
+              : track.stage === 'firstlight'
+                ? '#e0a267'
+                : '#050403',
+        ]}
       />
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {track.stage === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
+      {track.stage === 'firstlight' ? <FirstlightWorld track={track} lights={lights} /> : null}
 
       {chunks.map((chunk, i) => (
         <mesh

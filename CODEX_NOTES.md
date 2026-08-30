@@ -454,3 +454,27 @@ shared-file changes, measurements, and anything another agent should preserve.
   switching, retained unfinished text and prevention of accidental place entry.
   No runtime errors appeared; TypeScript and the production build pass. The
   established Firebase bundle warning remains unchanged.
+
+## 30 August 2026 - Codex - Paper, mobile corner and place arrivals
+
+- Rebuilt the shared paper surface used by letters, thoughts, questions, the
+  pot and profile: restrained rag-paper colour variation, subtle laid lines and
+  fibres, a millimetre-scale deckled cut, a pressed rim and a proper cast edge.
+  Sheets without the old SVG grain now receive the same material treatment too.
+- Replaced the decorative cursive throughout paper writing with the locally
+  bundled IM FELL English roman/italic face. It has a genuinely old printed
+  character while remaining calm enough for long letters and small phone text.
+- Corrected the three personal volume labels and percentages to use dark paper
+  ink instead of the world's white overlay colours.
+- Fixed the mobile music/message handle's geometry. A placed tab now releases
+  its bottom anchor, centres on the release point, clamps to a safe vertical
+  range and removes its pointer-cancel listener correctly.
+- Place entry is now a load-aware handoff: warming and React.lazy share one
+  promise; the veil waits for both the dark midpoint and the destination code;
+  the destination commits underneath a covered settling frame before the veil
+  opens. The shade itself now closes like passing beneath a canopy instead of
+  flashing a flat rectangle.
+- TypeScript and the production build pass. A local-data mobile browser pass
+  verified the main garden, the redesigned profile paper, visible volume labels
+  and successful entry into the Tree. The only console output was Three's
+  existing `THREE.Clock` deprecation warning.

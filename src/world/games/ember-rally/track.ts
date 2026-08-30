@@ -964,12 +964,161 @@ function stormcrownBands(): Band[] {
   ]
 }
 
+/**
+ * The Firstlight: a slot canyon, driven down, at sunrise.
+ *
+ * ---------------------------------------------------------------------------
+ * Three roads existed and all three were night — a cave lit by lanterns, a
+ * causeway under a moon, a mountain inside a storm. This one is the morning.
+ * It is the only road here whose light comes from a sun rather than from
+ * something you are carrying.
+ *
+ * **It goes down.** The others are level, or climb and pay it back at the end.
+ * This one loses a hundred and eighty metres between the rim and the fire and
+ * never really gives any of it back, which changes what driving it *is*: the
+ * throttle stops being the thing you manage and the brakes start being the
+ * thing you run out of. Gravity helps you into every corner on this road and
+ * helps you out of none of them.
+ *
+ * **The walls do the work the dark used to do.** In the Rootway a corner is
+ * hidden because it is unlit; here it is hidden because a hundred feet of
+ * sandstone is in front of it and the road is four and a half metres wide.
+ * That difference is the point. A blind corner in the dark is a surprise; a
+ * blind corner in daylight is one whose *shape* you can read off the rim above
+ * it — so this road rewards looking up, where the others reward memory.
+ *
+ * The one wet place is Coldfall, where a thread of water still crosses the
+ * floor at the bottom of the fastest run on the road. It is the hardest brake
+ * in the game and it is deliberately put where the car is quickest.
+ * ---------------------------------------------------------------------------
+ */
+function firstlightBands(): Band[] {
+  /*
+    A slot: narrow, tall, close. `room` stands the walls back from the verge,
+    and at 0.3 the rock is near enough to read as a corridor rather than a
+    valley — which is the whole feeling this road exists for.
+  */
+  const cut = (shape: Partial<Band> & { length: number }) =>
+    band({ width: 5.3, ceiling: 30, room: 0.3, wet: 0.06, ...shape })
+
+  return [
+    // --- The Rim -------------------------------------------------------------
+    // Wide, level, pointed down the canyon, so the whole descent is visible
+    // from the fire before anything is asked of anybody. It is the only long
+    // sightline on the road, and it is here to be taken away.
+    cut({ length: 90, width: 7.6, ceiling: 46, room: 1, curv: 0 }),
+    cut({ length: 60, width: 6.9, ceiling: 40, room: 0.85, curv: 0.003 }),
+    cut({ length: 70, width: 6.2, ceiling: 34, room: 0.6, curv: -0.004, grade: -0.02 }),
+
+    // --- The Drop ------------------------------------------------------------
+    // Steep, fast and open. The corners are long enough to be taken flat once
+    // they are known, and the grade means arriving at each one faster than the
+    // last. This is where the road teaches you which way it is going.
+    cut({ length: 110, grade: -0.075, curv: 0.009, width: 5.9 }),
+    cut({ length: 60, grade: -0.085, curv: 0, width: 5.5 }),
+    cut({ length: 120, grade: -0.09, curv: -0.011, width: 6.0 }),
+    cut({ length: 55, grade: -0.08, curv: -0.002, width: 5.4 }),
+    cut({ length: 130, grade: -0.095, curv: 0.008, width: 5.8 }),
+    cut({ length: 80, grade: -0.07, curv: 0, width: 5.2, room: 0.24 }),
+
+    // --- The Narrows ---------------------------------------------------------
+    // The hardest sustained stretch on any road here. Four and a half metres,
+    // walls at arm's length, and the direction changing before the last change
+    // has finished. Nothing here is fast. Everything here is close.
+    cut({ length: 46, grade: -0.03, curv: 0.026, width: 4.7, room: 0.16 }),
+    cut({ length: 22, grade: -0.02, curv: -0.004, width: 4.5, room: 0.14 }),
+    cut({ length: 44, grade: -0.03, curv: -0.028, width: 4.7, room: 0.16 }),
+    cut({ length: 20, grade: -0.02, curv: 0.002, width: 4.45, room: 0.14 }),
+    cut({ length: 48, grade: -0.035, curv: 0.030, width: 4.8, room: 0.18 }),
+    cut({ length: 24, grade: -0.02, curv: 0, width: 4.5, room: 0.14 }),
+    cut({ length: 42, grade: -0.03, curv: -0.026, width: 4.7, room: 0.16 }),
+    cut({ length: 70, grade: -0.045, curv: -0.003, width: 5.1, room: 0.26 }),
+
+    // --- Slipstone -----------------------------------------------------------
+    // Two switchbacks stacked down the canyon wall, and the reason the side
+    // channel is worth taking: this is the long way round, and it is long.
+    cut({ length: 90, grade: -0.05, curv: 0, width: 5.6, room: 0.4 }),
+    cut({ length: 26, grade: -0.03, curv: 0.014, width: 6.4, room: 0.6 }),
+    cut({ length: 58, grade: -0.015, curv: 0.040, width: 7.6, room: 0.9 }),
+    cut({ length: 26, grade: -0.03, curv: 0.013, width: 6.4, room: 0.6 }),
+    cut({ length: 96, grade: -0.075, curv: -0.002, width: 5.4, room: 0.35 }),
+    cut({ length: 26, grade: -0.03, curv: -0.015, width: 6.4, room: 0.6 }),
+    cut({ length: 58, grade: -0.015, curv: -0.042, width: 7.7, room: 0.9 }),
+    cut({ length: 26, grade: -0.03, curv: -0.013, width: 6.4, room: 0.6 }),
+    cut({ length: 110, grade: -0.07, curv: 0.004, width: 5.5, room: 0.34 }),
+
+    // --- Coldfall ------------------------------------------------------------
+    // The one wet place, at the bottom of the fastest run. A long straight to
+    // build speed on and then water across the floor: the brake has to be
+    // finished before the wet starts, which is a thing you learn exactly once.
+    cut({ length: 200, grade: -0.085, curv: 0, width: 5.4, room: 0.3 }),
+    cut({ length: 44, grade: -0.02, curv: 0.006, width: 5.9, wet: 0.72, room: 0.42 }),
+    cut({ length: 66, grade: 0.005, curv: 0.030, width: 6.6, wet: 0.9, room: 0.55 }),
+    cut({ length: 40, grade: 0.01, curv: 0.008, width: 5.8, wet: 0.78, room: 0.42 }),
+    cut({ length: 74, grade: -0.015, curv: -0.020, width: 6.0, wet: 0.55, room: 0.4 }),
+    cut({ length: 60, grade: -0.03, curv: 0, width: 5.3, wet: 0.28 }),
+
+    // --- The Gallery ---------------------------------------------------------
+    // Where the canyon roofs over, and the road stops asking you to slow down.
+    //
+    // Every other beat on this road is a test. This one is a reward, and it is
+    // load-bearing: three minutes of nothing but tests is exhausting rather
+    // than hard, and a road with no fast flowing part has nowhere to *enjoy*
+    // being quick. The ceiling drops to a lid a few metres up, so the light
+    // comes in from the sides in bars and the whole section strobes — which is
+    // the one moment on this road you can feel the speed rather than measure
+    // it. The corners are long and open and can all be taken flat, once.
+    cut({ length: 130, grade: -0.02, curv: 0.004, width: 6.2, ceiling: 9, room: 0.34 }),
+    cut({ length: 120, grade: -0.03, curv: -0.010, width: 6.3, ceiling: 7.5, room: 0.3 }),
+    cut({ length: 90, grade: -0.015, curv: 0.002, width: 6.0, ceiling: 11, room: 0.4 }),
+    cut({ length: 115, grade: -0.025, curv: 0.011, width: 6.3, ceiling: 7, room: 0.28 }),
+    cut({ length: 105, grade: -0.02, curv: -0.006, width: 6.1, ceiling: 12, room: 0.44 }),
+    // The lid runs out over a compression, which is where the speed you have
+    // been carrying stops being free.
+    cut({ length: 80, grade: 0.03, curv: 0, width: 5.6, ceiling: 20, room: 0.5 }),
+
+    // --- The Sun Terrace -----------------------------------------------------
+    // The only climb, and it is short. The canyon opens, the light arrives from
+    // the side instead of from dead ahead, and for twenty seconds the road is
+    // fast and readable — which is what makes the last section frightening.
+    cut({ length: 120, grade: 0.045, curv: -0.006, width: 6.4, ceiling: 24, room: 0.7 }),
+    cut({ length: 150, grade: 0.03, curv: 0.007, width: 6.6, ceiling: 20, room: 0.85 }),
+    cut({ length: 90, grade: 0.015, curv: -0.010, width: 6.2, ceiling: 22, room: 0.75 }),
+    cut({ length: 130, grade: 0, curv: 0.004, width: 6.0, ceiling: 26, room: 0.6 }),
+
+    // --- The Last Cut --------------------------------------------------------
+    // Everything gained on the terrace given back at once, into a canyon that
+    // closes as it drops. The corners tighten in sequence rather than
+    // alternating, so each one asks for a little more brake than the last.
+    cut({ length: 170, grade: -0.06, curv: 0, width: 5.6, room: 0.4 }),
+    cut({ length: 90, grade: -0.08, curv: 0.012, width: 5.5, room: 0.32 }),
+    cut({ length: 70, grade: -0.09, curv: 0.019, width: 5.2, room: 0.26 }),
+    cut({ length: 56, grade: -0.085, curv: 0.027, width: 5.0, room: 0.2 }),
+    cut({ length: 44, grade: -0.06, curv: -0.030, width: 4.9, room: 0.18 }),
+    cut({ length: 60, grade: -0.05, curv: -0.016, width: 5.3, room: 0.26 }),
+    // One more, tighter again, because the sequence should end on the hardest
+    // corner rather than tail off into the run home.
+    cut({ length: 68, grade: -0.055, curv: 0.024, width: 5.0, room: 0.2 }),
+    cut({ length: 52, grade: -0.04, curv: -0.021, width: 5.2, room: 0.24 }),
+    cut({ length: 90, grade: -0.04, curv: 0.006, width: 5.6, room: 0.36 }),
+
+    // --- The floor -----------------------------------------------------------
+    // Out of the slot, onto sand, with the fire ahead. Wide and flat, because
+    // the last thing this road should do is take a race away at the end of it.
+    cut({ length: 130, grade: -0.02, curv: -0.005, width: 6.6, ceiling: 26, room: 0.8 }),
+    cut({ length: 150, grade: 0, curv: 0, width: 7.4, ceiling: 34, room: 1 }),
+    cut({ length: 110, grade: 0, curv: 0, width: 7.8, ceiling: 42, room: 1 }),
+  ]
+}
+
 export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
   const bands = stage === 'moonbreak'
     ? moonbreakBands()
     : stage === 'stormcrown'
       ? stormcrownBands()
-      : rootwayBands(seed)
+      : stage === 'firstlight'
+        ? firstlightBands()
+        : rootwayBands(seed)
   const total = bands.reduce((sum, b) => sum + b.length, 0)
   const count = Math.floor(total / STEP) + 1
 
@@ -1116,6 +1265,29 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
 
   if (stage === 'rootway' && dealtMouth !== null) {
     track.split = makeRootSplit(track, dealtMouth)
+  } else if (stage === 'firstlight') {
+    /*
+      The dry channel, cutting Slipstone.
+
+      Fixed rather than dealt, because unlike the Rootwake this is not hidden:
+      the canyon splits in daylight and you can see both ways from the fork.
+      What makes it a decision is that the short way is narrow, unlit and
+      rougher, and the long way is two switchbacks you already know how to
+      drive. It leaves just after the Narrows and is back before Coldfall.
+    */
+    track.split = makeRootSplit(track, 1085, {
+      until: 1615,
+      // A slot cut lower than the terrace it leaves, not a tunnel under it.
+      dip: 7,
+      // Half the Rootwake's wandering: this is a channel, not a labyrinth.
+      wild: 0.42,
+      // Narrow enough that the two hundred metres it saves are all spent
+      // again on the two hundred it has to be driven carefully through.
+      width: 4.05,
+      ceiling: 26,
+      room: 0.09,
+      wet: 0.2,
+    })
   }
 
   if (stage === 'moonbreak') dressMoonbreak(track, random(seed ^ 0x6d2b79))
@@ -1764,8 +1936,42 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
  * The road then drops more than thirty metres below the ordinary cave and is
  * sampled into the same physical quantities understood by tyres and cameras.
  */
-function makeRootSplit(track: Track, from: number): RootSplit {
-  const to = Math.max(from + 900, track.finishAt - 285)
+/*
+  `until` is where the side road comes back, and it used to be worked out here.
+
+  The Rootwake leaves the Rootway and does not rejoin until the last chamber,
+  so `max(from + 900, finishAt - 285)` was the whole rule — a rule about one
+  road, living inside the function that builds every road's second route. The
+  Firstlight's channel is a shortcut in the ordinary sense: it cuts one pair of
+  switchbacks and comes straight back, five hundred metres later, with most of
+  the road still to drive. Passing the rejoin in is the difference between a
+  hidden road and a shortcut, and both are worth having.
+*/
+/** What a road's second route is like, where the two of them differ. */
+interface SideRoute {
+  /** Where it comes back. Left out, it runs to the last chamber. */
+  until?: number
+  /** Metres it sinks below the road it left. The Rootwake is a tunnel. */
+  dip?: number
+  /** How wildly it wanders. 1 is the Rootwake's authored gate and reverse. */
+  wild?: number
+  width?: number
+  ceiling?: number
+  room?: number
+  wet?: number
+}
+
+function makeRootSplit(track: Track, from: number, side: SideRoute = {}): RootSplit {
+  const {
+    until,
+    dip = 34,
+    wild = 1,
+    width: deckWidth = 3.7,
+    ceiling: deckCeiling = 3.62,
+    room: deckRoom = 0.035,
+    wet: deckWet = 0.45,
+  } = side
+  const to = until ?? Math.max(from + 900, track.finishAt - 285)
   const span = to - from
   const count = Math.floor(span / STEP) + 1
   const x = new Float32Array(count)
@@ -1819,14 +2025,14 @@ function makeRootSplit(track: Track, from: number): RootSplit {
     const fade = Math.sin(Math.PI * t) ** 2
     // One broad hard S, followed by a tighter blind reverse. Their unequal
     // weights stop the hidden road from feeling like a procedural slalom.
-    const hardGate = -18 * Math.exp(-(((t - 0.37) / 0.075) ** 2))
-    const blindReverse = 30 * Math.exp(-(((t - 0.69) / 0.055) ** 2))
+    const hardGate = wild * -18 * Math.exp(-(((t - 0.37) / 0.075) ** 2))
+    const blindReverse = wild * 30 * Math.exp(-(((t - 0.69) / 0.055) ** 2))
     const transverse = amplitude * fade * (
       0.7 * Math.sin(Math.PI * 2 * t) +
       0.24 * Math.sin(Math.PI * 4 * t) -
       0.1 * Math.sin(Math.PI * 6 * t)
     ) + hardGate + blindReverse
-    const depth = fade * (-34 - 7 * Math.sin(Math.PI * 3 * t) ** 2)
+    const depth = fade * (-dip - (dip / 34) * 7 * Math.sin(Math.PI * 3 * t) ** 2)
     /*
       A readable fork, rather than two tunnels born in the same place. This is
       deliberately a small correction to the proven hidden route, not a new
@@ -1876,12 +2082,17 @@ function makeRootSplit(track: Track, from: number): RootSplit {
     x[i] = sample.x
     y[i] = sample.y
     z[i] = sample.z
-    // Rootwake is the learned precision road. A 7.4 m deck leaves deliberate
-    // placement room around the car, but no longer lets a loose line feel safe.
-    width[i] = 3.7
-    ceiling[i] = 3.62 + Math.sin(t * Math.PI * 7) * 0.24
-    room[i] = 0.035
-    wet[i] = 0.45 + Math.sin(t * 13.1) * 0.16
+    /*
+      Rootwake is the learned precision road: a narrow deck that leaves room to
+      place the car and none to be loose in. The Firstlight's channel wants the
+      same narrowness for a different reason — it is a shortcut, so it has to
+      cost something — and a very different roof, being a slot in daylight
+      rather than a tunnel under a garden.
+    */
+    width[i] = deckWidth
+    ceiling[i] = deckCeiling + Math.sin(t * Math.PI * 7) * (deckCeiling * 0.066)
+    room[i] = deckRoom
+    wet[i] = deckWet + Math.sin(t * 13.1) * (deckWet * 0.36)
   }
 
   let previousHeading = 0

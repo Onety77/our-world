@@ -387,6 +387,7 @@ function realRoad() {
     ['rootway 1234', 1234, 'rootway'],
     ['moonbreak', 1, 'moonbreak'],
     ['stormcrown', 1, 'stormcrown'],
+    ['firstlight', 1, 'firstlight'],
   ]
   for (const [name, seed, stage] of roads) {
     const track = makeTrack(seed, stage)

@@ -48,7 +48,7 @@ import {
 
 type View = 'courses' | 'menu' | 'road' | 'replay'
 type RaceKind = 'qualifying' | 'chase'
-const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown']
+const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown', 'firstlight']
 
 /**
  * `?stage=moonbreak` opens that road and drops you straight onto it.
@@ -86,6 +86,8 @@ const COURSES: Record<StageId, {
   chaseHome: string
   resultKicker: string
   finishPlace: string
+  /** How a spotless run through this one is described. */
+  cleanWord: string
 }> = {
   rootway: {
     name: 'The Rootway',
@@ -101,6 +103,7 @@ const COURSES: Record<StageId, {
     chaseHome: 'home to the fire',
     resultKicker: 'two lines through one dark',
     finishPlace: 'the fire',
+    cleanWord: 'through the Rootway',
   },
   moonbreak: {
     name: 'The Moonbreak',
@@ -116,6 +119,23 @@ const COURSES: Record<StageId, {
     chaseHome: 'home across the water',
     resultKicker: 'two wakes under one moon',
     finishPlace: 'the moonwell',
+    cleanWord: 'across the Moonbreak',
+  },
+  firstlight: {
+    name: 'The Firstlight',
+    place: 'sun and cut stone',
+    short: 'A slot canyon, driven down at sunrise. Steep, narrow, and the only road here with a way through the wall.',
+    soloTitle: 'Something went down before the sun did',
+    soloCopy: 'The canyon does the telling on this road: the rim above a corner shows you which way it goes long before the corner does. It falls the whole way, so the brakes are what you run out of, not the road. Get Coldfall wrong once and you will remember where the water is.',
+    spirit: 'the dawn-spirit',
+    returnTo: 'return to the low fire',
+    setTitle: 'Leave a line down the cut',
+    setCopy: 'Learn where the light lands and leave your marks on the sand. {Their} run down stays under the rock until yours is beside it — and yours stays there until {hers} is.',
+    sealedTitle: 'The canyon keeps it.',
+    chaseHome: 'home to the canyon floor',
+    resultKicker: 'two lines down one cut',
+    finishPlace: 'the low fire',
+    cleanWord: 'down the Firstlight',
   },
   stormcrown: {
     name: 'The Stormcrown',
@@ -131,6 +151,7 @@ const COURSES: Record<StageId, {
     chaseHome: 'home through the rain',
     resultKicker: 'two lights under one storm',
     finishPlace: 'the stormfire',
+    cleanWord: 'over the Stormcrown',
   },
 }
 
@@ -525,6 +546,27 @@ export default function EmberRally({
             onDone={backToFire}
             onAgain={!solo && kind === 'qualifying' ? null : () => start(kind)}
             returnLabel={course.returnTo}
+            cleanWord={course.cleanWord}
+            /*
+              Who you were racing, and what they did.
+
+              Wheel to wheel: her run on the same road, which lands whenever
+              she crosses the line — before you, or a minute after. Until it
+              does there is no result, only your own time and a note saying so.
+
+              A chase: the line you were chasing, which has been there all
+              along. Either way it is the same question — first or second —
+              and the screen at the end of a race was answering neither.
+            */
+            against={
+              solo
+                ? null
+                : live
+                  ? { name: theirName, run: moveRun(theirs, 'chase', activeStage, true) }
+                  : kind === 'chase'
+                    ? { name: theirName, run: moveRun(theirs, 'qualifying', activeStage) }
+                    : null
+            }
           />
         ) : null}
       </Road>
@@ -866,7 +908,10 @@ function CoursePicker({
   return (
     <div className="rally rally-courses">
       <div className="rally-course-heading">
-        <p className="rally-kicker">ember rally · three roads</p>
+        {/* Counted, not written down. It said "three roads" for a while
+            after there were four, which is the sort of thing only the person
+            who added the fourth ever notices. */}
+        <p className="rally-kicker">ember rally · {STAGES.length} roads</p>
         <h1>Where do you want the engine?</h1>
       </div>
 
@@ -935,6 +980,39 @@ function CoursePicker({
           <CourseBest stage="stormcrown" />
           <span className="rally-course-copy">{COURSES.stormcrown.short}</span>
           <span className="rally-course-enter">climb into weather</span>
+        </button>
+
+        {/*
+          The canyon, in five shapes.
+
+          Each of these doors is drawn rather than mapped, and that is on
+          purpose: the little scene above each name is the only picture of a
+          road anybody sees before choosing it, and four generated rectangles
+          would say nothing about which one is which. This one is two walls
+          leaning in, a low sun between them, and the single shaft that gives
+          the road its name landing on the floor.
+        */}
+        <button
+          ref={(node) => { courseDoors.current[3] = node }}
+          type="button"
+          className={`rally-course firstlight${selected === 3 ? ' is-selected' : ''}`}
+          aria-current={selected === 3 ? 'true' : undefined}
+          onFocus={() => setSelected(3)}
+          onClick={() => onChoose('firstlight')}
+        >
+          <span className="rally-course-scene" aria-hidden="true">
+            <i className="course-sun" />
+            <i className="course-wall one" />
+            <i className="course-wall two" />
+            <i className="course-shaft" />
+            <i className="course-sand" />
+            <i className="course-road" />
+          </span>
+          <span className="rally-course-name">The Firstlight</span>
+          <CourseState stage="firstlight" mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
+          <CourseBest stage="firstlight" />
+          <span className="rally-course-copy">{COURSES.firstlight.short}</span>
+          <span className="rally-course-enter">go down the cut</span>
         </button>
       </div>
 
@@ -1437,6 +1515,8 @@ function RunOver({
   onDone,
   onAgain,
   returnLabel,
+  cleanWord,
+  against,
 }: {
   run: RallyRun
   sealed: boolean
@@ -1445,15 +1525,67 @@ function RunOver({
   onDone(): void
   onAgain: (() => void) | null
   returnLabel: string
+  /** "through the Rootway", "across the Moonbreak" — the road, in words. */
+  cleanWord: string
+  /** Who you were racing, and their run — null while it is still being driven. */
+  against: { name: string; run: RallyRun | null } | null
 }) {
+  /*
+    First or second, which is the only thing a race is actually asking.
+
+    The end of a run showed your time and nothing else — no gap, no placing,
+    no sign of the person you had just spent two minutes racing. Wheel to wheel
+    especially: you would cross the line, see a number, and have no way of
+    knowing whether you had won until you went back to the fire and worked it
+    out from two screens.
+
+    `null` means there is nobody to compare to — a solo lap, or a qualifying
+    run that nobody is allowed to see yet. A present `against` with a null run
+    means she is still out there, which is its own thing worth saying.
+  */
+  const hers = against?.run ?? null
+  const won = hers !== null && run.timeMs <= hers.timeMs
+  const gap = hers === null ? 0 : Math.abs(run.timeMs - hers.timeMs)
+
   return (
     <div className="rally-over">
       <p className="rally-kicker">{sealed ? 'your line is under the stone' : 'back at the fire'}</p>
+
+      {hers !== null ? (
+        <p className={`rally-placing ${won ? 'first' : 'second'}`}>
+          {won ? 'first' : 'second'}
+        </p>
+      ) : null}
+
       <h1>{timeLabel(run.timeMs)}</h1>
+
+      {against !== null ? (
+        <p className="rally-against">
+          {hers === null ? (
+            <>{against.name} is still on the road.</>
+          ) : (
+            <>
+              {against.name} · {timeLabel(hers.timeMs)}
+              <b>
+                {gap === 0 ? 'dead level' : `${won ? '−' : '+'}${timeLabel(gap)}`}
+              </b>
+            </>
+          )}
+        </p>
+      ) : null}
       <p className="rally-copy">
+        {/*
+          Named, rather than guessed at from the label on a button.
+
+          This read the *return* label and looked for the word "moonwell" in it
+          to decide between two sentences — so every road that was not the
+          Moonbreak was congratulated on a clean run through the Rootway,
+          including the Stormcrown, which has been wrong for as long as there
+          have been three roads.
+        */}
         {run.strikes > 0
           ? `${run.strikes} ${run.strikes === 1 ? 'time' : 'times'} the rock had you.`
-          : returnLabel.includes('moonwell') ? 'Clean across the Moonbreak.' : 'Clean through the Rootway.'}
+          : `Clean ${cleanWord}.`}
         {run.driftMs > 2500 ? ` ${(run.driftMs / 1000).toFixed(1)} seconds sideways.` : ''}
       </p>
       <BestLine />

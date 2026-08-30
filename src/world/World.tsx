@@ -10,7 +10,7 @@
  * anything more than one section away is wasted work.
  */
 
-import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ACESFilmicToneMapping, Group } from 'three'
 import { useData, useWorldSlice } from '@/data/provider'
@@ -230,15 +230,35 @@ function useShownWorld(): { entered: boolean; section: number } {
   useEffect(() => {
     if (entered === shown.entered && (!entered || index === shown.section)) return
     /*
-      Swap at the midpoint of the fade — see `Veil` in App.
+      A real handoff, not two timers hoping to agree.
 
-      Written into the store rather than into local state, because the DOM
-      layer draws places too and has to arrive on the same frame the world
-      does. See the note on `shown` in `systems/sections` for what happened
-      when they were on separate clocks.
+      The veil starts closing as soon as `entered` changes. We wait for both its
+      dark midpoint and the destination module, then swap while fully covered.
+      `Veil` keeps the dark settled for a beat after the hold is released, so
+      React gets a committed frame underneath before anything is revealed.
     */
-    const id = setTimeout(() => showNow({ entered, section: index }), FADE_MS / 2)
-    return () => clearTimeout(id)
+    let cancelled = false
+    let timer = 0
+    const destination = entered ? SECTIONS[index]?.Scene : null
+    const release = destination ? useArriving.getState().hold() : null
+
+    destination?.warm()
+    const darkest = new Promise<void>((resolve) => {
+      timer = window.setTimeout(resolve, FADE_MS / 2)
+    })
+    const ready = destination?.whenReady() ?? Promise.resolve()
+
+    void Promise.allSettled([darkest, ready]).then(() => {
+      if (cancelled) return
+      showNow({ entered, section: index })
+      release?.()
+    })
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      release?.()
+    }
   }, [entered, index, shown, showNow])
 
   return shown
@@ -382,7 +402,8 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
  * and taking it away again is not.
  */
 function Arriving() {
-  useEffect(() => useArriving.getState().hold(), [])
+  /* Last defence for a nested suspension: hold before the browser can paint. */
+  useLayoutEffect(() => useArriving.getState().hold(), [])
   return null
 }
 

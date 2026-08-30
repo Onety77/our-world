@@ -6,7 +6,7 @@ import type { RallyMove, RallySetup } from './model'
 export default {
   id: 'ember-rally',
   name: 'Ember Rally',
-  blurb: 'Choose a road, set a line, then chase {hers} through fire, moonlight, or storm.',
+  blurb: 'Choose a road, set a line, then chase {hers} through fire, moonlight, storm or first light.',
   mode: 'async',
   cadence: 'daily',
   duration: 'one long road, twice',
@@ -40,6 +40,7 @@ export default {
         { id: 'rootway', name: 'The Rootway' },
         { id: 'moonbreak', name: 'The Moonbreak' },
         { id: 'stormcrown', name: 'The Stormcrown' },
+        { id: 'firstlight', name: 'The Firstlight' },
       ],
     },
   },
@@ -80,7 +81,7 @@ export default {
       direction. Still both people, still a real race, and it no longer insists
       on a symmetry the game no longer has.
     */
-    return (['rootway', 'moonbreak', 'stormcrown'] as const).some((stage) => {
+    return (['rootway', 'moonbreak', 'stormcrown', 'firstlight'] as const).some((stage) => {
       if (solo) return on(mine, stage, 'chase')
       const raced = (a: RallyMove[], b: RallyMove[]) =>
         on(a, stage, 'qualifying') && on(b, stage, 'chase')

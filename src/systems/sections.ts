@@ -19,7 +19,7 @@ import { create } from 'zustand'
  * visible. Long enough to hide the swap, short enough that it reads as a
  * movement rather than a loading screen.
  */
-export const FADE_MS = 620
+export const FADE_MS = 820
 
 /** How far the camera slides sideways under the fade, in metres. */
 export const SLIDE_DISTANCE = 9

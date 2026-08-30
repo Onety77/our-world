@@ -1441,6 +1441,7 @@ canvas {
 
 .sheet {
   position: relative;
+  isolation: isolate;
   width: min(46rem, 94vw);
   max-height: min(80vh, 46rem);
   /* A sheet of paper has a shape whether or not you filled it. Without this a
@@ -1451,33 +1452,66 @@ canvas {
   transform-origin: 50% 40%;
   animation: sheet-open 0.55s cubic-bezier(0.2, 0.75, 0.25, 1) 0.3s both;
 
-  /* Aged laid paper: a warm ground, a wash of foxing in the corners, and a
-     faint horizontal laid pattern the way old sheets are made. */
-  background-color: #e7dcc2;
+  /*
+    Laid rag paper, not a sepia texture pasted into a rectangle. The broad
+    variation is visible; the chain lines are something found up close.
+  */
+  background-color: #e6dcc4;
   background-image:
-    radial-gradient(ellipse at 12% 8%, rgba(146, 108, 58, 0.22), transparent 42%),
-    radial-gradient(ellipse at 88% 92%, rgba(132, 96, 52, 0.24), transparent 46%),
-    radial-gradient(ellipse at 78% 14%, rgba(120, 88, 48, 0.14), transparent 34%),
-    linear-gradient(to bottom, rgba(255, 250, 236, 0.55), rgba(220, 204, 172, 0.4)),
+    radial-gradient(ellipse at 16% 9%, rgba(129, 94, 49, 0.09), transparent 43%),
+    radial-gradient(ellipse at 91% 86%, rgba(108, 78, 42, 0.1), transparent 49%),
+    radial-gradient(ellipse at 62% 44%, rgba(255, 252, 238, 0.25), transparent 62%),
+    linear-gradient(112deg, rgba(255, 253, 243, 0.32), transparent 36%, rgba(102, 73, 37, 0.045)),
     repeating-linear-gradient(
       to bottom,
-      rgba(120, 96, 60, 0.05) 0 1px,
-      transparent 1px 4px
+      rgba(91, 68, 39, 0.025) 0 1px,
+      transparent 1px 7px
     );
 
   box-shadow:
-    0 1px 0 rgba(255, 252, 240, 0.5) inset,
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.35);
+    0 1px 0 rgba(255, 253, 242, 0.5) inset,
+    0 -1px 0 rgba(82, 58, 31, 0.11) inset;
+  filter:
+    drop-shadow(0 24px 28px rgba(0, 0, 0, 0.43))
+    drop-shadow(0 3px 5px rgba(0, 0, 0, 0.3));
 
-  /* A deckled edge — torn rather than guillotined. Uneven on all four sides so
-     no two corners match. */
+  /* A deckled edge is millimetres, not chunks missing from the page. */
   clip-path: polygon(
-    0.6% 1.2%, 12% 0.4%, 27% 1.5%, 41% 0.3%, 58% 1.4%, 73% 0.5%, 88% 1.6%, 99.4% 0.6%,
-    99% 14%, 99.6% 31%, 98.8% 49%, 99.5% 66%, 98.9% 84%, 99.4% 98.8%,
-    86% 99.5%, 70% 98.6%, 54% 99.6%, 38% 98.7%, 22% 99.5%, 8% 98.8%, 0.5% 99.4%,
-    1.1% 82%, 0.4% 64%, 1.2% 47%, 0.5% 29%, 1% 15%
+    0.18% 0.28%, 9% 0.08%, 19% 0.3%, 31% 0.1%, 44% 0.24%, 57% 0.05%, 71% 0.27%, 84% 0.1%, 99.78% 0.24%,
+    99.9% 13%, 99.72% 27%, 99.94% 42%, 99.75% 58%, 99.92% 74%, 99.7% 88%, 99.84% 99.74%,
+    88% 99.9%, 73% 99.69%, 59% 99.94%, 43% 99.72%, 28% 99.91%, 13% 99.7%, 0.16% 99.86%,
+    0.3% 84%, 0.08% 68%, 0.27% 52%, 0.06% 36%, 0.31% 18%
   );
+}
+
+/* Fibres and tiny foxing marks shared by every sheet in the world. */
+.sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(8deg, transparent 0 17px, rgba(77, 58, 35, 0.024) 18px, transparent 19px 31px),
+    repeating-linear-gradient(96deg, transparent 0 37px, rgba(255, 255, 246, 0.055) 38px, transparent 39px 67px),
+    radial-gradient(circle at 7% 23%, rgba(105, 72, 34, 0.1) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 82% 12%, rgba(105, 72, 34, 0.08) 0 0.6px, transparent 1.2px),
+    radial-gradient(circle at 91% 72%, rgba(105, 72, 34, 0.085) 0 0.8px, transparent 1.4px);
+  mix-blend-mode: multiply;
+  opacity: 0.72;
+}
+
+/* A pressed, slightly darker rim gives the thin paper an actual edge. */
+.sheet::after {
+  content: '';
+  position: absolute;
+  inset: 0.22rem;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid rgba(76, 55, 30, 0.065);
+  box-shadow:
+    inset 0 0 1.5rem rgba(86, 60, 30, 0.055),
+    inset 0 0 0 1px rgba(255, 253, 238, 0.13);
 }
 
 /* The grain itself, laid over the washes at low opacity. */
@@ -1487,7 +1521,8 @@ canvas {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  opacity: 0.16;
+  z-index: 0;
+  opacity: 0.075;
   mix-blend-mode: multiply;
 }
 
@@ -1513,65 +1548,18 @@ canvas {
 }
 
 /*
-  Ink.
+  Ink set in an old press face rather than a modern imitation of handwriting.
 
-  This used to be a stack of system handwriting faces, and it was the wrong
-  call: 'Segoe Script' is a stiff, evenly-weighted school script, and on
-  Android — which is most of the time here — none of those names exist, so the
-  letters quietly rendered in Georgia. A letter in Georgia is a document.
-
-  So the face ships with the world. **Homemade Apple** (SIL Open Font License,
-  in src/fonts) — a real flowing pen cursive with an old letter-writing hand:
-  uneven baselines, joins that don't quite close, a nib that varies with the
-  stroke. It replaced Caveat, which is drawn from handwriting but is a neat
-  modern marker hand and read as a note rather than as a letter.
-
-  It has a small x-height and a wide, slow rhythm, so everywhere it is set it
-  needs more size and more leading than a printed face would — the sizes below
-  went up when the face changed and should move together with it.
-
-  Caveat stays as the second face, for the extended-latin range Homemade Apple
-  does not ship. It will almost never be seen: the range below latin-1 covers
-  every accent either of you is likely to type, and a different hand for one
-  rare glyph beats a box.
-
-  Self-hosted rather than linked, because a garden that needs Google's servers
-  to look right isn't ours.
+  IM FELL English is irregular enough to belong to an old sheet, but it is a
+  printed book hand: long letters remain calm and readable instead of turning
+  into a page of decorative loops. It is bundled locally from Fontsource.
 */
-@font-face {
-  font-family: 'Garden Hand';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./fonts/homemade-apple-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-/* Extended latin only — see the note above. Caveat, not Homemade Apple. */
-@font-face {
-  font-family: 'Garden Hand';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url('./fonts/caveat-latin-ext.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
-    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
-    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
 
 .ink {
-  font-family: 'Garden Hand', 'Segoe Script', 'Bradley Hand', 'Noteworthy',
-    'Iowan Old Style', Palatino, Georgia, cursive, serif;
-  /* A hand has a small x-height, so it needs more size than a serif would to
-     read at the same comfort. This one is a joined cursive with long
-     ascenders, so it also needs the lines further apart than the marker hand
-     it replaced — set too tight, the descenders of one line tangle with the
-     capitals of the next and the whole page turns to lace. */
-  font-size: clamp(1.3rem, 4.1vw, 1.66rem);
-  line-height: 1.85;
-  letter-spacing: 0.002em;
+  font-family: 'IM FELL English', 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: clamp(1.18rem, 3.7vw, 1.48rem);
+  line-height: 1.68;
+  letter-spacing: 0.006em;
   color: #2f2418;
   margin: 0;
   white-space: pre-wrap;
@@ -1584,10 +1572,10 @@ canvas {
   margin: auto 0 0;
   padding-top: 2.4rem;
   text-align: right;
-  font-family: 'Garden Hand', 'Segoe Script', 'Bradley Hand', 'Noteworthy',
-    'Iowan Old Style', Palatino, Georgia, cursive, serif;
-  font-size: 1.3rem;
-  line-height: 1.7;
+  font-family: 'IM FELL English', 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: 1.18rem;
+  font-style: italic;
+  line-height: 1.55;
   color: #4a3a26;
 }
 
@@ -1687,20 +1675,20 @@ canvas {
 /* --- the question under the bark --------------------------------------- */
 
 .question-sheet {
-  background-color: #e3d7bb;
+  background-color: #e3d9c0;
   background-image:
-    radial-gradient(ellipse at 50% 110%, rgba(78, 94, 54, 0.2), transparent 52%),
-    radial-gradient(ellipse at 12% 8%, rgba(146, 108, 58, 0.2), transparent 42%),
-    linear-gradient(to bottom, rgba(255, 250, 236, 0.52), rgba(214, 198, 163, 0.48)),
-    repeating-linear-gradient(to bottom, rgba(120, 96, 60, 0.045) 0 1px, transparent 1px 4px);
+    radial-gradient(ellipse at 50% 112%, rgba(67, 85, 48, 0.13), transparent 54%),
+    radial-gradient(ellipse at 14% 7%, rgba(128, 91, 48, 0.07), transparent 44%),
+    linear-gradient(115deg, rgba(255, 253, 242, 0.31), transparent 43%, rgba(92, 68, 37, 0.04)),
+    repeating-linear-gradient(to bottom, rgba(94, 73, 44, 0.024) 0 1px, transparent 1px 7px);
 }
 
 .question-prompt {
   max-width: 35rem;
   margin: 0 auto clamp(2rem, 6vh, 3.8rem);
   color: #302519;
-  font-family: 'Garden Hand', 'Iowan Old Style', Palatino, Georgia, serif;
-  font-size: clamp(1.65rem, 5vw, 2.5rem);
+  font-family: 'IM FELL English', 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: clamp(1.5rem, 4.6vw, 2.3rem);
   font-weight: 400;
   line-height: 1.55;
   text-align: center;
@@ -4093,8 +4081,9 @@ canvas {
 }
 
 .ware-name {
-  font-family: 'Garden Hand', 'Segoe Script', cursive;
-  font-size: 1.2rem;
+  font-family: 'IM FELL English', 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: 1.13rem;
+  font-style: italic;
   color: #2f2418;
 }
 
@@ -4145,14 +4134,65 @@ canvas {
   inset: 0;
   z-index: 6;
   pointer-events: none;
-  background: #0b1310;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 46%, #17221c 0%, #0d1713 48%, #07100d 100%);
   opacity: 0;
-  transition: opacity var(--fade, 300ms) ease-out;
+  transition:
+    opacity var(--fade, 300ms) cubic-bezier(0.22, 0.7, 0.28, 1),
+    backdrop-filter var(--fade, 300ms) ease-out;
+  backdrop-filter: blur(0) saturate(1);
+  -webkit-backdrop-filter: blur(0) saturate(1);
+}
+
+/* Shade closes from the edges like passing beneath a canopy. */
+.veil::before,
+.veil::after {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  pointer-events: none;
+}
+
+.veil::before {
+  background: radial-gradient(
+    ellipse at 50% 48%,
+    rgba(11, 20, 16, 0.08) 0 19%,
+    rgba(4, 10, 8, 0.74) 72%,
+    #030806 100%
+  );
+  opacity: 0.28;
+  transform: scale(1.12);
+  transition:
+    opacity var(--fade, 300ms) ease,
+    transform var(--fade, 300ms) cubic-bezier(0.2, 0.72, 0.24, 1);
+}
+
+.veil::after {
+  background:
+    radial-gradient(ellipse at 35% 62%, rgba(94, 121, 99, 0.075), transparent 38%),
+    radial-gradient(ellipse at 70% 34%, rgba(123, 101, 68, 0.05), transparent 34%);
+  opacity: 0;
+  transform: translateY(1.2rem) scale(1.04);
+  transition:
+    opacity calc(var(--fade, 300ms) + 80ms) ease,
+    transform calc(var(--fade, 300ms) + 80ms) ease;
 }
 
 .veil.dark {
   opacity: 1;
-  transition: opacity var(--fade, 300ms) ease-in;
+  backdrop-filter: blur(7px) saturate(0.76);
+  -webkit-backdrop-filter: blur(7px) saturate(0.76);
+}
+
+.veil.dark::before {
+  opacity: 1;
+  transform: scale(0.93);
+}
+
+.veil.dark::after {
+  opacity: 1;
+  transform: none;
 }
 
 /*
@@ -4172,6 +4212,7 @@ canvas {
   margin: 0;
   text-align: center;
   animation: veil-word 420ms ease-out both;
+  z-index: 1;
 }
 
 @keyframes veil-word {
@@ -4180,6 +4221,9 @@ canvas {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .veil,
+  .veil::before,
+  .veil::after { transition-duration: 1ms; }
   .veil > .door-waiting { animation: none; }
 }
 
@@ -6226,12 +6270,10 @@ canvas {
 .arrival-who {
   display: block;
   margin: 0 0 0.9rem;
-  font-family: 'Garden Hand', 'Segoe Script', 'Bradley Hand', 'Noteworthy',
-    cursive;
-  /* Homemade Apple has a small x-height and long ascenders — it needs to be
-     set larger and leaded looser than a printed face at the same size. */
-  font-size: clamp(0.92rem, 2.6vw, 1.14rem);
-  line-height: 1.9;
+  font-family: 'IM FELL English', 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: clamp(0.92rem, 2.6vw, 1.12rem);
+  font-style: italic;
+  line-height: 1.55;
   color: rgba(255, 196, 142, 0.72);
   animation: drift-in 2.6s cubic-bezier(0.2, 0.7, 0.25, 1) 0.1s both;
 }
@@ -10023,6 +10065,16 @@ body:has(.rally-running) .player {
 }
 
 /*
+  Once placed, top owns the position and bottom must let go. Keeping both made
+  the button stretch between the fingertip and the bottom edge; its little line
+  then sat at the top of that invisible tall button and appeared to snap.
+*/
+.corner-tab.placed {
+  bottom: auto;
+  transform: translateY(-50%);
+}
+
+/*
   Tall enough to read as "the thing that was here".
 
   It was a 2.4rem stub, which is findable if you already know it is there and
@@ -10670,15 +10722,121 @@ body.on-the-road .broke-what {
   font-size: 0.64rem;
   letter-spacing: 0.12em;
   text-transform: lowercase;
-  color: var(--ink-dim);
+  color: rgba(61, 45, 28, 0.7);
 }
 
 /* The number, which is the only part worth reading twice. */
 .my-sound-name b {
   font-weight: 400;
-  color: var(--ink);
+  color: #382919;
 }
 
 .my-sound input[type='range'] {
   width: 100%;
+}
+
+/* ---- first or second, at the end of a race -------------------------------- */
+/*
+  See `RunOver`. The placing sits above the time rather than below it, because
+  it is the thing you looked up for — the time is the evidence, not the answer.
+*/
+.rally-placing {
+  margin: 0 0 0.1rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.rally-placing.first { color: #f0b26a; }
+/* Not red. Second in a race between two people is not a failure. */
+.rally-placing.second { color: rgba(191, 215, 239, 0.72); }
+
+.rally-against {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: 0.15rem 0 0.5rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+}
+
+/* The gap, which is the number people actually talk about afterwards. */
+.rally-against b {
+  font-weight: 400;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+/* ---- the fourth door: the Firstlight -------------------------------------- */
+/*
+  Two walls leaning in, a low sun between them, and the one shaft of light that
+  gives the road its name landing on the floor. Drawn rather than generated,
+  like the other three — the little scene above a name is the only picture of a
+  road anybody sees before choosing it, and four grey rectangles would say
+  nothing about which is which.
+*/
+.rally-course.firstlight .rally-course-scene {
+  background: linear-gradient(180deg, #f0b06a 0%, #c9713c 46%, #4d2418 100%);
+}
+
+.rally-course.firstlight .course-sun {
+  position: absolute;
+  z-index: 1;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(2.2rem, 5.5vw, 3.6rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #fff3cf;
+  box-shadow: 0 0 3.4rem rgba(255, 226, 160, 0.85);
+}
+
+/* The walls. Sheer, leaning in, and dark because the sun is behind them. */
+.rally-course.firstlight .course-wall {
+  position: absolute;
+  z-index: 2;
+  top: -6%;
+  bottom: 0;
+  width: 44%;
+  background: linear-gradient(180deg, #7a3d22 0%, #2e1610 100%);
+}
+
+.rally-course.firstlight .course-wall.one {
+  left: -6%;
+  clip-path: polygon(0 0, 100% 0, 72% 100%, 0 100%);
+}
+
+.rally-course.firstlight .course-wall.two {
+  right: -6%;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 28% 100%);
+}
+
+/* The shaft: a wedge of lit dust, widest where it comes through the gap. */
+.rally-course.firstlight .course-shaft {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 42%;
+  width: 22%;
+  height: 88%;
+  background: linear-gradient(180deg, rgba(255, 236, 190, 0.62), rgba(255, 214, 150, 0));
+  clip-path: polygon(34% 0, 66% 0, 100% 100%, 0 100%);
+}
+
+.rally-course.firstlight .course-sand {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 24%;
+  background: linear-gradient(180deg, #b9793f 0%, #7d4a26 100%);
 }

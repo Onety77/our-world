@@ -2,6 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { WhenItBreaks } from './ui/WhenItBreaks'
+import '@fontsource/im-fell-english/latin-400.css'
+import '@fontsource/im-fell-english/latin-400-italic.css'
 import './styles.css'
 
 const root = document.getElementById('root')

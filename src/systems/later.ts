@@ -37,12 +37,26 @@ import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 export type Later<P = object> = LazyExoticComponent<ComponentType<P>> & {
   /** Fetch the code now, without rendering anything. Cheap, and idempotent. */
   warm(): void
+  /** Resolve once React can mount this component without a network wait. */
+  whenReady(): Promise<void>
 }
 
 export function later<P = object>(
   load: () => Promise<{ default: ComponentType<P> }>,
 ): Later<P> {
-  const Loaded = lazy(load) as Later<P>
+  /*
+    React.lazy and our warm-up must share the exact promise. Dynamic import
+    caches the module, but two separate calls can still leave React observing
+    a different promise for a frame. One flight also gives navigation a real
+    readiness signal instead of guessing from a timeout.
+  */
+  let flight: ReturnType<typeof load> | null = null
+  const loadOnce = () => {
+    flight ??= load()
+    return flight
+  }
+
+  const Loaded = lazy(loadOnce) as Later<P>
   /*
     Hung on the component rather than kept beside it.
 
@@ -53,7 +67,10 @@ export function later<P = object>(
     how to arrive.
   */
   Loaded.warm = () => {
-    void load()
+    void loadOnce()
+  }
+  Loaded.whenReady = async () => {
+    await loadOnce()
   }
   return Loaded
 }

@@ -23,6 +23,7 @@
  */
 
 import { useEffect, type RefObject } from 'react'
+import { cornerHandleAt } from '@/systems/corner'
 
 /** Far enough to be a shove rather than a wobble, in pixels. */
 const ENOUGH = 44
@@ -80,7 +81,7 @@ export function useTuckOnSwipe(
       window.setTimeout(() => el.removeEventListener('click', stopTheClick, true), 0)
       // Where it was let go, so the handle can be left there rather than in
       // the corner the panel happens to live in. See `CornerTab`.
-      tuck(event.clientY / Math.max(1, window.innerHeight))
+      tuck(cornerHandleAt(event.clientY))
     }
 
     const stopTheClick = (event: Event) => {

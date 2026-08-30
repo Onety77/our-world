@@ -75,6 +75,21 @@ export const useCorner = create<CornerState>((set, get) => ({
 }))
 
 /**
+ * A safe, stable vertical home for the tucked handle.
+ *
+ * The pointer position is stored as a fraction so rotation can preserve it,
+ * but the button is more than five rem tall. A raw `clientY / innerHeight`
+ * can therefore put half of its touch target beyond an edge. Keep one full
+ * thumb target clear at both ends before normalising it.
+ */
+export function cornerHandleAt(clientY: number): number {
+  const height = Math.max(1, window.innerHeight)
+  const breathingRoom = Math.min(68, height * 0.25)
+  const safeY = Math.max(breathingRoom, Math.min(height - breathingRoom, clientY))
+  return safeY / height
+}
+
+/**
  * Can this device put the corner away by hand?
  *
  * A finger, and nothing else. Where `cornerIsInTheWay` asks whether the corner
