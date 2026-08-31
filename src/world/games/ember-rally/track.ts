@@ -860,35 +860,66 @@ function moonbreakBands(): Band[] {
     open({ length: 62, width: 7.2, ceiling: 24, room: 1, curv: 0 }),
     open({ length: 34, width: 6.4, ceiling: 21, room: 0.9, curv: -0.002 }),
 
-    // Windward sweep. Fast enough to take flat once it has been learned.
-    open({ length: 30, curv: -0.0035 }),
-    open({ length: 86, curv: -0.0105, width: 6.1 }),
-    open({ length: 30, curv: -0.003 }),
-    open({ length: 78, curv: 0.001, width: 5.7, wet: 0.28 }),
+/*
+      Windward. It used to be flat once learned, which on a road whose whole
+      idea is speed made the first minute a place you waited through.
+
+      The car is flat out past a sixty-nine metre radius, and this was ninety-
+      five: it asked for nothing. At fifty-eight it is a hard lift with the car
+      light on its outside wheels, taken in one long committed arc — which is
+      this road's kind of difficult, not the Rootway's. Narrower with it,
+      because width is what makes a fast corner forgiving.
+    */
+    open({ length: 30, curv: -0.005 }),
+    open({ length: 86, curv: -0.0172, width: 5.4, room: 0.6 }),
+    open({ length: 30, curv: -0.006 }),
+    /*
+      And the straight that followed is now a corner the other way — the same
+      seventy-eight metres, so every arch downstream stays on its mark.
+    */
+    open({ length: 30, curv: 0.004, width: 5.5, wet: 0.28 }),
+    open({ length: 48, curv: 0.0155, width: 5.2, room: 0.56, wet: 0.34 }),
 
     // The drowned orchard: a deliberate left-right rhythm between trunks.
-    open({ length: 42, curv: 0.021, width: 5.7, room: 0.72, wet: 0.56 }),
-    open({ length: 16, curv: 0, width: 5.2, room: 0.62, wet: 0.68 }),
-    open({ length: 42, curv: -0.021, width: 5.7, room: 0.72, wet: 0.56 }),
+    open({ length: 42, curv: 0.027, width: 5.0, room: 0.5, wet: 0.62 }),
+    open({ length: 16, curv: 0.004, width: 4.7, room: 0.42, wet: 0.72 }),
+    open({ length: 42, curv: -0.028, width: 5.0, room: 0.5, wet: 0.62 }),
 
     // Up through the first broken arch, then light over the crest.
-    open({ length: 56, curv: -0.004, grade: 0.052, width: 5.8 }),
-    open({ length: 30, curv: 0.003, grade: 0, width: 5.1, room: 0.55 }),
-    open({ length: 56, curv: 0.006, grade: -0.052, width: 5.6 }),
+    open({ length: 56, curv: -0.0125, grade: 0.052, width: 5.4, room: 0.6 }),
+    // Blind over the crest, and it turns while you cannot see it.
+    open({ length: 30, curv: 0.013, grade: 0, width: 4.9, room: 0.4 }),
+    open({ length: 56, curv: 0.0168, grade: -0.052, width: 5.1, room: 0.5 }),
 
     // Glasswater bridge. Narrow, straight, and visibly exposed on both sides.
-    open({ length: 96, curv: 0, width: 4.65, room: 0.34, wet: 0.82, ceiling: 28 }),
+/*
+      Glasswater. It was straight, and a straight bridge is only a picture of
+      exposure — you look at it rather than think about it. Eight metres wide
+      with a bend in the middle is the same bridge asking a question, and the
+      room is nearly gone, so the edge is right there rather than a metre and a
+      half of forgiving verge away.
+
+      Split into three that sum to the same ninety-six metres.
+    */
+    open({ length: 34, curv: 0, width: 4.1, room: 0.12, wet: 0.82, ceiling: 28 }),
+    open({ length: 30, curv: -0.0125, width: 4.0, room: 0.08, wet: 0.86, ceiling: 28 }),
+    open({ length: 32, curv: 0, width: 4.1, room: 0.12, wet: 0.82, ceiling: 28 }),
 
     // Tidecut — the hard corner. Its long, widening approach asks for one
     // proper brake, then gives the driver enough road to choose a late apex.
     // At about 120 degrees it is serious without stealing the Moonhook's role.
-    open({ length: 46, curv: 0, width: 5.8, wet: 0.3 }),
-    open({ length: 30, curv: 0.004, width: 6.2 }),
-    open({ length: 20, curv: 0.012, width: 6.8, room: 1 }),
-    open({ length: 50, curv: 0.03, width: 7.25, room: 1, wet: 0.42 }),
-    open({ length: 20, curv: 0.014, width: 6.8, room: 1 }),
-    open({ length: 18, curv: 0.004, width: 6.2 }),
-    open({ length: 62, curv: 0, width: 5.9, wet: 0.24 }),
+    open({ length: 46, curv: 0, width: 5.5, wet: 0.3 }),
+    open({ length: 30, curv: 0.005, width: 5.6 }),
+    open({ length: 20, curv: 0.015, width: 5.8, room: 0.7 }),
+    /*
+      Fourteen and a half metres of road at a thirty-three metre radius is a
+      corner you can be wrong about twice and still make. Twelve, at twenty-
+      eight, is one you have to mean.
+    */
+    open({ length: 50, curv: 0.036, width: 5.9, room: 0.66, wet: 0.5 }),
+    open({ length: 20, curv: 0.017, width: 5.8, room: 0.7 }),
+    open({ length: 18, curv: 0.005, width: 5.6 }),
+    open({ length: 62, curv: 0, width: 5.5, wet: 0.24 }),
 
     /*
       ======================================================================
@@ -942,13 +973,15 @@ function moonbreakBands(): Band[] {
     // The long deep straight — the Mirror Flats' speed, with a roof of water.
     open({ length: 130, curv: 0, width: 5.5, room: 0.48, wet: 0.16, ceiling: 30 }),
     // The two opposing sweeps, kept.
-    open({ length: 88, curv: -0.006, width: 5.9, room: 0.66, wet: 0.16 }),
-    open({ length: 88, curv: 0.006, width: 5.9, room: 0.66, wet: 0.16 }),
+    // Under the water, at the fastest the road ever goes. These were r167 and
+    // free; they are now the price of the speed the deep straight gives you.
+    open({ length: 88, curv: -0.0142, width: 5.4, room: 0.5, wet: 0.16 }),
+    open({ length: 88, curv: 0.0148, width: 5.4, room: 0.5, wet: 0.16 }),
     open({ length: 84, curv: 0, width: 5.35, room: 0.42, wet: 0.16, ceiling: 30 }),
 
     // The deep garden: the Falling Garden's changes of weight, at the bottom.
-    open({ length: 62, curv: -0.014, width: 5.8, room: 0.78, wet: 0.2 }),
-    open({ length: 46, curv: 0.016, width: 5.9, room: 0.8, wet: 0.2 }),
+    open({ length: 62, curv: -0.019, width: 5.2, room: 0.56, wet: 0.2 }),
+    open({ length: 46, curv: 0.023, width: 5.2, room: 0.56, wet: 0.2 }),
 
     // And back up, ending exactly level with where it went down.
     open({ length: 56, curv: -0.004, width: 5.7, room: 0.6, grade: 0.045, wet: 0.2 }),
@@ -957,38 +990,66 @@ function moonbreakBands(): Band[] {
 
     // Reedwater — a lower, quieter rhythm. The two bends are deliberately
     // medium-speed: this is the composure test between the two braking tests.
-    open({ length: 110, curv: 0, width: 5.1, room: 0.4, wet: 0.9 }),
-    open({ length: 54, curv: 0.012, width: 5.75, room: 0.7, wet: 0.72 }),
-    open({ length: 24, curv: 0, width: 5.25, room: 0.5, wet: 0.82 }),
-    open({ length: 54, curv: -0.013, width: 5.8, room: 0.72, wet: 0.74 }),
-    open({ length: 90, curv: 0, width: 5.25, room: 0.44, wet: 0.84 }),
+/*
+      Reedwater was a hundred and ten metres of nothing, two medium bends and
+      ninety more of nothing. It is the composure test between the two braking
+      tests and it was mostly waiting.
+
+      The two runs become corners — the same lengths, split — so there are four
+      things here instead of two, on the wettest stone on the road.
+    */
+    open({ length: 62, curv: 0, width: 5.1, room: 0.4, wet: 0.9 }),
+    open({ length: 48, curv: -0.0165, width: 4.9, room: 0.34, wet: 0.92 }),
+    open({ length: 54, curv: 0.019, width: 5.2, room: 0.5, wet: 0.78 }),
+    open({ length: 24, curv: 0.002, width: 4.9, room: 0.36, wet: 0.86 }),
+    open({ length: 54, curv: -0.0205, width: 5.2, room: 0.5, wet: 0.8 }),
+    open({ length: 44, curv: 0.0135, width: 5.0, room: 0.38, wet: 0.88 }),
+    open({ length: 46, curv: 0, width: 5.25, room: 0.44, wet: 0.84 }),
 
     // The Sky Stair climbs out of the reeds, crests between two broken ribs,
     // and drops the moon into view above the longest braking approach.
-    open({ length: 92, curv: 0.006, grade: 0.045, width: 5.8, room: 0.72, wet: 0.3 }),
-    open({ length: 54, curv: -0.004, grade: 0.02, width: 5.5, room: 0.58 }),
-    open({ length: 78, curv: -0.009, grade: -0.052, width: 5.9, room: 0.76, wet: 0.38 }),
+    open({ length: 92, curv: 0.0135, grade: 0.045, width: 5.3, room: 0.56, wet: 0.3 }),
+    // The crest itself turns now. The car goes light exactly where the road
+    // stops being straight, and you cannot see the exit until you are over it.
+    open({ length: 54, curv: -0.0145, grade: 0.02, width: 4.9, room: 0.4 }),
+    open({ length: 78, curv: -0.0185, grade: -0.052, width: 5.2, room: 0.54, wet: 0.42 }),
     open({ length: 66, curv: 0.003, grade: 0, width: 5.6, room: 0.62 }),
 
     // The Moonhook — the one very hard corner. The road opens before turn-in,
     // gives 216 metres to get the car settled, then turns almost 180 degrees.
     // It is wide and clearly marked, but it cannot be taken by lifting alone.
     open({ length: 216, curv: 0, width: 5.7, room: 0.64, wet: 0.2, ceiling: 30 }),
-    open({ length: 40, curv: 0.004, width: 6.3, room: 0.9 }),
-    open({ length: 22, curv: 0.012, width: 7, room: 1 }),
-    open({ length: 58, curv: 0.038, width: 8.1, room: 1, wet: 0.36 }),
-    open({ length: 22, curv: 0.015, width: 7.3, room: 1 }),
-    open({ length: 40, curv: 0.004, width: 6.5, room: 0.95 }),
+    open({ length: 40, curv: 0.005, width: 5.9, room: 0.8 }),
+    open({ length: 22, curv: 0.014, width: 6.2, room: 0.86 }),
+    /*
+      Still the biggest corner on either road, and still clearly marked — the
+      two hundred and sixteen metres in front of it are untouched, because the
+      long look at what is coming is the whole of its drama. What has gone is
+      sixteen metres of road at a twenty-six metre radius, which is enough to
+      take it two different wrong ways and still get away with it.
+    */
+    open({ length: 58, curv: 0.0435, width: 6.4, room: 0.8, wet: 0.44 }),
+    open({ length: 22, curv: 0.018, width: 6.3, room: 0.86 }),
+    open({ length: 40, curv: 0.005, width: 6.0, room: 0.85 }),
     open({ length: 62, curv: 0, width: 5.9, room: 0.7 }),
 
     // Homeward gates: an easy left-right release after the hairpin, then a
     // broad moonwell terrace that lets the finish breathe instead of arriving
     // immediately after the hardest thing on the road.
-    open({ length: 88, curv: 0, width: 5.8, wet: 0.24 }),
-    open({ length: 56, curv: -0.012, width: 6, room: 0.78 }),
-    open({ length: 18, curv: 0, width: 5.5, room: 0.58 }),
-    open({ length: 54, curv: 0.012, width: 6, room: 0.78 }),
-    open({ length: 30, curv: 0, width: 5.6 }),
+/*
+      The gates were an easy left-right after the hairpin. They are now a real
+      sequence: a corner in the run-up so you arrive already busy, then the two
+      of them tighter and narrower. Same lengths throughout — the eighty-eight
+      is split, nothing downstream moves.
+
+      The broad terrace after it is untouched. The finish still gets to breathe.
+    */
+    open({ length: 44, curv: 0, width: 5.5, wet: 0.24 }),
+    open({ length: 44, curv: 0.0155, width: 5.2, room: 0.5, wet: 0.3 }),
+    open({ length: 56, curv: -0.0195, width: 5.3, room: 0.56 }),
+    open({ length: 18, curv: 0.003, width: 5.0, room: 0.4 }),
+    open({ length: 54, curv: 0.0205, width: 5.3, room: 0.56 }),
+    open({ length: 30, curv: 0.004, width: 5.4 }),
     open({ length: 112, curv: 0, width: 7.8, room: 1, ceiling: 30, wet: 0.5 }),
     open({ length: 26, curv: 0, width: 6.2, room: 0.75, ceiling: 22 }),
   ]
