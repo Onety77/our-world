@@ -21,7 +21,15 @@ import {
 } from 'three'
 import { random } from './model'
 import { basisAt, roadPoint, type RoadBasis, type TunnelChunk } from './geometry'
-import { MOONBREAK, WATER_Y, emptyRoad, roadAt, vergeWidth, type Track } from './track'
+import {
+  MOONBREAK,
+  SWAY_ROLL,
+  WATER_Y,
+  emptyRoad,
+  roadAt,
+  vergeWidth,
+  type Track,
+} from './track'
 import { Deepwater } from './Deepwater'
 import { deep } from './depth'
 import { MoonbreakSound } from './MoonbreakSound'
@@ -55,20 +63,96 @@ function hash3(a: number, b: number, c: number): number {
   return value - Math.floor(value)
 }
 
+/**
+ * What a batch of vertices needs to know to swing with the deck under it.
+ *
+ * The centre of the road and its two cross axes, so that a vertex given only
+ * as a world point can be asked where it *is* on the bridge — see
+ * `CourseMesh.onSwayingRoad`.
+ */
+interface Swaying {
+  cx: number; cy: number; cz: number
+  rx: number; ry: number; rz: number
+  ux: number; uy: number; uz: number
+  sway: number
+  s: number
+}
+
 class CourseMesh {
   readonly position: number[] = []
   readonly color: number[] = []
   readonly surface: number[] = []
+  /** Where this vertex goes when the deck rolls one radian. Zero on solid ground. */
+  readonly swing: number[] = []
+  /** x: how much this piece of road moves. y: how far along the road it is. */
+  readonly phase: number[] = []
   readonly index: number[] = []
+
+  private swaying: Swaying | null = null
 
   get count() {
     return this.position.length / 3
+  }
+
+  /*
+    =========================================================================
+    Everything added from here until `onSolidGround` belongs to a bridge that
+    is rolling, and should roll with it.
+
+    **Why a mode rather than an argument.** Vertices arrive here from six
+    different places — the ring loop, boxes, tubes, arches, trees, reeds — and
+    all of them already know the road, so threading "and how much does this
+    move" through every one of their signatures would touch every caller to
+    serve one section of one course.
+
+    Instead the vertex is asked where it is. A world point `p` on a road whose
+    centre is `c` sits `n = (p−c)·right` across and `h = (p−c)·up` above, and
+    rolling by θ about the road's own length moves it by `sinθ · (n·up − h·right)`
+    to first order — which for eleven degrees is exact to about two per cent
+    and costs one multiply-add in the shader. So the whole of a vertex's
+    relationship to the swing is that one vector, worked out once at build time
+    and never again.
+
+    The consequence worth stating: a cable ten metres above the deck swings
+    ten times as far sideways as the deck does, and the hangers between them
+    stay attached, without any of that being written down anywhere. It falls
+    out of `h`.
+    =========================================================================
+  */
+  onSwayingRoad(road: ReturnType<typeof emptyRoad>, basis: RoadBasis, s: number) {
+    this.swaying =
+      road.sway <= 0.002
+        ? null
+        : {
+            cx: road.x, cy: road.y, cz: road.z,
+            rx: basis.rx, ry: basis.ry, rz: basis.rz,
+            ux: basis.ux, uy: basis.uy, uz: basis.uz,
+            sway: road.sway,
+            s,
+          }
+  }
+
+  onSolidGround() {
+    this.swaying = null
   }
 
   vertex(point: Vector3, color: Color, wet = 0, rough = 0.5) {
     this.position.push(point.x, point.y, point.z)
     this.color.push(color.r, color.g, color.b)
     this.surface.push(wet, rough)
+    const w = this.swaying
+    if (!w) {
+      this.swing.push(0, 0, 0)
+      this.phase.push(0, 0)
+      return
+    }
+    const dx = point.x - w.cx
+    const dy = point.y - w.cy
+    const dz = point.z - w.cz
+    const n = dx * w.rx + dy * w.ry + dz * w.rz
+    const h = dx * w.ux + dy * w.uy + dz * w.uz
+    this.swing.push(n * w.ux - h * w.rx, n * w.uy - h * w.ry, n * w.uz - h * w.rz)
+    this.phase.push(w.sway, w.s)
   }
 
   quad(a: number, b: number, c: number, d: number) {
@@ -80,9 +164,27 @@ class CourseMesh {
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(this.position), 3))
     geometry.setAttribute('aColor', new BufferAttribute(new Float32Array(this.color), 3))
     geometry.setAttribute('aSurface', new BufferAttribute(new Float32Array(this.surface), 2))
+    geometry.setAttribute('aSwing', new BufferAttribute(new Float32Array(this.swing), 3))
+    geometry.setAttribute('aSwayPhase', new BufferAttribute(new Float32Array(this.phase), 2))
     geometry.setIndex(this.index)
     geometry.computeVertexNormals()
     geometry.computeBoundingSphere()
+    /*
+      The bounding sphere is measured from where the vertices are written down,
+      and on the span that is not where they are drawn — the cable tops move
+      two metres either way. A chunk culled on its resting bounds pops out of
+      existence at the moment it leans furthest, which is exactly when you are
+      looking at it. Cheaper to be generous than to recompute a sphere every
+      frame for a bridge.
+    */
+    let farthest = 0
+    for (let i = 0; i < this.phase.length; i += 2) {
+      if (this.phase[i] <= 0) continue
+      const j = (i / 2) * 3
+      const reach = Math.hypot(this.swing[j], this.swing[j + 1], this.swing[j + 2])
+      farthest = Math.max(farthest, reach * this.phase[i])
+    }
+    if (farthest > 0 && geometry.boundingSphere) geometry.boundingSphere.radius += farthest * SWAY_ROLL
     return geometry
   }
 }
@@ -257,6 +359,141 @@ function addReeds(mesh: CourseMesh, track: Track, s: number, side: number, seed:
   }
 }
 
+
+/**
+ * The Swaying Span's rigging: two pylons a bay, a cable between them, and the
+ * hangers that hold the deck up off it.
+ *
+ * ===========================================================================
+ * **This is here so the force has a reason.** The deck rolls and gravity takes
+ * the car down the slope — see `swayRollAt` — and a road that shoves you
+ * sideways with nothing visible causing it does not read as a bridge, it reads
+ * as a bug in the handling. What makes it legible is the *superstructure*: a
+ * cable ten metres up swings ten times as far as the deck it is holding, so
+ * the towers are what you actually see moving, and the deck under you is only
+ * confirming it.
+ *
+ * All of it is registered with `onSwayingRoad`, so none of it needs to know
+ * that: each vertex swings by how high above the deck it is, which the mesh
+ * works out from where the vertex is. The hangers stay attached to both ends
+ * for the same reason.
+ *
+ * Deliberately sparse — four bays over two hundred and seventy metres, thin
+ * stone rather than steel. The Moonbreak's whole look is a garden that drowned
+ * a long time ago, and the one thing that must stay visible past all of this
+ * is the water.
+ * ===========================================================================
+ */
+function addSpanRig(
+  meshes: CourseMesh[],
+  track: Track,
+  chunkFor: (s: number) => number,
+) {
+  const { from, to } = MOONBREAK.span
+  const BAYS = 4
+  const bay = (to - from) / BAYS
+  /** Hangers this far apart, which also sets how finely the cable is drawn. */
+  const STEP_ALONG = bay / 10
+  const TOWER = 9.6
+  const SAG = 2.3
+
+  const road = emptyRoad()
+  const basis: RoadBasis = { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 }
+  /** Just outside the deck, so the rigging never eats road you can drive on. */
+  const edge = (r: typeof road) => r.width + vergeWidth(r.room) + 0.34
+
+  /** Where the cable hangs at this point of a bay: a slack parabola. */
+  const cableY = (t: number) => TOWER - (TOWER - SAG) * 4 * t * (1 - t)
+
+  const at = (s: number, n: number, y: number) => {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    return roadPoint(road, n, y, new Vector3(), basis)
+  }
+
+  // --- the pylons ----------------------------------------------------------
+  for (let i = 0; i <= BAYS; i++) {
+    const s = from + i * bay
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    const mesh = meshes[chunkFor(s)]
+    mesh.onSwayingRoad(road, basis, s)
+    for (const side of [-1, 1]) {
+      const n = side * edge(road)
+      /*
+        Leaning very slightly inward over the road, which is what a tower
+        carrying a load in the middle of its span actually does, and which also
+        stops five pairs of verticals reading as a fence.
+      */
+      addTube(
+        mesh,
+        [
+          roadPoint(road, n, -0.7, new Vector3(), basis),
+          roadPoint(road, n - side * 0.12, TOWER * 0.5, new Vector3(), basis),
+          roadPoint(road, n - side * 0.34, TOWER, new Vector3(), basis),
+        ],
+        0.3,
+        PALE_STONE,
+      )
+    }
+    mesh.onSolidGround()
+  }
+
+  // --- the two cables, and the hangers off them ----------------------------
+  for (let i = 0; i < BAYS; i++) {
+    const start = from + i * bay
+    for (let step = 0; step * STEP_ALONG < bay - 0.01; step++) {
+      const s0 = start + step * STEP_ALONG
+      const s1 = s0 + STEP_ALONG
+      const t0 = (step * STEP_ALONG) / bay
+      const t1 = ((step + 1) * STEP_ALONG) / bay
+      roadAt(track, s0, road)
+      basisAt(road, basis)
+      const mesh = meshes[chunkFor(s0)]
+      mesh.onSwayingRoad(road, basis, s0)
+      const lean0 = 0.34 * (1 - 4 * t0 * (1 - t0))
+      const lean1 = 0.34 * (1 - 4 * t1 * (1 - t1))
+      for (const side of [-1, 1]) {
+        const n0 = side * (edge(road) - lean0)
+        const n1 = side * (edge(road) - lean1)
+        // One short length of cable, drawn in its own road frame so that a
+        // seventy metre bay follows the bridge round its bends.
+        addTube(mesh, [at(s0, n0, cableY(t0)), at(s1, n1, cableY(t1))], 0.075, PALE_STONE)
+        // And the hanger down to the deck. Not at the towers, where there is
+        // no cable to hang from and a hanger would be a post against a post.
+        if (step > 0) {
+          addTube(
+            mesh,
+            [at(s0, n0, cableY(t0)), at(s0, side * edge(road), 0.34)],
+            0.032,
+            BARK_PALE,
+          )
+        }
+      }
+      mesh.onSolidGround()
+    }
+  }
+
+  /*
+    A rope along each edge at knee height, which is the only thing on this
+    bridge you actually steer by. It swings with everything else, and because
+    it sits almost on the deck it swings by almost exactly as much as the deck
+    does — so it stays where the road really ends rather than promising room
+    that is not there.
+  */
+  for (let s = from; s < to; s += 3) {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    const mesh = meshes[chunkFor(s)]
+    mesh.onSwayingRoad(road, basis, s)
+    for (const side of [-1, 1]) {
+      const n = side * edge(road)
+      addTube(mesh, [at(s, n, 0.46), at(Math.min(to, s + 3), n, 0.46)], 0.038, BARK_PALE)
+    }
+    mesh.onSolidGround()
+  }
+}
+
 /** The causeway in the same chunk format the race already knows how to cull. */
 export function buildMoonbreak(track: Track): TunnelChunk[] {
   const rings = Math.floor(track.length / RING) + 1
@@ -276,6 +513,9 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
       const s = ring * RING
       roadAt(track, s, road)
       basisAt(road, basis)
+      // The deck of the Swaying Span is a moving thing; everywhere else this
+      // does nothing at all, because everywhere else `sway` is zero.
+      mesh.onSwayingRoad(road, basis, s)
       const wall = road.width + vergeWidth(road.room)
       const offsets = [
         -wall, -wall, -road.width, -road.width * 0.92, -road.width * 0.62,
@@ -283,9 +523,34 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
         road.width * 0.31, road.width * 0.62, road.width * 0.92, road.width,
         wall, wall,
       ]
+      /*
+        The flank, and how far down it goes.
+
+        =====================================================================
+        **A metre and a bit was right when this road was flat.** The causeway
+        ran a metre above the water for its whole length, so a skirt that
+        dropped just below the surface was all anybody could see and all it
+        needed.
+
+        Then the Sky Stair went in — thirty metres of climb, which is the one
+        thing a cave cannot do and therefore the reason this road exists after
+        the Rootway — and a fixed skirt turned it into a strip of tarmac
+        hanging in the air with the sea a long way underneath and nothing in
+        between. Nothing was wrong with the *road*; what was missing was the
+        thing holding it up, and it was missing because holding it up used to
+        be free.
+
+        So the flank simply reaches the water wherever the water is: a low kerb
+        along the drowned garden, and a thirty-metre stone pier under the
+        crest, out of one line. Down in the Drowned Mile, where the road is
+        already eighteen metres *under* the surface, the `min` keeps the old
+        kerb rather than growing a wall upward through the sea.
+        =====================================================================
+      */
+      const flank = Math.min(-1.15, WATER_Y - road.y - 0.8)
       const heights = [
-        -1.15, 0.08, 0.035, 0.045, 0.055, 0.064, 0.07,
-        0.064, 0.055, 0.045, 0.035, 0.08, -1.15,
+        flank, 0.08, 0.035, 0.045, 0.055, 0.064, 0.07,
+        0.064, 0.055, 0.045, 0.035, 0.08, flank,
       ]
       const base = mesh.count
 
@@ -339,13 +604,21 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
     }
   }
 
+  // The rings are laid; nothing added from here belongs to a moving road
+  // unless it says so.
+  for (const mesh of meshes) mesh.onSolidGround()
+
   const chunkFor = (s: number) => Math.max(0, Math.min(chunkCount - 1, Math.floor(s / CHUNK)))
+
+  addSpanRig(meshes, track, chunkFor)
 
   // Low pale stones mark the drop without turning the high road into a modern
   // guardrail. Their rhythm is what makes acceleration visible in open space.
   for (let s = 26; s < track.finishAt - 24; s += 15) {
     const at = roadAt(track, s)
     const frame = basisAt(at, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
+    // On the span these mark the edge of a deck that is moving, so they move.
+    meshes[chunkFor(s)].onSwayingRoad(at, frame, s)
     for (const side of [-1, 1]) {
       addBox(
         meshes[chunkFor(s)],
@@ -359,6 +632,7 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
         PALE_STONE,
       )
     }
+    meshes[chunkFor(s)].onSolidGround()
   }
 
   for (const s of MOONBREAK.arches) {
@@ -398,6 +672,24 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
       kelp instead, and the tall stones that used to mark the Mirror Flats.
     */
     if (s > MOONBREAK.deep.from - 30 && s < MOONBREAK.deep.to + 30) continue
+    /*
+      And nothing grows on the Swaying Span either, for a plainer reason: it is
+      a deck hung off cables over open water, so there is no ground within nine
+      metres of it for a root to be in. Trees came through here on the first
+      build and stood in mid-air beside the handrail, which is the kind of
+      thing that only shows up when somebody looks at it.
+    */
+    if (s > MOONBREAK.span.from - 22 && s < MOONBREAK.span.to + 22) continue
+    /*
+      Nor anywhere the road has climbed away from the water.
+
+      A tree is planted at the height of the road beside it, which was fine
+      while the road lay a metre above the sea for its whole length. Up the Sky
+      Stair the road is twenty-eight metres up and the verge is the top of a
+      pier, so the same code hangs an orchard in the open air over the water —
+      which is what it did, and which only showed up by looking at it.
+    */
+    if (roadAt(track, s).y - WATER_Y > 6) continue
     if (highRoad && rng() < 0.52) continue
     addTree(meshes[chunkFor(s)], track, s, rng() < 0.5 ? -1 : 1, treeSeed++)
     if (orchard || rng() > 0.78) {

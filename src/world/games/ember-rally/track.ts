@@ -35,6 +35,26 @@ export interface Band {
   room: number
   /** 0..1 — wet stone: sheen under the headlights, and puddles. */
   wet: number
+  /**
+   * 0..1 — how much this piece of road is *moving*.
+   *
+   * -------------------------------------------------------------------------
+   * **The first thing in this game that is not standing still.** Every other
+   * property here describes a shape the road holds for ever: how wide it is,
+   * how wet, how far the walls stand back. This one says the road itself is
+   * swinging, and it is what a suspended span over open water actually does.
+   *
+   * It becomes a sideways acceleration on the car — see `swayAt` and its use in
+   * `physics` — travelling along the span as a wave rather than shoving the
+   * whole thing at once, because a bridge does not move in one piece. The
+   * practical effect is that the road is never quite where you left it, and a
+   * line that worked on the way in is wrong by the middle.
+   *
+   * Zero everywhere except where a road says otherwise, so nothing that does
+   * not ask for it pays anything.
+   * -------------------------------------------------------------------------
+   */
+  sway: number
 }
 
 export interface Lantern {
@@ -132,6 +152,8 @@ export interface Track {
   ceiling: Float32Array
   room: Float32Array
   wet: Float32Array
+  /** How much the road is swinging here, 0..1. See `Band.sway`. */
+  sway: Float32Array
   grade: Float32Array
   /** Roll of the road surface into the corner, radians. */
   bank: Float32Array
@@ -198,6 +220,7 @@ const band = (b: Partial<Band> & { length: number }): Band => ({
   width: 4.6,
   ceiling: 5.6,
   grade: 0,
+  sway: 0,
   room: 0.25,
   wet: 0.1,
   ...b,
@@ -780,42 +803,29 @@ function rootwayBands(seed: number): Band[] {
  */
 /**
  * Fixed distances used by both the racing line and the Moonbreak scenery.
- * Keeping these here means an arch, a braking pearl and the corner it warns
- * about can never quietly drift apart during another course edit.
+ *
+ * ---------------------------------------------------------------------------
+ * **These are derived from the road now, not written next to it.** They used to
+ * be a hand-kept table of numbers — an arch at 68 m, a braking pearl at 658,
+ * the tube's mouth at 1016 — and a note warning that they must never drift
+ * apart from the corners they mark.
+ *
+ * The note was right and the arrangement was the problem. Every one of those
+ * numbers is a *consequence* of how long the bands before it are, so any change
+ * to the road's shape silently invalidated all of them: an arch ends up over a
+ * straight, a marker warns about nothing, the tube is glass over open air.
+ * Nothing throws. It just quietly stops meaning anything, which is why the road
+ * was effectively frozen — you could re-tune a corner but never lengthen one.
+ *
+ * So the road is laid out in named sections and reports where they landed. The
+ * table cannot drift now, because it is measured off the thing it describes.
+ * `npm run moonbreak` still checks it, because a derivation with a mistake in
+ * it is just a confident mistake.
+ * ---------------------------------------------------------------------------
  */
-export const MOONBREAK = {
-  arches: [68, 420, 658, 904, 2010, 2290, 2580, 3040, 3256],
-  orchard: { from: 285, to: 470 },
-  hard: { approach: 658, apex: 779, exit: 904 },
-  /**
-   * The Drowned Mile: where the causeway stops going over the water and goes
-   * under it.
-   *
-   * -------------------------------------------------------------------------
-   * Every one of these is used by three separate things that have to agree —
-   * the road's own grade, the glass tube and its portals in `Moonbreak`, and
-   * the light, which is driven off the car's depth in `Race`. A tube whose
-   * mouth sits forty metres from where the road actually goes under is a car
-   * driving through open air inside a lit tunnel, and there is no number
-   * anywhere that would show it.
-   *
-   * `under` is the waterline crossing in both directions, worked out from the
-   * grades below rather than guessed: the deck is at zero at `from`, tips over
-   * a lip, and passes the surface at -1.08 about a hundred and ten metres in.
-   */
-  deep: {
-    from: 904,
-    to: 1958,
-    /** Where the deck passes the waterline, going down and coming back up. */
-    under: { in: 1016, out: 1940 },
-    /** The flat bottom of it, and how far down that is. */
-    floor: { from: 1234, to: 1732, y: -18.6 },
-  },
-  mirror: { from: 1234, to: 1560 },
-  reeds: { from: 1958, to: 2290 },
-  stair: { from: 2290, to: 2580 },
-  veryHard: { approach: 2580, apex: 2887, exit: 3040 },
-} as const
+const MOON = layMoonbreak()
+
+export const MOONBREAK = MOON.marks
 
 /**
  * Where the water is, in metres. The Moonbreak's one horizontal plane.
@@ -844,215 +854,361 @@ export const WATER_Y = -1.08
  * happens *while you are falling* — which is the point of diving at all.
  * ---------------------------------------------------------------------------
  */
+/**
+ * How far the Swaying Span has rolled, and how hard that pushes.
+ *
+ * ===========================================================================
+ * **A bridge that pushes you sideways needs a reason you can see**, or the
+ * force is a bug. The reason is that the deck is *tilted*: a suspended span in
+ * a swell rolls about its own length, and a car on a tilted floor slides down
+ * it because of gravity, which is a thing everybody already understands
+ * without being told.
+ *
+ * That is why this returns an angle rather than a force. One number, read by
+ * three things that have to agree exactly:
+ *
+ *   - `physics` turns it into the sideways acceleration on the car,
+ *   - `placeCar` rolls the car so it lies on the deck rather than floating
+ *     level above a tilted one,
+ *   - and the deck's own vertices are lifted by it in the road shader.
+ *
+ * If any of those kept its own copy of the wave they would drift apart by a
+ * few degrees and the car would sit visibly wrong on the bridge — which reads
+ * as "the physics is broken" rather than as "that number is slightly off".
+ *
+ * **The phase carries `s` as well as time**, so the wave *travels* along the
+ * span the way a real one does, instead of the whole bridge tipping at once.
+ * The practical consequence is that the span cannot be learned as "lean left
+ * here": how far it has rolled by the time you reach a given plank depends on
+ * how fast you got there.
+ *
+ * **`elapsed` is the race clock, never the wall clock.** Two people racing
+ * start their clocks together at the flag, so they get the same bridge at the
+ * same moment. A wall-clock phase would give each of them a different one,
+ * which nobody would think to check and both would feel.
+ * ===========================================================================
+ */
+/** Radians of roll at full sway. Eleven degrees: dramatic, not cartoonish. */
+export const SWAY_ROLL = 0.205
+/** Radians per second of the swing. Slow enough to lean on, quick enough to matter. */
+export const SWAY_RATE = 1.15
+/** Radians per metre along the span, which is what makes it a wave. */
+export const SWAY_WAVE = 0.028
+
+/** Where in its swing the deck is here, −1..1, scaled by how much it moves. */
+export function swayAt(sway: number, s: number, elapsed: number): number {
+  if (sway <= 0.002) return 0
+  return sway * Math.sin(elapsed * SWAY_RATE - s * SWAY_WAVE)
+}
+
+/**
+ * The roll of the deck here, in radians, positive raising its right-hand side.
+ *
+ * The sign is not a taste. `basisAt` puts a point `n` to the right at
+ * `road.y + sin(bank) * n`, so a positive bank lifts the right-hand side and
+ * gravity takes the car to the *left*. Everything downstream depends on that.
+ */
+export function swayRollAt(sway: number, s: number, elapsed: number): number {
+  return -SWAY_ROLL * swayAt(sway, s, elapsed)
+}
+
 export function sunkAt(track: Track, s: number): number {
   if (track.stage !== 'moonbreak') return 0
   const i = Math.max(0, Math.min(track.y.length - 1, Math.round(s / STEP)))
   return Math.max(0, Math.min(1, (WATER_Y - track.y[i]) / 8))
 }
 
+/**
+ * The Moonbreak, laid out section by section.
+ *
+ * ===========================================================================
+ * **The road after the Rootway, and it has to be harder than it.** The Rootway
+ * is fifteen corners in two and a quarter kilometres, all of them needing a
+ * brake, at its tightest twenty-four metres of radius on eight and a half
+ * metres of road. Anything that calls itself the next one along has to ask for
+ * more than that, and asking for it *in the same way* would only be the Rootway
+ * again with the lights on.
+ *
+ * So the difficulty here is made of things a cave cannot do:
+ *
+ *   **open water.** Nothing to lean on. Where the Rootway closes the rock in
+ *   until there is one line through, this narrows to seven metres with the
+ *   verge almost gone and nothing either side but the drop.
+ *
+ *   **a road that moves.** The Swaying Span is the first piece of road in the
+ *   game that is not standing still — see `Band.sway`. A wave travels along it,
+ *   so the line that worked on the way in is wrong by the middle, and how far
+ *   it has moved when you reach a given plank depends on how fast you got
+ *   there. It cannot be learned as a shape, only as a thing to read.
+ *
+ *   **height.** The Rootway is a cave floor and never climbs more than a few
+ *   metres. This goes thirty-four metres up the Sky Stair to a crest that
+ *   turns while you cannot see over it, and then throws all of it away again
+ *   down the Fall — which puts you at the hardest corner on either road,
+ *   downhill, still braking.
+ *
+ *   **and the water over your head**, which it already had, and which is the
+ *   one thing here that is not about being hard. The Drowned Mile keeps its
+ *   shape exactly: a place should have one big idea and this road's is that
+ *   halfway through it goes under.
+ * ===========================================================================
+ */
+function layMoonbreak() {
+  const bands: Band[] = []
+  /** Where the road has got to, so every landmark can be measured rather than guessed. */
+  let at = 0
+  const open = (shape: Partial<Band> & { length: number }) => {
+    bands.push(band({ width: 5.9, ceiling: 18, room: 0.82, wet: 0.38, ...shape }))
+    at += shape.length
+    return at
+  }
+  /** Where we are now, for naming a boundary without laying anything. */
+  const here = () => at
+
+  // --- the moonwell terrace -----------------------------------------------
+  // Enough road to see sky, water and the first gate before anything is asked.
+  open({ length: 62, width: 7.2, ceiling: 24, room: 1, curv: 0 })
+  const firstArch = here()
+  open({ length: 34, width: 6.4, ceiling: 21, room: 0.9, curv: -0.002 })
+
+  /*
+    Windward. It used to be flat once learned, which on a road whose whole idea
+    is speed made the first minute something you waited through. The car is
+    flat out past a sixty-nine metre radius; this was ninety-five.
+  */
+  open({ length: 30, curv: -0.005, width: 5.6 })
+  open({ length: 86, curv: -0.0178, width: 5.2, room: 0.55 })
+  open({ length: 30, curv: -0.006, width: 5.4 })
+  open({ length: 30, curv: 0.005, width: 5.3, wet: 0.28 })
+  open({ length: 48, curv: 0.0162, width: 5.1, room: 0.5, wet: 0.34 })
+
+  // --- the drowned orchard -------------------------------------------------
+  // A deliberate left-right rhythm between trunks, on wet stone.
+  const orchardFrom = here()
+  open({ length: 44, curv: 0.028, width: 4.9, room: 0.44, wet: 0.62 })
+  open({ length: 16, curv: 0.004, width: 4.6, room: 0.36, wet: 0.74 })
+  open({ length: 44, curv: -0.029, width: 4.9, room: 0.44, wet: 0.62 })
+  const orchardTo = here()
+
+  // Up through the first broken arch, then light over the crest — and it turns
+  // while you are over it.
+  open({ length: 56, curv: -0.0128, grade: 0.052, width: 5.2, room: 0.55 })
+  const crestArch = here()
+  open({ length: 30, curv: 0.0135, grade: 0, width: 4.8, room: 0.36 })
+  open({ length: 56, curv: 0.0172, grade: -0.052, width: 5.0, room: 0.46 })
+
+  /*
+    ========================================================================
+    THE SWAYING SPAN
+    ========================================================================
+
+    A quarter of a kilometre of suspended deck, seven metres wide, with almost
+    no verge and a wave running along it.
+
+    **This is the road's second idea and it is deliberately the opposite kind
+    of thing from its first.** The Drowned Mile is a place — you go somewhere,
+    and what changes is where you are rather than what you are doing. The span
+    changes what you are doing and nothing else: same water, same sky, same
+    speed, and a deck that will not hold still under the car.
+
+    Three bends in it, gentle ones. They matter because a straight span can be
+    driven by aiming once and holding it; with bends you have to keep choosing,
+    and every choice is made on a road that has moved since you looked.
+
+    The sway ramps in and out rather than switching on, so you drive onto
+    something already moving instead of being hit by it at a seam — see the
+    smoothing on `Track.sway`.
+    ========================================================================
+  */
+  const spanFrom = here()
+  open({ length: 40, curv: 0, width: 5.0, room: 0.2, wet: 0.7, ceiling: 28, sway: 0.25 })
+  open({ length: 46, curv: -0.0085, width: 3.7, room: 0.05, wet: 0.82, ceiling: 28, sway: 0.7 })
+  open({ length: 52, curv: 0.004, width: 3.6, room: 0.04, wet: 0.86, ceiling: 28, sway: 1 })
+  const spanMiddle = here()
+  open({ length: 52, curv: 0.0105, width: 3.6, room: 0.04, wet: 0.86, ceiling: 28, sway: 1 })
+  open({ length: 46, curv: -0.005, width: 3.7, room: 0.05, wet: 0.82, ceiling: 28, sway: 0.7 })
+  open({ length: 40, curv: 0, width: 5.0, room: 0.2, wet: 0.7, ceiling: 28, sway: 0.25 })
+  const spanTo = here()
+
+  /*
+    Tidecut — the first hard corner, and it is now arrived at going downhill.
+
+    Fourteen and a half metres of road at a thirty-three metre radius used to be
+    a corner you could be wrong about twice and still make. Twelve at twenty-
+    eight, off a descent, off the span, is one you have to mean.
+  */
+  const hardApproach = here()
+  open({ length: 46, curv: 0, width: 5.4, grade: -0.038, wet: 0.3 })
+  open({ length: 30, curv: 0.006, width: 5.5, grade: -0.045 })
+  open({ length: 20, curv: 0.016, width: 5.7, room: 0.66, grade: -0.03 })
+  const hardApex = here()
+  open({ length: 50, curv: 0.037, width: 5.9, room: 0.62, wet: 0.5 })
+  open({ length: 20, curv: 0.018, width: 5.8, room: 0.68, grade: 0.03 })
+  open({ length: 18, curv: 0.005, width: 5.6, grade: 0.04 })
+  open({ length: 62, curv: 0, width: 5.5, grade: 0.043, wet: 0.24 })
+  const hardExit = here()
+
+  /*
+    ======================================================================
+    THE DROWNED MILE — kept exactly as it was.
+
+    A kilometre of causeway that goes *under* the water instead of over it,
+    and the one place on either road where the sky is not the ceiling. Its
+    shape is not touched by any of this hardening: a set piece that also asks
+    you to learn six new corners is two things at once, and the driver ends up
+    looking at the road instead of at the water.
+
+    The two sweeps down there are the exception, and only because they were
+    free — a hundred and sixty-seven metres of radius at the fastest the road
+    ever goes, which is not a corner, it is a direction. They are the price of
+    the speed the deep straight hands you.
+    ======================================================================
+  */
+  open({ length: 90, curv: 0, width: 6.2, room: 0.6, wet: 0.62, ceiling: 30 })
+  open({ length: 55, curv: 0, width: 5.9, room: 0.5, grade: -0.05, wet: 0.7 })
+  const goesUnder = here()
+  open({ length: 130, curv: 0, width: 5.6, room: 0.42, grade: -0.105, wet: 0.24 })
+  open({ length: 55, curv: -0.002, width: 5.6, room: 0.46, grade: -0.04, wet: 0.18 })
+  const mirrorFrom = here()
+  open({ length: 130, curv: 0, width: 5.5, room: 0.48, wet: 0.16, ceiling: 30 })
+  open({ length: 88, curv: -0.0145, width: 5.3, room: 0.48, wet: 0.16 })
+  open({ length: 88, curv: 0.0152, width: 5.3, room: 0.48, wet: 0.16 })
+  const mirrorTo = here()
+  open({ length: 84, curv: 0, width: 5.35, room: 0.42, wet: 0.16, ceiling: 30 })
+  open({ length: 62, curv: -0.0195, width: 5.1, room: 0.5, wet: 0.2 })
+  open({ length: 46, curv: 0.0235, width: 5.1, room: 0.5, wet: 0.2 })
+  open({ length: 56, curv: -0.005, width: 5.5, room: 0.56, grade: 0.045, wet: 0.2 })
+  open({ length: 130, curv: 0, width: 5.6, room: 0.5, grade: 0.105, wet: 0.3 })
+  const comesUp = here()
+  open({ length: 40, curv: 0, width: 5.9, room: 0.6, grade: 0.061, wet: 0.5 })
+  const deepTo = here()
+
+  // --- reedwater -----------------------------------------------------------
+  /*
+    A hundred and ten metres of nothing, two medium bends, ninety more of
+    nothing. It is the composure test between the two braking tests and it was
+    mostly waiting. Four things now, on the wettest stone on the road.
+  */
+  const reedsFrom = here()
+  open({ length: 62, curv: 0, width: 5.0, room: 0.38, wet: 0.9 })
+  open({ length: 48, curv: -0.0175, width: 4.7, room: 0.3, wet: 0.92 })
+  open({ length: 54, curv: 0.0205, width: 5.0, room: 0.44, wet: 0.8 })
+  open({ length: 24, curv: 0.003, width: 4.7, room: 0.32, wet: 0.88 })
+  open({ length: 54, curv: -0.0215, width: 5.0, room: 0.44, wet: 0.82 })
+  open({ length: 44, curv: 0.0145, width: 4.8, room: 0.34, wet: 0.9 })
+  open({ length: 46, curv: 0, width: 5.1, room: 0.4, wet: 0.84 })
+  const reedsTo = here()
+
+  /*
+    ========================================================================
+    THE SKY STAIR — thirty-four metres up, and it turns at the top.
+    ========================================================================
+
+    The Rootway is a cave floor and never climbs more than a few metres. This
+    is the road's answer to that: four hundred metres of genuine climb at nine
+    per cent, narrowing as it goes, so the car is working against gravity
+    exactly while there is least road to do it on.
+
+    **The crest is the point.** It turns, and it turns while the nose is light
+    and you cannot see over it — the one moment on this road where you commit
+    to something you have not been shown. Everything before it is the climb
+    that makes the crest cost something.
+  */
+  const stairFrom = here()
+  open({ length: 96, curv: 0.0138, grade: 0.095, width: 5.1, room: 0.5, wet: 0.3 })
+  open({ length: 104, curv: -0.0092, grade: 0.095, width: 4.9, room: 0.44 })
+  open({ length: 92, curv: 0.0125, grade: 0.092, width: 4.7, room: 0.36 })
+  // Over the top, light, and turning. The mark goes in the *middle* of it,
+  // not on the seam: the seam is where the climb stops and the turn has not
+  // started, which is the one place on the crest that is straight.
+  open({ length: 29, curv: -0.0215, grade: 0.012, width: 4.4, room: 0.24 })
+  const crest = here()
+  open({ length: 29, curv: -0.0215, grade: 0.012, width: 4.4, room: 0.24 })
+  open({ length: 54, curv: -0.0155, grade: -0.05, width: 4.6, room: 0.3, wet: 0.34 })
+  const stairTo = here()
+
+  /*
+    ========================================================================
+    THE FALL — and it does not level out before the Moonhook.
+    ========================================================================
+
+    Everything the Stair climbed, given back at nine and a half per cent, into
+    the hardest corner on either road. Arriving somewhere tight while still
+    going downhill is the single hardest thing in driving: the brakes have the
+    car's weight *and* the hill to fight, the back is light the whole way, and
+    the corner does not care.
+
+    The two hundred metres of approach are kept — the long look at what is
+    coming is the whole of the Moonhook's drama — but they are no longer flat.
+  */
+  const veryHardApproach = here()
+  open({ length: 104, curv: -0.004, grade: -0.105, width: 5.0, room: 0.4, wet: 0.36 })
+  open({ length: 96, curv: 0.006, grade: -0.105, width: 4.9, room: 0.36, wet: 0.4 })
+  open({ length: 62, curv: 0, grade: -0.095, width: 5.2, room: 0.48, wet: 0.3, ceiling: 30 })
+  open({ length: 40, curv: 0.006, width: 5.5, room: 0.6, grade: -0.062 })
+  open({ length: 22, curv: 0.016, width: 5.9, room: 0.7 })
+  /*
+    The Moonhook. Still the biggest corner in the game and still clearly
+    marked. What has gone is sixteen metres of road at a twenty-six metre
+    radius, which was enough to take it two different wrong ways and get away
+    with both.
+  */
+  const veryHardApex = here()
+  open({ length: 58, curv: 0.0445, width: 6.2, room: 0.72, wet: 0.44 })
+  open({ length: 22, curv: 0.019, width: 6.1, room: 0.8, grade: 0.02 })
+  open({ length: 40, curv: 0.006, width: 5.8, room: 0.8, grade: 0.02 })
+  open({ length: 62, curv: 0, width: 5.6, room: 0.68, grade: 0.02 })
+  const veryHardExit = here()
+
+  /*
+    Homeward. It was an easy left-right release after the hairpin; it is now a
+    real sequence, still climbing gently back to the height the road started
+    at, so the two fires stand on the same water.
+  */
+  open({ length: 44, curv: 0, width: 5.4, grade: 0.012, wet: 0.24 })
+  open({ length: 44, curv: 0.0165, width: 5.1, room: 0.46, grade: 0.01, wet: 0.3 })
+  open({ length: 56, curv: -0.0205, width: 5.2, room: 0.5, grade: 0.008 })
+  open({ length: 18, curv: 0.004, width: 4.9, room: 0.36 })
+  open({ length: 54, curv: 0.0215, width: 5.2, room: 0.5 })
+  open({ length: 30, curv: 0.005, width: 5.4 })
+  const lastArch = here()
+  // And a broad moonwell terrace, so the finish breathes instead of arriving
+  // immediately after the hardest thing on the road.
+  open({ length: 112, curv: 0, width: 7.8, room: 1, ceiling: 30, wet: 0.5 })
+  open({ length: 26, curv: 0, width: 6.2, room: 0.75, ceiling: 22 })
+
+  return {
+    bands,
+    marks: {
+      /*
+        Nine arches, each on something worth marking rather than at a number
+        somebody typed: the gate you leave by, the orchard, the crest, the two
+        braking corners, both mouths of the tube, the stair, and the way home.
+      */
+      arches: [
+        firstArch, orchardFrom, crestArch, spanMiddle, hardExit,
+        mirrorTo, reedsTo, veryHardExit, lastArch,
+      ],
+      orchard: { from: orchardFrom, to: orchardTo },
+      span: { from: spanFrom, to: spanTo },
+      hard: { approach: hardApproach, apex: hardApex, exit: hardExit },
+      deep: {
+        from: hardExit,
+        to: deepTo,
+        under: { in: goesUnder, out: comesUp },
+        floor: { from: mirrorFrom, to: mirrorTo, y: -18.6 },
+      },
+      mirror: { from: mirrorFrom, to: mirrorTo },
+      reeds: { from: reedsFrom, to: reedsTo },
+      stair: { from: stairFrom, to: stairTo },
+      crest,
+      veryHard: { approach: veryHardApproach, apex: veryHardApex, exit: veryHardExit },
+    },
+  }
+}
+
 function moonbreakBands(): Band[] {
-  const open = (shape: Partial<Band> & { length: number }) =>
-    band({ width: 5.9, ceiling: 18, room: 0.82, wet: 0.38, ...shape })
-
-  return [
-    // The moonwell terrace: enough road to see sky, water and the first gate
-    // before the car is asked to turn.
-    open({ length: 62, width: 7.2, ceiling: 24, room: 1, curv: 0 }),
-    open({ length: 34, width: 6.4, ceiling: 21, room: 0.9, curv: -0.002 }),
-
-/*
-      Windward. It used to be flat once learned, which on a road whose whole
-      idea is speed made the first minute a place you waited through.
-
-      The car is flat out past a sixty-nine metre radius, and this was ninety-
-      five: it asked for nothing. At fifty-eight it is a hard lift with the car
-      light on its outside wheels, taken in one long committed arc — which is
-      this road's kind of difficult, not the Rootway's. Narrower with it,
-      because width is what makes a fast corner forgiving.
-    */
-    open({ length: 30, curv: -0.005 }),
-    open({ length: 86, curv: -0.0172, width: 5.4, room: 0.6 }),
-    open({ length: 30, curv: -0.006 }),
-    /*
-      And the straight that followed is now a corner the other way — the same
-      seventy-eight metres, so every arch downstream stays on its mark.
-    */
-    open({ length: 30, curv: 0.004, width: 5.5, wet: 0.28 }),
-    open({ length: 48, curv: 0.0155, width: 5.2, room: 0.56, wet: 0.34 }),
-
-    // The drowned orchard: a deliberate left-right rhythm between trunks.
-    open({ length: 42, curv: 0.027, width: 5.0, room: 0.5, wet: 0.62 }),
-    open({ length: 16, curv: 0.004, width: 4.7, room: 0.42, wet: 0.72 }),
-    open({ length: 42, curv: -0.028, width: 5.0, room: 0.5, wet: 0.62 }),
-
-    // Up through the first broken arch, then light over the crest.
-    open({ length: 56, curv: -0.0125, grade: 0.052, width: 5.4, room: 0.6 }),
-    // Blind over the crest, and it turns while you cannot see it.
-    open({ length: 30, curv: 0.013, grade: 0, width: 4.9, room: 0.4 }),
-    open({ length: 56, curv: 0.0168, grade: -0.052, width: 5.1, room: 0.5 }),
-
-    // Glasswater bridge. Narrow, straight, and visibly exposed on both sides.
-/*
-      Glasswater. It was straight, and a straight bridge is only a picture of
-      exposure — you look at it rather than think about it. Eight metres wide
-      with a bend in the middle is the same bridge asking a question, and the
-      room is nearly gone, so the edge is right there rather than a metre and a
-      half of forgiving verge away.
-
-      Split into three that sum to the same ninety-six metres.
-    */
-    open({ length: 34, curv: 0, width: 4.1, room: 0.12, wet: 0.82, ceiling: 28 }),
-    open({ length: 30, curv: -0.0125, width: 4.0, room: 0.08, wet: 0.86, ceiling: 28 }),
-    open({ length: 32, curv: 0, width: 4.1, room: 0.12, wet: 0.82, ceiling: 28 }),
-
-    // Tidecut — the hard corner. Its long, widening approach asks for one
-    // proper brake, then gives the driver enough road to choose a late apex.
-    // At about 120 degrees it is serious without stealing the Moonhook's role.
-    open({ length: 46, curv: 0, width: 5.5, wet: 0.3 }),
-    open({ length: 30, curv: 0.005, width: 5.6 }),
-    open({ length: 20, curv: 0.015, width: 5.8, room: 0.7 }),
-    /*
-      Fourteen and a half metres of road at a thirty-three metre radius is a
-      corner you can be wrong about twice and still make. Twelve, at twenty-
-      eight, is one you have to mean.
-    */
-    open({ length: 50, curv: 0.036, width: 5.9, room: 0.66, wet: 0.5 }),
-    open({ length: 20, curv: 0.017, width: 5.8, room: 0.7 }),
-    open({ length: 18, curv: 0.005, width: 5.6 }),
-    open({ length: 62, curv: 0, width: 5.5, wet: 0.24 }),
-
-    /*
-      ======================================================================
-      THE DROWNED MILE
-      ======================================================================
-
-      A kilometre of causeway that goes *under* the water instead of over it,
-      and the one place on either road where the sky is not the ceiling.
-
-      It replaces the Mirror Flats and the Falling Garden and it deliberately
-      keeps their driving: the long fast straight, the pair of opposing
-      sweeps, the changes of weight. That is not laziness — those bands were
-      already the right shapes in the right order, and the reason this is a
-      dive rather than a new sequence of corners is that **what changes here
-      is where you are, not what you are doing**. A set piece that also asks
-      you to learn six new corners is two things at once, and the driver ends
-      up looking at the road instead of at the water.
-
-      The vertical profile is the whole design, and it is written as five acts:
-
-        the approach   level and wide, with the mouth visible a long way off,
-                       so going under is something you watch arrive
-        the lip        a gentle tip-in — the horizon drops out of the frame
-                       before the water closes over, which is what sells it
-        the dive       a hundred and thirty metres at ten per cent, straight,
-                       so it is fast and reads as *falling* rather than as a
-                       corner that happens to be descending
-        the deep       level, the fast bands, nineteen metres down
-        the climb      the mirror of the dive, ending level at the old height
-
-      Nineteen metres down is chosen, not arbitrary: enough water overhead to
-      be properly dark and to hold something large moving in it, shallow
-      enough that the surface is still a lit ceiling with the moon in it.
-      Past about twenty-five the surface stops reading at all and this becomes
-      a cave, which is the other road's job and it does it better.
-
-      The grades are steep by this game's standards — everything else on the
-      Moonbreak is inside five per cent — and cost about a metre a second
-      squared each way, which the car has in hand.
-    */
-
-    // The approach. Wide and level, and the last of the open sky.
-    open({ length: 90, curv: 0, width: 6.2, room: 0.6, wet: 0.62, ceiling: 30 }),
-    // The lip.
-    open({ length: 55, curv: 0, width: 5.9, room: 0.5, grade: -0.05, wet: 0.7 }),
-    // The dive. Straight on purpose — a corner here would be read as a corner.
-    open({ length: 130, curv: 0, width: 5.6, room: 0.42, grade: -0.105, wet: 0.24 }),
-    // Levelling out on the bottom.
-    open({ length: 55, curv: -0.002, width: 5.6, room: 0.46, grade: -0.04, wet: 0.18 }),
-
-    // The long deep straight — the Mirror Flats' speed, with a roof of water.
-    open({ length: 130, curv: 0, width: 5.5, room: 0.48, wet: 0.16, ceiling: 30 }),
-    // The two opposing sweeps, kept.
-    // Under the water, at the fastest the road ever goes. These were r167 and
-    // free; they are now the price of the speed the deep straight gives you.
-    open({ length: 88, curv: -0.0142, width: 5.4, room: 0.5, wet: 0.16 }),
-    open({ length: 88, curv: 0.0148, width: 5.4, room: 0.5, wet: 0.16 }),
-    open({ length: 84, curv: 0, width: 5.35, room: 0.42, wet: 0.16, ceiling: 30 }),
-
-    // The deep garden: the Falling Garden's changes of weight, at the bottom.
-    open({ length: 62, curv: -0.019, width: 5.2, room: 0.56, wet: 0.2 }),
-    open({ length: 46, curv: 0.023, width: 5.2, room: 0.56, wet: 0.2 }),
-
-    // And back up, ending exactly level with where it went down.
-    open({ length: 56, curv: -0.004, width: 5.7, room: 0.6, grade: 0.045, wet: 0.2 }),
-    open({ length: 130, curv: 0, width: 5.7, room: 0.5, grade: 0.105, wet: 0.3 }),
-    open({ length: 40, curv: 0, width: 6, room: 0.62, grade: 0.061, wet: 0.5 }),
-
-    // Reedwater — a lower, quieter rhythm. The two bends are deliberately
-    // medium-speed: this is the composure test between the two braking tests.
-/*
-      Reedwater was a hundred and ten metres of nothing, two medium bends and
-      ninety more of nothing. It is the composure test between the two braking
-      tests and it was mostly waiting.
-
-      The two runs become corners — the same lengths, split — so there are four
-      things here instead of two, on the wettest stone on the road.
-    */
-    open({ length: 62, curv: 0, width: 5.1, room: 0.4, wet: 0.9 }),
-    open({ length: 48, curv: -0.0165, width: 4.9, room: 0.34, wet: 0.92 }),
-    open({ length: 54, curv: 0.019, width: 5.2, room: 0.5, wet: 0.78 }),
-    open({ length: 24, curv: 0.002, width: 4.9, room: 0.36, wet: 0.86 }),
-    open({ length: 54, curv: -0.0205, width: 5.2, room: 0.5, wet: 0.8 }),
-    open({ length: 44, curv: 0.0135, width: 5.0, room: 0.38, wet: 0.88 }),
-    open({ length: 46, curv: 0, width: 5.25, room: 0.44, wet: 0.84 }),
-
-    // The Sky Stair climbs out of the reeds, crests between two broken ribs,
-    // and drops the moon into view above the longest braking approach.
-    open({ length: 92, curv: 0.0135, grade: 0.045, width: 5.3, room: 0.56, wet: 0.3 }),
-    // The crest itself turns now. The car goes light exactly where the road
-    // stops being straight, and you cannot see the exit until you are over it.
-    open({ length: 54, curv: -0.0145, grade: 0.02, width: 4.9, room: 0.4 }),
-    open({ length: 78, curv: -0.0185, grade: -0.052, width: 5.2, room: 0.54, wet: 0.42 }),
-    open({ length: 66, curv: 0.003, grade: 0, width: 5.6, room: 0.62 }),
-
-    // The Moonhook — the one very hard corner. The road opens before turn-in,
-    // gives 216 metres to get the car settled, then turns almost 180 degrees.
-    // It is wide and clearly marked, but it cannot be taken by lifting alone.
-    open({ length: 216, curv: 0, width: 5.7, room: 0.64, wet: 0.2, ceiling: 30 }),
-    open({ length: 40, curv: 0.005, width: 5.9, room: 0.8 }),
-    open({ length: 22, curv: 0.014, width: 6.2, room: 0.86 }),
-    /*
-      Still the biggest corner on either road, and still clearly marked — the
-      two hundred and sixteen metres in front of it are untouched, because the
-      long look at what is coming is the whole of its drama. What has gone is
-      sixteen metres of road at a twenty-six metre radius, which is enough to
-      take it two different wrong ways and still get away with it.
-    */
-    open({ length: 58, curv: 0.0435, width: 6.4, room: 0.8, wet: 0.44 }),
-    open({ length: 22, curv: 0.018, width: 6.3, room: 0.86 }),
-    open({ length: 40, curv: 0.005, width: 6.0, room: 0.85 }),
-    open({ length: 62, curv: 0, width: 5.9, room: 0.7 }),
-
-    // Homeward gates: an easy left-right release after the hairpin, then a
-    // broad moonwell terrace that lets the finish breathe instead of arriving
-    // immediately after the hardest thing on the road.
-/*
-      The gates were an easy left-right after the hairpin. They are now a real
-      sequence: a corner in the run-up so you arrive already busy, then the two
-      of them tighter and narrower. Same lengths throughout — the eighty-eight
-      is split, nothing downstream moves.
-
-      The broad terrace after it is untouched. The finish still gets to breathe.
-    */
-    open({ length: 44, curv: 0, width: 5.5, wet: 0.24 }),
-    open({ length: 44, curv: 0.0155, width: 5.2, room: 0.5, wet: 0.3 }),
-    open({ length: 56, curv: -0.0195, width: 5.3, room: 0.56 }),
-    open({ length: 18, curv: 0.003, width: 5.0, room: 0.4 }),
-    open({ length: 54, curv: 0.0205, width: 5.3, room: 0.56 }),
-    open({ length: 30, curv: 0.004, width: 5.4 }),
-    open({ length: 112, curv: 0, width: 7.8, room: 1, ceiling: 30, wet: 0.5 }),
-    open({ length: 26, curv: 0, width: 6.2, room: 0.75, ceiling: 22 }),
-  ]
+  return MOON.bands
 }
 
 /**
@@ -1250,6 +1406,7 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
   const rawCeiling = new Float32Array(count)
   const rawRoom = new Float32Array(count)
   const rawWet = new Float32Array(count)
+  const rawSway = new Float32Array(count)
   const rawGrade = new Float32Array(count)
 
   let cursor = 0
@@ -1262,6 +1419,7 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       rawCeiling[cursor] = b.ceiling
       rawRoom[cursor] = b.room
       rawWet[cursor] = b.wet
+      rawSway[cursor] = b.sway
       rawGrade[cursor] = b.grade
     }
     at += b.length
@@ -1272,6 +1430,7 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     rawCeiling[cursor] = 12
     rawRoom[cursor] = 1
     rawWet[cursor] = 0.1
+    rawSway[cursor] = 0
     rawGrade[cursor] = 0
   }
 
@@ -1280,6 +1439,11 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
   const ceiling = smooth(rawCeiling, 9)
   const room = smooth(rawRoom, 9)
   const wet = smooth(rawWet, 7)
+  // Wider than the rest: a span that starts swinging between one metre and the
+  // next is a step in the sideways force, which reads as a shunt rather than as
+  // a bridge. Eased in over forty metres it reads as walking onto something
+  // that is already moving.
+  const sway = smooth(rawSway, 21, 2)
   const grade = smooth(rawGrade, 8)
 
   const x = new Float32Array(count)
@@ -1348,6 +1512,7 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     ceiling,
     room,
     wet,
+    sway,
     grade,
     bank,
     line,
@@ -1992,6 +2157,8 @@ export interface RoadAt {
   wet: number
   bank: number
   grade: number
+  /** How much the road is swinging here, 0..1. */
+  sway: number
   line: number
   /** World metres represented by one metre of shared race progress. */
   metric: number
@@ -2000,7 +2167,7 @@ export interface RoadAt {
 export function emptyRoad(): RoadAt {
   return {
     x: 0, y: 0, z: 0, heading: 0, curv: 0, width: 4.6,
-    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, line: 0, metric: 1,
+    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, sway: 0, line: 0, metric: 1,
   }
 }
 
@@ -2024,6 +2191,7 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
   r.ceiling = lerpAt(track.ceiling, i, j, mix)
   r.room = lerpAt(track.room, i, j, mix)
   r.wet = lerpAt(track.wet, i, j, mix)
+  r.sway = lerpAt(track.sway, i, j, mix)
   r.bank = lerpAt(track.bank, i, j, mix)
   r.grade = lerpAt(track.grade, i, j, mix)
   r.line = lerpAt(track.line, i, j, mix)
@@ -2060,6 +2228,7 @@ export function shortcutRoadAt(split: RootSplit, s: number, out?: RoadAt): RoadA
   r.ceiling = lerpAt(split.ceiling, i, j, mix)
   r.room = lerpAt(split.room, i, j, mix)
   r.wet = lerpAt(split.wet, i, j, mix)
+  r.sway = 0
   r.grade = lerpAt(split.grade, i, j, mix)
   r.bank = lerpAt(split.bank, i, j, mix)
   r.line = lerpAt(split.line, i, j, mix)

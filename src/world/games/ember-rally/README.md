@@ -43,10 +43,21 @@ grammar with four rules in it. Fully procedural roads are how you get a racer
 whose every bend is the same bend.
 
 The Moonbreak is the deliberate exception. It is a road to learn: the orchard
-esses always lead to the glasswater bridge, the bridge always spends its speed
-at the wide hairpin, and the two moon arches can eventually be taken as one
-drift. Its seed moves trees, stones, puddles and moon pearls without moving the
-racing line.
+esses always lead to the Swaying Span, the span always spends its speed at
+Tidecut, and the Sky Stair always throws you down the Fall into the Moonhook
+still braking. Its seed moves trees, stones, puddles and moon pearls without
+moving the racing line.
+
+**It is laid out in named sections and reports where they landed.** `MOONBREAK`
+used to be a hand-kept table of distances sitting next to the road — an arch at
+68 m, a tube mouth at 1016 — with a note warning that they must never drift
+apart from the corners they mark. The note was right and the arrangement was
+the problem: every one of those numbers is a consequence of how long the bands
+before it are, so changing the *shape* of a corner was fine and changing its
+*length* silently invalidated everything downstream. Nothing threw; an arch
+just ended up over a straight. The road was effectively frozen. `layMoonbreak`
+now measures the table off the road as it lays it, which is what made a second
+kilometre of new road possible at all.
 
 **The light comes from the car.** There is no sun down here and no scene
 lights: two headlamp cones, a warm pool travelling with the car, and a sliding
@@ -285,6 +296,44 @@ smoke and the tyre marks still know the tyre is sliding.
 
 `npm run rally` drives all four behaviours and prints whether the flick
 actually swapped sides and how much speed a long drift keeps.
+
+## The road, and what is on it
+
+### The Moonbreak is the next one along, and had to be harder than the Rootway
+
+The Rootway is fifteen corners in two and a quarter kilometres, all of them
+needing a brake, at its tightest twenty-four metres of radius on eight and a
+half metres of road. The first attempt at hardening the Moonbreak turned the
+same dials on the same corners — tighter radii, less width — and changed
+nothing anybody could feel, because the road was still the same road and it
+still asked the same *kind* of question.
+
+So the difficulty here is made of three things a cave structurally cannot do:
+
+**Open water.** Nothing to lean on. Where the Rootway closes the rock in until
+there is one line through, this narrows to seven metres with the verge nearly
+gone and the drop either side.
+
+**A road that moves.** The Swaying Span is the first piece of road in the game
+that is not standing still — see `Band.sway` and `swayRollAt`. The deck rolls
+about its own length and gravity takes the car down the slope, so the force has
+a cause you can see: a cable ten metres up swings ten times as far as the deck
+it holds, which is what you actually watch. The wave *travels* along the span,
+so how far it has rolled when you reach a given plank depends on how fast you
+got there, and it cannot be learned as "lean left here".
+
+**Height.** Thirty metres up the Sky Stair to a crest that turns while you
+cannot see over it, then the Fall gives all of it back at ten per cent into the
+Moonhook — arriving somewhere tight while still going downhill, which is the
+single hardest thing in driving. It is also why the causeway's flank now
+reaches the water at whatever height the road is: a fixed one-metre skirt was
+right for a flat road and turned the crest into tarmac hanging in mid-air.
+
+`npm run moonbreak` builds both roads and compares them, rather than trusting a
+number somebody wrote down, and drives the span twice — once with the hands
+still, once working — because a section nobody can drive is not difficulty, it
+is a wall. The first tuning of the swing failed exactly that test before the
+road was ever played.
 
 ## The road, and what is on it
 

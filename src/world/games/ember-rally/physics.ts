@@ -73,6 +73,7 @@ import {
   END_WALL,
   roadAt,
   roadAtRoute,
+  swayRollAt,
   vergeWidth,
   type RoadAt,
   type Track,
@@ -1710,6 +1711,62 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     wheel.travelVel +=
       (DERIVED.wheelSpring.k * (want - wheel.travel) - DERIVED.wheelSpring.c * wheel.travelVel) * dt
     wheel.travel += wheel.travelVel * dt
+  }
+
+  /*
+    ==========================================================================
+    The road moves under the car.
+
+    **The first thing in this game that is not standing still.** A suspended
+    span over open water swings, and until now the only things a road could do
+    to you were be narrow, be tight, be wet or be steep — all of which are
+    shapes it holds still while you deal with them. This one does not hold
+    still, and that is a different kind of difficult: the line that worked on
+    the way in is wrong by the middle of the bridge.
+
+    **A travelling wave, not a shove.** A bridge does not move in one piece —
+    the wave runs along it — so the phase carries `car.s`. Driving *into* the
+    wave meets it sooner than sitting still would, which is why the span cannot
+    be learned as "push left here": how much it has moved by the time you reach
+    a given plank depends on how fast you got there.
+
+    **Timed off the car's own race clock**, never off `performance.now()`. Two
+    people racing wheel to wheel both start their clocks at the flag, so both
+    bridges are in the same place at the same moment. A wall-clock phase would
+    give each of them a different bridge, which is the sort of thing nobody
+    would ever think to check and everybody would feel.
+
+    Applied as an acceleration in the road's own frame, so it is a force on the
+    car rather than a teleport of its position — it can be leaned against,
+    caught late, or used, and the tyres get a say in all three.
+    ==========================================================================
+  */
+  const swaying = swayRollAt(road.sway, car.s, car.elapsed)
+  if (swaying !== 0) {
+    /*
+      Gravity down a tilted floor, and nothing else.
+
+      The whole force is g·sin(roll), which is why the number governing how
+      hard this bridge is to drive is an *angle* — the same angle the deck is
+      drawn at and the same one the car is laid on. Nothing here can disagree
+      with what is on the screen, because there is only one number.
+
+      Eleven degrees works out at almost exactly two metres per second squared
+      at the peak. That matters more than it sounds: the span gives the car
+      three and a half metres either side of the middle, and a sine of
+      amplitude `a` at `w` radians a second moves what it is pushing by
+      `a / w²` — about a metre and a half here, call it two fifths of the
+      road, spent before the driver has done anything at all. Enough to be late
+      and still be on the deck. The first attempt was three and a half, which
+      spends two and a half metres and cannot be driven; that is not difficulty,
+      it is a coin toss, and the harness caught it before it was ever played.
+
+      Left is negative n and a positive roll lifts the right, so the sign comes
+      out of `basisAt` rather than out of trying it both ways.
+    */
+    const push = -TUNE.gravity * Math.sin(swaying)
+    car.vn += push * Math.cos(car.psi) * dt
+    car.vs -= push * Math.sin(car.psi) * dt
   }
 
   // --- into the road's frame ----------------------------------------------

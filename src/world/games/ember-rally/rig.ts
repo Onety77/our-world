@@ -23,6 +23,7 @@ import {
   buildWheel,
 } from './car'
 import { basisAt, roadPoint, type RoadBasis } from './geometry'
+import { swayRollAt } from './track'
 import type { CarState } from './physics'
 import { emptyRoad, roadAtRoute, type Track } from './track'
 
@@ -394,6 +395,7 @@ export function placeCar(
   heave = 0,
   drop = 0,
   shortcut = false,
+  elapsed = 0,
 ) {
   const road = roadAtRoute(track, s, shortcut, placeRoad)
   const basis = basisAt(road, placeBasis)
@@ -402,6 +404,30 @@ export function placeCar(
   rig.root.position.x += basis.ux * drop
   rig.root.position.y += basis.uy * drop
   rig.root.position.z += basis.uz * drop
+
+  /*
+    On the Swaying Span, up onto the deck.
+
+    `roadPoint` puts the car on the road as it was *written down*, and on this
+    one bridge that is not where the road is: the deck is rolling about its own
+    centreline, so a point two metres out to the side is up to forty centimetres
+    above or below where the map says. Rotating the car without also lifting it
+    leaves it half a wheel into the planks on one swing and hovering over them
+    on the next — which looks exactly like a physics bug and is really a
+    rounding error between two ways of describing the same bridge.
+
+    The lift is `sin(roll) · n` along the road's own up, which is the same first
+    -order term the deck's vertices are displaced by in the road shader. Same
+    angle, same arithmetic, same result, so the car and the planks cannot
+    disagree.
+  */
+  const swaying = swayRollAt(road.sway, s, elapsed)
+  if (swaying !== 0) {
+    const onto = Math.sin(swaying) * n
+    rig.root.position.x += basis.ux * onto
+    rig.root.position.y += basis.uy * onto
+    rig.root.position.z += basis.uz * onto
+  }
   rig.root.rotation.set(0, road.heading - psi, 0)
   /*
     Two tilts, and they belong to different things.
@@ -413,7 +439,22 @@ export function placeCar(
     thing happening in the springs. Putting both on one group is what made the
     old car tilt its wheels into the rock every time it leaned.
   */
-  rig.ground.rotation.set(-road.grade, 0, road.bank)
+  /*
+    And on the Swaying Span, a third tilt that is not the road's shape but the
+    road's *behaviour* — the deck is rolling, and the car has to roll with it or
+    it is visibly floating level over a tilted bridge. It goes on `ground` with
+    the road's own bank because from the car's point of view there is no
+    difference between a banked corner and a bridge that happens to be leaning:
+    both are simply which way the floor is.
+
+    Read from `swayRollAt` rather than worked out again here, because this
+    angle is also the one the deck is drawn at and the one gravity is resolved
+    down in `physics`. Three copies of a wave is three chances to be a few
+    degrees apart, and a few degrees apart looks like a bug in the car.
+
+    Zero on every road but this one, so nothing else pays for it.
+  */
+  rig.ground.rotation.set(-road.grade, 0, road.bank + swaying)
   rig.body.rotation.set(pitch, 0, roll)
   rig.body.position.y = heave
 }

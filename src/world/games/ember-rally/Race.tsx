@@ -954,6 +954,13 @@ class Driving {
 
     this.clock += args.delta
     args.lights.uniforms.uTime.value = this.clock
+    /*
+      The bridge is timed off the *race* clock, not this one. They differ by
+      the countdown, and they have to differ: physics phases the swing on
+      `car.elapsed`, so a deck drawn on `this.clock` would be a second or two
+      out of step with the force and the car would sit visibly through it.
+    */
+    args.lights.uniforms.uSway.value.x = this.car.elapsed
     // `boostLeft` only ever jumps up on the press and falls from there, so the
     // high-water mark *is* the launch value, with nothing to reset by hand.
     if (this.car.boostLeft > this.boostFrom) this.boostFrom = this.car.boostLeft
@@ -1241,6 +1248,7 @@ class Driving {
       car.heave,
       0,
       car.shortcut,
+      car.elapsed,
     )
     poseWheels(args.mine, car)
 
@@ -1555,7 +1563,10 @@ class Driving {
       back onto her real line — which is a starting grid, and is both prettier
       and more honest than two cars occupying one piece of road.
     */
-    placeCar(rig, args.track, sample.s, sample.n + grid, sample.yaw, roll, 0, 0, 0, sample.shortcut)
+    placeCar(
+      rig, args.track, sample.s, sample.n + grid, sample.yaw, roll, 0, 0, 0,
+      sample.shortcut, elapsedMs / 1000,
+    )
 
     // A live car brings its smoothed velocity. A recording has no velocity,
     // so its wheels retain the distance-per-frame fallback when replayed.
@@ -1611,6 +1622,8 @@ class Driving {
     if (this.clock > duration) this.clock = 0
 
     const at = this.clock * 1000
+    // In a replay this clock *is* the race clock, so the bridge follows it.
+    args.lights.uniforms.uSway.value.x = this.clock
     const me = runAt(replay.mine, at)
     const them = runAt(replay.theirs, at)
 
@@ -1634,7 +1647,7 @@ class Driving {
     me.n += split * side
     them.n -= split * side
 
-    placeCar(args.mine, track, me.s, me.n, me.yaw, me.drift * 0.14, 0, 0, 0, me.shortcut)
+    placeCar(args.mine, track, me.s, me.n, me.yaw, me.drift * 0.14, 0, 0, 0, me.shortcut, this.clock)
     poseGhostWheels(args.mine, 30, me.drift, me.yaw, me.spinning, delta)
     args.materials.mine.uniforms.uGlow.value = me.boost ? 1 : 0.4
     args.materials.mine.uniforms.uBrake.value = me.braking ? 1 : 0

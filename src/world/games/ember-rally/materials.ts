@@ -32,8 +32,11 @@ import {
   NormalBlending,
   ShaderMaterial,
   Vector3,
+  Vector4,
   type IUniform,
 } from 'three'
+// The one description of how the Swaying Span moves; see the note beside it.
+import { SWAY_RATE, SWAY_ROLL, SWAY_WAVE } from './track'
 
 /** How many lanterns can be lit at once. A window, not the whole road. */
 export const LAMP_SLOTS = 10
@@ -78,6 +81,15 @@ export function createLights(): RallyLights {
       uFogColor: { value: new Color('#0a0908') },
       uFogNear: { value: 22 },
       uFogFar: { value: 118 },
+
+      /*
+        The Swaying Span's swing, as one vector so that the shape of it travels
+        with the clock and cannot be half-updated: the race clock, then the
+        three constants from `track.ts` that every other reader of this wave
+        uses too. Zero on the clock is a bridge at rest, which is what the
+        garage and the studio want.
+      */
+      uSway: { value: new Vector4(0, SWAY_ROLL, SWAY_RATE, SWAY_WAVE) },
 
       uHeadLeft: { value: headLeft },
       uHeadRight: { value: headRight },
@@ -297,6 +309,25 @@ const ROCK_VERT = /* glsl */ `
   attribute vec3 aColor;
   /** x: how wet, y: how rough. */
   attribute vec2 aSurface;
+  /*
+    The Swaying Span, and nothing else in the game.
+
+    aSwing is where this vertex goes when the deck under it rolls one radian,
+    worked out once when the mesh was built — see CourseMesh.onSwayingRoad. It
+    is zero everywhere except the one bridge, and absent entirely from the
+    Rootway and the Stormcrown, where WebGL supplies zero for it and this
+    branch costs a comparison.
+
+    aSwayPhase is how much this piece of road moves and how far along the road
+    it is. The distance is in the phase because the wave *travels*: the whole
+    bridge does not tip at once, which is what stops the span being learnable
+    as "lean left here".
+  */
+  attribute vec3 aSwing;
+  attribute vec2 aSwayPhase;
+
+  /** x: the race clock. yzw: how far it rolls, how fast, and how long the wave is. */
+  uniform vec4 uSway;
 
   varying vec3 vWorld;
   varying vec3 vNormal;
@@ -307,7 +338,22 @@ const ROCK_VERT = /* glsl */ `
   void main() {
     vColor = aColor;
     vSurface = aSurface;
-    vec4 world = modelMatrix * vec4(position, 1.0);
+
+    /*
+      The same roll, from the same three numbers, as the one gravity is
+      resolved down in physics and the one the car is laid on in placeCar. Kept
+      as uniforms rather than typed in here so there is exactly one place the
+      bridge's swing is described; a shader with its own copy of the wave would
+      drift a few degrees from the road and put the car visibly through the
+      deck.
+    */
+    vec3 laid = position;
+    if (aSwayPhase.x > 0.002) {
+      float roll = -uSway.y * aSwayPhase.x * sin(uSway.x * uSway.z - aSwayPhase.y * uSway.w);
+      laid += aSwing * sin(roll);
+    }
+
+    vec4 world = modelMatrix * vec4(laid, 1.0);
     vWorld = world.xyz;
     vNormal = normalize(mat3(modelMatrix) * normal);
     vec4 mv = viewMatrix * world;

@@ -187,9 +187,25 @@ function kick(): number[] {
   for (const onTheVerge of [false, true]) {
     const car = createCar(track)
     car.vs = 30
-    // Hard sideways — well past anything the drive above can reach, and past
-    // where both helpers start having an opinion.
-    car.vn = 11
+    /*
+      Hard sideways — well past anything the drive above can reach, and past
+      where both helpers start having an opinion.
+
+      **Twenty-six, and the number is load-bearing.** Slide catching only wakes
+      up past `spinProtection * 0.72`, which at the default is twenty-nine
+      degrees of slip, and the car is *good* at coming back: kicked at eleven
+      it peaked at twenty-three degrees and settled, so the dial was moved from
+      end to end and the car drove identically, and this reported a perfectly
+      wired helper as dead. It was not marginal by much — eleven reached the
+      threshold on some seeds and not on the one this uses, which is the worst
+      kind of test, the sort that passes until an unrelated change to the
+      *tyres* tips it over.
+
+      At twenty-six the car peaks past forty degrees and the helper fires
+      thirty-five times, so what is being measured is the dial rather than
+      whether the kick happened to be big enough.
+    */
+    car.vn = 26
     if (onTheVerge) car.n = 6.5
     // Rolling, so the tyres are not fighting four locked wheels from step one.
     for (const wheel of car.wheels) wheel.omega = 30 / 0.34
