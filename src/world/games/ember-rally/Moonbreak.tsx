@@ -7,7 +7,7 @@
  * know which road they are on.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
   BackSide,
@@ -16,6 +16,7 @@ import {
   Color,
   DoubleSide,
   ShaderMaterial,
+  Mesh,
   Sphere,
   Vector3,
 } from 'three'
@@ -53,6 +54,27 @@ const PALE_STONE = new Color('#a8aaa0')
 const MIRROR_STONE = new Color('#798c91')
 const BARK = new Color('#4d403d')
 const BARK_PALE = new Color('#766861')
+/*
+  The Swaying Span is made of wood, and needs its own three tones.
+
+  A plank deck read at speed is almost entirely about the *gaps*: the boards
+  themselves barely differ from one another, and what the eye follows is the
+  dark line between them going past. So the important colour here is the
+  darkest one — what is under the deck, which is nothing.
+*/
+/*
+  Built out of the drowned orchard, not out of a timber yard.
+
+  The first pass invented its own warm pine and the span came out looking new,
+  which is the one thing nothing on this road is: everything here has been in
+  the water a long time. These are BARK and BARK_PALE, the trees' own two
+  tones, nudged apart — so the deck, the trunks either side of the orchard and
+  the rope on the rail are all visibly the same wood at different ages.
+*/
+const DECK = new Color('#584a45')
+const DECK_WORN = new Color('#766861')
+/** Between the boards: the drop, and the water a long way down it. */
+const DECK_GAP = new Color('#070b0e')
 const LEAVES = [new Color('#344d48'), new Color('#485546'), new Color('#5a4b57')]
 /** Down in the Drowned Mile, where the only green left is the kind that likes it. */
 const KELP = new Color('#3c6b52')
@@ -361,6 +383,124 @@ function addReeds(mesh: CourseMesh, track: Track, s: number, side: number, seed:
 
 
 /**
+ * The deck of the Swaying Span: boards across, on two beams, over nothing.
+ *
+ * ===========================================================================
+ * **A bridge should not have a road on it.** Everything else about this span
+ * was built first — the pylons, the catenaries, the hangers, the rope along
+ * each edge — and all of it was standing over the same worn paving as the
+ * causeway, which made it decoration rather than construction.
+ *
+ * Boards laid crosswise are the whole answer, and they do three things at once
+ * that a painted surface cannot:
+ *
+ *   **They say bridge instantly**, because nothing else is built that way.
+ *
+ *   **They give the section its own rhythm.** The Moonbreak already makes
+ *   speed legible with edge stones going past at the side; this puts the same
+ *   metronome directly under the car, and much faster. Crossing the span
+ *   *sounds* different to the eye.
+ *
+ *   **They put the drop where you can see it.** The dark between two boards is
+ *   real geometry, not a line drawn on a surface, and it is the colour of the
+ *   water a long way underneath.
+ *
+ * **Laid on a solid deck rather than over open air**, which is the one
+ * concession. Genuine gaps would be genuine holes, and a hundred and thirty
+ * thousand holes seen at forty metres a second through a renderer with
+ * antialiasing switched off is a shimmering mess at any distance past thirty
+ * metres. The plate underneath is painted the colour of the dark, the boards
+ * stand six centimetres proud of it, and what you get is the reading of a
+ * plank deck without the strobing.
+ *
+ * All of it goes through onSwayingRoad, so the boards roll with the bridge
+ * and the hangers stay attached to them.
+ * ===========================================================================
+ */
+function addSpanDeck(
+  meshes: CourseMesh[],
+  track: Track,
+  chunkFor: (s: number) => number,
+) {
+  const { from, to } = MOONBREAK.span
+  /** Board pitch. Close enough to blur into a rhythm at speed, not a texture. */
+  const PITCH = 0.62
+  const road = emptyRoad()
+  const basis: RoadBasis = { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 }
+
+  let board = 0
+  for (let s = from; s < to; s += PITCH) {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    const mesh = meshes[chunkFor(s)]
+    mesh.onSwayingRoad(road, basis, s)
+    /*
+      Weathered unevenly, and the same board is the same shade every time the
+      course is built — hash3 of its index, not a random per run. A deck that
+      re-dapples itself between two runs of the same road is a deck you notice.
+    */
+    const grain = hash3(board, 3, 11)
+    tint.copy(DECK).lerp(DECK_WORN, grain * 0.85)
+    // One board in nine is a replacement, and paler for it.
+    if (board % 9 === 4) tint.lerp(DECK_WORN, 0.6)
+    tint.multiplyScalar(0.9 + hash3(board, 7, 2) * 0.16)
+    addBox(
+      mesh,
+      road,
+      basis,
+      0,
+      0.05,
+      // Half a metre of board, twelve centimetres of dark between. Any tighter
+      // and the slots close up at distance and it goes back to being a surface.
+      PITCH * 0.40,
+      road.width + vergeWidth(road.room) * 0.5,
+      0.06,
+      tint.clone(),
+      /*
+        Smooth, and the number matters more than it looks.
+
+        The mineral veins in the shared rock shader are gated on roughness —
+        `vein *= smoothstep(0.28, 0.72, rough)` — which is why the road surface
+        (0.08) has none and the banks either side (0.9) are full of them. The
+        boards went in at 0.7 and came out with quartz seams running across the
+        grain, which is a thing wood does not do.
+      */
+      0.16,
+    )
+    board++
+    mesh.onSolidGround()
+  }
+
+  /*
+    And the two beams the boards are lying on, running the length of it just
+    inside each edge. Without them the boards float: a plank deck is boards on
+    stringers, and the stringers are the half of it you only notice when they
+    are missing.
+  */
+  for (let s = from; s < to; s += 4) {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    const mesh = meshes[chunkFor(s)]
+    mesh.onSwayingRoad(road, basis, s)
+    for (const side of [-1, 1]) {
+      addBox(
+        mesh,
+        road,
+        basis,
+        side * (road.width - 0.5),
+        -0.24,
+        2.05,
+        0.22,
+        0.3,
+        BARK,
+        0.2,
+      )
+    }
+    mesh.onSolidGround()
+  }
+}
+
+/**
  * The Swaying Span's rigging: two pylons a bay, a cable between them, and the
  * hangers that hold the deck up off it.
  *
@@ -559,10 +699,34 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
         const roadSurface = k >= 2 && k <= 10
         const roadEdge = k === 2 || k === 10
         const bankTop = k === 1 || k === 11
+        /*
+          On the span there is no road, because it is not a road.
+
+          =================================================================
+          The rigging went up first — pylons, cables, hangers, a rope along
+          each edge — and left the thing they were holding up as the same
+          worn paving as the causeway either side of it. Which is a bridge in
+          name only: you could see the suspension out of the side windows and
+          the surface under the car had not changed at all, so what it read as
+          was a road with some decoration standing beside it.
+
+          So the deck is boards now. What is drawn *here* is only what is
+          underneath them — dark, unlit, the drop — and the boards themselves
+          are laid on top in addSpanDeck. The two together are what makes it
+          a deck rather than a texture: the gap between two planks is real
+          geometry with real dark in it, and at speed the boards going past
+          are the whole feel of the section.
+          =================================================================
+        */
+        const onTheSpan = s > MOONBREAK.span.from - 2 && s < MOONBREAK.span.to + 2
         let color = BANK_LOW
         let wet = road.wet * 0.48
         let rough = 0.9
-        if (roadEdge) {
+        if (onTheSpan && (roadSurface || roadEdge)) {
+          color = DECK_GAP
+          wet = road.wet * 0.3
+          rough = 0.85
+        } else if (roadEdge) {
           tint.copy(PALE_STONE).multiplyScalar(0.78 + hash3(ring, k, 4) * 0.18)
           color = tint
           wet = road.wet * 0.72
@@ -611,14 +775,19 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
   const chunkFor = (s: number) => Math.max(0, Math.min(chunkCount - 1, Math.floor(s / CHUNK)))
 
   addSpanRig(meshes, track, chunkFor)
+  addSpanDeck(meshes, track, chunkFor)
 
   // Low pale stones mark the drop without turning the high road into a modern
   // guardrail. Their rhythm is what makes acceleration visible in open space.
   for (let s = 26; s < track.finishAt - 24; s += 15) {
     const at = roadAt(track, s)
     const frame = basisAt(at, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
-    // On the span these mark the edge of a deck that is moving, so they move.
-    meshes[chunkFor(s)].onSwayingRoad(at, frame, s)
+    /*
+      Not on the span. These are the causeway's kerb stones, and a bridge made
+      of rope and boards has no business having cut stone bolted along it — the
+      rope rail in addSpanRig is what marks that edge.
+    */
+    if (s > MOONBREAK.span.from - 6 && s < MOONBREAK.span.to + 6) continue
     for (const side of [-1, 1]) {
       addBox(
         meshes[chunkFor(s)],
@@ -632,7 +801,6 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
         PALE_STONE,
       )
     }
-    meshes[chunkFor(s)].onSolidGround()
   }
 
   for (const s of MOONBREAK.arches) {
@@ -967,6 +1135,8 @@ const MOON = new Vector3(-420, 245, 980)
 
 /** Sky, moon and the water all the causeway pieces rise out of — or go under. */
 export function MoonbreakWorld({ track }: { track: Track }) {
+  const skyRef = useRef<Mesh>(null)
+  const moonRef = useRef<Mesh>(null)
   const sky = useMemo(
     () =>
       new ShaderMaterial({
@@ -1002,7 +1172,11 @@ export function MoonbreakWorld({ track }: { track: Track }) {
     water.dispose()
   }, [sky, water])
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
+    // See the notes on the two meshes below: both are held at a fixed offset
+    // from the camera so neither can ever cross the far plane.
+    skyRef.current?.position.copy(camera.position)
+    moonRef.current?.position.copy(camera.position).add(MOON)
     water.uniforms.uTime.value += Math.min(0.05, delta)
     water.uniforms.uDeep.value = deep.at
     water.uniforms.uFogColor.value.copy(deep.fog)
@@ -1015,13 +1189,50 @@ export function MoonbreakWorld({ track }: { track: Track }) {
   return (
     <>
       <MoonbreakSound track={track} />
-      <mesh frustumCulled={false} material={sky}>
-        <sphereGeometry args={[2400, 28, 16]} />
+      {/*
+        Sixteen hundred metres, and it travels with you.
+
+        =====================================================================
+        **This was the pale shape in the Drowned Mile.** The dome was a
+        twenty-four hundred metre sphere standing at the world origin, and the
+        camera's far plane is also twenty-four hundred — so the moment the car
+        was any distance from the origin at all, the far side of the sphere was
+        further away than the camera can see and was clipped away mid-triangle.
+
+        What is left of a clipped sphere is a cap with a hard polygonal edge,
+        because the dome is twenty-eight segments around: a pale slab hanging
+        across the road, its outline following the tessellation, moving and
+        shrinking as the car's distance to the sphere changed, and gone when
+        the whole thing finally fell outside. It read as a rectangle of light
+        with nothing casting it.
+
+        It is worst in the Drowned Mile for a reason that has nothing to do
+        with the Drowned Mile: down there the fog is almost black, so the one
+        surface in the frame that does *not* fade with distance is the only
+        bright thing in it, and its edge is the only edge.
+
+        A dome has to be inside the far plane from wherever the camera actually
+        is, and on a road nearly four kilometres long the only way to guarantee
+        that is to carry it — which is what the Stormcrown's sky already does,
+        for exactly this reason and after exactly this bug.
+        =====================================================================
+      */}
+      <mesh ref={skyRef} frustumCulled={false} material={sky}>
+        <sphereGeometry args={[1600, 28, 16]} />
       </mesh>
       <mesh position={[0, WATER_Y, 0]} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} material={water}>
         <planeGeometry args={[4200, 4200]} />
       </mesh>
-      <mesh position={MOON.toArray()} frustumCulled={false}>
+      {/*
+        And the moon goes with it, for the same reason and one more.
+
+        At eleven hundred metres from the origin it was inside the far plane at
+        the start line and outside it by the far end of the road, so it winked
+        out somewhere down the causeway. Carried, it is always eleven hundred
+        metres away in a fixed direction — which is also what a moon *is*: a
+        thing that does not move when you do.
+      */}
+      <mesh ref={moonRef} frustumCulled={false}>
         <sphereGeometry args={[54, 24, 18]} />
         <meshBasicMaterial color="#d9dfd3" fog={false} />
       </mesh>

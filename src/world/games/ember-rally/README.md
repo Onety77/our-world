@@ -320,6 +320,18 @@ it holds, which is what you actually watch. The wave *travels* along the span,
 so how far it has rolled when you reach a given plank depends on how fast you
 got there, and it cannot be learned as "lean left here".
 
+**And it is built out of bridge.** The rigging went up first — pylons,
+catenaries, hangers, a rope along each edge — over the same worn paving as the
+causeway either side, which made all of it decoration standing beside a road.
+The deck is boards now: half a metre of timber across, twelve centimetres of
+dark between, on two stringers. It reads as a bridge instantly because nothing
+else is built that way, it puts the drop where you can see it, and it gives the
+section its own metronome — the Moonbreak already makes speed legible with edge
+stones going past at the side, and this is the same trick directly under the
+car and much faster. Laid on a dark solid plate rather than over open air: real
+gaps are real holes, and four hundred and forty of them at forty metres a
+second with antialiasing off is a shimmer, not a bridge.
+
 **Height.** Thirty metres up the Sky Stair to a crest that turns while you
 cannot see over it, then the Fall gives all of it back at ten per cent into the
 Moonhook — arriving somewhere tight while still going downhill, which is the

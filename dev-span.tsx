@@ -32,6 +32,8 @@ import { buildMoonbreak, MoonbreakWorld } from '@/world/games/ember-rally/Moonbr
 import { buildTunnel } from '@/world/games/ember-rally/geometry'
 import { buildStormcrown, StormcrownWorld } from '@/world/games/ember-rally/Stormcrown'
 import { storm } from '@/world/games/ember-rally/weather'
+import { deep } from '@/world/games/ember-rally/depth'
+import { sunkAt } from '@/world/games/ember-rally/track'
 import { galeStrengthAt, stormAt } from '@/world/games/ember-rally/track'
 import { basisAt, roadPoint } from '@/world/games/ember-rally/geometry'
 import { MOONBREAK, makeTrack, roadAt } from '@/world/games/ember-rally/track'
@@ -119,6 +121,26 @@ export default function Span() {
       lights.uniforms.uFogColor.value.set('#1b2327').lerp(new Color('#b9c3c4'), cloud).lerp(new Color('#0b1220'), high)
       lights.uniforms.uFogNear.value = mix3(14, 5, 34)
       lights.uniforms.uFogFar.value = mix3(60, 32, 900)
+    } else if (STAGE === 'moonbreak') {
+      /*
+        Same argument as the Stormcrown's: the race blends the Moonbreak's light
+        between above the water and under it, and writes the result out to
+        `deep` for the glass, the shoals and the silt, which are the only things
+        in either road that do not go through the shared light block. A viewer
+        that leaves `deep.at` at zero draws the Drowned Mile as a lit plastic
+        pipe in open air, which is not what anybody is looking at it to see.
+      */
+      const t = params.has('day') ? 0 : sunkAt(track, AT + 8)
+      lights.uniforms.uAmbient.value.set('#a3b2c4').lerp(new Color('#2b5763'), t)
+      lights.uniforms.uVeinColor.value.set('#8bcfc4').lerp(new Color('#9fe6dc'), t)
+      lights.uniforms.uFogColor.value.set('#172131').lerp(new Color('#04161c'), t)
+      lights.uniforms.uFogNear.value = 62 + (12 - 62) * t
+      lights.uniforms.uFogFar.value = 235 + (78 - 235) * t
+      deep.at = t
+      deep.s = AT
+      deep.fog.copy(lights.uniforms.uFogColor.value)
+      deep.near = lights.uniforms.uFogNear.value
+      deep.far = lights.uniforms.uFogFar.value
     } else {
       lights.uniforms.uAmbient.value.set(params.has('day') ? '#9fb3c4' : '#4a5b72')
       lights.uniforms.uFogNear.value = 60

@@ -2609,10 +2609,19 @@ function dressTrack(track: Track, rng: () => number) {
 
   track.lanterns.sort((a, b) => a.s - b.s)
 
-  // Water off the seeps, pooling where the stone is wet.
+  /*
+    Water off the seeps, pooling where the stone is wet.
+
+    Not on the Swaying Span, which is among the wettest stretches of the road
+    and has no stone on it: a deck of boards with twelve centimetres of dark
+    between each pair does not hold a puddle, it drains. They were pooling on
+    it, which is the sort of detail that stays invisible right up until the
+    surface underneath stops being a surface.
+  */
   for (let s = 40; s < track.length - 40; s += 9 + rng() * 22) {
     const i = Math.min(count - 1, Math.round(s / STEP))
     if (track.wet[i] < 0.3) continue
+    if (s > MOONBREAK.span.from - 4 && s < MOONBREAK.span.to + 4) continue
     track.puddles.push({
       s,
       n: (rng() * 2 - 1) * track.width[i] * 0.8,
