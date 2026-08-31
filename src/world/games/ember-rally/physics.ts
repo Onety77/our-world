@@ -623,10 +623,34 @@ const SLIP_MARGIN = 0.05
  * steering ratio follows, instead of a table quietly going out of date.
  * ---------------------------------------------------------------------------
  */
-function maxSteer(v: number): number {
+function maxSteer(v: number, catching = 0): number {
   // Floored, or standing still asks for infinite lock.
   const usable = (WHEELBASE * TUNE.grip * TUNE.gravity) / Math.max(30, v * v)
-  return Math.min(TUNE.steerLock, (usable + SLIP_MARGIN) * TUNE.turnInBite)
+  const gripping = (usable + SLIP_MARGIN) * TUNE.turnInBite
+  /*
+    ==========================================================================
+    And however much more is needed to point the wheels where the car is going.
+
+    **This is why a slide could not be caught.** The lock above is the angle at
+    which the front tyres make their most lateral force, which is the right
+    ceiling for *turning* — past it you are scrubbing, not steering. At thirty
+    metres a second that angle is about six degrees.
+
+    Six degrees is nothing like enough to catch anything. When the back steps
+    out at forty degrees of slip, catching it means pointing the front wheels
+    down the road the car is actually travelling — that is what opposite lock
+    *is*, and it is twenty or thirty degrees. The car was not refusing to
+    answer the wheel; the wheel was not allowed to turn far enough, which from
+    the seat is the same thing. It is exactly "it locks in and there is nothing
+    you can do about it".
+
+    So the slide's own angle is allowed on top, and only when the steering is
+    *against* the slide — see the call site. Turning further into one is a
+    decision and gets no extra rope. In ordinary cornering the car is barely
+    sideways, so this is barely anything and nothing changes.
+    ==========================================================================
+  */
+  return Math.min(TUNE.steerLock, gripping + Math.abs(catching))
 }
 
 /**
@@ -742,7 +766,22 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     an unstable car is a sign the car needs fixing, not hiding.
   */
   const steerCommand = Math.max(-1, Math.min(1, input.steer))
-  const wanted = steerCommand * maxSteer(v)
+  /*
+    How sideways the car is, and therefore how much rope the steering gets.
+
+    Turning right gives a positive steer and a *negative* slip angle — the car
+    rotates further than its velocity does — so catching a slide is the case
+    where the two share a sign: the wheel is being turned toward where the car
+    is actually travelling. Ordinary turn-in has them opposite and gets nothing
+    extra, which matters, because handing out lock there would only help the
+    car rotate further into the corner it is already rotating into.
+  */
+  const sliding = slipOf(car)
+  const catching =
+    steerCommand !== 0 && Math.sign(steerCommand) === Math.sign(sliding)
+      ? Math.abs(sliding)
+      : 0
+  const wanted = steerCommand * maxSteer(v, catching)
   // The rack itself. Quick, because the hand in `controls.ts` is already the
   // slow part and two lags in series is a car that answers questions late.
   car.steerAngle += (wanted - car.steerAngle) * (1 - Math.exp(-11.5 * dt))
@@ -760,7 +799,38 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   // in opposite directions, and the player would feel only the argument.
   if (car.driftBlend < 0.02 && Math.abs(beta) > TUNE.spinProtection * 0.72) {
     const over = (Math.abs(beta) - TUNE.spinProtection * 0.72) / (TUNE.spinProtection * 0.28)
-    const correction = -Math.sign(beta) * Math.min(1, over) * maxSteer(v) * TUNE.autoCountersteer
+    /*
+      ========================================================================
+      The hand stands down in proportion to the hand already on the wheel.
+
+      **This is what made a lift impossible to catch.** Come off the throttle
+      into a corner, the back steps out past forty degrees of slip, and this
+      applies a correction — which is right, and is the only reason the car can
+      be driven with two arrow keys. What it did not do is notice that the
+      driver was *already* correcting. Both hands then pulled the same way, the
+      car whipped through straight and went out the other side: measured, it
+      crossed 6.7 metres of an eleven metre road, which is one wall and then
+      the other. Word for word the complaint — it locks in, will not listen,
+      and hits the far side.
+
+      So the assist asks how much of its own correction is already being
+      supplied. Hold full opposite lock and it adds nothing, because you have
+      it. Do nothing and it does exactly what it always did. In between it
+      makes up the difference, which is the honest version of what it was
+      always claiming to be.
+
+      Deliberately only counts steering that *opposes* the slide. Steering
+      further into it is a decision — usually the beginning of a drift — and
+      this has no business reading that as help and standing down.
+      ========================================================================
+    */
+    const opposing = Math.max(0, Math.min(1, steerCommand * -Math.sign(beta)))
+    const correction =
+      -Math.sign(beta) *
+      Math.min(1, over) *
+      maxSteer(v, Math.abs(beta)) *
+      TUNE.autoCountersteer *
+      (1 - opposing)
     car.steerAngle += correction * (1 - Math.exp(-9 * dt))
     car.caught = over > 0.5
   }
