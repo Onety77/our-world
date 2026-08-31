@@ -209,7 +209,9 @@ const band = (b: Partial<Band> & { length: number }): Band => ({
  * actually happens, and the lanterns are hung accordingly.
  */
 const chamber: Piece = (rng, dir) => {
-  const len = 62 + rng() * 34
+  // Shorter than it was. A room still has to be a room, but every metre of it
+  // is a metre not spent on a corner, and the road is not getting any longer.
+  const len = 46 + rng() * 24
   return [
     band({ length: 18, width: 5.9, ceiling: 8.4, room: 0.6, curv: dir * 0.004 }),
     band({ length: len, width: 7.6, ceiling: 12.5, room: 1, curv: dir * 0.006 }),
@@ -225,7 +227,7 @@ const chamber: Piece = (rng, dir) => {
  */
 const throat: Piece = (rng, dir) => [
   band({
-    length: 46 + rng() * 34,
+    length: 34 + rng() * 22,
     width: 3.35,
     ceiling: 3.5,
     room: 0,
@@ -234,13 +236,123 @@ const throat: Piece = (rng, dir) => [
   }),
 ]
 
-/** A long fast curve. Lift, do not brake. */
+/**
+ * A long fast curve. Lift, do not brake.
+ *
+ * ---------------------------------------------------------------------------
+ * **It used to be free, and it is the most common piece on the road.**
+ *
+ * The car has 1.78g and tops out at about 125 km/h down here, which puts the
+ * flat-out radius at sixty-nine metres: anything opener than that can be taken
+ * without lifting at all. This was dealt at 62 to 117 m — so most sweeps asked
+ * for nothing, and the piece the road is mostly made of was a corridor with a
+ * curve drawn on it.
+ *
+ * Forty-four to sixty-six puts every one of them under the line. The open end
+ * is now a lift and the tight end is a real brake, and because this is the most
+ * common piece, that one change is most of what makes the road ask questions.
+ *
+ * Narrower too, because width only matters where the speed is. Five metres of
+ * half-road at a hundred and twenty is room to be sloppy in.
+ * ---------------------------------------------------------------------------
+ */
 const sweep: Piece = (rng, dir) => {
-  const radius = 62 + rng() * 55
+  const radius = 44 + rng() * 22
   return [
-    band({ length: 22, curv: dir / (radius * 2.4), width: 5, ceiling: 6.4, room: 0.4 }),
-    band({ length: 58 + rng() * 46, curv: dir / radius, width: 5, ceiling: 6.6, room: 0.45 }),
-    band({ length: 22, curv: dir / (radius * 2.2), width: 5, ceiling: 6.4, room: 0.4 }),
+    band({ length: 22, curv: dir / (radius * 2.4), width: 4.5, ceiling: 6.4, room: 0.35 }),
+    band({ length: 52 + rng() * 38, curv: dir / radius, width: 4.3, ceiling: 6.6, room: 0.34 }),
+    band({ length: 22, curv: dir / (radius * 2.2), width: 4.5, ceiling: 6.4, room: 0.35 }),
+  ]
+}
+
+/**
+ * The closing throat: it keeps turning after you have committed to it.
+ *
+ * ---------------------------------------------------------------------------
+ * Opens at seventy-odd metres, which is flat out, and shuts to the middle
+ * twenties, which is not. The radius falls on a curve rather than a line, so
+ * most of the tightening happens late — you are already in it, already at the
+ * speed the entry suggested, and the corner is still going.
+ *
+ * The walls come in with it, from eleven metres of road to seven and a half.
+ * That is the punishment: there is nowhere to run wide to, because the place
+ * you would have run to has become rock.
+ *
+ * This is the piece that teaches braking. Nothing else on the road makes the
+ * cost of arriving too fast so immediate.
+ * ---------------------------------------------------------------------------
+ */
+const closing: Piece = (rng, dir) => {
+  const open = 68 + rng() * 14
+  const shut = 24 + rng() * 5
+  const bands: Band[] = [
+    band({ length: 20, curv: dir / (open * 2), width: 5.4, ceiling: 6.8, room: 0.42, wet: 0.15 }),
+  ]
+  const steps = 5
+  for (let i = 0; i < steps; i++) {
+    // Squared, so it holds its radius and then shuts, rather than easing round.
+    const t = (i + 1) / steps
+    const radius = open + (shut - open) * t * t
+    bands.push(band({
+      length: 22 - t * 6,
+      curv: dir / radius,
+      width: 5.4 + (3.75 - 5.4) * t,
+      ceiling: 6.8 - t * 1.6,
+      room: 0.42 - t * 0.36,
+      wet: 0.15 + t * 0.25,
+    }))
+  }
+  bands.push(band({ length: 18, curv: dir * 0.004, width: 4.2, ceiling: 5.2, room: 0.14, wet: 0.3 }))
+  return bands
+}
+
+/**
+ * The spiral: too tight to be steered round, so it has to be rotated.
+ *
+ * ---------------------------------------------------------------------------
+ * The same radius as the old hairpin and a third less road. That is the whole
+ * difference, and it is the difference between a corner you brake for and a
+ * corner you have to *place the car in*.
+ *
+ * The hairpin was deliberately given more stone than it needed, on the
+ * reasoning that a corner you can only take one way is one you stop thinking
+ * about. That was right when it was the hardest thing here. It is not any more,
+ * and something on this road has to be the corner where the handbrake is the
+ * answer — otherwise the best thing the car does is decoration.
+ * ---------------------------------------------------------------------------
+ */
+const spiral: Piece = (rng, dir) => {
+  const radius = 23 + rng() * 4
+  return [
+    band({ length: 22, curv: dir / (radius * 3), width: 4.6, ceiling: 6, room: 0.3, wet: 0.3 }),
+    band({ length: 16, curv: dir / (radius * 1.6), width: 4.3, ceiling: 5.6, room: 0.2, wet: 0.3 }),
+    band({ length: 44 + rng() * 14, curv: dir / radius, width: 4.2, ceiling: 5.4, room: 0.12, wet: 0.25 }),
+    band({ length: 18, curv: dir / (radius * 1.7), width: 4.4, ceiling: 5.6, room: 0.2 }),
+    band({ length: 20, curv: dir * 0.003, width: 4.7, ceiling: 6.1, room: 0.32 }),
+  ]
+}
+
+/**
+ * The seep: the grip is not there where you were going to use it.
+ *
+ * ---------------------------------------------------------------------------
+ * An ordinary middling corner with water across its apex. Wet stone is
+ * fourteen per cent less grip in this car — see `surfaceGrip` — which is not a
+ * lot until it arrives exactly where you had planned to lean on the tyres.
+ *
+ * This was going to be an off-camber corner instead, until I checked: `bank`
+ * does not appear anywhere in the physics. It rolls the road for the eye and
+ * changes nothing about how the car behaves, so an off-camber corner would have
+ * looked treacherous and driven identically. Water is real, and it is also more
+ * honest about where it is: you can see it shine before you are in it.
+ * ---------------------------------------------------------------------------
+ */
+const seep: Piece = (rng, dir) => {
+  const radius = 34 + rng() * 10
+  return [
+    band({ length: 26, curv: dir / (radius * 2.2), width: 4.8, ceiling: 5.8, room: 0.3, wet: 0.4 }),
+    band({ length: 32 + rng() * 12, curv: dir / radius, width: 4.5, ceiling: 5.3, room: 0.18, wet: 1 }),
+    band({ length: 22, curv: dir / (radius * 2), width: 4.8, ceiling: 5.8, room: 0.3, wet: 0.7 }),
   ]
 }
 
@@ -292,7 +404,7 @@ const rise: Piece = (rng, dir) => [
 
 /** Nothing at all, for a moment. Roads need these or none of them read. */
 const runway: Piece = (rng, dir) => [
-  band({ length: 55 + rng() * 45, curv: dir * (rng() * 0.004), width: 4.7, ceiling: 6 }),
+  band({ length: 32 + rng() * 26, curv: dir * (rng() * 0.004), width: 4.7, ceiling: 6 }),
 ]
 
 interface Entry {
@@ -302,15 +414,31 @@ interface Entry {
 }
 
 const LIBRARY: Entry[] = [
-  { name: 'sweep', make: sweep, weight: 3 },
-  { name: 'hairpin', make: hairpin, weight: 2 },
-  { name: 'chicane', make: chicane, weight: 2.4 },
-  { name: 'throat', make: throat, weight: 2 },
-  { name: 'descent', make: descent, weight: 1.6 },
-  { name: 'rise', make: rise, weight: 1.2 },
-  { name: 'runway', make: runway, weight: 1.4 },
-  { name: 'chamber', make: chamber, weight: 1.6 },
+  { name: 'sweep', make: sweep, weight: 2.6 },
+  { name: 'hairpin', make: hairpin, weight: 1.8 },
+  { name: 'chicane', make: chicane, weight: 2.2 },
+  { name: 'closing', make: closing, weight: 1.8 },
+  { name: 'spiral', make: spiral, weight: 1.5 },
+  { name: 'seep', make: seep, weight: 1.4 },
+  { name: 'throat', make: throat, weight: 1.5 },
+  { name: 'descent', make: descent, weight: 1.5 },
+  { name: 'rise', make: rise, weight: 1 },
+  { name: 'runway', make: runway, weight: 0.8 },
+  { name: 'chamber', make: chamber, weight: 1.1 },
 ]
+
+/**
+ * The three groups the grammar reasons about.
+ *
+ * `hard` is where a run is lost. `fast` is what you have to be coming off for a
+ * hard piece to hurt — arriving at the closing throat from a throat is a corner;
+ * arriving at it off a sweep is a *problem*. `easy` is everything that asks
+ * nothing, and the point of naming them is to stop three of them happening in a
+ * row, which is how the old road produced its long dull stretches.
+ */
+const HARD = new Set(['closing', 'spiral', 'seep'])
+const FAST = new Set(['sweep', 'runway', 'descent', 'chamber'])
+const EASY = new Set(['runway', 'chamber', 'throat', 'rise'])
 
 /**
  * Roughly how long the whole road should be, metres.
@@ -366,8 +494,54 @@ const START = 18
  * eight hundred metres of the same handedness. These are the rules that were
  * actually worth having.
  */
-function choose(rng: () => number, previous: string[], sinceChamber: number): Entry {
+/**
+ * Which piece comes next.
+ *
+ * ===========================================================================
+ * **A hard corner is only hard because of what you arrive off.** The old
+ * grammar was a bag with four "not twice in a row" rules in front of it, and
+ * that produces a road where every piece is its own small problem and none of
+ * them cost you the next one. It also, twice in four seeds, produced a road
+ * with nothing difficult in it at all: the tightest bend came out at 26 m on
+ * one and 36 m on another, and only one of those is a corner.
+ *
+ * So three things are guaranteed rather than left to the shuffle:
+ *
+ *   **hard pieces are entered fast.** A closing throat off a throat is a
+ *   corner. A closing throat off a sweep is a problem, because you are already
+ *   carrying speed you now have to lose in a road that is getting narrower.
+ *
+ *   **a bad exit costs twice.** The spiral is followed by something that needs
+ *   the car placed — a throat or a chicane — so getting the rotation wrong does
+ *   not just cost the corner, it costs the one after it.
+ *
+ *   **every road has the hard ones in it, and late.** A closing throat and a
+ *   spiral are forced in if the shuffle has not produced them by two thirds of
+ *   the way down, and hard pieces weigh more heavily in the last third. A run
+ *   should get harder as it goes, so a clean one is something you finish rather
+ *   than something you started well.
+ *
+ * Nothing here is random-hard. Every one of these arrives behind the same
+ * lantern grammar it always does, so the tenth run is better because you know
+ * the road — see `dressTrack`.
+ * ===========================================================================
+ */
+function choose(
+  rng: () => number,
+  previous: string[],
+  sinceChamber: number,
+  /** 0..1 of the way down the road. Hard pieces weigh more toward the end. */
+  progress: number,
+  /** What has been laid so far, so the road can be made to contain a test. */
+  laid: Set<string>,
+): Entry {
   const last = previous.at(-1)
+  const easyRun = (() => {
+    let run = 0
+    for (let i = previous.length - 1; i >= 0 && EASY.has(previous[i]); i--) run++
+    return run
+  })()
+
   const usable = LIBRARY.filter((entry) => {
     // Two hairpins back to back is not a road, it is a mistake typed twice.
     if (entry.name === 'hairpin' && last === 'hairpin') return false
@@ -375,6 +549,12 @@ function choose(rng: () => number, previous: string[], sinceChamber: number): En
     if (entry.name === 'chamber' && (last === 'chamber' || sinceChamber < 2)) return false
     if (entry.name === 'throat' && last === 'throat') return false
     if (entry.name === 'descent' && last === 'descent') return false
+    // The hard three are only hard off something quick, and never twice over:
+    // back to back they stop being events and start being a slalom.
+    if (HARD.has(entry.name) && (last === undefined || !FAST.has(last))) return false
+    // Three easy pieces in a row is the long dull stretch this road used to
+    // have in the middle of it.
+    if (EASY.has(entry.name) && easyRun >= 2) return false
     return true
   })
 
@@ -382,10 +562,34 @@ function choose(rng: () => number, previous: string[], sinceChamber: number): En
 
   // The room has been closed in for a while — open it.
   if (sinceChamber >= 5) return LIBRARY.find((e) => e.name === 'chamber')!
+
+  /*
+    A road that has not produced a test by two thirds of the way is made to.
+
+    Reached by laying the fast piece it needs to be entered off first, so this
+    never breaks the rule above — it takes two goes rather than one, which is
+    also why it starts asking with a third of the road still to run.
+  */
+  const owed = ['closing', 'spiral'].filter((name) => !laid.has(name))
+  if (progress > 0.62 && owed.length > 0) {
+    const want = usable.filter((e) => owed.includes(e.name))
+    if (want.length) return pickFrom(want)
+    const runUp = usable.filter((e) => FAST.has(e.name))
+    if (runUp.length) return pickFrom(runUp)
+  }
+
+  // Out of a spiral, something that has to be placed. A bad rotation should
+  // still be costing you a corner later.
+  if (last === 'spiral') {
+    const after = usable.filter((e) => e.name === 'throat' || e.name === 'chicane')
+    if (after.length) return pickFrom(after)
+  }
   // You arrive out of a descent carrying far too much speed. Give it somewhere
   // to go, or the piece is just a corridor that happens to slope.
   if (last === 'descent') {
-    const after = usable.filter((e) => e.name === 'hairpin' || e.name === 'chicane')
+    const after = usable.filter(
+      (e) => e.name === 'hairpin' || e.name === 'chicane' || HARD.has(e.name),
+    )
     if (after.length) return pickFrom(after)
   }
   // Out of a chamber, close it down again immediately. The contrast is the
@@ -395,10 +599,14 @@ function choose(rng: () => number, previous: string[], sinceChamber: number): En
     if (after.length) return pickFrom(after)
   }
 
-  const total = usable.reduce((sum, e) => sum + e.weight, 0)
+  // The last third leans on the hard three; the first third leaves them alone,
+  // so the road opens by letting you get up to speed and then asks for it back.
+  const lean = progress < 0.3 ? 0.55 : progress > 0.62 ? 1.7 : 1
+  const weigh = (e: Entry) => e.weight * (HARD.has(e.name) ? lean : 1)
+  const total = usable.reduce((sum, e) => sum + weigh(e), 0)
   let pick = rng() * total
   for (const entry of usable) {
-    pick -= entry.weight
+    pick -= weigh(entry)
     if (pick <= 0) return entry
   }
   return usable[usable.length - 1]
@@ -481,22 +689,6 @@ export function shortcutProgress(split: RootSplit, s: number): number {
   return clamp01((s - split.shortcut.from) / (split.shortcut.to - split.shortcut.from))
 }
 
-/** The mouth on the main road. Beyond it, the two roads share no geometry. */
-function splitBands(): Band[] {
-  return [
-    band({ length: 34, width: 4.4, ceiling: 5.4, room: 0.25, curv: 0.002, wet: 0.34 }),
-    // One chamber, just long enough to notice the low right-hand throat.
-    band({ length: 58, width: 7.4, ceiling: 9.2, room: 0.82, curv: -0.003, wet: 0.25 }),
-    // The ordinary road turns away. The hidden road does not follow it.
-    band({ length: 72, width: 5.1, ceiling: 6.1, room: 0.38, curv: -0.012, wet: 0.2 }),
-    band({ length: 58, width: 4.8, ceiling: 5.4, room: 0.22, curv: 0.008, wet: 0.38 }),
-    band({ length: 34, width: 4.5, ceiling: 5.1, room: 0.18, curv: 0.002, wet: 0.42 }),
-  ]
-}
-
-/** Filled in by `rootwayBands`; the independent road is built after sampling. */
-let dealtMouth: number | null = null
-
 function rootwayBands(seed: number): Band[] {
   const rng = random(seed ^ 0x51f2a3)
   const bands: Band[] = []
@@ -508,32 +700,36 @@ function rootwayBands(seed: number): Band[] {
   bands.push(band({ length: 34, width: 3.6, ceiling: 3.8, room: 0, curv: 0.004, wet: 0.3 }))
 
   const history: string[] = []
+  const laidPieces = new Set<string>()
   let sinceChamber = 3
   let dir = rng() < 0.5 ? -1 : 1
   let length = bands.reduce((sum, b) => sum + b.length, 0)
 
-  /* The Rootwake mouth goes in once, early enough to reach within thirty
-     dealt piece so the procedural road is never cut in half around it. */
-  const splitAfter = 480
-  let laid = false
-  dealtMouth = null
+  /*
+    ==========================================================================
+    There is no fork any more.
 
+    Rootwake was two hundred and fifty metres of dealt mouth and nine hundred
+    metres of hidden tunnel, and it came out of the road the day the ordinary
+    corners were sharpened. The tunnel is a curve drawn between two points on
+    the main road, and a main road with real corners in it brings those two
+    points close together in a straight line while leaving them just as far
+    apart along the tarmac — so the tunnel came out a third of the length its
+    features were drawn for, and every one of them folded. A three metre radius
+    in the throat, measured, on every seed.
+
+    Four separate fixes each moved the fold somewhere else rather than removing
+    it, which is what a symptom does. The cause is that the whole shape assumed
+    a road that no longer exists, and rebuilding it is its own piece of work
+    rather than a tail on this one.
+
+    What is left behind is a *better* road, not a poorer one: those two hundred
+    and fifty metres of mouth are now dealt as ordinary pieces, so the same
+    length of Rootway holds more corners than it did with the fork in it.
+    ==========================================================================
+  */
   while (length < TARGET - 120) {
-    if (!laid && length >= splitAfter) {
-      laid = true
-      const made = splitBands()
-      const from = length
-      bands.push(...made)
-      length += made.reduce((sum, b) => sum + b.length, 0)
-      dealtMouth = from + 34
-      // The cavern is a room, and the grammar's "do not follow a room with a
-      // room" rule applies to this one too.
-      history.push('chamber')
-      sinceChamber = 0
-      continue
-    }
-
-    const entry = choose(rng, history, sinceChamber)
+    const entry = choose(rng, history, sinceChamber, length / TARGET, laidPieces)
     // Alternate handedness most of the time. Always alternating reads as a
     // slalom; never alternating reads as a spiral.
     if (rng() < 0.74) dir = -dir
@@ -541,6 +737,7 @@ function rootwayBands(seed: number): Band[] {
     bands.push(...made)
     length += made.reduce((sum, b) => sum + b.length, 0)
     history.push(entry.name)
+    laidPieces.add(entry.name)
     sinceChamber = entry.name === 'chamber' ? 0 : sinceChamber + 1
   }
 
@@ -1137,10 +1334,6 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       stage === 'moonbreak' ? 0.12
       : stage === 'stormcrown' ? 0.4
       : 0.85,
-  }
-
-  if (stage === 'rootway' && dealtMouth !== null) {
-    track.split = makeRootSplit(track, dealtMouth)
   }
 
   if (stage === 'moonbreak') dressMoonbreak(track, random(seed ^ 0x6d2b79))
@@ -1789,203 +1982,6 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
  * The road then drops more than thirty metres below the ordinary cave and is
  * sampled into the same physical quantities understood by tyres and cameras.
  */
-function makeRootSplit(track: Track, from: number): RootSplit {
-  const dip = 34
-  const wild = 1
-  const deckWidth = 3.7
-  const deckCeiling = 3.62
-  const deckRoom = 0.035
-  const deckWet = 0.45
-  const portalN = 2.3
-  const commitAfter = 34
-  const separateAfter = 58
-  const to = Math.max(from + 900, track.finishAt - 285)
-  const span = to - from
-  const count = Math.floor(span / STEP) + 1
-  const x = new Float32Array(count)
-  const y = new Float32Array(count)
-  const z = new Float32Array(count)
-  const heading = new Float32Array(count)
-  const curv = new Float32Array(count)
-  const width = new Float32Array(count)
-  const ceiling = new Float32Array(count)
-  const room = new Float32Array(count)
-  const wet = new Float32Array(count)
-  const grade = new Float32Array(count)
-  const bank = new Float32Array(count)
-  const metric = new Float32Array(count)
-  const start = roadAt(track, from)
-  const end = roadAt(track, to)
-  const chordX = end.x - start.x
-  const chordZ = end.z - start.z
-  const chord = Math.max(1, Math.hypot(chordX, chordZ))
-  const sideX = -chordZ / chord
-  const sideZ = chordX / chord
-  // Hermite derivatives are expressed per normalized route, so a value of
-  // `span` means one world metre per shared progress metre at both portals.
-  // That keeps entry/rejoin speed continuous instead of catapulting the car
-  // through a compressed endpoint.
-  const throat = span
-  const startGrade = Math.max(-0.12, Math.min(0.12, start.grade))
-  const endGrade = Math.max(-0.12, Math.min(0.12, end.grade))
-  const separateAt = from + Math.max(commitAfter + 8, separateAfter)
-  const entryBegins = 12 / span
-  const entrySeparated = (separateAt - from) / span
-  const entrySettled = Math.min(0.19, entrySeparated + 96 / span)
-  const startRightX = -Math.cos(start.heading)
-  const startRightZ = Math.sin(start.heading)
-
-  const smoothstep = (value: number) => {
-    const held = clamp01(value)
-    return held * held * (3 - held * 2)
-  }
-
-  const point = (t: number, amplitude: number) => {
-    const startDX = Math.sin(start.heading) * throat
-    const startDZ = Math.cos(start.heading) * throat
-    const endDX = Math.sin(end.heading) * throat
-    const endDZ = Math.cos(end.heading) * throat
-    // These basis functions have a derivative of one at only their own end.
-    // Unlike a whole-span Hermite bend, they align each short portal throat
-    // without letting a random endpoint heading distort the road's middle.
-    const startAlign = t * (1 - t) ** 4
-    const endAlign = -(1 - t) * t ** 4
-    const fade = Math.sin(Math.PI * t) ** 2
-    // One broad hard S, followed by a tighter blind reverse. Their unequal
-    // weights stop the hidden road from feeling like a procedural slalom.
-    const hardGate = wild * -18 * Math.exp(-(((t - 0.37) / 0.075) ** 2))
-    const blindReverse = wild * 30 * Math.exp(-(((t - 0.69) / 0.055) ** 2))
-    const transverse = amplitude * fade * (
-      0.7 * Math.sin(Math.PI * 2 * t) +
-      0.24 * Math.sin(Math.PI * 4 * t) -
-      0.1 * Math.sin(Math.PI * 6 * t)
-    ) + hardGate + blindReverse
-    const depth = fade * (-dip - (dip / 34) * 7 * Math.sin(Math.PI * 3 * t) ** 2)
-    /*
-      A readable fork, rather than two tunnels born in the same place. This is
-      deliberately a small correction to the proven hidden route, not a new
-      entrance curve: it gives the right-hand throat room to read, then eases
-      away before the authored hard and very-hard corners.
-    */
-    const peelIn = smoothstep((t - entryBegins) / (entrySeparated - entryBegins))
-    const peelOut = 1 - smoothstep((t - entrySeparated) / (entrySettled - entrySeparated))
-    const entryPeel = 11 * peelIn * peelOut
-    return {
-      x: start.x + chordX * t + (startDX - chordX) * startAlign + (endDX - chordX) * endAlign + sideX * transverse + startRightX * entryPeel,
-      y: start.y + (end.y - start.y) * t +
-        (startGrade * throat - (end.y - start.y)) * startAlign +
-        (endGrade * throat - (end.y - start.y)) * endAlign + depth,
-      z: start.z + chordZ * t + (startDZ - chordZ) * startAlign + (endDZ - chordZ) * endAlign + sideZ * transverse + startRightZ * entryPeel,
-    }
-  }
-
-  const curveLength = (amplitude: number) => {
-    let total = 0
-    let previous = point(0, amplitude)
-    for (let i = 1; i < count; i++) {
-      const next = point(i / (count - 1), amplitude)
-      total += Math.hypot(next.x - previous.x, next.y - previous.y, next.z - previous.z)
-      previous = next
-    }
-    return total
-  }
-
-  // The road is physically shorter, but not by so much that simply finding it
-  // wins. Its hard S and blind reverse still have to be learned to earn the
-  // intended ten seconds.
-  const targetLength = Math.max(curveLength(0), span - 330)
-  let low = 0
-  let high = 220
-  while (curveLength(high) < targetLength && high < 900) high *= 1.45
-  for (let pass = 0; pass < 22; pass++) {
-    const middle = (low + high) * 0.5
-    if (curveLength(middle) < targetLength) low = middle
-    else high = middle
-  }
-  const amplitude = (low + high) * 0.5
-
-  for (let i = 0; i < count; i++) {
-    const t = i / (count - 1)
-    const sample = point(t, amplitude)
-    x[i] = sample.x
-    y[i] = sample.y
-    z[i] = sample.z
-    // Rootwake is the learned precision road: a narrow deck that leaves room
-    // to place the car and none to be loose in.
-    width[i] = deckWidth
-    ceiling[i] = deckCeiling + Math.sin(t * Math.PI * 7) * (deckCeiling * 0.066)
-    room[i] = deckRoom
-    wet[i] = deckWet + Math.sin(t * 13.1) * (deckWet * 0.36)
-  }
-
-  let previousHeading = 0
-  for (let i = 0; i < count; i++) {
-    const a = Math.max(0, i - 1)
-    const b = Math.min(count - 1, i + 1)
-    const dx = x[b] - x[a]
-    const dy = y[b] - y[a]
-    const dz = z[b] - z[a]
-    let angle = Math.atan2(dx, dz)
-    if (i > 0) {
-      while (angle - previousHeading > Math.PI) angle -= Math.PI * 2
-      while (angle - previousHeading < -Math.PI) angle += Math.PI * 2
-    }
-    heading[i] = angle
-    previousHeading = angle
-    const ds = Math.max(1, b - a)
-    const world = Math.max(0.25, Math.hypot(dx, dy, dz) / ds)
-    metric[i] = world
-    grade[i] = (dy / ds) / world
-  }
-
-  const rawLine = new Float32Array(count)
-  for (let i = 0; i < count; i++) {
-    const a = Math.max(0, i - 2)
-    const b = Math.min(count - 1, i + 2)
-    const distance = Math.max(0.5, ((metric[a] + metric[b]) * (b - a)) * 0.5)
-    curv[i] = -(heading[b] - heading[a]) / distance
-    // Keep restrained apex relief through the signature corners without letting
-    // them swell back to the width of an ordinary Rootway chamber.
-    width[i] += Math.min(0.7, Math.abs(curv[i]) * 19)
-    bank[i] = Math.max(-0.16, Math.min(0.16, -curv[i] * 4.4))
-    const usable = Math.max(0, width[i] - 1.25)
-    // The tunnel is too narrow for the broad road's full edge-to-apex line.
-    // A restrained apex still teaches the faster path without putting a
-    // correct wheel on the rock when the corner reverses.
-    rawLine[i] = Math.sign(curv[i]) * usable * Math.min(0.52, Math.abs(curv[i]) * 25)
-  }
-  const line = smooth(rawLine, 19, 2)
-
-  let shortcutLength = 0
-  for (let i = 1; i < count; i++) {
-    shortcutLength += Math.hypot(x[i] - x[i - 1], y[i] - y[i - 1], z[i] - z[i - 1])
-  }
-  const hardest = (fromFraction: number, toFraction: number) => {
-    let best = Math.floor(count * fromFraction)
-    for (let i = best + 1; i < count * toFraction; i++) {
-      if (Math.abs(curv[i]) > Math.abs(curv[best])) best = i
-    }
-    return from + best * STEP
-  }
-
-  return {
-    from,
-    to,
-    shortcut: { from, to },
-    // The choice is made while both cars are still on the common, wide floor.
-    // The branch only starts pulling hard away after this point.
-    commitAt: from + commitAfter,
-    separateAt,
-    rejoinAt: to - 2,
-    portalN,
-    mainLength: span,
-    shortcutLength,
-    hardAt: hardest(0.2, 0.52),
-    veryHardAt: hardest(0.52, 0.84),
-    x, y, z, heading, curv, width, ceiling, room, wet, grade, bank, line, metric,
-  }
-}
-
 /** Read the hidden tunnel, whose arrays begin at `split.from`. */
 export function shortcutRoadAt(split: RootSplit, s: number, out?: RoadAt): RoadAt {
   const last = split.x.length - 1

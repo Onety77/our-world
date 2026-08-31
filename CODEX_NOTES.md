@@ -599,7 +599,7 @@ shared-file changes, measurements, and anything another agent should preserve.
   isolation, auth-change cleanup, explicit close cleanup and Realtime Database
   `onDisconnect` removal. The previous `presence.driving` route remains as a
   temporary compatibility fallback for a phone on the earlier cached build.
-- Added session-only production diagnostics to the car tab in `/dev7731`:
+- Added production diagnostics for the latest race to `/dev7731`:
   actual queue/flush/receive counts, missing and reordered sequences, arrival
   gap, jitter, delivery age, stream errors, adaptive delay and dry-frame rate.
   It stores no positions, room names or route history.
@@ -609,3 +609,22 @@ shared-file changes, measurements, and anything another agent should preserve.
 - `npm run rally-stream`, `npm run wire`, `npm run rally`, `npm run lobby`,
   TypeScript, the rule JSON checks and the final production build pass. The
   established Firebase chunk-size warning remains unchanged.
+
+## 31 August 2026 - Codex - Wheel-to-wheel smoothing, Step 2
+
+- Replaced straight-line opponent interpolation with bounded, monotone cubic
+  motion. The direct stream's velocity shapes acceleration, braking and lane
+  changes between real positions without being allowed to overshoot either
+  reported point or reverse the car unexpectedly.
+- Gave the live opponent continuous wheel speed, real transmitted front-wheel
+  steering and turn-responsive body lean. Saved replays and an older cached
+  phone retain their previous position-based fallback.
+- Limited missing-update prediction to a short easing coast. At 30 m/s it can
+  bridge roughly 5.4 metres, then approaches rest instead of blindly driving
+  through a corner for the full disconnect timeout.
+- Moved the position-free last-race diagnostic report from tab-only session
+  storage to durable same-origin storage, with migration of the old report, so
+  it remains visible when `/dev7731` opens in another tab or installed window.
+- Expanded `npm run wire` with direct-motion acceleration, lane-change,
+  steering, mixed legacy/direct and dropped-update checks. The wire suite,
+  rally-stream suite, TypeScript and production build pass.

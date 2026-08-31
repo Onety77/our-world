@@ -1253,120 +1253,52 @@ function metersSurviveRestart(): string {
   return rows.join(NEWLINE)
 }
 
+/**
+ * There is no fork, and that is now the thing worth checking.
+ *
+ * ---------------------------------------------------------------------------
+ * Rootwake was nine hundred metres of hidden tunnel and it came out of the road
+ * the day the ordinary corners were sharpened. A tunnel is a curve drawn
+ * between two points on the main road, and a main road with real corners in it
+ * brings those two points close together in a straight line while leaving them
+ * just as far apart along the tarmac — so the tunnel came out a third of the
+ * length its features were drawn for and folded, down to a three metre radius
+ * in the throat.
+ *
+ * This used to prove the fork was worth taking. It now proves the road has
+ * none, because a fork half-removed is worse than either — and it counts what
+ * the road got back instead: the mouth was two hundred and fifty metres of wide
+ * gentle cavern, and every metre of it is dealt as ordinary road now.
+ * ---------------------------------------------------------------------------
+ */
 function theSplit(): string {
   const rows: string[] = []
+  const FLAT = 69
   for (const seed of [1, 42, 90210]) {
     const track = makeTrack(seed, 'rootway')
-    const split = track.split
-    if (!split) return '  NO SPLIT ON THE ROOTWAY — it should always have one'
-
-    let separation = Infinity
-    let tightest = Infinity
-    let hardest = 0
-    for (let at = split.from + 120; at < split.to - 140; at += 2) {
-      const main = roadAt(track, at)
-      const hidden = shortcutRoadAt(split, at)
-      separation = Math.min(separation, Math.hypot(main.x - hidden.x, main.y - hidden.y, main.z - hidden.z))
-      tightest = Math.min(tightest, hidden.width * 2)
-      hardest = Math.max(hardest, Math.abs(hidden.curv))
+    if (track.split !== null) {
+      return '  THERE IS STILL A FORK ON THE ROOTWAY — it was taken out on purpose'
     }
-    let mainPace = 0
-    let hiddenPace = 0
-    for (let at = split.from; at < split.to; at += 2) {
-      const mainRoad = roadAt(track, at)
-      const hiddenRoad = shortcutRoadAt(split, at)
-      mainPace += 2 / Math.min(35, Math.sqrt(12.9 / Math.max(0.0003, Math.abs(mainRoad.curv))))
-      hiddenPace += (2 * hiddenRoad.metric) / Math.min(35, Math.sqrt(12.9 / Math.max(0.0003, Math.abs(hiddenRoad.curv))))
+    const corners: number[] = []
+    let run: number[] = []
+    for (let i = 4; i < track.curv.length - 4; i++) {
+      const k = Math.abs(track.curv[i])
+      if (k > 1 / 140) run.push(1 / k)
+      else { if (run.length > 12) corners.push(Math.min(...run)); run = [] }
     }
-    const masteredAdvantage = mainPace - hiddenPace
-    const hardRoad = shortcutRoadAt(split, split.hardAt)
-    const veryHardRoad = shortcutRoadAt(split, split.veryHardAt)
-    const forkSeparation = [split.from + 12, split.commitAt, split.separateAt]
-      .map((at) => {
-        const main = roadAt(track, at)
-        const hidden = shortcutRoadAt(split, at)
-        return Math.hypot(main.x - hidden.x, main.y - hidden.y, main.z - hidden.z)
-      })
-
-    const mainCar = createCar(track)
-    const mainDrive = spiritDriver(track, seed ^ 0x1927, 0.82, true)
-    let mouthAt = 0
-    let mainExitAt = 0
-    let guard = 0
-    while (!mainCar.finished && guard++ < 36_000) {
-      advanceCar(track, mainCar, mainDrive(mainCar, DT), DT)
-      if (!mouthAt && mainCar.s >= split.from) mouthAt = mainCar.elapsed
-      if (!mainExitAt && mainCar.s >= split.to) mainExitAt = mainCar.elapsed
-    }
-
-    const hiddenCar = createCar(track)
-    const hiddenDrive = spiritDriver(track, seed ^ 0x1927, 0.82, true)
-    let hiddenMouthAt = 0
-    let hiddenExitAt = 0
-    let hiddenMinimumSpeed = Infinity
-    let hiddenMinimumAt = 0
-    let hiddenMinimumN = 0
-    let hiddenWallSteps = 0
-    guard = 0
-    while (!hiddenCar.finished && guard++ < 36_000) {
-      if (!hiddenCar.shortcut && hiddenCar.s >= split.from + 5 && hiddenCar.s < split.rejoinAt) {
-        hiddenCar.shortcut = true
-        hiddenCar.n = Math.min(hiddenCar.n, 0.4)
-      }
-      advanceCar(track, hiddenCar, hiddenDrive(hiddenCar, DT), DT)
-      if (!hiddenMouthAt && hiddenCar.s >= split.from) hiddenMouthAt = hiddenCar.elapsed
-      if (hiddenCar.shortcut) {
-        const hiddenSpeed = speedOf(hiddenCar)
-        if (hiddenSpeed < hiddenMinimumSpeed) {
-          hiddenMinimumSpeed = hiddenSpeed
-          hiddenMinimumAt = hiddenCar.s
-          hiddenMinimumN = hiddenCar.n
-        }
-        if (hiddenCar.hitWall > 0) hiddenWallSteps++
-      }
-      if (!hiddenExitAt && hiddenCar.s >= split.to) hiddenExitAt = hiddenCar.elapsed
-    }
-    const advantage = mainCar.elapsed - hiddenCar.elapsed
-
+    if (run.length > 12) corners.push(Math.min(...run))
+    const braked = corners.filter((r) => r < FLAT).length
+    const tightest = Math.min(...corners)
     rows.push(
-      `  seed ${String(seed).padEnd(6)} main ${mainCar.elapsed.toFixed(1)}s   Rootwake ${hiddenCar.elapsed.toFixed(1)}s   ` +
-        `${advantage.toFixed(1)}s quicker` +
-        (masteredAdvantage >= 8 && masteredAdvantage <= 12 ? '' : '   ← MASTERED PACE MISSES THE TEN-SECOND TARGET'),
-    )
-    rows.push(
-      `               ${split.mainLength.toFixed(0)}m main centreline · ${split.shortcutLength.toFixed(0)}m hidden centreline · ` +
-        `${tightest.toFixed(1)}m narrowest deck · r${(1 / hardest).toFixed(1)}m tightest bend`,
-    )
-    rows.push(
-      `               signature corners r${(1 / Math.abs(hardRoad.curv)).toFixed(1)}m hard / ` +
-        `r${(1 / Math.abs(veryHardRoad.curv)).toFixed(1)}m very hard`,
-    )
-    rows.push(
-      `               mouth at ${mouthAt.toFixed(1)}s · ${separation.toFixed(1)}m minimum rock separation · ` +
-        `solid walls agree with the tyres`,
-    )
-    rows.push(
-      `               fork opens ${forkSeparation.map((value) => value.toFixed(1)).join(' → ')}m ` +
-        `(shared floor → choice → separate tunnels)`,
-    )
-    rows.push(
-      `               spirit stays ${mainCar.shortcut ? 'INSIDE THE SECRET ROAD' : 'on the ordinary road'} · ` +
-        `hidden run ${hiddenCar.strikes} strikes`,
-    )
-    rows.push(
-      `               branch sector ${(hiddenExitAt - hiddenMouthAt).toFixed(1)}s vs main ${(mainExitAt - mouthAt).toFixed(1)}s; ` +
-        `branch low speed ${hiddenMinimumSpeed.toFixed(1)}m/s at ${(hiddenMinimumAt - split.from).toFixed(0)}m (n ${hiddenMinimumN.toFixed(1)}); ` +
-        `wall ${(hiddenWallSteps * DT).toFixed(1)}s`,
-    )
-    const splitStart = roadAt(track, split.from)
-    const splitEnd = roadAt(track, split.to)
-    rows.push(
-      `               portals ${Math.hypot(splitEnd.x - splitStart.x, splitEnd.y - splitStart.y, splitEnd.z - splitStart.z).toFixed(0)}m apart in the world`,
-    )
-    rows.push(
-      `               mastered pace saves ${masteredAdvantage.toFixed(1)}s (main ${mainPace.toFixed(1)} / hidden ${hiddenPace.toFixed(1)})`,
+      `  seed ${String(seed).padEnd(6)} no fork · ${String(corners.length).padStart(2)} corners · ` +
+        `${String(braked).padStart(2)} need the brake · tightest r${tightest.toFixed(0)}m`,
     )
   }
+  rows.push('')
+  rows.push(
+    '  anything opener than r69m is flat out in this car, so a corner under it',
+  )
+  rows.push('  is one you have to do something about')
   return rows.join(NEWLINE)
 }
 
@@ -1387,7 +1319,7 @@ const sections: [string, () => string][] = [
   ['The ghost, written and read back', ghostRoundTrip],
   ['What a step costs', cost],
   ['A long drift, held on one side', heldDrift],
-  ['The Rootwake', theSplit],
+  ['The road, and the fork it no longer has', theSplit],
   ['The Drowned Mile', theDrownedMile],
   ['The Stormcrown', theStormcrown],
   ['The meters survive a restart', metersSurviveRestart],

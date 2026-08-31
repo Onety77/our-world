@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
+  RALLY_DIAGNOSTICS_STORAGE_KEY,
   clearRallyDiagnostics,
   readRallyDiagnostics,
 } from '@/systems/rallyDiagnostics'
@@ -9,12 +10,30 @@ const time = (ms: number) => `${Math.round(ms)} ms`
 export function RallyLink() {
   const [report, setReport] = useState(readRallyDiagnostics)
 
+  useEffect(() => {
+    const refresh = () => setReport(readRallyDiagnostics())
+    const receive = (event: StorageEvent) => {
+      if (event.key === RALLY_DIAGNOSTICS_STORAGE_KEY) refresh()
+    }
+    const reveal = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    window.addEventListener('storage', receive)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', reveal)
+    return () => {
+      window.removeEventListener('storage', receive)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', reveal)
+    }
+  }, [])
+
   if (!report) {
     return (
       <section>
         <h2>last live race link</h2>
         <p className="admin-note">
-          No measured wheel-to-wheel race on this tab yet. Run one on the deployed
+          No measured wheel-to-wheel race on this device yet. Run one on the deployed
           site, then come back here; positions are never kept, only delivery counts.
         </p>
       </section>

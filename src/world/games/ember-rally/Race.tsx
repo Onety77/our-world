@@ -101,7 +101,15 @@ import { otherUser } from '@/data/types'
 import { readSitting } from '@/systems/lobby'
 import { keepRallyDiagnostics } from '@/systems/rallyDiagnostics'
 import { useRace } from './session'
-import { KEEPALIVE_MS, Rolling, readCar, readClock, stamp, writeCar } from './wire'
+import {
+  KEEPALIVE_MS,
+  Rolling,
+  readCar,
+  readClock,
+  stamp,
+  writeCar,
+  type RollingSample,
+} from './wire'
 import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
 
 /** Seconds of lamps coming up before the road opens. */
@@ -255,7 +263,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     const stream = room
       ? data.openRallyStream(room, (frame) => {
           const sample = readCar(frame.car)
-          if (sample) rolling.push(sample, performance.now(), frame.clock)
+          if (sample) rolling.push(sample, performance.now(), frame.clock, frame)
         })
       : null
 
@@ -335,8 +343,8 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     /*
       What the visual buffer is doing, under `?shot=1` and in development.
 
-      The production evidence is kept once a second for the current browser
-      session and read from the car tab in `/dev7731`; see `rememberLink`.
+      The production evidence is kept once a second as the last-race report
+      and read from `/dev7731`, including from another tab or PWA window.
 
       How far behind her car is drawn is not a number anybody picked — it is
       measured from how evenly her updates arrive, and it settles somewhere
@@ -1534,7 +1542,10 @@ class Driving {
     const rig = args.theirs
     Object.assign(this.ghost, sample)
 
-    const roll = Math.max(-0.14, Math.min(0.14, sample.drift * 0.16 * Math.sign(sample.yaw || 1)))
+    const live = 'liveMotion' in sample ? sample as RollingSample : null
+    const driftRoll = sample.drift * 0.16 * Math.sign(sample.yaw || 1)
+    const turningRoll = live ? live.yawRate * live.speed * 0.0035 : 0
+    const roll = Math.max(-0.14, Math.min(0.14, driftRoll + turningRoll))
     /*
       `grid` is the one place her car is not exactly where she drove.
 
@@ -1546,17 +1557,18 @@ class Driving {
     */
     placeCar(rig, args.track, sample.s, sample.n + grid, sample.yaw, roll, 0, 0, 0, sample.shortcut)
 
-    // Nothing recorded her speed, so the wheels turn at however fast she just
-    // moved. Same number, and it stays right if the replay is ever scrubbed.
+    // A live car brings its smoothed velocity. A recording has no velocity,
+    // so its wheels retain the distance-per-frame fallback when replayed.
     const moved = Math.max(0, Math.min(4, sample.s - this.lastGhostS))
     this.lastGhostS = sample.s
     poseGhostWheels(
       rig,
-      moved / Math.max(0.004, args.delta),
+      live ? Math.max(-25, Math.min(90, live.speed)) : moved / Math.max(0.004, args.delta),
       sample.drift,
       sample.yaw,
       sample.spinning,
       args.delta,
+      live?.liveMotion ? live.steering : undefined,
     )
 
     args.materials.theirs.uniforms.uGlow.value = sample.boost ? 1 : 0.45

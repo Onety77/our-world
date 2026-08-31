@@ -342,6 +342,7 @@ export function poseGhostWheels(
   yaw: number,
   spinning: boolean,
   dt: number,
+  steering?: number,
 ) {
   /*
     Her front wheels are opposite lock, because that is what a slide is.
@@ -353,6 +354,7 @@ export function poseGhostWheels(
     her wheels turned the same way whichever side she was hanging out.
   */
   const counter = Math.sign(yaw || 1) * drift * 0.45
+  const front = steering === undefined ? counter : -steering
   for (let i = 0; i < 4; i++) {
     const rear = i >= 2
     const rate = (rear && spinning ? speed * 1.7 : speed) / WHEEL_RADIUS
@@ -361,7 +363,7 @@ export function poseGhostWheels(
     rig.cambers[i].rotation.z = drift * 0.12
     rig.hubs[i].position.y = WHEEL_RADIUS
     // Same negation as `poseWheels`: right is negative about Y in this scene.
-    if (i < 2) rig.hubs[i].rotation.y = counter
+    if (i < 2) rig.hubs[i].rotation.y = front
   }
 }
 

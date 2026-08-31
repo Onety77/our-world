@@ -22,6 +22,7 @@ import {
   readClock,
   stamp,
   writeCar,
+  type LiveMotion,
 } from '../src/world/games/ember-rally/wire'
 import { SAMPLE_BOOST, SAMPLE_BRAKE, type RunSample } from '../src/world/games/ember-rally/model'
 
@@ -97,6 +98,9 @@ const sample = (s: number, n = 0, yaw = 0): RunSample => ({
 */
 function drive({
   road,
+  across = () => 0,
+  heading = () => 0,
+  motion,
   until = 4000,
   every = 60,
   lands = (t: number) => t,
@@ -104,6 +108,9 @@ function drive({
   after = 0,
 }: {
   road: (ms: number) => number
+  across?: (ms: number) => number
+  heading?: (ms: number) => number
+  motion?: (ms: number) => LiveMotion
   until?: number
   every?: number
   /** When an update sent at `t` lands here. Never out of order: one socket. */
@@ -113,7 +120,16 @@ function drive({
   after?: number
 }) {
   const car = new Rolling()
-  const drawn: { at: number; s: number }[] = []
+  const drawn: {
+    at: number
+    s: number
+    n: number
+    yaw: number
+    speed: number
+    lateral: number
+    steering: number
+    liveMotion: boolean
+  }[] = []
   const sends: { t: number; at: number }[] = []
   let landed = 0
   for (let t = 0; t <= until; t += every) {
@@ -125,10 +141,24 @@ function drive({
   for (let now = 0; now <= landed + after; now += frame) {
     while (next < sends.length && sends[next].at <= now) {
       const one = sends[next++]
-      car.push(sample(road(one.t)), one.at, one.t)
+      car.push(
+        sample(road(one.t), across(one.t), heading(one.t)),
+        one.at,
+        one.t,
+        motion?.(one.t) ?? null,
+      )
     }
     const at = car.at(now)
-    if (at) drawn.push({ at: now, s: at.s })
+    if (at) drawn.push({
+      at: now,
+      s: at.s,
+      n: at.n,
+      yaw: at.yaw,
+      speed: at.speed,
+      lateral: at.lateral,
+      steering: at.steering,
+      liveMotion: at.liveMotion,
+    })
   }
   return { car, drawn }
 }
@@ -210,6 +240,87 @@ check('nothing has arrived, so there is nothing to draw', nothing.at(0), null)
   const how = car.stats()
   check('an even link keeps the buffer tight', how.behind <= 110, true)
   check('and it never has to guess', how.dry, 0)
+}
+
+console.log('\nThe direct stream carries motion, not a trail of still pictures\n')
+
+/* A clean pull from eight to twenty-four metres a second. */
+{
+  const acceleration = 0.000004
+  const position = (ms: number) => 200 + 0.008 * ms + 0.5 * acceleration * ms * ms
+  const { drawn } = drive({
+    road: position,
+    motion: (ms) => ({
+      speed: (0.008 + acceleration * ms) * 1000,
+      lateral: 0,
+      yawRate: 0,
+      steering: 0,
+    }),
+  })
+  const moving = drawn.filter((one) => one.at > 1200)
+  const changes = moving.slice(1).map((one, i) => Math.abs(one.speed - moving[i].speed))
+  check('the direct motion reached the renderer', moving.every((one) => one.liveMotion), true)
+  check('acceleration changes wheel speed continuously', Math.max(...changes) < 0.2, true)
+  check('and its speed rises rather than stepping and stopping',
+    moving[moving.length - 1].speed > moving[0].speed, true)
+}
+
+/* A long lane change: across-road motion and steering arrive with position. */
+{
+  const lane = (ms: number) => 2.2 * Math.sin(ms / 700)
+  const laneRate = (ms: number) => (2.2 / 700) * Math.cos(ms / 700) * 1000
+  const steer = (ms: number) => 0.32 * Math.sin(ms / 700)
+  const { drawn } = drive({
+    road: (ms) => 200 + ms * 0.028,
+    across: lane,
+    motion: (ms) => ({
+      speed: 28,
+      lateral: laneRate(ms),
+      yawRate: 0,
+      steering: steer(ms),
+    }),
+  })
+  const moving = drawn.filter((one) => one.at > 1200)
+  const laneSteps = moving.slice(1).map((one, i) => Math.abs(one.n - moving[i].n))
+  const steerSteps = moving.slice(1).map((one, i) => Math.abs(one.steering - moving[i].steering))
+  check('a lane change stays inside its reported envelope',
+    moving.every((one) => Math.abs(one.n) <= 2.21), true)
+  check('sideways movement has no visible jump', Math.max(...laneSteps) < 0.09, true)
+  check('the front steering moves continuously too', Math.max(...steerSteps) < 0.03, true)
+}
+
+/* The legacy echo may land first; the direct frame must still enrich it. */
+{
+  const mixed = new Rolling()
+  mixed.push(sample(200), 0, 0)
+  mixed.push(sample(200), 2, 0, { speed: 18, lateral: 0, yawRate: 0, steering: 0.2 })
+  const shown = mixed.at(2)
+  check('a same-clock direct frame upgrades its legacy echo', shown?.liveMotion, true)
+  near('and keeps its real steering', shown?.steering ?? 0, 0.2, 0.001)
+}
+
+/* A missing update gets a short coast, never a blind half-corner. */
+{
+  const gapped = new Rolling()
+  let newest = 0
+  for (let t = 0; t <= 960; t += 60) {
+    newest = 200 + t * 0.03
+    gapped.push(sample(newest), t, t, {
+      speed: 30, lateral: 0, yawRate: 0, steering: 0,
+    })
+    gapped.at(t)
+  }
+  let lastSpeed = 30
+  let lastPosition = newest
+  for (let now = 980; now <= 1900; now += 1000 / 60) {
+    const shown = gapped.at(now)
+    if (shown) {
+      lastSpeed = shown.speed
+      lastPosition = shown.s
+    }
+  }
+  check('a gap cannot project her more than one short coast', lastPosition - newest < 5.5, true)
+  check('and that prediction eases toward rest', lastSpeed < 1, true)
 }
 
 /*

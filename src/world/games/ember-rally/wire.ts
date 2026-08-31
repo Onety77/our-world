@@ -133,6 +133,9 @@ const SAME_INSTANT = 16
 /** Nothing on this road goes faster than this, in metres per millisecond. */
 const FASTEST = 0.09
 
+/** A dry buffer may predict briefly, then its velocity must ease away. */
+const PREDICT_MS = 180
+
 /** After this long with nothing from her, stop pretending to know. */
 export const LOST_MS = 2600
 
@@ -178,6 +181,29 @@ interface Seen {
   /** This device's clock when it landed. What `LOST_MS` is measured against. */
   at: number
   sample: RunSample
+  motion: LiveMotion | null
+}
+
+/** Motion carried by the direct race stream, in the car's body frame. */
+export interface LiveMotion {
+  speed: number
+  lateral: number
+  yawRate: number
+  steering: number
+}
+
+/** The position plus continuous motion used to pose the live opponent. */
+export interface RollingSample extends RunSample {
+  /** Road-forward metres per second. */
+  speed: number
+  /** Across-road metres per second, right positive. */
+  lateral: number
+  /** Smoothed relative heading rate, radians per second. */
+  yawRate: number
+  /** Her transmitted front steering angle, radians. */
+  steering: number
+  /** False for the legacy presence fallback, whose stream has no motion. */
+  liveMotion: boolean
 }
 
 /**
@@ -202,8 +228,8 @@ interface Seen {
  * **So: never guess.** Keep the last couple of seconds of her, and draw her at
  * a playhead held a little way behind the newest thing we have. Then there is
  * always a real sample either side of the moment being drawn, and the answer
- * is a blend of two things she actually did. She brakes when she braked. No
- * corrections, because nothing was ever wrong; no speed estimate at all.
+ * is a curve through two things she actually did. Her transmitted velocity
+ * shapes that curve, but a monotonicity bound forbids it from overshooting.
  *
  * **What it costs.** She is on screen roughly a tenth of a second behind where
  * she really is — three metres or so at racing speed. That is the trade, and
@@ -218,10 +244,9 @@ interface Seen {
  * steady link settles near the floor and widens on its own when the connection
  * is rough. `stats()` reports where it landed.
  *
- * **When it does run dry** — she has genuinely stopped sending — it falls back
- * to carrying her forward at her last speed, exactly as before, until
- * `LOST_MS` takes her off the road. A bad connection degrades to the old
- * behaviour rather than to a car frozen on the tarmac.
+ * **When it does run dry** — she has genuinely stopped sending — the final
+ * velocity bridges only a short gap and then eases toward rest. It cannot
+ * blindly carry her through the next unseen corner.
  * =============================================================================
  */
 export class Rolling {
@@ -241,16 +266,22 @@ export class Rolling {
   private frames = 0
 
   /** The car being drawn. One object, rewritten, because this is per frame. */
-  private readonly out: RunSample = {
+  private readonly out: RollingSample = {
     n: 0, s: 0, yaw: 0, drift: 0,
     boost: false, rough: false, braking: false, spinning: false, shortcut: false,
+    speed: 0, lateral: 0, yawRate: 0, steering: 0, liveMotion: false,
   }
 
   /**
    * A sample as it arrives, stamped with this device's clock — and, if she
    * sent one, with her own.
    */
-  push(sample: RunSample, at: number, clock: number | null = null) {
+  push(
+    sample: RunSample,
+    at: number,
+    clock: number | null = null,
+    motion: LiveMotion | null = null,
+  ) {
     /*
       Her clock where there is one, ours where there is not.
 
@@ -262,9 +293,18 @@ export class Rolling {
     */
     const t = clock ?? at
     const newest = this.seen[this.seen.length - 1]
+    const clean = cleanMotion(motion)
 
     // The same instant twice is not news. See the receiver in `Race.tsx`.
-    if (newest && t === newest.t) return
+    if (newest && t === newest.t) {
+      // The compatibility presence can arrive first. Let the direct stream
+      // enrich that same position rather than losing steering and velocity.
+      if (!newest.motion && clean) {
+        newest.motion = clean
+        this.speed = roadRates(newest).s
+      }
+      return
+    }
 
     /*
       Her clock going backwards is one of two quite different things.
@@ -290,9 +330,11 @@ export class Rolling {
     } else if (newest) {
       const drove = t - newest.t
       if (drove > SAME_INSTANT) {
-        const speed = (sample.s - newest.sample.s) / drove
-        // Backwards, or impossibly fast, means a bad packet.
-        this.speed = speed >= 0 && speed < FASTEST ? speed : 0
+        const speed = clean
+          ? roadRates({ t, at, sample, motion: clean }).s
+          : (sample.s - newest.sample.s) / drove
+        // Impossible means a bad packet. Reverse remains a legitimate state.
+        this.speed = Math.abs(speed) < FASTEST ? speed : 0
       }
       // Measured on *arrival*, because the buffer exists to cover the network,
       // not her driving. Her clock is even by construction; ours is not.
@@ -300,7 +342,7 @@ export class Rolling {
       if (this.gaps.length > 24) this.gaps.shift()
     }
 
-    this.seen.push({ t, at, sample })
+    this.seen.push({ t, at, sample, motion: clean })
     while (
       this.seen.length > 2 &&
       (t - this.seen[0].t > HISTORY_MS || this.seen.length > HISTORY_MAX)
@@ -310,7 +352,7 @@ export class Rolling {
   }
 
   /** Where to draw her, or null if she has gone quiet or never arrived. */
-  at(now: number): RunSample | null {
+  at(now: number): RollingSample | null {
     const seen = this.seen
     if (seen.length === 0) return null
     const newest = seen[seen.length - 1]
@@ -350,20 +392,31 @@ export class Rolling {
     const out = this.out
 
     /*
-      Past everything we hold. She has stopped sending, so this is the old
-      behaviour and the only place a guess is left: carry her on at her last
-      speed until `LOST_MS` above takes her off the road.
+      Past everything we hold. This is the only place a guess is left. Its
+      distance is bounded, then the last velocity eases toward rest.
     */
     if (this.playhead >= newest.t) {
       this.dry++
       copy(out, newest.sample)
-      out.s = newest.sample.s + this.speed * (this.playhead - newest.t)
+      const ahead = this.playhead - newest.t
+      const travel = PREDICT_MS * (1 - Math.exp(-ahead / PREDICT_MS))
+      const decay = Math.exp(-ahead / PREDICT_MS)
+      const rate = roadRates(newest, this.speed)
+      out.s = newest.sample.s + rate.s * travel
+      out.n = newest.sample.n + rate.n * travel
+      out.yaw = wrapped(newest.sample.yaw + rate.yaw * travel)
+      out.speed = rate.s * decay * 1000
+      out.lateral = rate.n * decay * 1000
+      out.yawRate = rate.yaw * decay * 1000
+      out.steering = newest.motion?.steering ?? 0
+      out.liveMotion = newest.motion !== null
       return out
     }
 
     const oldest = seen[0]
     if (this.playhead <= oldest.t) {
       copy(out, oldest.sample)
+      describe(out, oldest, this.speed)
       return out
     }
 
@@ -376,8 +429,17 @@ export class Rolling {
     const span = b.t - a.t
     const u = span > 0 ? (this.playhead - a.t) / span : 0
 
-    out.s = a.sample.s + (b.sample.s - a.sample.s) * u
-    out.n = a.sample.n + (b.sample.n - a.sample.n) * u
+    const fallbackS = span > 0 ? (b.sample.s - a.sample.s) / span : 0
+    const fallbackN = span > 0 ? (b.sample.n - a.sample.n) / span : 0
+    const fallbackYaw = span > 0 ? shortWay(b.sample.yaw - a.sample.yaw) / span : 0
+    const aRate = roadRates(a, fallbackS, fallbackN, fallbackYaw)
+    const bRate = roadRates(b, fallbackS, fallbackN, fallbackYaw)
+    const along = hermite(a.sample.s, b.sample.s, aRate.s, bRate.s, span, u)
+    const across = hermite(a.sample.n, b.sample.n, aRate.n, bRate.n, span, u)
+    out.s = along.value
+    out.n = across.value
+    out.speed = along.rate * 1000
+    out.lateral = across.rate * 1000
     out.drift = a.sample.drift + (b.sample.drift - a.sample.drift) * u
     /*
       The short way round.
@@ -388,7 +450,14 @@ export class Rolling {
       car whips the whole way round the wrong way. It only shows up in a spin,
       which is the one moment you are certainly watching her.
     */
-    out.yaw = wrapped(a.sample.yaw + shortWay(b.sample.yaw - a.sample.yaw) * u)
+    const yawEnd = a.sample.yaw + shortWay(b.sample.yaw - a.sample.yaw)
+    const turning = hermite(a.sample.yaw, yawEnd, aRate.yaw, bRate.yaw, span, u)
+    out.yaw = wrapped(turning.value)
+    out.yawRate = turning.rate * 1000
+    out.steering = a.motion && b.motion
+      ? a.motion.steering + (b.motion.steering - a.motion.steering) * u
+      : (u < 0.5 ? a.motion?.steering : b.motion?.steering) ?? 0
+    out.liveMotion = a.motion !== null || b.motion !== null
 
     // Flags belong to whichever sample is nearer. A brake lamp that fades on
     // is a lie, and half a brake lamp is a worse one.
@@ -461,6 +530,97 @@ export class Rolling {
       dryPercent: this.frames > 0 ? Math.round((this.dry / this.frames) * 1000) / 10 : 0,
     }
   }
+}
+
+/** Refuse non-finite or physically absurd motion before it shapes the curve. */
+function cleanMotion(motion: LiveMotion | null): LiveMotion | null {
+  if (!motion) return null
+  const { speed, lateral, yawRate, steering } = motion
+  if (![speed, lateral, yawRate, steering].every(Number.isFinite)) return null
+  return {
+    speed: Math.max(-90, Math.min(90, speed)),
+    lateral: Math.max(-45, Math.min(45, lateral)),
+    yawRate: Math.max(-20, Math.min(20, yawRate)),
+    steering: Math.max(-1.4, Math.min(1.4, steering)),
+  }
+}
+
+/** Body-frame velocity turned into the road coordinates used by RunSample. */
+function roadRates(
+  seen: Seen,
+  fallbackS = 0,
+  fallbackN = 0,
+  fallbackYaw = 0,
+): { s: number; n: number; yaw: number } {
+  const motion = seen.motion
+  if (!motion) return { s: fallbackS, n: fallbackN, yaw: fallbackYaw }
+  const c = Math.cos(seen.sample.yaw)
+  const s = Math.sin(seen.sample.yaw)
+  return {
+    s: Math.max(-FASTEST, Math.min(FASTEST, (motion.speed * c - motion.lateral * s) / 1000)),
+    n: Math.max(-0.045, Math.min(0.045, (motion.speed * s + motion.lateral * c) / 1000)),
+    yaw: Math.max(-0.02, Math.min(0.02, motion.yawRate / 1000)),
+  }
+}
+
+function describe(out: RollingSample, seen: Seen, fallbackS = 0) {
+  const rate = roadRates(seen, fallbackS)
+  out.speed = rate.s * 1000
+  out.lateral = rate.n * 1000
+  out.yawRate = rate.yaw * 1000
+  out.steering = seen.motion?.steering ?? 0
+  out.liveMotion = seen.motion !== null
+}
+
+/**
+ * Cubic position with monotone endpoint tangents.
+ *
+ * Raw velocities make acceleration visible, but network quantisation can make
+ * one disagree with the distance between its two positions. The circle limit
+ * below is the Fritsch-Carlson monotonicity bound: it retains the shape while
+ * guaranteeing the curve cannot reverse or overshoot either endpoint.
+ */
+function hermite(
+  from: number,
+  to: number,
+  fromRate: number,
+  toRate: number,
+  span: number,
+  u: number,
+): { value: number; rate: number } {
+  if (!(span > 0)) return { value: from, rate: 0 }
+  const delta = to - from
+  const secant = delta / span
+  let a = fromRate
+  let b = toRate
+  if (Math.abs(secant) < 1e-9) {
+    a = 0
+    b = 0
+  } else {
+    if (a / secant < 0) a = 0
+    if (b / secant < 0) b = 0
+    const alpha = a / secant
+    const beta = b / secant
+    const length = Math.hypot(alpha, beta)
+    if (length > 3) {
+      const scale = 3 / length
+      a = scale * alpha * secant
+      b = scale * beta * secant
+    }
+  }
+
+  const u2 = u * u
+  const u3 = u2 * u
+  const value =
+    (2 * u3 - 3 * u2 + 1) * from +
+    (u3 - 2 * u2 + u) * span * a +
+    (-2 * u3 + 3 * u2) * to +
+    (u3 - u2) * span * b
+  const rate =
+    ((6 * u2 - 6 * u) * from + (-6 * u2 + 6 * u) * to) / span +
+    (3 * u2 - 4 * u + 1) * a +
+    (3 * u2 - 2 * u) * b
+  return { value, rate }
 }
 
 /** An angle difference brought back into ±π, so a blend takes the short way. */
