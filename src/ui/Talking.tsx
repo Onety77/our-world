@@ -640,41 +640,57 @@ export function Talking() {
               </button>
             </p>
           )}
-          <textarea
-            ref={field}
-            className="saying-field ink"
-            value={draft}
-            onChange={(e) => write(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                void say()
-              }
-            }}
-            rows={1}
-            placeholder={`say something to ${them.name}`}
-            aria-label={`say something to ${them.name}`}
-            /*
-              The phone's own return key says "send", because that is what it
-              does. Costs nothing and removes the only real question left after
-              taking the buttons away.
-            */
-            enterKeyHint="send"
-          />
           {/*
-            No send button, and no "not now".
+            The field and the way out of it, side by side.
 
-            Enter sends. That is the whole contract, on a phone and on a
-            desktop, and it is the one every messaging app has taught everybody
-            already — so a pair of buttons underneath was two rows of furniture
-            explaining a thing nobody needed explaining, parked permanently
-            under the newest message in the quietest place in the garden.
+            No placeholder. It said "say something to Tife" in the middle of an
+            otherwise empty sky, which is a label on a thing that is already
+            obviously a place to type — you opened it on purpose — and it was
+            the only sentence on screen while you were deciding what to say.
+            The empty line is better company.
 
-            "Not now" was the odd one out twice over: it is the only way *out*
-            of anything here that had a control of its own, when tapping
-            somewhere else and pressing escape already do it — see
-            `useDismissOutside` and the Escape handler above.
+            The send is a light rather than a labelled button: dark while there
+            is nothing to send, warm the moment there is, which is the same
+            language the rest of the garden uses for "this is live now". It is
+            beside the field for the ordinary reason — it is where a thumb
+            already is at the end of a sentence.
           */}
+          <div className="saying-row">
+            <textarea
+              ref={field}
+              className="saying-field ink"
+              value={draft}
+              onChange={(e) => write(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  void say()
+                }
+              }}
+              rows={1}
+              aria-label={`say something to ${them.name}`}
+              /*
+                The phone's own return key says "send", because that is what it
+                does — and it is the fastest way to send without moving a thumb.
+              */
+              enterKeyHint="send"
+            />
+            <button
+              type="button"
+              className="saying-send"
+              disabled={draft.trim() === ''}
+              aria-label={`send this to ${them.name}`}
+              /*
+                The field must not lose the cursor on the way to the button, or
+                a phone puts the keyboard away between finishing a sentence and
+                sending it — which is the exact thing that was just fixed.
+              */
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => void say()}
+            >
+              <span aria-hidden="true" />
+            </button>
+          </div>
         </div>
       ) : (
         <button type="button" className="start-saying" onClick={startWriting}>

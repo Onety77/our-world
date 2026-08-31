@@ -19,6 +19,15 @@
 import { random, type StageId } from './model'
 
 /** Metres between samples. */
+import {
+  CUT,
+  CUT_HALF_WIDTH,
+  HALF_WIDTH,
+  SWITCHBACK,
+  cornerBands,
+  marks,
+} from './switchback'
+
 export const STEP = 1
 
 export interface Band {
@@ -49,6 +58,16 @@ export interface Lantern {
   warm: number
   /** One of the two real fires. Gets a flame, and lights half a chamber. */
   fire?: boolean
+  /**
+   * A distance marker rather than ambience.
+   *
+   * Only the Switchback has these, because only a road that is the same road
+   * every time can be measured from. Kept as a flag rather than inferred from
+   * position so that a checker — and anything that wants to draw them as cut
+   * stone rather than as another lantern — can tell them apart from the light
+   * the dresser scatters.
+   */
+  mark?: boolean
 }
 
 export interface Root {
@@ -496,6 +515,127 @@ function splitBands(): Band[] {
 
 /** Filled in by `rootwayBands`; the independent road is built after sampling. */
 let dealtMouth: number | null = null
+
+/**
+ * The Switchback Run's road, band by band.
+ *
+ * ===========================================================================
+ * Authored from `switchback.ts`, which is the blueprint written down once and
+ * read by both this and the checker. Nothing here is dealt or seeded: the whole
+ * point of this road is that it is the same road every time, so that learning
+ * where the apex of Turn 7 is means something the next evening.
+ *
+ * **What is left to this file is the cave, not the course.** The driveable
+ * width is 11 m from end to end because the blueprint says so, so the Rootway's
+ * usual trick of pinching the road to make a chamber land is not available.
+ * The vault does it instead: low and close down the straights, opening over the
+ * hairpins, so the road still breathes exactly as the Rootway does while every
+ * metre of tarmac stays the width it is supposed to be.
+ *
+ * `room` closes in through every corner, which is the blueprint's "barriers or
+ * slowdown terrain outside major corners" answered in the language this place
+ * already speaks: underground, the thing outside a corner is rock.
+ * ===========================================================================
+ */
+function switchbackBands(): Band[] {
+  const bands: Band[] = []
+
+  /*
+    Out of the fire, exactly as the Rootway does it — the first fifty metres are
+    the Hollow itself, so the road you leave on is the room you were sitting in.
+    These sit *before* the timed line; see `SWITCHBACK_START`.
+  */
+  bands.push(band({ length: 26, width: 7.2, ceiling: 11, room: 1, curv: 0 }))
+  bands.push(band({ length: 22, width: 6.2, ceiling: 7.6, room: 0.5, curv: 0 }))
+  bands.push(band({ length: 34, width: HALF_WIDTH, ceiling: 6.2, room: 0.2, curv: 0, wet: 0.3 }))
+
+  /**
+   * How the vault behaves over one leg.
+   *
+   * A straight runs under a low close roof and a corner opens into a hall, with
+   * the biggest halls over the two hairpins. It is the same rhythm the dealt
+   * Rootway gets from its chamber/throat grammar, taken here from the shape of
+   * the course instead — which is better, because now the room opens where
+   * something is happening rather than wherever the bag said.
+   */
+  const vault = (kind: 'straight' | 'corner', turn: number) => {
+    if (kind === 'straight') {
+      return { ceiling: 5.9, room: 0.34, wet: 0.16 }
+    }
+    const big = Math.min(1, Math.abs(turn) / 165)
+    return {
+      ceiling: 6.4 + big * 6.2,
+      // Rock right there on the outside of everything that turns.
+      room: 0.06 + (1 - big) * 0.1,
+      wet: 0.24 + big * 0.16,
+    }
+  }
+
+  for (const leg of SWITCHBACK) {
+    if (leg.kind === 'straight') {
+      /*
+        A straight is three bands, not one.
+
+        One long band of identical stone reads as a corridor rather than a
+        cave — the eye has nothing to measure the length against. Splitting it
+        lets the roof lift a little in the middle and settle again, which at a
+        hundred and twenty is the difference between travelling somewhere and
+        watching a texture scroll.
+      */
+      const shape = vault('straight', 0)
+      const third = leg.length / 3
+      bands.push(band({ length: third, width: HALF_WIDTH, grade: leg.grade ?? 0, ...shape }))
+      bands.push(band({
+        length: third,
+        width: HALF_WIDTH,
+        grade: leg.grade ?? 0,
+        ...shape,
+        ceiling: shape.ceiling + 1.7,
+        room: shape.room + 0.16,
+      }))
+      bands.push(band({ length: leg.length - third * 2, width: HALF_WIDTH, grade: leg.grade ?? 0, ...shape }))
+      continue
+    }
+
+    bands.push(
+      ...cornerBands(
+        leg,
+        band,
+        () => ({ width: HALF_WIDTH, ...vault('corner', leg.deg) }),
+        leg.grade ?? 0,
+      ),
+    )
+  }
+
+  /*
+    And the arrival, which is the Rootway's ending because it is the Rootway's
+    cave: a throat, then a hall with the finish standing in the mouth of it,
+    then the back wall the far fire is against. See the note in `rootwayBands`.
+
+    These come *after* the 5,650 m, so the course is the course and the room you
+    stop in is not part of it.
+  */
+  /*
+    A hundred and ten metres of it, which is not a round number by accident:
+    the finish is placed `COAST` back from the end of the road, so the tail has
+    to be exactly a coast long for the line to land on 5,650 m. See the check.
+  */
+  bands.push(band({ length: 20, width: 4.8, ceiling: 5.4, room: 0.2, curv: 0, wet: 0.25 }))
+  bands.push(band({ length: 76, width: 7.6, ceiling: 13, room: 1, curv: 0 }))
+  bands.push(band({ length: 14, width: 5.2, ceiling: 8, room: 0.45, curv: 0 }))
+
+  return bands
+}
+
+/**
+ * Where the timed course begins, in metres along the sampled road.
+ *
+ * The eighty-two metres of Hollow in front of it are the room you launch out
+ * of, and they are deliberately not part of the 5,650: every distance the
+ * blueprint gives is measured from the line, so the line has to be somewhere
+ * the arithmetic can start.
+ */
+export const SWITCHBACK_START = 82
 
 function rootwayBands(seed: number): Band[] {
   const rng = random(seed ^ 0x51f2a3)
@@ -983,7 +1123,9 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     ? moonbreakBands()
     : stage === 'stormcrown'
       ? stormcrownBands()
-      : rootwayBands(seed)
+      : stage === 'rootway-test'
+        ? switchbackBands()
+        : rootwayBands(seed)
   const total = bands.reduce((sum, b) => sum + b.length, 0)
   const count = Math.floor(total / STEP) + 1
 
@@ -1079,7 +1221,15 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     seed,
     stage,
     length: (count - 1) * STEP,
-    start: START,
+    /*
+      The Switchback launches from its own line.
+
+      Every distance in its blueprint is measured from there, so the car has to
+      begin there — with the eighty-two metres of Hollow behind it rather than
+      inside the course, where the road would be the wrong width. The Rootway
+      keeps the ordinary eighteen; see `start` on `Track`.
+    */
+    start: stage === 'rootway-test' ? SWITCHBACK_START : START,
     finishAt: (count - 1) * STEP - COAST,
     x,
     y,
@@ -1143,9 +1293,30 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     track.split = makeRootSplit(track, dealtMouth)
   }
 
+  /*
+    The Switchback's cut is a corner cut, not a hidden parallel road.
+
+    Rootwake is nine hundred metres of separate tunnel with its own character;
+    this is three hundred and ten metres straight across the outside of Turn 4.
+    Same builder, different shape — see the options on `makeRootSplit`.
+  */
+  if (stage === 'rootway-test') {
+    track.split = makeRootSplit(track, SWITCHBACK_START + CUT.entry, {
+      until: SWITCHBACK_START + CUT.entry + CUT.mainSpan,
+      cutLength: CUT.length,
+      halfWidth: CUT_HALF_WIDTH,
+      wild: 0,
+      dip: 7,
+      align: 0.05,
+      entryRadius: CUT.entryRadius,
+    })
+  }
+
   if (stage === 'moonbreak') dressMoonbreak(track, random(seed ^ 0x6d2b79))
   else if (stage === 'stormcrown') dressStormcrown(track, random(seed ^ 0x7a36c1))
   else dressTrack(track, random(seed ^ 0x9c31d7))
+  // The cave first, then the course's own signs on top of it.
+  if (stage === 'rootway-test') markSwitchback(track)
   return track
 }
 
@@ -1416,6 +1587,85 @@ function dressMoonbreak(track: Track, rng: () => number) {
  * outside of a bend at its entry — the wall you would hit — and then stop,
  * which is the apex.
  */
+/**
+ * The Switchback's own signs, laid over the cave the dresser already built.
+ *
+ * ===========================================================================
+ * **A learnable road needs somewhere to learn it from.** The Rootway is dealt
+ * fresh, so its lanterns are ambience — light enough to see the next twenty
+ * metres by, and no more. This road is the same road every time, which makes
+ * distance markers worth something: brake at the second stone and you are
+ * right, every single lap, and finding that out is most of the pleasure.
+ *
+ * Three stones at 150, 100 and 50 m before Turn 2, Turn 3 and Turn 7 — the two
+ * hairpins and the corner that tightens, exactly as the blueprint asks. They
+ * are paired across the road and level with each other, because a pair at the
+ * same height is the one shape this cave uses for "this is information" and
+ * everything else in it is deliberately uneven.
+ *
+ * They count *down* in light: the far one is dim and the last one is bright, so
+ * the corner is arriving even if you cannot yet see it.
+ *
+ * The warning before the cut is a single stone on the right, where the mouth
+ * is. One, not three, and off to one side rather than paired: it is not telling
+ * you to brake, it is telling you there is a decision a hundred metres away,
+ * and it must not be mistaken for the corner markers it stands among — the
+ * mouth is inside Turn 3's braking zone, which is the whole difficulty of it.
+ * ===========================================================================
+ */
+function markSwitchback(track: Track) {
+  const at = (s: number) => Math.max(0, Math.min(track.length - 1, s))
+  const put = (s: number, n: number, warm: number, size: number) => {
+    const road = roadAt(track, at(s))
+    track.lanterns.push({
+      s: at(s),
+      n,
+      y: road.y + 1.15,
+      size,
+      warm,
+      mark: true,
+    })
+  }
+
+  /*
+    Where each corner starts turning, taken from the table rather than from the
+    road, so a marker cannot drift away from the corner it belongs to. Turn 2,
+    Turn 3 and Turn 7 — the blueprint names those three.
+  */
+  const named = new Map(marks().map((m) => [m.leg.name, m]))
+  for (const name of ['Turn 2', 'Turn 3', 'Turn 7']) {
+    const leg = named.get(name)
+    if (!leg || leg.leg.kind !== 'corner') continue
+    /*
+      Measured from where the road *begins to turn*, not from the start of the
+      section — the section carries its lead-in straight, and a stone that says
+      "150" while there is still ninety metres of straight left is a stone that
+      teaches the wrong thing.
+    */
+    const turnsAt =
+      SWITCHBACK_START + leg.from + (leg.to - leg.from - legArc(leg.leg)) * (leg.leg.lead ?? 0.5)
+    const edge = 5.5 + 1.1
+    for (const [away, glow, size] of [[150, 0.35, 0.62], [100, 0.62, 0.74], [50, 1, 0.92]] as const) {
+      put(turnsAt - away, -edge, glow, size)
+      put(turnsAt - away, edge, glow, size)
+    }
+  }
+
+  // And the one stone that is not about braking.
+  if (track.split) {
+    put(track.split.from - CUT.warnAt, 5.5 + 1.4, 0.18, 1.05)
+  }
+}
+
+/** How much of a corner's section it actually spends turning. */
+function legArc(corner: { deg: number; radius: number; section: number; ease: number }): number {
+  const turn = (Math.abs(corner.deg) * Math.PI) / 180
+  const arcNeeded = turn * corner.radius
+  const spare = corner.section - arcNeeded
+  const ease = Math.min(arcNeeded * 0.92, spare * 0.95) * corner.ease
+  return arcNeeded - ease + ease * 2
+}
+
 function dressTrack(track: Track, rng: () => number) {
   const count = track.x.length
 
@@ -1789,17 +2039,61 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
  * The road then drops more than thirty metres below the ordinary cave and is
  * sampled into the same physical quantities understood by tyres and cameras.
  */
-function makeRootSplit(track: Track, from: number): RootSplit {
-  const dip = 34
-  const wild = 1
-  const deckWidth = 3.7
+/**
+ * What kind of second road this is.
+ *
+ * ---------------------------------------------------------------------------
+ * Two quite different things share this builder, and the options are how they
+ * differ rather than a fork in the code.
+ *
+ * **Rootwake**, on the Rootway, is nine hundred metres of separate tunnel with
+ * its own hard S and its own blind reverse — a place, which you go and learn.
+ * Everything defaults to it, so passing nothing builds exactly what has always
+ * been built.
+ *
+ * **The Switchback's cut** is three hundred and ten metres straight across the
+ * outside of a corner. There is nothing to learn down it except whether you got
+ * into it cleanly, which is the whole of its difficulty: `wild` is zero, so it
+ * has no character of its own beyond the line it takes, and `entryRadius` is
+ * what makes the mouth a real brake rather than a doorway you drift through.
+ * ---------------------------------------------------------------------------
+ */
+interface SplitShape {
+  /** Where it comes back. Defaults to Rootwake's own long reach. */
+  until?: number
+  /** How long the hidden road itself should measure. */
+  cutLength?: number
+  /** Half the driveable stone down it. */
+  halfWidth?: number
+  /** 0 for a plain cut; 1 for Rootwake's authored corners. */
+  wild?: number
+  /** How far the road drops below the one it left, at the middle. */
+  dip?: number
+  /** Radius of the turn into the mouth, metres. Smaller means brake harder. */
+  entryRadius?: number
+  /**
+   * How hard the two ends are made to leave and arrive along the road they
+   * join, 0..1.
+   *
+   * Rootwake wants this at one: it is a tunnel branching out of a chamber and
+   * it should look like it grew there. A corner cut wants it low — it is
+   * supposed to leave at an angle, that angle is the brake, and forcing it to
+   * peel away tangentially is what stops a short cut from ever being short.
+   */
+  align?: number
+}
+
+function makeRootSplit(track: Track, from: number, shape: SplitShape = {}): RootSplit {
+  const dip = shape.dip ?? 34
+  const wild = shape.wild ?? 1
+  const deckWidth = shape.halfWidth ?? 3.7
   const deckCeiling = 3.62
   const deckRoom = 0.035
   const deckWet = 0.45
   const portalN = 2.3
   const commitAfter = 34
   const separateAfter = 58
-  const to = Math.max(from + 900, track.finishAt - 285)
+  const to = shape.until ?? Math.max(from + 900, track.finishAt - 285)
   const span = to - from
   const count = Math.floor(span / STEP) + 1
   const x = new Float32Array(count)
@@ -1825,7 +2119,7 @@ function makeRootSplit(track: Track, from: number): RootSplit {
   // `span` means one world metre per shared progress metre at both portals.
   // That keeps entry/rejoin speed continuous instead of catapulting the car
   // through a compressed endpoint.
-  const throat = span
+  const throat = span * (shape.align ?? 1)
   const startGrade = Math.max(-0.12, Math.min(0.12, start.grade))
   const endGrade = Math.max(-0.12, Math.min(0.12, end.grade))
   const separateAt = from + Math.max(commitAfter + 8, separateAfter)
@@ -1869,7 +2163,22 @@ function makeRootSplit(track: Track, from: number): RootSplit {
     */
     const peelIn = smoothstep((t - entryBegins) / (entrySeparated - entryBegins))
     const peelOut = 1 - smoothstep((t - entrySeparated) / (entrySettled - entrySeparated))
-    const entryPeel = 11 * peelIn * peelOut
+    /*
+      How hard the mouth turns away from the road it is leaving.
+
+      This is what a stated entry radius actually becomes: the road is pushed
+      sideways over the length of the peel, and a sharper push is a tighter
+      turn in. Solved from the radius rather than tuned by eye — a lateral
+      shove of `d` over a run of `L` bends the road by roughly `8d/L²`, so
+      `d = L²/(8R)` puts the tightest part of the mouth at `R`. Measured back
+      by `npm run switchback`, because "roughly" is not a thing to leave
+      unchecked in the one corner that decides whether the cut is worth taking.
+    */
+    const peelRun = Math.max(1, (entrySettled - entryBegins) * span)
+    const peelBy = shape.entryRadius
+      ? Math.min(26, (peelRun * peelRun) / (8 * shape.entryRadius))
+      : 11
+    const entryPeel = peelBy * peelIn * peelOut
     return {
       x: start.x + chordX * t + (startDX - chordX) * startAlign + (endDX - chordX) * endAlign + sideX * transverse + startRightX * entryPeel,
       y: start.y + (end.y - start.y) * t +
@@ -1893,7 +2202,7 @@ function makeRootSplit(track: Track, from: number): RootSplit {
   // The road is physically shorter, but not by so much that simply finding it
   // wins. Its hard S and blind reverse still have to be learned to earn the
   // intended ten seconds.
-  const targetLength = Math.max(curveLength(0), span - 330)
+  const targetLength = shape.cutLength ?? Math.max(curveLength(0), span - 330)
   let low = 0
   let high = 220
   while (curveLength(high) < targetLength && high < 900) high *= 1.45

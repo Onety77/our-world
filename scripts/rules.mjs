@@ -78,8 +78,8 @@ const FILES = [
     where: 'Realtime Database → Rules',
     console: 'Realtime Database → the **Rules** tab along the top',
     what:
-      'presence only — where the two of you are standing right now, and the ' +
-      'two live invitations that ride on it.',
+      'live state only — where the two of you are standing right now, the ' +
+      'two invitations that ride on presence, and the short-lived car stream.',
     fence: 'json',
   },
   {

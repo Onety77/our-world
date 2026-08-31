@@ -52,6 +52,7 @@ import {
   QUESTION_PROMPTS,
   questionHash,
 } from './questionPrompts'
+import { openLocalRallyStream } from './rallyStream'
 
 const STORAGE_KEY = 'garden:v1'
 
@@ -770,6 +771,10 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         presenceFrame = 0
         emit()
       })
+    },
+
+    openRallyStream(room, listener) {
+      return openLocalRallyStream(me, room, listener)
     },
 
     setPresenceFor(id, patch) {

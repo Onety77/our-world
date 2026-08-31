@@ -36,6 +36,7 @@ import { attempt } from '@/systems/trouble'
 import { useVoiceLights } from '@/systems/voiceLights'
 import { CarSettings } from './CarSettings'
 import { ThumbLayout } from './ThumbLayout'
+import { RallyLink } from './RallyLink'
 import { Hearing } from './Hearing'
 import { Volumes } from './Volumes'
 import { LockedDoors } from './Locks'
@@ -265,6 +266,7 @@ export function Admin() {
 
       {tab === 'car' && <CarSettings />}
       {tab === 'car' && <ThumbLayout />}
+      {tab === 'car' && <RallyLink />}
 
       {/*
         Device-only things stay on the device tab; the shared mix does not.

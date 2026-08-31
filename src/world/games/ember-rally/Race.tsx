@@ -98,6 +98,8 @@ import {
 import { MARK_LIFE, Marks } from './marks'
 import { useData } from '@/data/provider'
 import { otherUser } from '@/data/types'
+import { readSitting } from '@/systems/lobby'
+import { keepRallyDiagnostics } from '@/systems/rallyDiagnostics'
 import { useRace } from './session'
 import { KEEPALIVE_MS, Rolling, readCar, readClock, stamp, writeCar } from './wire'
 import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
@@ -222,15 +224,15 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
 
     Wheel to wheel used to be two people driving the same road at the same
     moment and seeing nothing of each other, which is a time trial with better
-    manners. This is the channel that fixes it: presence, six times a second,
-    both ways, no server — see `wire.ts` for what goes down it and `npm run
-    wire` for the arithmetic that keeps it looking like a car.
+    manners. This is the channel that fixes it: one race-scoped Realtime
+    Database child per car, about sixteen times a second, both ways, with no
+    server of our own. See `wire.ts` for what goes down it and `npm run wire`
+    for the arithmetic that keeps it looking like a car.
 
     Held in a ref and fed from a subscription rather than from React state, on
-    purpose. Her car arrives about six times a second; putting that through a
-    re-render would rebuild this component — every mesh, every material — six
-    times a second, mid-race, on a phone. The frame reads the ref instead and
-    React never hears about any of it.
+    purpose. Putting arrivals through a re-render would rebuild this component
+    — every mesh, every material — mid-race on a phone. The direct listener
+    writes the ref instead and React never hears about any of it.
     ==========================================================================
   */
   const data = useData()
@@ -243,17 +245,44 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
     }
     const rolling = new Rolling()
     const them = otherUser(data.me)
+    const presence = data.snapshot().presence
+    const room =
+      readSitting(presence[data.me]?.racing)?.key ??
+      readSitting(presence[them]?.racing)?.key ??
+      ''
+    const startedAt = data.now()
+    let legacyReceived = 0
+    const stream = room
+      ? data.openRallyStream(room, (frame) => {
+          const sample = readCar(frame.car)
+          if (sample) rolling.push(sample, performance.now(), frame.clock)
+        })
+      : null
+
+    const rememberLink = (endedAt: number | null = null) => {
+      keepRallyDiagnostics({
+        version: 1,
+        stage: track.stage,
+        startedAt,
+        updatedAt: data.now(),
+        endedAt,
+        direct: stream?.stats() ?? null,
+        legacyReceived,
+        smoother: rolling.stats(),
+      })
+    }
+    const checkpoint = window.setInterval(() => rememberLink(), 1000)
     let sent = ''
     let sentAt = 0
     live.current = {
       rolling,
-      send(text, elapsedMs) {
+      send(text, elapsedMs, speed, lateral, yawRate, steering) {
         /*
           Skip a repeat, but never go quiet.
 
-          Presence writes are already throttled to `PRESENCE_INTERVAL`; this is
-          about not asking for a write that says exactly what the last one
-          said, which is every frame of a car sitting still on the grid. The
+          The stream is already throttled to `RALLY_STREAM_INTERVAL`; this is
+          about not queueing a frame that says exactly what the last one said,
+          which is every frame of a car sitting still on the grid. The
           keepalive is the other half of that, and it is not optional: the far
           end drops a car it has not heard from in `LOST_MS`, so a perfectly
           still car would be sent once, deduped for ever, and disappear off her
@@ -267,6 +296,15 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
         if (text === sent && now - sentAt < KEEPALIVE_MS) return
         sent = text
         sentAt = now
+        stream?.send({
+          car: text,
+          clock: elapsedMs,
+          speed,
+          lateral,
+          yawRate,
+          steering,
+        })
+        // Keep yesterday's cached build visible during this first rollout.
         data.publishPresence({ driving: stamp(text, elapsedMs) })
       },
     }
@@ -287,13 +325,18 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       a genuinely new sample lands and jumps it forward. Several times a second,
       for the whole race.
 
-      That is the whole of the lag. Not the network, not the six-times-a-second
-      — the car was being told, over and over, that she had stopped.
+      The direct stream no longer travels through this subscription at all.
+      This reader remains only so a phone on yesterday's cached build is still
+      visible, and the guard remains because a compatibility path must not be
+      allowed to reintroduce the old freeze.
       ==========================================================================
     */
     let seen = ''
     /*
-      What the link is actually doing, under `?shot=1` and in development.
+      What the visual buffer is doing, under `?shot=1` and in development.
+
+      The production evidence is kept once a second for the current browser
+      session and read from the car tab in `/dev7731`; see `rememberLink`.
 
       How far behind her car is drawn is not a number anybody picked — it is
       measured from how evenly her updates arrive, and it settles somewhere
@@ -316,9 +359,15 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       if (text === seen) return
       seen = text
       const sample = readCar(text)
-      if (sample) rolling.push(sample, performance.now(), readClock(text))
+      if (sample) {
+        legacyReceived++
+        rolling.push(sample, performance.now(), readClock(text))
+      }
     })
     return () => {
+      window.clearInterval(checkpoint)
+      rememberLink(data.now())
+      stream?.close()
       stop()
       live.current = null
       // Take the car off the road behind you. Left standing, it is an
@@ -326,7 +375,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       // tab closes.
       data.publishPresence({ driving: '' })
     }
-  }, [wheelToWheel, data])
+  }, [wheelToWheel, data, track.stage])
 
   const lights = useMemo(() => {
     const next = createLights()
@@ -664,7 +713,14 @@ function buildLanterns(track: Track) {
 interface LiveWheel {
   rolling: Rolling
   /** The four-integer car, and her own elapsed race time to stamp it with. */
-  send(text: string, elapsedMs: number): void
+  send(
+    text: string,
+    elapsedMs: number,
+    speed: number,
+    lateral: number,
+    yawRate: number,
+    steering: number,
+  ): void
 }
 
 interface FrameArgs {
@@ -1363,7 +1419,14 @@ class Driving {
     */
     if (args.live && (phase === 'ready' || phase === 'running')) {
       const packed = packCar(car)
-      args.live.send(writeCar(packed.n, packed.s, packed.psi, packed.state), car.elapsed * 1000)
+      args.live.send(
+        writeCar(packed.n, packed.s, packed.psi, packed.state),
+        car.elapsed * 1000,
+        car.vs,
+        car.vn,
+        car.yaw,
+        car.steerAngle,
+      )
     }
 
     // --- her -----------------------------------------------------------------

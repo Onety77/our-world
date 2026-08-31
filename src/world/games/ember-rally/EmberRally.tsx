@@ -7,6 +7,7 @@ import { useRace } from './session'
 import { usePublishedTuning } from './tuningSync'
 import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
 import { roadKey, useDoorman } from '@/systems/locks'
+import { useMenuKeys } from '@/ui/useMenuKeys'
 import { useLobby } from '@/systems/useLobby'
 import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
@@ -51,7 +52,7 @@ import {
 
 type View = 'courses' | 'menu' | 'road' | 'replay'
 type RaceKind = 'qualifying' | 'chase'
-const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown']
+const STAGES: readonly StageId[] = ['rootway', 'rootway-test', 'moonbreak', 'stormcrown']
 
 /** Old saved rounds may still name a road that no longer exists. */
 function availableStage(value: unknown): StageId {
@@ -116,6 +117,31 @@ const COURSES: Record<StageId, {
     cleanWord: 'through the Rootway',
     enter: 'go below',
   },
+  /*
+    The Switchback Run.
+
+    Written rather than dealt — see `switchback.ts`. Everything it says about
+    itself is about the *road*, because the place is the Rootway: same cave,
+    same fires, same dust. It is the only course here you can learn, and the
+    copy is careful to promise exactly that and nothing else.
+  */
+  'rootway-test': {
+    name: 'The Switchback',
+    place: 'the same stone, a made road',
+    short: 'The Rootway cut to a plan: eight numbered corners, two hairpins, and one line through the lot.',
+    soloTitle: 'This one does not move',
+    soloCopy: 'Every other road down here is dealt out fresh. This one is drawn. Turn 2 keeps tightening after you have committed to it, the fifth and sixth are one shape and you cannot fix the second by rushing the first, and the seventh is where a race is won. There is a cut across the fourth if you are brave with the brake.',
+    spirit: 'the fire-spirit',
+    returnTo: 'return to the fire',
+    setTitle: 'Set a line {she} cannot see',
+    setCopy: 'The road is the same road every time, so a tenth found here is a tenth you keep. {Their} first run stays under the stone until yours is beside it — and yours stays under it until {hers} is.',
+    sealedTitle: 'The stone stays closed.',
+    chaseHome: 'home to the fire',
+    resultKicker: 'two lines through one plan',
+    finishPlace: 'the fire',
+    cleanWord: 'through the Switchback',
+    enter: 'go below',
+  },
   moonbreak: {
     name: 'The Moonbreak',
     place: 'water and open sky',
@@ -169,6 +195,18 @@ const SCENES: Record<StageId, ReactNode> = {
       <i className="course-lamps"><b /><b /></i>
     </>
   ),
+  /*
+    The Rootway's own vault, with the road drawn switching back through it —
+    because that is the honest picture: the same tunnel, a different line.
+  */
+  'rootway-test': (
+    <>
+      <i className="course-vault one" />
+      <i className="course-vault two" />
+      <i className="course-switchback" />
+      <i className="course-lamps"><b /><b /></i>
+    </>
+  ),
   moonbreak: (
     <>
       <i className="course-moon" />
@@ -209,39 +247,6 @@ const SCENES: Record<StageId, ReactNode> = {
  */
 const CONTROLS = 'up to go · down to brake · arrows to steer · space to slide · shift for the ember'
 
-/** Arrow selection plus Enter, while leaving native button activation intact. */
-function useMenuKeys(count: number, activate: (index: number) => void, loop = true) {
-  const [selected, setSelected] = useState(0)
-  const activateRef = useRef(activate)
-  activateRef.current = activate
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const focused = document.activeElement
-      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
-      if (
-        event.key === 'ArrowRight' || event.key === 'ArrowDown' ||
-        event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-      ) {
-        event.preventDefault()
-        const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown'
-        setSelected((at) => {
-          const next = at + (forward ? 1 : -1)
-          return loop ? (next + count) % count : Math.max(0, Math.min(count - 1, next))
-        })
-      } else if (event.key === 'Enter' && !event.repeat) {
-        if (focused instanceof HTMLButtonElement) return
-        event.preventDefault()
-        activateRef.current(selected)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [count, loop, selected])
-
-  return [selected, setSelected] as const
-}
-
 interface RallyAction {
   label: string
   onChoose(): void
@@ -251,21 +256,19 @@ interface RallyAction {
 
 /** Every choice shown after a run obeys the same arrows-and-Enter contract. */
 function RallyActions({ actions }: { actions: RallyAction[] }) {
-  const [selected, setSelected] = useMenuKeys(actions.length, (index) => {
-    const action = actions[index]
-    if (action && !action.disabled) action.onChoose()
-  })
+  const keys = useMenuKeys(actions.length)
 
   return (
     <>
       <div className="rally-actions">
         {actions.map((action, index) => (
           <button
+            ref={keys.ref(index)}
             type="button"
-            className={`${action.quiet ? 'quiet' : ''}${selected === index ? ' is-selected' : ''}`.trim()}
+            className={`${action.quiet ? 'quiet' : ''}${keys.selected === index ? ' is-selected' : ''}`.trim()}
             disabled={action.disabled}
             key={action.label}
-            onFocus={() => setSelected(index)}
+            onFocus={() => keys.choose(index)}
             onClick={action.onChoose}
           >
             {action.label}
@@ -958,39 +961,23 @@ function CoursePicker({
     so the heading, the arrows, the marks underneath and the keyboard all agree
     without any of them knowing that locking exists.
   */
-  const shut = useDoorman()
-  const roads = STAGES.filter((stage) => !shut(roadKey(stage)))
-
-  const [selected, setSelected] = useMenuKeys(roads.length, (index) => {
-    const stage = roads[index]
-    if (stage) onChoose(stage)
-  }, false)
-
-  const showPrevious = () => setSelected((at) => Math.max(0, at - 1))
-  const showNext = () => setSelected((at) => Math.min(roads.length - 1, at + 1))
-
   /*
-    Every road shut at once.
+    Every road stays on the wall, and a closed one wears a lock.
 
-    Rare, and it has to say something rather than show an empty carousel with
-    "00 / 00" under it. Deliberately does not say *who* shut them or why: from
-    her side this is a road being worked on, which is the whole truth she needs
-    and the only one that will still be true tomorrow.
+    Taking it out of the row was the first attempt and it read as the road
+    having been deleted — three cards where there had been four, and nothing
+    anywhere saying why. A lock says the thing a gap cannot: it is still here,
+    and it is shut for a reason.
   */
-  if (roads.length === 0) {
-    return (
-      <div className="rally rally-centre">
-        <p className="rally-kicker">ember rally</p>
-        <h1>The roads are closed.</h1>
-        <p className="rally-copy">
-          Every one of them is being worked on. They will be back.
-        </p>
-        <button type="button" className="rally-course-leave" onClick={onLeave}>
-          back to the games
-        </button>
-      </div>
-    )
-  }
+  const shut = useDoorman()
+  const roads = STAGES
+
+  const keys = useMenuKeys(roads.length, false)
+  const selected = keys.selected
+  const setSelected = keys.choose
+
+  const showPrevious = () => setSelected(Math.max(0, selected - 1))
+  const showNext = () => setSelected(Math.min(roads.length - 1, selected + 1))
 
   return (
     <div className="rally rally-courses">
@@ -1029,16 +1016,20 @@ function CoursePicker({
           Mapped, the index is wherever the road actually is, and adding a
           fourth road is a line in `SCENES` rather than a fourth copy of this.
         */}
-        {roads.map((stage, index) => (
+        {roads.map((stage, index) => {
+          const locked = shut(roadKey(stage))
+          return (
           <button
             key={stage}
             type="button"
-            className={`rally-course ${stage}${selected === index ? ' is-selected' : ''}`}
+            className={`rally-course ${stage}${selected === index ? ' is-selected' : ''}${locked ? ' is-locked' : ''}`}
             aria-current={selected === index ? 'true' : undefined}
             aria-hidden={selected !== index}
+            aria-disabled={locked || undefined}
+            ref={keys.ref(index)}
             tabIndex={selected === index ? 0 : -1}
             onFocus={() => setSelected(index)}
-            onClick={() => onChoose(stage)}
+            onClick={() => { if (!locked) onChoose(stage) }}
           >
             <span className="rally-course-scene" aria-hidden="true">
               {SCENES[stage]}
@@ -1047,9 +1038,20 @@ function CoursePicker({
             <CourseState stage={stage} mine={mine} theirs={theirs} theirName={theirName} solo={solo} />
             <CourseBest stage={stage} />
             <span className="rally-course-copy">{COURSES[stage].short}</span>
-            <span className="rally-course-enter">{COURSES[stage].enter}</span>
+            {/* The lock stands where the way in would have been, because that
+                is exactly what it is standing in for. */}
+            <span className="rally-course-enter">
+              {locked ? (
+                <span className="rally-course-locked">
+                  <i aria-hidden="true" /> being worked on
+                </span>
+              ) : (
+                COURSES[stage].enter
+              )}
+            </span>
           </button>
-        ))}
+          )
+        })}
 
           </div>
         </div>
@@ -1757,10 +1759,9 @@ function Briefing({
   onLeave(): void
   leaveLabel?: string
 }) {
-  const [selected, setSelected] = useMenuKeys(2, (index) => {
-    if (index === 0) onPrimary()
-    else onLeave()
-  })
+  const keys = useMenuKeys(2)
+  const selected = keys.selected
+  const setSelected = keys.choose
 
   return (
     <div className="rally rally-centre">
@@ -1769,6 +1770,7 @@ function Briefing({
       <p className="rally-copy">{copy}</p>
       <div className="rally-actions">
         <button
+          ref={keys.ref(0)}
           type="button"
           className={selected === 0 ? 'is-selected' : ''}
           onFocus={() => setSelected(0)}
@@ -1777,6 +1779,7 @@ function Briefing({
           {primary}
         </button>
         <button
+          ref={keys.ref(1)}
           type="button"
           className={`quiet${selected === 1 ? ' is-selected' : ''}`}
           onFocus={() => setSelected(1)}

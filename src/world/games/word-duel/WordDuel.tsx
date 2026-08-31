@@ -35,7 +35,8 @@
  * ---------------------------------------------------------------------------
  */
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useMenuKeys } from '@/ui/useMenuKeys'
 import { useLobby } from '@/systems/useLobby'
 import { readSitting } from '@/systems/lobby'
 import { useSay } from '@/systems/useSay'
@@ -521,30 +522,26 @@ export default function WordDuel({
                 '{She} has not left you a word yet. Come back when {she} has — or take one from the pile and play now.',
               )}
         </p>
-        <div className="duel-actions">
-          {target !== null ? (
-            <button type="button" className="put-back" onClick={() => setJustGave(false)}>
-              {say('play {their} word')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="put-back"
-              disabled={sending || !pileWord}
-              onClick={() => {
-                if (!pileWord) return
-                void send({ kind: 'guess', guess: '', target: pileWord }).then((landed) => {
-                  if (landed) setJustGave(false)
-                })
-              }}
-            >
-              take one from the pile
-            </button>
-          )}
-          <button type="button" className="put-back quiet" onClick={onLeave}>
-            back out to the fire
-          </button>
-        </div>
+        <DuelActions
+          actions={[
+            target !== null
+              ? {
+                  label: say('play {their} word'),
+                  onChoose: () => setJustGave(false),
+                }
+              : {
+                  label: 'take one from the pile',
+                  disabled: sending || !pileWord,
+                  onChoose: () => {
+                    if (!pileWord) return
+                    void send({ kind: 'guess', guess: '', target: pileWord }).then((landed) => {
+                      if (landed) setJustGave(false)
+                    })
+                  },
+                },
+            { label: 'back out to the fire', quiet: true, onChoose: onLeave },
+          ]}
+        />
       </div>
     )
   }
@@ -731,21 +728,18 @@ export default function WordDuel({
         )}
 
         {waiting && (
-          <div className="duel-actions">
-            <button
-              type="button"
-              className="put-back"
-              onClick={() =>
-                pileWord && void send({ kind: 'guess', guess: '', target: pileWord })
-              }
-              disabled={sending || !pileWord}
-            >
-              take one from the pile
-            </button>
-            <button type="button" className="put-back quiet" onClick={onLeave}>
-              wait for {say('{her}')}
-            </button>
-          </div>
+          <DuelActions
+            actions={[
+              {
+                label: 'take one from the pile',
+                disabled: sending || !pileWord,
+                onChoose: () => {
+                  if (pileWord) void send({ kind: 'guess', guess: '', target: pileWord })
+                },
+              },
+              { label: <>wait for {say('{her}')}</>, quiet: true, onChoose: onLeave },
+            ]}
+          />
         )}
 
         {!typing && !waiting && (
@@ -941,17 +935,65 @@ function RaceOver({
       </div>
 
       <div className="duel-foot">
-        <div className="duel-actions">
-          <button type="button" className="put-back" onClick={onAgain}>
-            {againLabel}
-          </button>
-          <button type="button" className="put-back quiet" onClick={onLeave}>
-            back out to the fire
-          </button>
-        </div>
+        <DuelActions
+          actions={[
+            { label: againLabel, onChoose: onAgain },
+            { label: 'back out to the fire', quiet: true, onChoose: onLeave },
+          ]}
+        />
       </div>
     </div>
   )
+}
+
+/**
+ * Any row of choices in this game, and every one of them reachable by keyboard.
+ *
+ * These were four separate rows of bare buttons, and not one of them answered
+ * an arrow key — so the end of a time challenge, the moment after handing a
+ * word over, and the wait for her word were all screens a keyboard could look
+ * at and not use. The racer had this from the start and the word game simply
+ * never got it, which is what happens when the contract lives inside one game
+ * instead of somewhere both can reach. It is `ui/useMenuKeys` now.
+ *
+ * The hint line only appears when there is actually a choice. One button is not
+ * a menu, and telling somebody they can press up and down between one thing is
+ * the kind of furniture this garden keeps taking out.
+ */
+function DuelActions({ actions }: { actions: DuelAction[] }) {
+  const keys = useMenuKeys(actions.length)
+
+  return (
+    <>
+      <div className="duel-actions">
+        {actions.map((action, index) => (
+          <button
+            ref={keys.ref(index)}
+            key={index}
+            type="button"
+            className={`put-back${action.quiet ? ' quiet' : ''}${
+              keys.selected === index ? ' is-selected' : ''
+            }`}
+            disabled={action.disabled}
+            onFocus={() => keys.choose(index)}
+            onClick={action.onChoose}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+      {actions.length > 1 && (
+        <p className="duel-menu-keys">↑ ↓ choose · enter confirm</p>
+      )}
+    </>
+  )
+}
+
+interface DuelAction {
+  label: ReactNode
+  onChoose(): void
+  quiet?: boolean
+  disabled?: boolean
 }
 
 /** Which stone was just put down, and how many have been put down since. */

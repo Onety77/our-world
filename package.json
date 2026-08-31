@@ -19,9 +19,11 @@
     "pronouns": "node scripts/pronouns.mjs",
     "places": "node scripts/places.mjs",
     "wire": "npx --yes tsx scripts/wire-check.ts",
+    "rally-stream": "npx --yes tsx scripts/rally-stream-check.ts",
     "hollow": "node scripts/hollow-check.mjs",
     "chase": "node scripts/chase-check.mjs",
-    "locks": "node scripts/locks-check.mjs"
+    "locks": "node scripts/locks-check.mjs",
+    "switchback": "npx --yes tsx scripts/switchback-check.ts"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",

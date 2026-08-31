@@ -90,6 +90,22 @@ const main = async () => {
   await send('Page.navigate', { url }, S)
   await wait(9000)
 
+  /*
+    Start with an empty drawer.
+
+    A round is named for the day, and the mock keeps them — so a run on the
+    following morning would find yesterday's round first, write both laps into
+    it, and then sit looking at today's empty one wondering where the chase
+    went. Which is a confusing way to be told nothing is wrong.
+  */
+  await ev(`(() => {
+    localStorage.setItem('garden:me', 'warm')
+    localStorage.removeItem('garden:rounds:v1')
+    return 1
+  })()`)
+  await send('Page.navigate', { url }, S)
+  await wait(9000)
+
   await ev(`(() => { const b=[...document.querySelectorAll('button')].find(x=>/come in/i.test(x.textContent)); if(b)b.click(); return 1 })()`)
   await wait(4000)
 

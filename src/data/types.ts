@@ -141,6 +141,67 @@ export interface Presence {
 }
 
 // ---------------------------------------------------------------------------
+// The live Ember Rally road
+// ---------------------------------------------------------------------------
+
+/**
+ * One car update before the data layer puts sequence and delivery information
+ * around it.
+ *
+ * This deliberately is not part of `WorldState`. A car is useful only to the
+ * other car in the same live race, and sending it through the world store can
+ * coalesce several network arrivals into one React notification. Ordinary
+ * presence should do that; a racing line must not.
+ */
+export interface RallyStreamInput {
+  /** The recorder-compatible four-integer car from ember-rally/wire.ts. */
+  car: string
+  /** Milliseconds since this driver's flag dropped. */
+  clock: number
+  /** Body-frame metres per second. */
+  speed: number
+  /** Body-frame lateral metres per second, right positive. */
+  lateral: number
+  /** Body yaw rate in radians per second, right positive. */
+  yawRate: number
+  /** Front steering angle in radians. */
+  steering: number
+}
+
+/** A validated update received from the other phone. */
+export interface RallyStreamFrame extends RallyStreamInput {
+  /** Monotonic within this connection. Gaps make packet loss measurable. */
+  sequence: number
+  /** Corrected server-clock milliseconds when the sender flushed it. */
+  sentAt: number
+}
+
+/** Transport evidence kept for the most recent wheel-to-wheel race. */
+export interface RallyStreamStats {
+  startedAt: number
+  queued: number
+  sent: number
+  received: number
+  missed: number
+  duplicates: number
+  outOfOrder: number
+  resets: number
+  meanGap: number
+  jitter: number
+  maxGap: number
+  age: number
+  maxAge: number
+  errors: number
+}
+
+/** One private, short-lived connection to one live race. */
+export interface RallyStream {
+  send(frame: RallyStreamInput): void
+  stats(): RallyStreamStats
+  close(): void
+}
+
+// ---------------------------------------------------------------------------
 // Money
 // ---------------------------------------------------------------------------
 
@@ -690,6 +751,16 @@ export interface DataLayer {
 
   setProfile(id: UserId, patch: Partial<Omit<Profile, 'id'>>): Promise<void>
   publishPresence(patch: Partial<Omit<Presence, 'id'>>): void
+
+  /**
+   * Open the fast path for one wheel-to-wheel room.
+   *
+   * The returned connection owns its own throttle, sequence and cleanup. The
+   * listener receives each valid opponent frame directly from the backing
+   * store; no world-state subscription or React render sits between Firebase
+   * and the rally interpolation buffer.
+   */
+  openRallyStream(room: string, listener: (frame: RallyStreamFrame) => void): RallyStream
 
   /**
    * Leave a letter. The position is where it will hang forever, worked out by

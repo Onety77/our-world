@@ -1,8 +1,8 @@
 {
   "//": [
-    "Presence only. Nothing here is kept and nothing here matters tomorrow —",
-    "it is where the two of you are standing right now, written several times a",
-    "second and thrown away.",
+    "Live things only. Nothing here is kept and nothing here matters tomorrow:",
+    "presence says where the two of you are standing; liveRaces carries the two",
+    "cars for the few minutes they share a road. Both are thrown away.",
     "",
     "Same rule as Firestore: two people, forever. Do not fill the addresses in by",
     "hand — run `npm run rules`, which takes them from .env.local and writes",
@@ -64,6 +64,35 @@
         },
 
         "$other": { ".validate": false }
+      }
+    },
+
+    "//liveRaces": [
+      "One compact, replace-in-place frame per person in an active room.",
+      "Unlike presence this is listened to directly by the race, so bursts do",
+      "not lose their middle snapshots inside the world-state render coalescer.",
+      "The room name is escaped before it becomes a path; each person can read",
+      "both cars but write and remove only their own. onDisconnect removes it."
+    ],
+    "liveRaces": {
+      "$race": {
+        "$who": {
+          ".read": "auth != null && (auth.token.email.toLowerCase() === '__WARM_EMAIL__' || auth.token.email.toLowerCase() === '__COOL_EMAIL__')",
+          ".write": "auth != null && (($who === 'warm' && auth.token.email.toLowerCase() === '__WARM_EMAIL__') || ($who === 'cool' && auth.token.email.toLowerCase() === '__COOL_EMAIL__'))",
+          ".validate": "newData.hasChildren(['v', 'q', 'c', 't', 'f', 'l', 'y', 'w', 'a'])",
+
+          "v": { ".validate": "newData.isNumber() && newData.val() === 1" },
+          "q": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2147483647" },
+          "c": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64" },
+          "t": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3600000" },
+          "f": { ".validate": "newData.isNumber() && newData.val() >= -10000 && newData.val() <= 10000" },
+          "l": { ".validate": "newData.isNumber() && newData.val() >= -10000 && newData.val() <= 10000" },
+          "y": { ".validate": "newData.isNumber() && newData.val() >= -20000 && newData.val() <= 20000" },
+          "w": { ".validate": "newData.isNumber() && newData.val() >= -2000 && newData.val() <= 2000" },
+          "a": { ".validate": "newData.isNumber() && newData.val() > 0" },
+
+          "$other": { ".validate": false }
+        }
       }
     }
   }

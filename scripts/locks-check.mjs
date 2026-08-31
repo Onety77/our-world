@@ -172,7 +172,20 @@ const main = async () => {
 
   const cards = await ev(`[...document.querySelectorAll('.game-card strong')].map(s=>s.textContent)`)
   console.log('cards:', JSON.stringify(cards))
-  check(!cards.some((n) => /scatter/i.test(n)), 'a game shut for both is gone from the row', JSON.stringify(cards))
+  check(cards.some((n) => /scatter/i.test(n)), 'a shut game is still in the row', JSON.stringify(cards))
+  const locked = await ev(`(() => {
+    const cards = [...document.querySelectorAll('.game-card')]
+    const scat = cards.find(c => /scatter/i.test(c.textContent))
+    return scat ? { marked: scat.classList.contains('is-locked'), says: scat.textContent.includes('being worked on') } : null
+  })()`)
+  check(locked && locked.marked, 'and it is marked as shut', JSON.stringify(locked))
+  check(locked && locked.says, 'and says it is being worked on', JSON.stringify(locked))
+  // And the same, looked at rather than only asserted.
+  const scatAt = cards.findIndex((n) => /scatter/i.test(n))
+  await ev(`(() => { const el=document.querySelector('.game-row'); const c=el.querySelectorAll('.game-card')[${scatAt}];
+    el.scrollLeft = c.offsetLeft + c.offsetWidth/2 - el.clientWidth/2; return 1 })()`)
+  await wait(1400)
+  await shot('locks-card')
   check(cards.some((n) => /rally/i.test(n)), 'and the rally is still there', JSON.stringify(cards))
 
   // Into the rally, to the road picker.
@@ -209,7 +222,7 @@ const main = async () => {
 
   const herCards = await ev(`[...document.querySelectorAll('.game-card strong')].map(s=>s.textContent)`)
   console.log('her cards:', JSON.stringify(herCards))
-  check(!herCards.some((n) => /scatter/i.test(n)), 'shut for both is gone for her too', JSON.stringify(herCards))
+  check(herCards.some((n) => /scatter/i.test(n)), 'she sees it too, shut', JSON.stringify(herCards))
 
   const j = herCards.findIndex((n) => /rally/i.test(n))
   await ev(`(() => { const el=document.querySelector('.game-row'); const c=el.querySelectorAll('.game-card')[${j}];
@@ -229,10 +242,30 @@ const main = async () => {
     count: (document.querySelector('.rally-course-count')||{}).textContent,
   }))()`)
   console.log('her roads:', JSON.stringify(herRoads))
-  check(!herRoads.names.some((n) => /moonbreak/i.test(n)),
-    'the road shut for her is gone from her picker', JSON.stringify(herRoads.names))
-  check(herRoads.names.length === 2, 'and the other two are still there', JSON.stringify(herRoads.names))
-  check(/2 roads/.test(herRoads.kicker ?? ''), 'the heading counts what she can see', String(herRoads.kicker))
+  // Counted against what you can see rather than a number, so adding a road
+  // to the racer does not make this fail for the wrong reason.
+  check(herRoads.names.length === roads.names.length,
+    'every road is still on her wall', JSON.stringify(herRoads.names))
+  const herLock = await ev(`(() => {
+    const cards = [...document.querySelectorAll('.rally-course')]
+    const moon = cards.find(c => /moonbreak/i.test(c.textContent))
+    const root = cards.find(c => /rootway/i.test(c.textContent))
+    return {
+      moon: moon ? moon.classList.contains('is-locked') : null,
+      says: moon ? moon.textContent.includes('being worked on') : null,
+      root: root ? root.classList.contains('is-locked') : null,
+    }
+  })()`)
+  check(herLock.moon === true, 'the road shut for her wears a lock', JSON.stringify(herLock))
+  check(herLock.says === true, 'and says why', JSON.stringify(herLock))
+  check(herLock.root === false, 'and the open ones do not', JSON.stringify(herLock))
+  // Bring the shut road to the middle, so the lock is actually looked at.
+  await ev(`(() => {
+    const marks = [...document.querySelectorAll('.rally-course-marks button')]
+    if (marks[1]) marks[1].click()
+    return 1
+  })()`)
+  await wait(1200)
   await shot('locks-her-roads')
 
   console.log('')

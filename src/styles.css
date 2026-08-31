@@ -11754,3 +11754,215 @@ body.on-the-road .broke-what {
     flex: 1 1 auto;
   }
 }
+
+/* --------------------------------------------------------------------------
+   The field, and the light beside it
+
+   A send that is a light rather than a labelled button: dark while there is
+   nothing to send, warm the moment there is. That is the same language the
+   rest of the garden uses for "this is live now", and it means the control
+   says its own state instead of needing a word for it.
+   -------------------------------------------------------------------------- */
+.saying-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.saying-row .saying-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.saying-send {
+  flex: 0 0 auto;
+  width: 2.3rem;
+  height: 2.3rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: 1px solid rgba(242, 239, 230, 0.16);
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.4s ease,
+    opacity 0.3s ease;
+}
+
+/* The arrow, drawn rather than typed: two rules meeting at a corner and turned
+   forty-five degrees, so it is sharp at any size and needs no glyph. */
+.saying-send span {
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.14rem;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  rotate: -45deg;
+  color: rgba(242, 239, 230, 0.4);
+  transition: color 0.3s ease;
+}
+
+.saying-send:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.saying-send:enabled {
+  border-color: rgba(255, 197, 130, 0.55);
+  box-shadow: 0 0 0.9rem rgba(255, 150, 60, 0.16);
+}
+
+.saying-send:enabled span {
+  color: #ffc98f;
+}
+
+.saying-send:enabled:hover,
+.saying-send:enabled:focus-visible {
+  border-color: rgba(255, 209, 155, 0.9);
+  box-shadow: 0 0 1.3rem rgba(255, 150, 60, 0.3);
+  outline: none;
+}
+
+/* Room for a thumb where thumbs are used. */
+@media (max-width: 30rem) {
+  .saying-send {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   A door that is shut
+
+   Locked, not hidden. The card keeps its place in the row and its landscape,
+   and loses only the invitation — which is replaced by the reason. Dimmed
+   enough to read as unavailable at a glance, lit enough to still be legible,
+   because the point of showing it is that you can see what it is.
+   -------------------------------------------------------------------------- */
+.game-card.is-locked,
+.rally-course.is-locked {
+  cursor: default;
+}
+
+.game-card.is-locked .game-card-object,
+.game-card.is-locked strong,
+.game-card.is-locked small,
+.rally-course.is-locked .rally-course-scene,
+.rally-course.is-locked .rally-course-name,
+.rally-course.is-locked .rally-course-copy {
+  opacity: 0.42;
+  filter: saturate(0.5);
+}
+
+.game-card-locked,
+.rally-course-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  color: rgba(214, 190, 160, 0.8);
+}
+
+/*
+  The lock itself: a body and a shackle, in two boxes.
+
+  Drawn rather than an emoji or an icon font, for the same reason every other
+  small mark in this garden is — an emoji arrives in whatever style the device
+  feels like and would be the only thing on screen not made of the same light.
+*/
+.game-card-locked i,
+.rally-course-locked i {
+  position: relative;
+  display: block;
+  width: 0.5rem;
+  height: 0.4rem;
+  border: 1px solid currentColor;
+  border-radius: 1px;
+}
+
+.game-card-locked i::before,
+.rally-course-locked i::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 0.3rem;
+  height: 0.24rem;
+  translate: -50% 0;
+  border: 1px solid currentColor;
+  border-bottom: 0;
+  border-radius: 0.2rem 0.2rem 0 0;
+}
+
+/* The selected card's command line is normally warm; a shut one is not an
+   invitation, so it does not get the warmth. */
+.game-card.is-selected.is-locked .game-card-command {
+  color: rgba(214, 190, 160, 0.8);
+}
+
+/*
+  The same hint the racer gives, in the word game.
+
+  Only where there is actually a choice — see `DuelActions`. Deliberately the
+  quietest thing on the screen: it is for the one evening somebody is on a
+  laptop wondering whether the arrows do anything, and furniture for every
+  other.
+*/
+.duel-menu-keys {
+  margin: 0.55rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  text-align: center;
+  color: rgba(242, 239, 230, 0.3);
+}
+
+/* A phone has no arrow keys, and nothing on it needs telling about them. */
+@media (pointer: coarse) {
+  .duel-menu-keys,
+  .rally-menu-keys {
+    display: none;
+  }
+}
+
+/*
+  The Switchback's card, which is the Rootway's vault with a different road in it.
+
+  A single ribbon that leaves the middle, doubles back and comes out the other
+  side — the shape of a hairpin seen down the tunnel, drawn with a border and a
+  clip rather than an image, like every other scene on these cards. It says the
+  one true thing about this course in one glance: same cave, road that switches
+  back.
+*/
+.rally-course .course-switchback {
+  position: absolute;
+  z-index: 2;
+  bottom: 0;
+  left: 50%;
+  width: 92%;
+  height: 52%;
+  translate: -50% 0;
+  background: linear-gradient(#31261e, #17100c);
+  clip-path: polygon(
+    42% 0, 58% 0,
+    58% 34%, 88% 34%, 88% 58%, 26% 58%, 26% 74%,
+    100% 100%, 0 100%,
+    14% 74%, 14% 46%, 76% 46%, 76% 22%, 42% 22%
+  );
+}
+
+/* The line down the middle of it, the same pale dust the other roads carry. */
+.rally-course .course-switchback::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 49.4%,
+    rgba(229, 190, 143, 0.22) 50%,
+    transparent 50.6%
+  );
+}

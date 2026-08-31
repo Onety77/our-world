@@ -526,21 +526,33 @@ function TheHollow() {
     at — plus a listener on a document that cannot exist.
   */
   /*
-    Games that are not shut for you right now.
-
-    A locked game is *gone*, not greyed out — see `systems/locks`. Which means
-    the row's numbering, its swipe and its "next fire" card all follow along
-    without any of them knowing that locking exists.
+    Which doors are shut for you right now. See `systems/locks`.
   */
   const shut = useDoorman()
-  const open = useMemo(
-    () => GAMES.filter((g) => !shut(gameKey(g.id))),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- shut is rebuilt
+  /*
+    Every game stays in the row, and a closed one wears a lock.
+
+    The first version of this took a locked game out of the row altogether, on
+    the reasoning that a door you can see and cannot open is the interface
+    talking about work in progress. That was the wrong call, and it read as the
+    game having been deleted: the Hollow simply had two cards in it where there
+    had been three, with nothing anywhere saying why.
+
+    A lock says what a gap cannot. It is still your game, it is still there, and
+    it is shut for a reason — which is the whole message.
+  */
+  const open = GAMES
+
+  /*
+    A shut game is not waiting for anybody, so it is not in the list of what is.
+    That list is a to-do, and a door you cannot open has nothing to do.
+  */
+  const listed = useMemo(
+    () => GAMES.filter((g) => g.mode !== 'live' && !shut(gameKey(g.id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the doorman is rebuilt
     // every render by design; the locks themselves are the dependency.
     [shut],
   )
-
-  const listed = useMemo(() => open.filter((g) => g.mode !== 'live'), [open])
   const turns = useStandings(listed)
 
   /*
@@ -587,13 +599,20 @@ function TheHollow() {
     (by: 1 | -1) => setAt((n) => Math.max(0, Math.min(last, n + by))),
     [last],
   )
-  const chooseGame = useCallback((index: number) => {
-    if (!open[index]) return
-    ambience.cue('ember', 0.38)
-    setAt(index)
-    setWay(0)
-    setShowing('ways')
-  }, [])
+  const chooseGame = useCallback(
+    (index: number) => {
+      const game = open[index]
+      // Shut is shut whichever way you reached for it — a tap, Enter, or the
+      // list of what is waiting. One guard, at the one door they all go through.
+      if (!game || shut(gameKey(game.id))) return
+      ambience.cue('ember', 0.38)
+      setAt(index)
+      setWay(0)
+      setShowing('ways')
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- as above
+    [shut],
+  )
 
   const track = useRef<HTMLDivElement>(null)
   const cards = useRef<(HTMLButtonElement | null)[]>([])
@@ -908,15 +927,20 @@ function TheHollow() {
           ‹
         </button>
         <div className="game-row" role="group" aria-label="games in the Hallow">
-        {open.map((g, index) => (
+        {open.map((g, index) => {
+          const locked = shut(gameKey(g.id))
+          return (
           <button
             ref={(node) => { cards.current[index] = node }}
             type="button"
-            className={`game-card${index === at ? ' is-selected' : ''}`}
+            className={`game-card${index === at ? ' is-selected' : ''}${locked ? ' is-locked' : ''}`}
             key={g.id}
             aria-current={index === at ? 'true' : undefined}
+            aria-disabled={locked || undefined}
             onClick={() => {
-              if (index === at) chooseGame(index)
+              // A shut card still takes a tap — it just brings itself to the
+              // middle so you can read why. What it will not do is open.
+              if (index === at) { if (!locked) chooseGame(index) }
               else setAt(index)
             }}
           >
@@ -925,11 +949,28 @@ function TheHollow() {
             <strong>{g.name}</strong>
             <span className="game-length">{g.duration}</span>
             <small>{say(g.blurb)}</small>
+            {/*
+              The lock, and it says what kind of shut this is.
+
+              Not "unavailable" and not an error: this is a thing that is being
+              worked on and will come back, and the line is the only place that
+              can say so. It sits where the invitation would have been, because
+              it is standing in for exactly that.
+            */}
             <span className="game-card-command">
-              {index === at ? 'enter to choose' : 'bring to the fire'}
+              {locked ? (
+                <span className="game-card-locked">
+                  <i aria-hidden="true" /> being worked on
+                </span>
+              ) : index === at ? (
+                'enter to choose'
+              ) : (
+                'bring to the fire'
+              )}
             </span>
           </button>
-        ))}
+          )
+        })}
         <button
           ref={(node) => { cards.current[last] = node }}
           type="button"

@@ -15,7 +15,7 @@ export const SAMPLE_MS = 100
  * can now hold a line through each place without a Moonbreak run ever being
  * mistaken for a Rootway run recorded against different geometry.
  */
-export type StageId = 'rootway' | 'moonbreak' | 'stormcrown'
+export type StageId = 'rootway' | 'rootway-test' | 'moonbreak' | 'stormcrown'
 
 export interface RallySetup {
   seed: number

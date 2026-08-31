@@ -72,6 +72,7 @@ import {
   onDisconnect,
   onValue,
   ref,
+  remove as rtdbRemove,
   serverTimestamp as rtdbTimestamp,
   set as rtdbSet,
   type Database,
@@ -82,6 +83,7 @@ import { localDateKey } from '@/systems/time'
 import {
   GROWN_DAYS,
   USER_IDS,
+  otherUser,
   type Contribution,
   type Decor,
   type DataLayer,
@@ -99,10 +101,18 @@ import {
   type WorldState,
   type QuestionAnswer,
   type QuestionRound,
+  type RallyStreamInput,
   type VoiceLight,
 } from './types'
 import { AMBIENCE_KEYS } from './types'
 import { newId } from './ids'
+import {
+  RALLY_STREAM_INTERVAL,
+  RallyStreamMeter,
+  rallyRoomKey,
+  readRallyFrame,
+  writeRallyFrame,
+} from './rallyStream'
 import {
   QUESTION_DAY,
   QUESTION_PROMPTS,
@@ -146,6 +156,10 @@ const LOCKS = 'locks'
 
 /** Presence is per person, under a path only that person may write. */
 const presencePath = (id: UserId) => `presence/${id}`
+
+/** One disposable, race-scoped car path. Never enters the world snapshot. */
+const rallyPath = (room: string, id: UserId) =>
+  `liveRaces/${rallyRoomKey(room)}/${id}`
 
 /**
  * How often a moving body is published, in milliseconds.
@@ -432,6 +446,8 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
   let state = emptyWorld()
   const listeners = new Set<(s: WorldState) => void>()
   const unsubscribes: (() => void)[] = []
+  /** Race-scoped listeners also close if authentication changes mid-road. */
+  const rallyStops = new Set<() => void>()
 
   /**
    * Download URLs, by storage path, for as long as the tab is open.
@@ -874,6 +890,77 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         sendTimer = null
         flush()
       }, wait - since)
+    },
+
+    openRallyStream(room, listener) {
+      const mine = ref(rtdb, rallyPath(room, me))
+      const theirs = ref(rtdb, rallyPath(room, otherUser(me)))
+      const meter = new RallyStreamMeter(now)
+      let pending: RallyStreamInput | null = null
+      let timer: ReturnType<typeof setTimeout> | null = null
+      let lastSent = 0
+      let sequence = 0
+      let closed = false
+
+      const stop = onValue(
+        theirs,
+        (snap) => {
+          const frame = readRallyFrame(snap.val())
+          if (!frame) return
+          if (meter.noteReceived(frame, now())) listener(frame)
+        },
+        () => meter.noteError(),
+      )
+
+      /*
+        A dead phone must not leave a car standing in a future rematch. This is
+        registered on the exact race and exact driver, so neither person can
+        ever clear the other's line.
+      */
+      const gone = onDisconnect(mine)
+      void gone.remove().catch(() => meter.noteError())
+
+      const flushRally = () => {
+        timer = null
+        if (closed || !pending) return
+        const frame = writeRallyFrame(pending, sequence++, now())
+        pending = null
+        lastSent = Date.now()
+        meter.noteSent()
+        void rtdbSet(mine, frame).catch(() => meter.noteError())
+      }
+
+      const close = () => {
+        if (closed) return
+        closed = true
+        pending = null
+        if (timer) clearTimeout(timer)
+        timer = null
+        stop()
+        rallyStops.delete(close)
+        void gone.cancel().catch(() => {})
+        void rtdbRemove(mine).catch(() => meter.noteError())
+      }
+      rallyStops.add(close)
+
+      return {
+        send(frame: RallyStreamInput) {
+          if (closed) return
+          pending = frame
+          meter.noteQueued()
+          const since = Date.now() - lastSent
+          if (since >= RALLY_STREAM_INTERVAL) {
+            flushRally()
+            return
+          }
+          if (timer) return
+          timer = setTimeout(flushRally, RALLY_STREAM_INTERVAL - since)
+        },
+
+        stats: () => meter.snapshot(),
+
+        close,
+      }
     },
 
     async writeLetter({ body, placeId, position }) {
@@ -2017,6 +2104,8 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     },
 
     dispose() {
+      for (const close of [...rallyStops]) close()
+      rallyStops.clear()
       for (const off of unsubscribes) off()
       unsubscribes.length = 0
       listeners.clear()

@@ -583,3 +583,29 @@ shared-file changes, measurements, and anything another agent should preserve.
   crash the rally screen.
 - TypeScript, the production build and the complete remaining-road simulation
   pass after the removal.
+
+## 31 August 2026 - Codex - Wheel-to-wheel transport, Step 1
+
+- Kept the adaptive delayed interpolation buffer and moved live car delivery
+  onto a dedicated Realtime Database child for each race and each person. The
+  listener feeds the buffer directly, outside the coalesced world-presence
+  store and without causing React renders during a race.
+- Added compact versioned frames carrying a monotonic sequence, sender race
+  clock, recorder-compatible car, forward/lateral velocity, yaw rate, steering
+  and corrected send time. Malformed, duplicated and out-of-order frames are
+  refused before they reach the road; a sender reconnect can safely restart
+  its sequence.
+- Added a matching local two-client stream, 60-ms write throttling, exact-room
+  isolation, auth-change cleanup, explicit close cleanup and Realtime Database
+  `onDisconnect` removal. The previous `presence.driving` route remains as a
+  temporary compatibility fallback for a phone on the earlier cached build.
+- Added session-only production diagnostics to the car tab in `/dev7731`:
+  actual queue/flush/receive counts, missing and reordered sequences, arrival
+  gap, jitter, delivery age, stream errors, adaptive delay and dry-frame rate.
+  It stores no positions, room names or route history.
+- Added guarded `liveRaces` Realtime Database rules and regenerated the files
+  in `rules-out/`; those rules must be published before the direct path can be
+  measured on the deployed site.
+- `npm run rally-stream`, `npm run wire`, `npm run rally`, `npm run lobby`,
+  TypeScript, the rule JSON checks and the final production build pass. The
+  established Firebase chunk-size warning remains unchanged.

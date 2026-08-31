@@ -238,6 +238,7 @@ export class Rolling {
   /** Arrival gaps, for measuring the above. */
   private gaps: number[] = []
   private dry = 0
+  private frames = 0
 
   /** The car being drawn. One object, rewritten, because this is per frame. */
   private readonly out: RunSample = {
@@ -314,6 +315,7 @@ export class Rolling {
     if (seen.length === 0) return null
     const newest = seen[seen.length - 1]
     if (now - newest.at > LOST_MS) return null
+    this.frames++
 
     // Capped, so a tab coming back from the background does not advance her
     // half a lap in one frame.
@@ -431,7 +433,15 @@ export class Rolling {
    * What the link is actually doing, for `npm run wire` and for the dev handle
    * in `Race.tsx`. Nobody should have to guess at this from a phone.
    */
-  stats(): { held: number; behind: number; gap: number; jitter: number; dry: number } {
+  stats(): {
+    held: number
+    behind: number
+    gap: number
+    jitter: number
+    dry: number
+    frames: number
+    dryPercent: number
+  } {
     const gaps = this.gaps
     let mean = 0
     let spread = 0
@@ -447,6 +457,8 @@ export class Rolling {
       gap: Math.round(mean),
       jitter: Math.round(spread),
       dry: this.dry,
+      frames: this.frames,
+      dryPercent: this.frames > 0 ? Math.round((this.dry / this.frames) * 1000) / 10 : 0,
     }
   }
 }
