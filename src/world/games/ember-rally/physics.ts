@@ -72,6 +72,7 @@ import {
 import {
   END_WALL,
   roadAt,
+  galeAt,
   roadAtRoute,
   swayRollAt,
   vergeWidth,
@@ -1741,32 +1742,45 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     caught late, or used, and the tyres get a say in all three.
     ==========================================================================
   */
+  /*
+    ==========================================================================
+    Everything the road does to the car sideways, in one place.
+
+    Three things do it and there are only two ways they can do it, so this is
+    two lines of arithmetic rather than three near-identical blocks each with
+    its own chance of a sign error.
+
+    **Tilted floor.** The Moonbreak's span rolls under the car (`swayRollAt`)
+    and the Stormcrown has corners authored to lean the wrong way
+    (`Band.camber`). Both are the road not being level, both are resolved the
+    same way — gravity down the slope, `g·sin(tilt)` — and both are the *same*
+    angle the road is drawn at and the car is laid on, so nothing here can
+    disagree with what is on the screen.
+
+    Eleven degrees of swing works out at almost exactly two metres per second
+    squared, which matters more than it sounds: the span gives the car three and
+    a half metres either side of the middle, and a sine of amplitude `a` at `w`
+    radians a second moves what it is pushing by `a / w²` — about a metre and a
+    half, spent before the driver has done anything. The first attempt was three
+    and a half, which spends two and a half metres and cannot be driven; the
+    harness caught it before the road was ever played.
+
+    **Weather.** The gale (`galeAt`) is a force rather than a slope, so it is
+    added straight in. It is the only one of the three that is not a property of
+    the ground.
+
+    Left is negative n and a positive tilt lifts the right, so both signs come
+    out of `basisAt` rather than out of trying them both ways.
+    ==========================================================================
+  */
   const swaying = swayRollAt(road.sway, car.s, car.elapsed)
-  if (swaying !== 0) {
-    /*
-      Gravity down a tilted floor, and nothing else.
-
-      The whole force is g·sin(roll), which is why the number governing how
-      hard this bridge is to drive is an *angle* — the same angle the deck is
-      drawn at and the same one the car is laid on. Nothing here can disagree
-      with what is on the screen, because there is only one number.
-
-      Eleven degrees works out at almost exactly two metres per second squared
-      at the peak. That matters more than it sounds: the span gives the car
-      three and a half metres either side of the middle, and a sine of
-      amplitude `a` at `w` radians a second moves what it is pushing by
-      `a / w²` — about a metre and a half here, call it two fifths of the
-      road, spent before the driver has done anything at all. Enough to be late
-      and still be on the deck. The first attempt was three and a half, which
-      spends two and a half metres and cannot be driven; that is not difficulty,
-      it is a coin toss, and the harness caught it before it was ever played.
-
-      Left is negative n and a positive roll lifts the right, so the sign comes
-      out of `basisAt` rather than out of trying it both ways.
-    */
-    const push = -TUNE.gravity * Math.sin(swaying)
-    car.vn += push * Math.cos(car.psi) * dt
-    car.vs -= push * Math.sin(car.psi) * dt
+  const tilt = swaying + road.camber
+  const sideways =
+    (tilt === 0 ? 0 : -TUNE.gravity * Math.sin(tilt)) +
+    galeAt(road, car.s, car.elapsed, v)
+  if (sideways !== 0) {
+    car.vn += sideways * Math.cos(car.psi) * dt
+    car.vs -= sideways * Math.sin(car.psi) * dt
   }
 
   // --- into the road's frame ----------------------------------------------

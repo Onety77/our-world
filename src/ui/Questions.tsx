@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser, type QuestionRound } from '@/data/types'
 import { attempt } from '@/systems/trouble'
@@ -48,19 +48,26 @@ function RoundSheet({ round }: { round: QuestionRound }) {
     if (!mine) field.current?.focus()
   }, [mine, round.id])
 
+  const at = history.findIndex((item) => item.id === round.id)
+  const go = useCallback((offset: number) => {
+    const next = history[at + offset]
+    if (next) useQuestions.getState().openArchive(next.id)
+  }, [at, history])
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close()
+      else if (both && event.key === 'ArrowLeft') {
+        event.preventDefault()
+        go(-1)
+      } else if (both && event.key === 'ArrowRight') {
+        event.preventDefault()
+        go(1)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [close])
-
-  const at = history.findIndex((item) => item.id === round.id)
-  const go = (offset: number) => {
-    const next = history[at + offset]
-    if (next) useQuestions.getState().openArchive(next.id)
-  }
+  }, [both, close, go])
 
   const answer = async () => {
     if (body.trim() === '') return

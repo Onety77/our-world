@@ -628,3 +628,26 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Expanded `npm run wire` with direct-motion acceleration, lane-change,
   steering, mixed legacy/direct and dropped-update checks. The wire suite,
   rally-stream suite, TypeScript and production build pass.
+
+## 31 August 2026 - Codex - Keyboard and touch interaction pass
+
+- Audited the interaction path from Arrival and the five-place browser through
+  each place, game selection, waiting room, game setup, pause/result choices,
+  question history, message actions and opened Glasshouse memories.
+- Rebuilt the shared Arrow/Enter menu behavior so arrow selection no longer
+  moves browser focus or draws the browser's square/circle focus chrome. Tab
+  and native Enter still work normally; text fields keep their caret keys.
+- Preserved the Tree's authored controls: Left/Right still circles the tree,
+  while Up/Down chooses between its visible rituals and Enter opens one.
+- Added missing keyboard choice handling to the Tree and Wellspring actions,
+  Hollow waiting list, live race room, Scattergories opening, message menu,
+  Glasshouse threshold and opened-memory actions. Question archives now move
+  with Left/Right, and the Glasshouse aisle walks by bay with Up/Down.
+- Added horizontal finger swiping to both Ember Rally road pickers: ordinary
+  road choice and the wheel-to-wheel invitation road. Vertical page movement
+  remains native and a completed swipe cannot accidentally enter the card.
+- Verified in the browser at 390 x 844 that both road pickers move Rootway to
+  Moonbreak by a real pointer swipe, keyboard selection leaves focus on the
+  page with no outline, Enter opens the chosen road, and the live waiting room
+  changes and confirms its choice by keyboard. TypeScript and production build
+  pass.

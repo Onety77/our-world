@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { GameProps } from '../types'
 import { useGameStage } from '../stage'
 import { makeTrack } from './track'
@@ -8,6 +8,7 @@ import { usePublishedTuning } from './tuningSync'
 import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
 import { roadKey, useDoorman } from '@/systems/locks'
 import { useMenuKeys } from '@/ui/useMenuKeys'
+import { useChoiceSwipe } from '@/ui/useChoiceSwipe'
 import { useLobby } from '@/systems/useLobby'
 import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
@@ -941,6 +942,14 @@ function CoursePicker({
 
   const showPrevious = () => setSelected(Math.max(0, selected - 1))
   const showNext = () => setSelected(Math.min(roads.length - 1, selected + 1))
+  const browser = useRef<HTMLDivElement>(null)
+  const swipe = useCallback(
+    (direction: -1 | 1) => {
+      setSelected(Math.max(0, Math.min(roads.length - 1, selected + direction)))
+    },
+    [roads.length, selected, setSelected],
+  )
+  useChoiceSwipe(browser, swipe)
 
   return (
     <div className="rally rally-courses">
@@ -950,7 +959,7 @@ function CoursePicker({
         <h1>Where do you want the engine?</h1>
       </div>
 
-      <div className="rally-course-browser">
+      <div className="rally-course-browser" ref={browser}>
         <button
           type="button"
           className="rally-course-step previous"

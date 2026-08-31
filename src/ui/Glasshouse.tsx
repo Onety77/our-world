@@ -30,6 +30,7 @@ import { toTheNewest } from '@/sections/glasshouse/aisle'
 import { openPane } from '@/sections/glasshouse/view'
 // Named apart from this file's own `say`, which puts words on the glass.
 import { useSay as useWords } from '@/systems/useSay'
+import { useMenuKeys } from './useMenuKeys'
 
 /** How long the glass takes to form, in milliseconds. Matches the shader. */
 const FORMING_MS = 2400
@@ -201,6 +202,30 @@ export function OpenMemory() {
   const [taking, setTaking] = useState(false)
   const [saying, setSaying] = useState<string | null>(null)
   const field = useRef<HTMLTextAreaElement>(null)
+  const mine = memory?.by === me
+  const theirLine = memory?.theirs
+
+  /*
+    Every visible action around an opened pane is one keyboard trail.
+
+    The writing actions only join it while the glass is actually turned; the
+    bottom actions follow them, and the irreversible confirmation comes last.
+    Nothing is focused for decoration â€” the same quiet colour change used by
+    the other garden menus is enough to show where Enter will land.
+  */
+  const writingCount = turned && !mine && saying !== null ? 2 : 0
+  const backActionCount = turned && !mine && saying === null &&
+    (!theirLine || theirLine.by === me) ? 1 : 0
+  const contextualCount = writingCount || backActionCount
+  const mainCount = 2 + (mine && !taking ? 1 : 0)
+  const confirmationCount = mine && taking ? 2 : 0
+  const keys = useMenuKeys(
+    contextualCount + mainCount + confirmationCount,
+    true,
+    Boolean(memory),
+  )
+  const mainAt = contextualCount
+  const confirmationAt = contextualCount + mainCount
 
   /*
     Say that you are looking at it.
@@ -375,9 +400,6 @@ export function OpenMemory() {
   */
   if (!memory || memory.removed) return null
 
-  const mine = memory.by === me
-  const theirLine = memory.theirs
-
   const takeItOut = async () => {
     try {
       await data.removeMemory(memory.id)
@@ -460,7 +482,13 @@ export function OpenMemory() {
               {inWords('Nothing on this side yet. {She} writes here, when {she} gets to it.')}
             </p>
           ) : saying === null ? (
-            <button type="button" className="opened-say" onClick={() => setSaying('')}>
+            <button
+              ref={turned ? keys.ref(0) : undefined}
+              type="button"
+              className={`opened-say${turned && keys.selected === 0 ? ' is-selected' : ''}`}
+              onFocus={() => keys.choose(0)}
+              onClick={() => setSaying('')}
+            >
               what I remember
             </button>
           ) : null}
@@ -477,10 +505,22 @@ export function OpenMemory() {
                 autoFocus
               />
               <div className="opened-ways">
-                <button type="button" className="put-back" onClick={() => void say()}>
+                <button
+                  ref={turned ? keys.ref(0) : undefined}
+                  type="button"
+                  className={`put-back${turned && keys.selected === 0 ? ' is-selected' : ''}`}
+                  onFocus={() => keys.choose(0)}
+                  onClick={() => void say()}
+                >
                   write it on the glass
                 </button>
-                <button type="button" className="put-back quiet" onClick={() => setSaying(null)}>
+                <button
+                  ref={turned ? keys.ref(1) : undefined}
+                  type="button"
+                  className={`put-back quiet${turned && keys.selected === 1 ? ' is-selected' : ''}`}
+                  onFocus={() => keys.choose(1)}
+                  onClick={() => setSaying(null)}
+                >
                   not now
                 </button>
               </div>
@@ -489,8 +529,10 @@ export function OpenMemory() {
 
           {!mine && theirLine && theirLine.by === me && (
             <button
+              ref={turned ? keys.ref(0) : undefined}
               type="button"
-              className="put-back quiet"
+              className={`put-back quiet${turned && keys.selected === 0 ? ' is-selected' : ''}`}
+              onFocus={() => keys.choose(0)}
               onClick={() => setSaying(theirLine.body)}
             >
               change what you wrote
@@ -518,8 +560,10 @@ export function OpenMemory() {
 
       <div className="opened-ways">
         <button
+          ref={keys.ref(mainAt)}
           type="button"
-          className="put-back"
+          className={`put-back${keys.selected === mainAt ? ' is-selected' : ''}`}
+          onFocus={() => keys.choose(mainAt)}
           onClick={() => {
             ambience.cue('glass', 0.28)
             setTurned(!turned)
@@ -527,7 +571,13 @@ export function OpenMemory() {
         >
           {turned ? 'turn it back' : 'turn it over'}
         </button>
-        <button type="button" className="put-back quiet" onClick={() => open(null)}>
+        <button
+          ref={keys.ref(mainAt + 1)}
+          type="button"
+          className={`put-back quiet${keys.selected === mainAt + 1 ? ' is-selected' : ''}`}
+          onFocus={() => keys.choose(mainAt + 1)}
+          onClick={() => open(null)}
+        >
           back to the glass
         </button>
         {/*
@@ -540,7 +590,17 @@ export function OpenMemory() {
           delete button of equal weight to the picture.
         */}
         {mine && !taking && (
-          <button type="button" className="put-back quiet" onClick={() => setTaking(true)}>
+          <button
+            ref={keys.ref(mainAt + 2)}
+            type="button"
+            className={`put-back quiet${keys.selected === mainAt + 2 ? ' is-selected' : ''}`}
+            onFocus={() => keys.choose(mainAt + 2)}
+            onClick={() => {
+              // The safe answer is selected when the confirmation arrives.
+              keys.choose(mainAt + 3)
+              setTaking(true)
+            }}
+          >
             take it out
           </button>
         )}
@@ -559,10 +619,25 @@ export function OpenMemory() {
             the building moves, and there is no way back.
           </span>
           <span className="opened-taking-ways">
-            <button type="button" className="put-back" onClick={() => void takeItOut()}>
+            <button
+              ref={keys.ref(confirmationAt)}
+              type="button"
+              className={`put-back${keys.selected === confirmationAt ? ' is-selected' : ''}`}
+              onFocus={() => keys.choose(confirmationAt)}
+              onClick={() => void takeItOut()}
+            >
               take it out of the glass
             </button>
-            <button type="button" className="put-back quiet" onClick={() => setTaking(false)}>
+            <button
+              ref={keys.ref(confirmationAt + 1)}
+              type="button"
+              className={`put-back quiet${keys.selected === confirmationAt + 1 ? ' is-selected' : ''}`}
+              onFocus={() => keys.choose(confirmationAt + 1)}
+              onClick={() => {
+                keys.choose(mainAt + 1)
+                setTaking(false)
+              }}
+            >
               keep it
             </button>
           </span>

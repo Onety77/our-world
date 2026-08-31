@@ -36,6 +36,7 @@ import { create } from 'zustand'
 import { useData } from '@/data/provider'
 import { heartedBy, useTalking } from '@/systems/talking'
 import type { Message } from '@/data/types'
+import { useMenuKeys } from './useMenuKeys'
 
 /** Two taps closer together than this, and nearer than `NEAR`, are one act. */
 const DOUBLE_MS = 340
@@ -169,6 +170,7 @@ export function SaidMenu() {
   const messages = useTalking((s) => s.messages)
   const answer = useTalking((s) => s.answer)
   const startWriting = useTalking((s) => s.startWriting)
+  const keys = useMenuKeys(at ? 2 : 0, true, Boolean(at))
 
   /*
     Anything at all closes it: a click, a key, a scroll, the sky moving.
@@ -234,7 +236,10 @@ export function SaidMenu() {
       onPointerDown={(e) => e.stopPropagation()}
     >
       <button
+        ref={keys.ref(0)}
         type="button"
+        className={keys.selected === 0 ? 'is-selected' : undefined}
+        onFocus={() => keys.choose(0)}
         onClick={() => {
           answer(message.id)
           startWriting()
@@ -244,7 +249,10 @@ export function SaidMenu() {
         answer this
       </button>
       <button
+        ref={keys.ref(1)}
         type="button"
+        className={keys.selected === 1 ? 'is-selected' : undefined}
+        onFocus={() => keys.choose(1)}
         onClick={() => {
           void data.heartMessage(message.id, !yours)
           close()

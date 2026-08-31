@@ -24,7 +24,8 @@
     "chase": "node scripts/chase-check.mjs",
     "locks": "node scripts/locks-check.mjs",
     "lift": "npx --yes tsx scripts/lift-check.ts",
-    "moonbreak": "npx --yes tsx scripts/moonbreak-check.ts"
+    "moonbreak": "npx --yes tsx scripts/moonbreak-check.ts",
+    "storm": "npx --yes tsx scripts/storm-check.ts"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",

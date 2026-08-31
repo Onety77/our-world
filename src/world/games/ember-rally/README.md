@@ -297,8 +297,6 @@ smoke and the tyre marks still know the tyre is sliding.
 `npm run rally` drives all four behaviours and prints whether the flick
 actually swapped sides and how much speed a long drift keeps.
 
-## The road, and what is on it
-
 ### The Moonbreak is the next one along, and had to be harder than the Rootway
 
 The Rootway is fifteen corners in two and a quarter kilometres, all of them
@@ -335,13 +333,63 @@ still, once working — because a section nobody can drive is not difficulty, it
 is a wall. The first tuning of the swing failed exactly that test before the
 road was ever played.
 
+### The Stormcrown is the last one, and it was the easiest
+
+The same problem as the Moonbreak's, one degree worse, because this is the road
+you finish on. Measured against the other two before any of this: nineteen
+corners in four and a half kilometres with **seven** of them needing a brake,
+never narrower than nine metres, hairpins twelve and a half metres wide, and
+fifty-six per cent of it within a whisker of straight. The Rootway asks for a
+brake fifteen times in half the distance.
+
+And it had the best idea of the three while spending none of it: you climb
+*through* the weather — under the cloud in hammering rain with the cedars
+close, into the blind middle of it, and out above into clear sky with the storm
+going on below you — and every bit of that was drawn while nothing at all
+happened to the car.
+
+So the mountain is a mountain now: a hundred and forty metres of it, with the
+cloud band raised to match so the three weathers land on the three parts of the
+road that earn them. And three things neither of the others can have:
+
+**The gale is real.** `Band.gale` is how exposed each piece of road is — nought
+in the cedars, one on the shelves and along the summit ridge — and its
+*direction* falls out of the road's own heading against the weather's bearing,
+so the same wind shoves you on one shoulder, becomes a headwind on the climb,
+and changes side on you halfway round a hairpin, none of it authored. Gusty
+rather than periodic, which is the whole difference from the Moonbreak's
+swinging span: that is a sine you learn to lean on, this is not. It is visible
+in the rain, which slants over as a gust arrives and stands up again in the
+trees — the same trick the span's cables play, and the difference between a
+hazard and a bug.
+
+**Corners that lean the wrong way.** `Band.camber` — the first time the road's
+roll has ever been in the physics. There is a comment in the Rootway's `seep`
+admitting the gap: an off-camber corner was wanted there and could not be had,
+because `bank` is a *drawing* rule and one would have looked treacherous while
+driving identically. Four of them now: the scoured shoulder at Gale Bend that
+teaches the idea, Thunder Stair II that punishes it, and the two fords on the
+descent, where the reason is a waterfall you can see coming from four hundred
+metres away.
+
+**Height, and a summit.** A hundred and forty metres up over two and a quarter
+kilometres, a ridge six and a half metres wide in the full gale with the storm
+spread out underneath, and twelve hundred metres of descent at a tenth to pay
+for it.
+
+`npm run storm` builds all three roads and compares them, then drives the same
+corner twice with each new mechanic switched off in the track. A hazard that
+measures the same either way is scenery, and this road was full of scenery.
+
 ## The road, and what is on it
 
-There are two now. The Rootway closes around the car and derives its speed from
+There are three. The Rootway closes around the car and derives its speed from
 walls and headlamps. **The Moonbreak** opens everything the other road closes:
 a pale raised causeway over black water, low edge stones passing in rhythm,
-wind-bent orchard trees, ruined arches and one moon held over the horizon. The
-same `Track`, car, tyre model, controls, camera and ghost cross both; only the
+wind-bent orchard trees, ruined arches and one moon held over the horizon.
+**The Stormcrown** climbs out of both of them — cedars, a cloud you go into and
+come out above, and weather that is finally allowed to touch the car. The same
+`Track`, car, tyre model, controls, camera and ghost cross all three; only the
 authored bands, dressing and rendered place change.
 
 **The light comes from the car, and almost nothing else glows.** That is the

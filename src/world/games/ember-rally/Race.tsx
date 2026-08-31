@@ -110,7 +110,15 @@ import {
   writeCar,
   type RollingSample,
 } from './wire'
-import { emptyRoad, roadAt, roadAtRoute, type Track, sunkAt, stormAt } from './track'
+import {
+  emptyRoad,
+  galeStrengthAt,
+  roadAt,
+  roadAtRoute,
+  type Track,
+  sunkAt,
+  stormAt,
+} from './track'
 
 /** Seconds of lamps coming up before the road opens. */
 const COUNTDOWN = 3.1
@@ -766,6 +774,9 @@ interface FrameArgs {
  * that everything which has to survive between frames — the car, the recorder,
  * the controls, the camera, the engine — has one place and one lifetime.
  */
+/** Scratch for the weather's once-a-frame look at the road under the car. */
+const stormRoad = emptyRoad()
+
 class Driving {
   private readonly car: CarState
   private recorder = new Recorder()
@@ -981,6 +992,15 @@ class Driving {
       const ease = 1 - Math.exp(-1.6 * args.delta)
       storm.inCloud += (want.inCloud - storm.inCloud) * ease
       storm.above += (want.above - storm.above) * ease
+      /*
+        And how hard it is blowing, which is the same number the car is being
+        shoved by — see `storm.wind`. Followed much more quickly than the cloud
+        is: a gust that arrives in the rain a second after it arrives in the
+        steering is a gust nobody connects to anything, and the whole point of
+        drawing it is that you see it coming.
+      */
+      const blowing = galeStrengthAt(roadAt(this.track, this.car.s, stormRoad), this.car.s, this.car.elapsed)
+      storm.wind += (blowing - storm.wind) * (1 - Math.exp(-9 * args.delta))
       /*
         And how hard it is raining, which is one number for the drops and the
         noise both — see the note in `weather`.

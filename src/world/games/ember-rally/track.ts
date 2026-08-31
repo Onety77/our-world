@@ -55,6 +55,52 @@ export interface Band {
    * -------------------------------------------------------------------------
    */
   sway: number
+  /**
+   * 0..1 — how exposed this piece of road is to the weather.
+   *
+   * -------------------------------------------------------------------------
+   * **The Stormcrown is named for a storm that could not touch you.** Rain,
+   * cloud, lightning and a sky that changes with the climb, all of it drawn and
+   * none of it in the physics — so the one road in the game whose whole subject
+   * is weather was the one road where weather was scenery.
+   *
+   * This is what fixes that. Nought in the cedars and down in the cuttings,
+   * where the mountain is between you and it; one out on the shelves and along
+   * the summit ridge, where there is nothing either side and the gale gets a
+   * clean run at the car. It becomes a sideways force — see `galeAt` — whose
+   * direction comes from the road's own heading against the weather's bearing,
+   * so the same wind is a shove on one shoulder, a headwind on the climb, and
+   * reverses on you halfway round a hairpin.
+   *
+   * The point of it being a road property rather than a global is that *coming
+   * out of the trees* is then something you feel rather than something you are
+   * told.
+   * -------------------------------------------------------------------------
+   */
+  gale: number
+  /**
+   * Radians the road is tilted the *wrong* way here, over and above however it
+   * was drawn. Positive raises the right-hand side, as everywhere else.
+   *
+   * -------------------------------------------------------------------------
+   * **This is the road's roll finally meaning something.** Every corner in the
+   * game already rolls into itself — see the note beside `bank` in `makeTrack`
+   * — but that is a *drawing* rule, applied automatically to every corner on
+   * every road so a hairpin looks worn rather than laid, and it has never been
+   * in the physics. There is a comment in the Rootway's `seep` saying so: an
+   * off-camber corner was wanted there and could not be had, because it would
+   * have looked treacherous and driven identically.
+   *
+   * Making that automatic roll physical now would silently re-tune every corner
+   * on two finished roads. So this is the other half: an *authored* tilt, zero
+   * unless somebody wrote it down, which is added to the drawn roll for the eye
+   * and is the only part of it gravity is resolved down. Where it is written
+   * large enough to overcome the drawn roll, the road visibly tips toward the
+   * outside of the corner and pulls the car that way — which is the most feared
+   * thing on a wet mountain and the reason it is here rather than anywhere else.
+   * -------------------------------------------------------------------------
+   */
+  camber: number
 }
 
 export interface Lantern {
@@ -154,6 +200,10 @@ export interface Track {
   wet: Float32Array
   /** How much the road is swinging here, 0..1. See `Band.sway`. */
   sway: Float32Array
+  /** How exposed to the weather here, 0..1. See `Band.gale`. */
+  gale: Float32Array
+  /** Radians of authored wrong-way tilt. See `Band.camber`. */
+  camber: Float32Array
   grade: Float32Array
   /** Roll of the road surface into the corner, radians. */
   bank: Float32Array
@@ -221,6 +271,8 @@ const band = (b: Partial<Band> & { length: number }): Band => ({
   ceiling: 5.6,
   grade: 0,
   sway: 0,
+  gale: 0,
+  camber: 0,
   room: 0.25,
   wet: 0.1,
   ...b,
@@ -912,6 +964,95 @@ export function swayRollAt(sway: number, s: number, elapsed: number): number {
   return -SWAY_ROLL * swayAt(sway, s, elapsed)
 }
 
+/**
+ * The gale, and what it does to a car that is out in it.
+ *
+ * ===========================================================================
+ * **A storm that could not touch you was the Stormcrown's whole problem.** It
+ * has the best idea of the three roads — you climb *through* the weather, from
+ * under the cloud into the blind middle of it and out above it into clear black
+ * sky with the storm still going on below — and until now all of that was
+ * drawn and none of it was felt. The last road in the game was the one where
+ * nothing happened to the car.
+ *
+ * **The direction comes out of the road, not out of a number.** The weather has
+ * one bearing for the whole mountain; what changes is which way the road is
+ * pointing across it. So the same gale is a shove on the west shoulder, a
+ * headwind up the cedar climb, and *reverses on you* halfway round a hairpin —
+ * and none of that had to be authored, because the road already knows where it
+ * is going. It falls out of `sin(heading − bearing)`.
+ *
+ * **Gusty rather than periodic**, which is the whole difference between this
+ * and the Moonbreak's swinging span. The span is a clean sine you can learn to
+ * lean on. Three sines at frequencies that do not divide into one another give
+ * a wave whose period is minutes long, so it is deterministic — same storm from
+ * the same flag for both cars in a race — without ever being the same twice
+ * inside one run. Raised to a power so it sits low and occasionally hits, which
+ * is what makes it a gust and not a wobble.
+ *
+ * **Worse the faster you go**, mildly. A crosswind's grip on a car really is a
+ * function of how fast the car is moving through it, and making the wind a
+ * consequence of committing is exactly this road's subject. Only mildly,
+ * because the honest square law would be four times as strong at racing speed
+ * as at half of it, and a hazard that vanishes when you slow down is a hazard
+ * that teaches you to crawl.
+ * ===========================================================================
+ */
+/** Metres per second squared, fully exposed, gusting, straight across the road. */
+export const GALE_FORCE = 3.4
+/** The fraction of it that is always there, under the gusts. */
+const GALE_BASE = 0.34
+/** The bearing the weather comes from, in the world's own angle. */
+const GALE_FROM = 2.28
+const GALE_RATE = 0.62
+const GALE_WAVE = 0.0075
+
+/** How hard it is gusting here and now, 0..1, before any shelter. */
+export function gustAt(s: number, elapsed: number): number {
+  const p = elapsed * GALE_RATE - s * GALE_WAVE
+  const raw =
+    0.5 +
+    0.5 * (0.55 * Math.sin(p) + 0.3 * Math.sin(p * 2.31 + 1.7) + 0.15 * Math.sin(p * 5.13 + 4.1))
+  // Sits low and occasionally hits. A gust, rather than a wobble.
+  return raw * raw * Math.sqrt(Math.max(0, raw))
+}
+
+/**
+ * How hard it is blowing where the car is, 0..1 — shelter and gust together.
+ *
+ * Split out from the force because the *drawing* needs it and must not work it
+ * out again: the rain slants by this, and rain that slants a moment before or
+ * after the car is shoved is worse than rain that falls straight down. One
+ * number, two readers, no chance of disagreeing.
+ */
+export function galeStrengthAt(road: RoadAt, s: number, elapsed: number): number {
+  if (road.gale <= 0.002) return 0
+  return road.gale * (GALE_BASE + (1 - GALE_BASE) * gustAt(s, elapsed))
+}
+
+/**
+ * The way the weather is going, as a horizontal unit vector in the world.
+ *
+ * The wind has one bearing for the whole mountain — it is the *road* that keeps
+ * turning across it. Exported because the rain has to fall along it and the
+ * rain is drawn somewhere else.
+ */
+export const GALE_TOWARD = { x: Math.sin(GALE_FROM), z: Math.cos(GALE_FROM) }
+
+/**
+ * What the weather is doing to the car sideways, in metres per second squared,
+ * positive toward the road's right.
+ *
+ * Zero wherever the mountain is between you and it, which is most of the way up.
+ */
+export function galeAt(road: RoadAt, s: number, elapsed: number, speed: number): number {
+  const strength = galeStrengthAt(road, s, elapsed)
+  if (strength === 0) return 0
+  const across = Math.sin(road.heading - GALE_FROM)
+  const bite = 0.55 + 0.45 * Math.min(1, speed / 28)
+  return GALE_FORCE * strength * across * bite
+}
+
 export function sunkAt(track: Track, s: number): number {
   if (track.stage !== 'moonbreak') return 0
   const i = Math.max(0, Math.min(track.y.length - 1, Math.round(s / STEP)))
@@ -1250,8 +1391,30 @@ function moonbreakBands(): Band[] {
  * which the road already had.
  * ---------------------------------------------------------------------------
  */
-export const CLOUD_BASE = 26
-export const CLOUD_TOP = 66
+/*
+  Raised with the mountain.
+
+  These were twenty-six and sixty-six, for a road that climbed to ninety, and
+  everything about the three weathers is a fraction of the band between them —
+  so when the summit went to a hundred and fifty they had to go with it or the
+  road would have spent its first kilometre under the cloud and the whole of the
+  rest above it.
+
+  Both ends are set by a moment rather than by a height.
+
+  The bottom is the Cloud Shelf: going into the cloud has to be its own event,
+  a hundred metres *after* coming out of the trees at Gale Bend, or the two
+  things that make the middle of this road frightening both happen at once and
+  neither lands. At fifty-two you met the cloud base and the gale in the same
+  fifteen metres.
+
+  The top is Thunder Stair II. That corner is the hardest thing on the road —
+  tight, off-camber, on the wettest stone there is — and doing it blind is the
+  whole of its argument, so the break-out has to come after it and before the
+  crown corner, which then gets done in clear air with the storm underneath.
+*/
+export const CLOUD_BASE = 66
+export const CLOUD_TOP = 124
 
 /**
  * How high the road is through the weather: 0 under the cloud, 1 inside it at
@@ -1269,127 +1432,417 @@ export function stormAt(track: Track, s: number): { inCloud: number; above: numb
   // Rises through the lower half of the band and falls through the upper half,
   // so the thickest, blindest part is the middle of the climb.
   const into = Math.max(0, Math.min(1, (y - CLOUD_BASE) / (band * 0.45)))
-  const outOf = Math.max(0, Math.min(1, (y - (CLOUD_TOP - band * 0.3)) / (band * 0.3)))
+  /*
+    Thin out over the top *sixth* of the band rather than the top third.
+
+    Cloud has a soft bottom and a hard top — you drift into it and you come out
+    of it — and the shape matters here for a specific reason: at a third, the
+    road was already half out of the cloud by the off-camber hairpin, which is
+    the one corner on the mountain that is supposed to be done blind.
+  */
+  const outOf = Math.max(0, Math.min(1, (y - (CLOUD_TOP - band * 0.15)) / (band * 0.15)))
   return {
     inCloud: Math.max(0, into - outOf),
-    above: Math.max(0, Math.min(1, (y - CLOUD_TOP) / 14)),
+    above: Math.max(0, Math.min(1, (y - CLOUD_TOP) / 15)),
   }
 }
 
-export const STORMCROWN = {
-  rainwood: { from: 0, to: 500 },
-  climb: { from: 500, to: 1030 },
-  galeBend: { approach: 1030, apex: 1280, exit: 1386 },
-  cloudShelf: { from: 1386, to: 1936 },
-  thunderStair: {
-    approach: 1936,
-    first: 2116,
-    second: 2375,
-    third: 2633,
-    exit: 2903,
-  },
-  eye: { from: 2903, to: 3483 },
-  stormfall: { from: 3483, to: 4078 },
-  lastRun: { from: 4078, to: 4792 },
-  lightningRods: [492, 1018, 1390, 1930, 2098, 2320, 2580, 2895, 3290, 3480, 4074, 4668],
-  waterfalls: [3595, 3812, 4028],
-} as const
+/**
+ * Fixed geography for the Stormcrown, measured off the road as it is laid.
+ *
+ * ---------------------------------------------------------------------------
+ * These distances are shared by the road, its scenery, its weather and its
+ * check script — a warning beacon must not drift away from the corner it is
+ * warning about because somebody lengthened the cedar road later.
+ *
+ * They used to be a hand-kept table sitting next to the bands, which had that
+ * exact failure built into it: every number in it is a *consequence* of how
+ * long the bands before it are, so changing a corner's shape was safe and
+ * changing its length silently invalidated everything downstream. Nothing
+ * threw. A lightning rod just stopped standing anywhere in particular. The
+ * road was effectively frozen — which is the whole reason it stayed the
+ * easiest of the three while the other two were hardened.
+ *
+ * `layStormcrown` lays it in named sections and reports where they landed.
+ * `npm run storm` still checks the result, because a derivation with a mistake
+ * in it is only a confident mistake.
+ * ---------------------------------------------------------------------------
+ */
+const STORM = layStormcrown()
+
+export const STORMCROWN = STORM.marks
 
 /**
- * The Stormcrown is one authored climb rather than a bag of interchangeable
- * pieces. It is deliberately the long road: 4.79 km including the quiet
- * roll-in, with its severity concentrated into landmarks a driver can learn.
+ * The Stormcrown, laid out section by section.
+ *
+ * ===========================================================================
+ * **The last road, and it was the easiest one.** Measured against the other
+ * two before any of this: nineteen corners in four and a half kilometres with
+ * only seven of them needing a brake, never narrower than nine metres, hairpins
+ * twelve and a half metres wide, and fifty-six per cent of it within a whisker
+ * of straight. The Rootway asks for a brake fifteen times in half the distance.
+ * The road you finish the game on was a scenic drive.
+ *
+ * It also had the best idea of the three and was spending none of it. You climb
+ * *through* the weather here — under the cloud in hammering rain with the
+ * cedars close, into the middle of it where you cannot see thirty metres, and
+ * out above it into clear black sky with the storm still going on below you —
+ * and all of that was drawn while nothing whatever happened to the car.
+ *
+ * So the mountain is now a mountain: a hundred and fifty metres of it, climbed
+ * and paid back, with the cloud band raised to match so the three weathers land
+ * on the three parts of the road that deserve them. And three things it has
+ * that neither of the others can:
+ *
+ *   **The gale is real.** `Band.gale` is how exposed each piece of road is —
+ *   nothing in the cedars, everything on the shelves — and the direction of it
+ *   comes from the road's own heading against the weather's bearing, so it
+ *   shoves you on one shoulder and reverses on you halfway round a hairpin.
+ *   Gusty rather than periodic, which is what separates it from the Moonbreak's
+ *   swinging span: that is a sine you learn to lean on, this is not.
+ *
+ *   **Corners that lean the wrong way.** `Band.camber` — the first time the
+ *   road's roll has ever been in the physics. Four of them: the scoured
+ *   shoulder at Gale Bend that teaches the idea, the second hairpin of the
+ *   Thunder Stair that punishes it, and the two fords on the descent, where the
+ *   reason is a waterfall you can see from four hundred metres away.
+ *
+ *   **Height, properly.** Not the Moonbreak's one hill. Two and a quarter
+ *   kilometres of climbing, a summit ridge, and twelve hundred metres of
+ *   descent at a tenth, which is where a hundred and fifty metres has to go.
+ * ===========================================================================
  */
+function layStormcrown() {
+  const bands: Band[] = []
+  let at = 0
+  const high = (shape: Partial<Band> & { length: number }) => {
+    bands.push(band({ width: 4.2, ceiling: 34, room: 0.5, wet: 0.72, ...shape }))
+    at += shape.length
+    return at
+  }
+  const here = () => at
+
+  // --- the Stormfire terrace, and the Rainwood ------------------------------
+  /*
+    Sheltered, fast, and wet, with the cedars close on both sides. It matters
+    that nothing out here is exposed: the gale is nought for the first half
+    kilometre, so that coming out of the trees above Gale Bend is something the
+    car does rather than something the sky is told to do.
+  */
+  const rainwoodFrom = here()
+  high({ length: 70, width: 6.4, room: 1, wet: 0.5, curv: 0 })
+  high({ length: 40, width: 5.0, curv: -0.006 })
+  high({ length: 62, width: 4.3, curv: -0.019, wet: 0.62 })
+  high({ length: 26, width: 4.1, curv: -0.004 })
+  high({ length: 54, width: 4.2, curv: 0.026, wet: 0.8, room: 0.42 })
+  high({ length: 20, width: 4.0, curv: 0.005 })
+  high({ length: 58, width: 4.2, curv: -0.028, wet: 0.84, room: 0.42 })
+  high({ length: 30, width: 4.2, curv: -0.006 })
+  high({ length: 48, width: 4.3, curv: 0.021, wet: 0.7 })
+  high({ length: 34, width: 4.1, curv: 0.004 })
+  high({ length: 62, width: 4.4, curv: -0.0165, grade: 0.02 })
+  high({ length: 56, width: 4.2, curv: -0.004, grade: 0.045 })
+  const rainwoodTo = here()
+
+  // --- the cedar climb ------------------------------------------------------
+  /*
+    Eight hundred metres and forty-six of height, which is the difference
+    between a road that goes uphill and a climb. There is no straight in it
+    longer than eighty metres — it used to be eight nearly-straight bands with a
+    steady grade, which made the summit feel earned and the driving feel like
+    waiting.
+
+    The gale comes up through it as the cedars thin, which is the whole of the
+    warning you get.
+  */
+  const climbFrom = here()
+  high({ length: 78, grade: 0.075, curv: 0.0135, width: 4.2 })
+  high({ length: 44, grade: 0.08, curv: -0.0235, width: 4.1, wet: 0.8, room: 0.4 })
+  high({ length: 66, grade: 0.082, curv: 0.0165, width: 4.2 })
+  high({ length: 30, grade: 0.07, curv: 0.004, width: 4.0, wet: 0.86 })
+  high({ length: 58, grade: 0.085, curv: -0.0275, width: 4.1, room: 0.4, gale: 0.08 })
+  high({ length: 40, grade: 0.08, curv: -0.008, width: 4.2, gale: 0.12 })
+  high({ length: 72, grade: 0.088, curv: 0.0195, width: 4.2, wet: 0.78, gale: 0.16 })
+  high({ length: 34, grade: 0.075, curv: 0.005, width: 4.0, wet: 0.88, gale: 0.2 })
+  high({ length: 62, grade: 0.086, curv: -0.0245, width: 4.1, room: 0.4, gale: 0.26 })
+  high({ length: 46, grade: 0.078, curv: 0.0125, width: 4.3, gale: 0.32 })
+  high({ length: 76, grade: 0.09, curv: -0.0105, width: 4.2, gale: 0.4 })
+  const climbTo = here()
+
+  /*
+    ========================================================================
+    GALE BEND — where the road teaches you that the wind is real.
+    ========================================================================
+
+    The trees stop. A hundred and forty metres of open shoulder with nothing on
+    the windward side, the gale at full strength for the first time, and then a
+    corner in the middle of it — so the first thing the weather ever does to the
+    car, it does while the car is busy.
+
+    And the shoulder is scoured: the first of the three corners on this road
+    that lean the wrong way, mildly, because it is the one that has to *teach*
+    the idea rather than punish it. Twenty-seven metres of radius on nine metres
+    of road, where it used to be thirty-one on twelve and a half.
+  */
+  const galeApproach = here()
+  high({ length: 84, grade: 0.045, curv: 0.004, width: 4.4, wet: 0.56, gale: 0.85 })
+  high({ length: 56, grade: 0.03, curv: -0.009, width: 4.5, gale: 1 })
+  high({ length: 22, grade: 0.02, curv: -0.019, width: 4.6, room: 0.7, gale: 1 })
+  const galeApex = here()
+  high({ length: 60, grade: 0.012, curv: -0.037, width: 4.5, room: 0.66, wet: 0.7, gale: 1, camber: -0.2 })
+  high({ length: 24, grade: 0.02, curv: -0.017, width: 4.5, room: 0.66, gale: 1 })
+  high({ length: 54, grade: 0.04, curv: -0.004, width: 4.4, gale: 0.9 })
+  const galeExit = here()
+
+  /*
+    ========================================================================
+    THE CLOUD SHELF — the narrowest road in the game, in a crosswind, blind.
+    ========================================================================
+
+    Six metres and a half of ledge cut along the mountain's windward face, with
+    the cloud base arriving on it. Everything that made the Rootway's tunnel
+    throat frightening is here except the walls: there is nothing either side,
+    the wind has a clean run at the car, and you cannot see the end of it.
+
+    The two fast opposing sweeps are kept because they were the right shape —
+    but they were a hundred and twenty-five metres of radius on eleven and a
+    half metres of road, which is a direction rather than a corner. At fifty on
+    seven they are the reason the ribbon is difficult rather than merely thin.
+  */
+  const shelfFrom = here()
+  high({ length: 70, grade: 0.062, curv: 0.008, width: 3.9, room: 0.28, wet: 0.62, gale: 0.9 })
+  high({ length: 88, grade: 0.058, curv: 0.0205, width: 3.7, room: 0.22, wet: 0.66, gale: 0.95 })
+  high({ length: 44, grade: 0.05, curv: 0.004, width: 3.4, room: 0.16, wet: 0.72, gale: 1 })
+  high({ length: 92, grade: 0.055, curv: -0.0195, width: 3.6, room: 0.2, wet: 0.7, gale: 1 })
+  high({ length: 54, grade: 0.048, curv: -0.005, width: 3.2, room: 0.14, wet: 0.76, gale: 1 })
+  high({ length: 86, grade: 0.06, curv: 0.0245, width: 3.5, room: 0.18, wet: 0.74, gale: 0.95 })
+  high({ length: 60, grade: 0.052, curv: 0.006, width: 3.3, room: 0.15, wet: 0.78, gale: 1 })
+  high({ length: 82, grade: 0.058, curv: -0.0225, width: 3.6, room: 0.2, wet: 0.72, gale: 1 })
+  high({ length: 66, grade: 0.05, curv: -0.006, width: 3.9, room: 0.3, wet: 0.68, gale: 0.85 })
+  const shelfTo = here()
+
+  /*
+    ========================================================================
+    THE THUNDER STAIR — three hairpins, and each one asks a different thing.
+    ========================================================================
+
+    They were three of the same corner: a wide slow hairpin, then a landing,
+    then the same again the other way. Twelve and a half metres of road at
+    twenty-three metres of radius is a corner you can take two different wrong
+    ways and get away with both, and taking it three times is not an escalation.
+
+    So they are the same *shape* and three different problems, which is what a
+    stair should be:
+
+      **I** the one you can learn. Tight and narrow — nineteen metres of
+        radius on eight and a half — and nothing else wrong with it.
+
+      **II** the same corner leaning the wrong way. Off-camber all the way
+        round, on the wettest stone on the mountain, in the blind middle of the
+        cloud. This is the corner that is impossible if you do not slow down,
+        and it is deliberately the second of three so that the first one has
+        already taught you what the speed *should* be.
+
+      **III** the crown corner, and it keeps closing. A decreasing radius
+        through nearly a half-turn, which means the corner takes back whatever
+        you left yourself, and then full gale on the exit at the exact moment
+        the road opens and you want the throttle.
+
+    You come out of the cloud on the second landing, so the third one is done in
+    clear air with the storm underneath — which is the reward arriving one
+    corner before it is earned, and is much better than the other way round.
+  */
+  const stairApproach = here()
+  high({ length: 96, grade: 0.055, curv: 0, width: 4.0, wet: 0.5, gale: 0.6 })
+
+  // Thunder Stair I
+  high({ length: 30, grade: 0.03, curv: 0.008, width: 4.2, gale: 0.5 })
+  high({ length: 18, grade: 0.018, curv: 0.022, width: 4.4, room: 0.66, gale: 0.45 })
+  const stairFirst = here()
+  high({ length: 54, grade: 0.012, curv: 0.0526, width: 4.4, room: 0.7, wet: 0.68, gale: 0.4 })
+  high({ length: 18, grade: 0.028, curv: 0.02, width: 4.3, room: 0.66, gale: 0.55 })
+  high({ length: 44, grade: 0.06, curv: 0.005, width: 4.0, gale: 0.8 })
+  high({ length: 84, grade: 0.058, curv: -0.0135, width: 4.0, wet: 0.78, gale: 0.7 })
+
+  // Thunder Stair II — the off-camber one
+  high({ length: 30, grade: 0.032, curv: -0.009, width: 4.1, gale: 0.5 })
+  high({ length: 18, grade: 0.018, curv: -0.024, width: 4.3, room: 0.66, gale: 0.45 })
+  const stairSecond = here()
+  high({ length: 56, grade: 0.01, curv: -0.05, width: 4.35, room: 0.7, wet: 0.9, gale: 0.4, camber: -0.26 })
+  high({ length: 20, grade: 0.03, curv: -0.019, width: 4.3, room: 0.66, wet: 0.82, gale: 0.55 })
+  high({ length: 48, grade: 0.058, curv: -0.005, width: 4.0, gale: 0.8 })
+  high({ length: 80, grade: 0.056, curv: 0.0145, width: 4.0, wet: 0.72, gale: 0.75 })
+
+  // Thunder Stair III — the crown corner, and it keeps closing
+  high({ length: 32, grade: 0.03, curv: 0.008, width: 4.2, gale: 0.5 })
+  high({ length: 20, grade: 0.016, curv: 0.021, width: 4.4, room: 0.66, gale: 0.45 })
+  const stairThird = here()
+  high({ length: 34, grade: 0.012, curv: 0.038, width: 4.4, room: 0.7, wet: 0.7, gale: 0.4 })
+  high({ length: 34, grade: 0.008, curv: 0.058, width: 4.3, room: 0.66, wet: 0.74, gale: 0.4 })
+  high({ length: 22, grade: 0.024, curv: 0.022, width: 4.3, room: 0.66, gale: 0.7 })
+  high({ length: 52, grade: 0.05, curv: 0.005, width: 4.1, gale: 0.95 })
+  const stairExit = here()
+
+  /*
+    THE EYE — above it, and the one place on this road that is allowed to be
+    easy.
+
+    Clear black sky, stars, no rain, and a floor of cloud below with the storm
+    lighting it from underneath. It is the reward, and a reward that also has to
+    be survived is not one — so this is genuinely fast and genuinely wide, and
+    the gale drops to almost nothing because the summit itself is between you
+    and the weather. Four hundred metres of being allowed to enjoy it.
+  */
+  const eyeFrom = here()
+  high({ length: 130, grade: 0.03, curv: 0.0055, width: 4.7, room: 0.6, wet: 0.24, gale: 0.25 })
+  high({ length: 120, grade: 0.022, curv: -0.0075, width: 4.8, room: 0.6, wet: 0.2, gale: 0.2 })
+  high({ length: 96, grade: 0.02, curv: 0.009, width: 4.6, room: 0.55, wet: 0.22, gale: 0.3 })
+  const eyeTo = here()
+
+  /*
+    ========================================================================
+    THE CROWN — the summit ridge. Beautiful, and the most dangerous place on
+    any of the three roads.
+    ========================================================================
+
+    Six metres and a half of rock with the mountain falling away on both sides,
+    in the full gale, in clear air with the whole storm spread out below. The
+    contrast is the point: this is the calmest-*looking* piece of road in the
+    game and the one where the wind has the cleanest run at the car, because
+    there is nothing left up here to stand behind.
+
+    It is deliberately placed immediately after the four hundred metres you were
+    allowed to relax in.
+  */
+  const crownFrom = here()
+  high({ length: 62, grade: 0.028, curv: -0.012, width: 3.5, room: 0.18, wet: 0.3, gale: 0.8 })
+  high({ length: 74, grade: 0.012, curv: 0.0165, width: 3.2, room: 0.12, wet: 0.28, gale: 1 })
+  const summit = here()
+  high({ length: 68, grade: -0.014, curv: -0.019, width: 3.2, room: 0.12, wet: 0.3, gale: 1 })
+  high({ length: 56, grade: -0.03, curv: 0.008, width: 3.6, room: 0.22, wet: 0.36, gale: 0.9 })
+  const crownTo = here()
+
+  /*
+    ========================================================================
+    THE STORMFALL — a hundred and thirty metres of height, given back at a
+    tenth, in the rain, with two rivers across it.
+    ========================================================================
+
+    You go back down through the cloud and into the weather, and the descent is
+    where the whole climb gets paid for. Braking downhill on wet rock is the
+    hardest thing this car ever has to do, and it is asked to do it twelve
+    times.
+
+    **The two fords are the other two off-camber corners**, and this is why the
+    waterfalls are where they are rather than at three numbers somebody liked:
+    water that crosses a road takes the camber with it. So the reason the corner
+    leans the wrong way is a thing you can see coming from four hundred metres
+    away, falling off the rock above the road — which is the same trick the
+    Moonbreak's cables play for its swinging deck, and is the difference between
+    a hazard and a bug.
+  */
+  const fallFrom = here()
+  high({ length: 92, grade: -0.085, curv: 0.0155, width: 4.2, wet: 0.88, gale: 0.75 })
+  high({ length: 48, grade: -0.1, curv: -0.006, width: 4.0, wet: 0.9, gale: 0.7 })
+  high({ length: 84, grade: -0.105, curv: -0.0235, width: 4.1, room: 0.44, wet: 0.92, gale: 0.62 })
+  high({ length: 56, grade: -0.098, curv: -0.005, width: 3.9, wet: 0.94, gale: 0.55 })
+  // The first ford. The rock above it is shedding the whole face's rain.
+  const firstFord = here()
+  high({ length: 46, grade: -0.088, curv: 0.03, width: 4.2, room: 0.5, wet: 1, gale: 0.5, camber: 0.19 })
+  high({ length: 40, grade: -0.1, curv: 0.009, width: 4.0, wet: 0.9, gale: 0.45 })
+  high({ length: 88, grade: -0.108, curv: -0.0185, width: 4.1, room: 0.44, wet: 0.92, gale: 0.42 })
+  high({ length: 52, grade: -0.096, curv: 0.004, width: 3.9, wet: 0.94, gale: 0.38 })
+  // The second, tighter, and it turns the other way.
+  const secondFord = here()
+  high({ length: 44, grade: -0.09, curv: -0.0335, width: 4.2, room: 0.5, wet: 1, gale: 0.34, camber: -0.19 })
+  high({ length: 62, grade: -0.104, curv: -0.007, width: 4.0, wet: 0.9, gale: 0.3 })
+  high({ length: 78, grade: -0.108, curv: 0.0215, width: 4.1, room: 0.44, wet: 0.9, gale: 0.26 })
+  high({ length: 46, grade: -0.094, curv: 0.005, width: 3.9, wet: 0.88, gale: 0.22 })
+  high({ length: 86, grade: -0.106, curv: -0.0165, width: 4.2, room: 0.46, wet: 0.88, gale: 0.2 })
+  // The third waterfall, on a corner tightening into the last of the descent.
+  const thirdFord = here()
+  high({ length: 48, grade: -0.09, curv: -0.0285, width: 4.2, room: 0.5, wet: 1, gale: 0.18 })
+  high({ length: 64, grade: -0.1, curv: 0.006, width: 4.0, wet: 0.9, gale: 0.16 })
+  high({ length: 82, grade: -0.098, curv: 0.0245, width: 4.1, room: 0.44, wet: 0.9, gale: 0.14 })
+  /*
+    Two more, and they are here rather than in a steeper grade above because a
+    hundred and forty metres has to go *somewhere* and the choice is length or
+    gradient. The descent was already at a tenth, which is the Moonbreak's dive
+    and about as steep as a road can be while still being a road; another two
+    corners is the honest way to pay for the mountain.
+  */
+  high({ length: 88, grade: -0.1, curv: -0.0225, width: 4.1, room: 0.44, wet: 0.88, gale: 0.12 })
+  high({ length: 88, grade: -0.096, curv: 0.0265, width: 4.1, room: 0.44, wet: 0.86, gale: 0.1 })
+  high({ length: 74, grade: -0.07, curv: -0.008, width: 4.2, wet: 0.86, gale: 0.1 })
+  const fallTo = here()
+
+  /*
+    THE LAST RUN — back under the cloud, back into the cedars, and the shelter
+    closing over you again is the last thing this road says.
+
+    One hard chicane while the car still has all the speed the mountain gave it,
+    and then space to use everything on the way back to the fire.
+  */
+  const lastFrom = here()
+  high({ length: 62, grade: -0.05, curv: 0.0255, width: 4.2, room: 0.46, wet: 0.84, gale: 0.06 })
+  high({ length: 22, grade: -0.035, curv: 0.005, width: 4.0, wet: 0.86 })
+  high({ length: 62, grade: -0.05, curv: -0.026, width: 4.2, room: 0.46, wet: 0.84 })
+  high({ length: 54, grade: -0.04, curv: -0.005, width: 4.2, wet: 0.72 })
+  high({ length: 78, grade: -0.03, curv: 0.0165, width: 4.4, wet: 0.66 })
+  high({ length: 40, grade: -0.02, curv: 0.004, width: 4.3, wet: 0.6 })
+  high({ length: 70, grade: -0.016, curv: -0.0185, width: 4.4, room: 0.5, wet: 0.58 })
+  high({ length: 46, grade: -0.01, curv: -0.004, width: 4.4, wet: 0.54 })
+  high({ length: 120, grade: 0, curv: 0, width: 6.0, room: 1, wet: 0.5 })
+  high({ length: 90, grade: 0, curv: 0, width: 6.4, room: 1, wet: 0.46 })
+
+  /*
+    The rods and the falls, placed on the road rather than beside it.
+
+    A lightning rod is a warning: it stands where something is about to be asked
+    of you, and one standing on a straight is furniture. So they are derived
+    from the corners they warn about, which is also what stops them sliding off
+    those corners the next time a section changes length.
+  */
+  return {
+    bands,
+    marks: {
+      rainwood: { from: rainwoodFrom, to: rainwoodTo },
+      climb: { from: climbFrom, to: climbTo },
+      galeBend: { approach: galeApproach, apex: galeApex, exit: galeExit },
+      cloudShelf: { from: shelfFrom, to: shelfTo },
+      thunderStair: {
+        approach: stairApproach,
+        first: stairFirst,
+        second: stairSecond,
+        third: stairThird,
+        exit: stairExit,
+      },
+      eye: { from: eyeFrom, to: eyeTo },
+      /** The summit ridge, and the windiest place in the game. */
+      crown: { from: crownFrom, to: crownTo, summit },
+      stormfall: { from: fallFrom, to: fallTo },
+      lastRun: { from: lastFrom, to: at },
+      /*
+        Deduplicated, because a section's end and the next one's start are the
+        same metre — `climbTo` *is* `galeApproach` — and two rods in one place
+        is one rod with a z-fighting problem. Sorted for the same reason the
+        arches on the Moonbreak are: things placed along a road should be in the
+        order you meet them, so a reader can check them against the drive.
+      */
+      lightningRods: [...new Set([
+        rainwoodTo, climbTo - 120, galeApproach - 30, galeExit,
+        shelfFrom + 120, shelfTo - 60, stairApproach, stairFirst - 40,
+        stairSecond - 40, stairThird - 40, stairExit,
+        crownFrom, fallFrom + 40, firstFord - 46, secondFord - 46, lastFrom,
+      ].map((n) => Math.round(n)))].sort((a, b) => a - b),
+      /** The three fords, which are also why two of the corners lean wrong. */
+      waterfalls: [firstFord + 22, secondFord + 20, thirdFord + 24],
+    },
+  }
+}
+
 function stormcrownBands(): Band[] {
-  const high = (shape: Partial<Band> & { length: number }) =>
-    band({ width: 5.45, ceiling: 34, room: 0.72, wet: 0.72, ...shape })
-
-  return [
-    // Stormfire terrace and Rainwood: quick, legible esses among close cedars.
-    high({ length: 80, width: 7.4, room: 1, wet: 0.5 }),
-    high({ length: 42, width: 6.3, curv: -0.003 }),
-    high({ length: 90, width: 5.7, curv: -0.010 }),
-    high({ length: 26, width: 5.25, curv: 0.002, wet: 0.9 }),
-    high({ length: 80, width: 5.7, curv: 0.014, wet: 0.82 }),
-    high({ length: 24, width: 5.1, curv: 0 }),
-    high({ length: 88, width: 5.65, curv: -0.013, wet: 0.86 }),
-    high({ length: 70, width: 5.35, curv: 0.003 }),
-
-    // The long cedar ascent. Its steady grade makes the summit feel earned.
-    high({ length: 80, grade: 0.055, curv: 0.003, width: 5.5 }),
-    high({ length: 70, grade: 0.07, curv: 0.011, width: 5.8 }),
-    high({ length: 30, grade: 0.045, curv: 0, width: 5.25 }),
-    high({ length: 80, grade: 0.075, curv: -0.013, width: 5.9 }),
-    high({ length: 30, grade: 0.05, curv: 0, width: 5.2 }),
-    high({ length: 95, grade: 0.085, curv: 0.002, width: 5.25 }),
-    high({ length: 60, grade: 0.065, curv: 0.014, width: 5.85 }),
-    high({ length: 85, grade: 0.07, curv: 0, width: 5.35 }),
-
-    // Gale Bend: the first proper brake, a broad 120-degree mountain corner.
-    high({ length: 160, grade: 0.025, curv: 0, width: 5.55, wet: 0.56 }),
-    high({ length: 40, grade: 0.015, curv: -0.004, width: 6.1 }),
-    high({ length: 20, curv: -0.013, width: 6.8, room: 0.95 }),
-    high({ length: 62, curv: -0.032, width: 7.45, room: 1, wet: 0.7 }),
-    high({ length: 24, curv: -0.014, width: 6.85, room: 0.95 }),
-    high({ length: 50, curv: -0.003, width: 6.1, room: 0.82 }),
-
-    // Cloud Shelf: fast opposing sweeps and the first exposed narrow ribbon.
-    high({ length: 120, grade: 0.018, curv: 0, width: 5.6, wet: 0.48 }),
-    high({ length: 105, grade: 0.02, curv: 0.008, width: 5.8, wet: 0.52 }),
-    high({ length: 80, grade: 0.012, curv: 0, width: 5.25 }),
-    high({ length: 105, grade: 0.018, curv: -0.009, width: 5.75, wet: 0.58 }),
-    high({ length: 140, grade: 0.024, curv: 0.001, width: 4.55, room: 0.3, wet: 0.78 }),
-
-    // A long sightline gives the Thunder Stair away before it asks anything.
-    high({ length: 180, grade: 0.035, curv: 0, width: 5.4, wet: 0.46 }),
-
-    // Thunder Stair I. Each landing changes handedness and continues upward.
-    high({ length: 30, grade: 0.025, curv: 0.005, width: 6.1 }),
-    high({ length: 18, grade: 0.015, curv: 0.015, width: 7 }),
-    high({ length: 58, grade: 0.012, curv: 0.039, width: 8.15, room: 1, wet: 0.63 }),
-    high({ length: 18, grade: 0.025, curv: 0.014, width: 7 }),
-    high({ length: 45, grade: 0.055, curv: 0.003, width: 5.8 }),
-    high({ length: 90, grade: 0.065, curv: -0.002, width: 5.15, wet: 0.78 }),
-
-    // Thunder Stair II, tighter on entry and wet at the apex.
-    high({ length: 30, grade: 0.03, curv: -0.006, width: 6.15 }),
-    high({ length: 18, grade: 0.015, curv: -0.016, width: 7 }),
-    high({ length: 58, grade: 0.012, curv: -0.041, width: 8.25, room: 1, wet: 0.82 }),
-    high({ length: 20, grade: 0.03, curv: -0.015, width: 7 }),
-    high({ length: 52, grade: 0.06, curv: -0.003, width: 5.65 }),
-    high({ length: 80, grade: 0.07, curv: 0.002, width: 5.05, wet: 0.75 }),
-
-    // Thunder Stair III: the very hard crown corner, nearly a half-turn.
-    high({ length: 32, grade: 0.025, curv: 0.006, width: 6.2 }),
-    high({ length: 20, grade: 0.012, curv: 0.018, width: 7.2 }),
-    high({ length: 62, grade: 0.008, curv: 0.043, width: 8.45, room: 1, wet: 0.72 }),
-    high({ length: 20, grade: 0.02, curv: 0.016, width: 7.2 }),
-    high({ length: 46, grade: 0.045, curv: 0.003, width: 5.8 }),
-    high({ length: 90, grade: 0.055, curv: 0, width: 5.45, wet: 0.54 }),
-
-    // The eye of the storm: quiet, high and fast after the concentration test.
-    high({ length: 180, grade: 0.012, curv: 0, width: 5.2, room: 0.45, wet: 0.36 }),
-    high({ length: 120, grade: 0, curv: -0.007, width: 5.7, wet: 0.3 }),
-    high({ length: 120, grade: -0.008, curv: 0.008, width: 5.7, wet: 0.4 }),
-    high({ length: 160, grade: -0.018, curv: 0, width: 4.45, room: 0.24, wet: 0.68 }),
-
-    // Stormfall: the elevation is paid back through spray and long braking.
-    high({ length: 100, grade: -0.075, curv: 0.002, width: 5.25, wet: 0.88 }),
-    high({ length: 110, grade: -0.085, curv: -0.014, width: 5.75, wet: 0.92 }),
-    high({ length: 70, grade: -0.065, curv: 0, width: 5.05, wet: 0.95 }),
-    high({ length: 105, grade: -0.09, curv: 0.017, width: 5.9, wet: 0.96 }),
-    high({ length: 90, grade: -0.075, curv: -0.004, width: 5.1, wet: 0.9 }),
-    high({ length: 120, grade: -0.085, curv: -0.012, width: 5.75, wet: 0.88 }),
-
-    // The lower mountain: one sharp chicane, then space to use everything.
-    high({ length: 60, grade: -0.035, curv: 0.023, width: 5.9, wet: 0.82 }),
-    high({ length: 24, grade: -0.02, curv: 0, width: 5.05, wet: 0.86 }),
-    high({ length: 60, grade: -0.035, curv: -0.023, width: 5.9, wet: 0.82 }),
-    high({ length: 180, grade: -0.018, curv: 0, width: 5.2, wet: 0.64 }),
-    high({ length: 120, grade: -0.012, curv: 0.011, width: 5.85, wet: 0.58 }),
-    high({ length: 160, grade: 0, curv: 0, width: 7.5, room: 1, wet: 0.5 }),
-    high({ length: 110, grade: 0, curv: 0, width: 7.8, room: 1, wet: 0.46 }),
-  ]
+  return STORM.bands
 }
 
 export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
@@ -1407,6 +1860,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
   const rawRoom = new Float32Array(count)
   const rawWet = new Float32Array(count)
   const rawSway = new Float32Array(count)
+  const rawGale = new Float32Array(count)
+  const rawCamber = new Float32Array(count)
   const rawGrade = new Float32Array(count)
 
   let cursor = 0
@@ -1420,6 +1875,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       rawRoom[cursor] = b.room
       rawWet[cursor] = b.wet
       rawSway[cursor] = b.sway
+      rawGale[cursor] = b.gale
+      rawCamber[cursor] = b.camber
       rawGrade[cursor] = b.grade
     }
     at += b.length
@@ -1431,6 +1888,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     rawRoom[cursor] = 1
     rawWet[cursor] = 0.1
     rawSway[cursor] = 0
+    rawGale[cursor] = 0
+    rawCamber[cursor] = 0
     rawGrade[cursor] = 0
   }
 
@@ -1444,6 +1903,18 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
   // a bridge. Eased in over forty metres it reads as walking onto something
   // that is already moving.
   const sway = smooth(rawSway, 21, 2)
+  /*
+    Wide, and for the opposite reason to the span's.
+
+    Coming out of the cedars into the open should be a *transition* — thirty
+    metres of the trees thinning and the crosswind arriving — rather than a step
+    change in a force, which reads as being hit by something rather than as
+    leaving shelter.
+  */
+  const gale = smooth(rawGale, 19, 2)
+  // As wide as the grade's, and for exactly the same reason: a step in the tilt
+  // of the road is a step in a force, and the car would jolt at the seam.
+  const camber = smooth(rawCamber, 15, 2)
   const grade = smooth(rawGrade, 8)
 
   const x = new Float32Array(count)
@@ -1465,7 +1936,14 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     // a cave road cut by water would be banked, and a flat ribbon through a
     // hairpin looks laid rather than worn. Negative because the inside of a
     // right-hander is on the right, and the inside is the low side.
-    bank[i] = Math.max(-0.2, Math.min(0.2, -curv[i] * 5.2))
+    /*
+      ...and then whatever the course author said about *this* corner. The line
+      above is the drawing rule and is not in the physics; `camber` is, so where
+      it is written large enough to cancel the roll above it the road is seen to
+      tip toward the outside at the same moment the car is pulled that way. See
+      the note beside `Band.camber`.
+    */
+    bank[i] = Math.max(-0.2, Math.min(0.2, -curv[i] * 5.2)) + camber[i]
 
     hx += Math.sin(ang) * STEP
     hz += Math.cos(ang) * STEP
@@ -1513,6 +1991,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     room,
     wet,
     sway,
+    gale,
+    camber,
     grade,
     bank,
     line,
@@ -2159,6 +2639,10 @@ export interface RoadAt {
   grade: number
   /** How much the road is swinging here, 0..1. */
   sway: number
+  /** How exposed to the weather here, 0..1. */
+  gale: number
+  /** Radians of authored wrong-way tilt, positive raising the right. */
+  camber: number
   line: number
   /** World metres represented by one metre of shared race progress. */
   metric: number
@@ -2167,7 +2651,7 @@ export interface RoadAt {
 export function emptyRoad(): RoadAt {
   return {
     x: 0, y: 0, z: 0, heading: 0, curv: 0, width: 4.6,
-    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, sway: 0, line: 0, metric: 1,
+    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, sway: 0, gale: 0, camber: 0, line: 0, metric: 1,
   }
 }
 
@@ -2192,6 +2676,8 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
   r.room = lerpAt(track.room, i, j, mix)
   r.wet = lerpAt(track.wet, i, j, mix)
   r.sway = lerpAt(track.sway, i, j, mix)
+  r.gale = lerpAt(track.gale, i, j, mix)
+  r.camber = lerpAt(track.camber, i, j, mix)
   r.bank = lerpAt(track.bank, i, j, mix)
   r.grade = lerpAt(track.grade, i, j, mix)
   r.line = lerpAt(track.line, i, j, mix)
@@ -2229,6 +2715,8 @@ export function shortcutRoadAt(split: RootSplit, s: number, out?: RoadAt): RoadA
   r.room = lerpAt(split.room, i, j, mix)
   r.wet = lerpAt(split.wet, i, j, mix)
   r.sway = 0
+  r.gale = 0
+  r.camber = 0
   r.grade = lerpAt(split.grade, i, j, mix)
   r.bank = lerpAt(split.bank, i, j, mix)
   r.line = lerpAt(split.line, i, j, mix)

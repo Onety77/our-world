@@ -18,11 +18,20 @@ import {
   Points,
   ShaderMaterial,
   Sphere,
+  Vector2,
   Vector3,
 } from 'three'
 import { basisAt, roadPoint, type RoadBasis, type TunnelChunk } from './geometry'
 import { random } from './model'
-import { CLOUD_TOP, STORMCROWN, emptyRoad, roadAt, vergeWidth, type Track } from './track'
+import {
+  CLOUD_TOP,
+  GALE_TOWARD,
+  STORMCROWN,
+  emptyRoad,
+  roadAt,
+  vergeWidth,
+  type Track,
+} from './track'
 import { storm } from './weather'
 import { StormcrownSound } from './StormcrownSound'
 
@@ -443,13 +452,47 @@ const SKY_FRAG = /* glsl */ `
   uniform float uFlash;
   float hash(vec3 p) { return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 
+  /*
+    The same hash, interpolated — and the difference is not subtle.
+
+    ------------------------------------------------------------------------
+    The hash floors what it is given, so it is constant over each unit cell of its
+    input. Sampled at fourteen times a unit direction that is about thirty cells
+    across the whole sky, each one a flat block of grey with a hard edge: the
+    overcast rendered as a **checkerboard**, which is what it had been doing all
+    along and what nobody had seen because nobody had looked at this road with
+    the sky in frame.
+
+    Smoothing between the eight corners of the cell costs eight hashes instead
+    of one and turns exactly the same field into cloud. The frequency goes up
+    with it, because the reason it was so low was presumably an attempt to keep
+    the blocks from reading as noise — which they did anyway, as blocks.
+    ------------------------------------------------------------------------
+  */
+  float noise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(
+        mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x),
+        mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x),
+        f.y),
+      mix(
+        mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x),
+        mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x),
+        f.y),
+      f.z);
+  }
+
   void main() {
     vec3 d = normalize(vDirection);
     float h = d.y * 0.5 + 0.5;
 
     // --- under the storm: overcast, and it is moving ---
-    float roll = hash(d * 14.0 + vec3(uTime * 0.02, 0.0, 0.0));
-    roll = smoothstep(0.26, 0.8, roll + (1.0 - h) * 0.26);
+    float roll = noise(d * 7.0 + vec3(uTime * 0.02, 0.0, 0.0)) * 0.62
+               + noise(d * 17.0 + vec3(uTime * 0.05, 0.0, 0.0)) * 0.38;
+    roll = smoothstep(0.3, 0.78, roll + (1.0 - h) * 0.26);
     vec3 low = mix(vec3(0.14, 0.17, 0.19), vec3(0.03, 0.05, 0.06), smoothstep(0.15, 0.85, h));
     low = mix(low, vec3(0.22, 0.25, 0.27), roll * 0.5);
 
@@ -459,8 +502,8 @@ const SKY_FRAG = /* glsl */ `
     high += vec3(0.8, 0.86, 1.0) * star * 0.9;
 
     // --- inside it: no sky, only cloud, and it is bright ---
-    float grain = hash(d * 34.0 + vec3(uTime * 0.05, uTime * 0.02, 0.0));
-    vec3 inside = vec3(0.70, 0.75, 0.77) + (grain - 0.5) * 0.09;
+    float grain = noise(d * 22.0 + vec3(uTime * 0.05, uTime * 0.02, 0.0));
+    vec3 inside = vec3(0.70, 0.75, 0.77) + (grain - 0.5) * 0.11;
 
     vec3 colour = mix(low, high, uAbove);
     colour = mix(colour, inside, uInCloud);
@@ -523,10 +566,30 @@ const CLOUD_FRAG = /* glsl */ `
 const RAIN_VERT = /* glsl */ `
   uniform float uTime;
   uniform float uRain;
+  /** Where the weather is going, in world x/z, times how hard it is blowing. */
+  uniform vec2 uWind;
   varying float vRain;
+  /** Which way "down" is for a drop, on the screen. */
+  varying vec2 vSlant;
   void main() {
     vec3 p = position;
-    p.y = mod(p.y - uTime * 31.0 + 26.0, 52.0) - 26.0;
+    p.y = mod(p.y - uTime * 31.0 + 22.0, 44.0) - 22.0;
+    /*
+      Rain falls along the wind, and this is the whole of the gale being
+      visible.
+
+      A drop's real velocity is thirty-one metres a second downward plus
+      whatever the wind is doing sideways, so the direction it *streaks* in is
+      that sum — put through the view matrix, which turns it into the direction
+      the streak should lie on the screen. Not an authored angle: it is the
+      same storm.wind that is shoving the car, so the rain leans over at the moment
+      the steering goes light and stands up again the moment you are back among
+      the cedars.
+
+      A w of nought, because this is a direction and not a place.
+    */
+    vec4 fall = viewMatrix * vec4(uWind.x, -31.0, uWind.y, 0.0);
+    vSlant = normalize(fall.xy + vec2(0.0, -0.0001));
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     /*
       Thinning rain takes drops *away* rather than making every drop fainter.
@@ -540,7 +603,10 @@ const RAIN_VERT = /* glsl */ `
     */
     float keep = fract(sin(position.x * 91.7 + position.z * 47.3) * 43758.5453);
     vRain = uRain;
-    gl_PointSize = keep > uRain ? 0.0 : clamp(145.0 / max(1.0, -mv.z), 1.0, 4.5);
+    // Driven rain is longer rain. Half again in the worst of it, which is
+    // enough to read as hard weather without turning into hail.
+    float driven = 1.0 + length(uWind) * 0.026;
+    gl_PointSize = keep > uRain ? 0.0 : clamp(145.0 * driven / max(1.0, -mv.z), 1.0, 7.0);
     gl_Position = projectionMatrix * mv;
   }
 `
@@ -548,8 +614,12 @@ const RAIN_VERT = /* glsl */ `
 const RAIN_FRAG = /* glsl */ `
   precision mediump float;
   varying float vRain;
+  varying vec2 vSlant;
   void main() {
     vec2 p = gl_PointCoord - 0.5;
+    // Turn the streak to lie along the way the drop is actually going. The
+    // sprite is square and axis-aligned; the rain is not.
+    p = vec2(dot(p, vec2(vSlant.y, -vSlant.x)), dot(p, vSlant));
     float line = 1.0 - smoothstep(0.06, 0.18, abs(p.x));
     float ends = smoothstep(0.5, 0.28, abs(p.y));
     // A little softer as it eases off, on top of there being fewer of them.
@@ -638,7 +708,7 @@ export function StormcrownWorld({ track }: { track: Track }) {
     fragmentShader: RAIN_FRAG,
     transparent: true,
     depthWrite: false,
-    uniforms: { uTime: { value: 0 }, uRain: { value: 0 } },
+    uniforms: { uTime: { value: 0 }, uRain: { value: 0 }, uWind: { value: new Vector2() } },
   }), [])
   const fall = useMemo(() => new ShaderMaterial({
     vertexShader: FALL_VERT,
@@ -649,12 +719,39 @@ export function StormcrownWorld({ track }: { track: Track }) {
     uniforms: { uTime: { value: 0 } },
   }), [])
   const rainGeometry = useMemo(() => {
+    /*
+      Enough drops, close enough, to actually be rain.
+
+      ---------------------------------------------------------------------
+      This was five hundred and forty of them spread through a box a hundred
+      and twenty metres wide, sixty deep and a hundred and sixty long — about
+      one drop in every two thousand cubic metres. Rendered, that is a handful
+      of specks somewhere near the horizon, and the road whose entire subject
+      is a storm had rain you could not see.
+
+      It went unnoticed because nothing measures it and because it is not
+      *wrong* anywhere: every drop is in the right place, doing the right
+      thing. There are just nowhere near enough of them, and they are nowhere
+      near you.
+
+      Two and a half thousand in a box a third the size is roughly thirty times
+      the density and puts most of them inside twenty metres, where the point
+      sprite is at full size. Twenty-five hundred points costs nothing — the
+      grass in the garden proper is twenty thousand blades — and it is the
+      difference between weather and a rumour of weather.
+
+      It also matters for the gale: the drops slant with the wind (see
+      `uWind`), which is the one visible cause the sideways force on the car
+      has. A slant on a speck nobody can see is not a cause of anything.
+      ---------------------------------------------------------------------
+    */
+    const DROPS = 2500
     const rng = random(track.seed ^ 0x5f27a1)
-    const positions = new Float32Array(540 * 3)
-    for (let i = 0; i < 540; i++) {
-      positions[i * 3] = (rng() * 2 - 1) * 62
-      positions[i * 3 + 1] = (rng() * 2 - 1) * 26
-      positions[i * 3 + 2] = (rng() * 2 - 1) * 82
+    const positions = new Float32Array(DROPS * 3)
+    for (let i = 0; i < DROPS; i++) {
+      positions[i * 3] = (rng() * 2 - 1) * 30
+      positions[i * 3 + 1] = (rng() * 2 - 1) * 22
+      positions[i * 3 + 2] = (rng() * 2 - 1) * 38
     }
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new BufferAttribute(positions, 3))
@@ -708,6 +805,13 @@ export function StormcrownWorld({ track }: { track: Track }) {
       raindrop is a white speck, and a field of them is snow.
     */
     rain.uniforms.uRain.value = storm.rain
+    /*
+      Eighteen metres a second at the top of a gust, which against thirty-one of
+      falling is a streak leaning about thirty degrees off vertical — hard
+      enough to be unmistakable from inside a car, nowhere near the horizontal
+      rain that would read as a bug in the shader.
+    */
+    rain.uniforms.uWind.value.set(GALE_TOWARD.x * storm.wind * 18, GALE_TOWARD.z * storm.wind * 18)
 
     /*
       The cloud floor sits at the top of the cloud rather than in the middle of

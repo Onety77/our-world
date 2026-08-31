@@ -7,22 +7,14 @@
  * the word game's screens quietly did not have it and nobody noticed until the
  * end of a race had a choice on it that a keyboard could not reach.
  *
- * **It moves real focus, and that is the important part.** The first version
- * kept its own idea of which item was selected and listened for Enter on the
- * window, which meant two selections existed at once: the one the highlight was
- * drawn from, and the browser's, which was wherever you had last clicked. Enter
- * then had to guess between them — it bailed out entirely whenever a button
- * happened to be focused, so pressing Enter after clicking anything did nothing
- * at all.
+ * Arrow selection is deliberately not browser focus. Forcing focus onto each
+ * choice made the browser draw circles and rectangles around controls whose
+ * own warm light already says what is selected. It could also leave focus on
+ * an old choice while the visual selection had moved elsewhere.
  *
- * Moving focus collapses the two into one. The browser activates the focused
- * button on Enter and Space by itself, so there is no Enter handler here to
- * disagree with it, and a screen reader is told which choice is current without
- * anything extra being said.
- *
- * Focus is only taken once the arrows have actually been used. Grabbing it on
- * mount would scroll the page to the buttons and, on a phone, is how a screen
- * ends up with a keyboard open over the thing you were reading.
+ * Arrows now move one garden selection and Enter activates exactly that item.
+ * Tab remains ordinary browser focus, and Enter on a Tab-focused control stays
+ * native. There is one cursor, without making focus chrome part of the art.
  * ---------------------------------------------------------------------------
  */
 
@@ -33,15 +25,21 @@ export interface MenuKeys {
   selected: number
   /** Point at it directly — from `onFocus`, or a pointer landing on one. */
   choose(index: number): void
-  /** Put on each choice, in order, so the arrows have something to focus. */
+  /** Put on each choice, in order, so Enter knows what to activate. */
   ref(index: number): (node: HTMLElement | null) => void
 }
 
-export function useMenuKeys(count: number, loop = true): MenuKeys {
+type MenuAxis = 'both' | 'horizontal' | 'vertical'
+
+export function useMenuKeys(
+  count: number,
+  loop = true,
+  active = true,
+  axis: MenuAxis = 'both',
+): MenuKeys {
   const [selected, setSelected] = useState(0)
   const items = useRef<(HTMLElement | null)[]>([])
-  /** Whether the arrows have been used, and focus is therefore ours to move. */
-  const driving = useRef(false)
+  const assigners = useRef<Array<(node: HTMLElement | null) => void>>([])
 
   // A row that gets shorter must not leave the selection past the end of it.
   useEffect(() => {
@@ -49,35 +47,58 @@ export function useMenuKeys(count: number, loop = true): MenuKeys {
   }, [count])
 
   useEffect(() => {
+    if (!active) return
     const onKey = (event: KeyboardEvent) => {
       const focused = document.activeElement
       // Somebody typing is not choosing.
-      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
-      const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown'
-      const back = event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-      if (!forward && !back) return
-      if (count === 0) return
+      if (
+        focused instanceof HTMLInputElement ||
+        focused instanceof HTMLTextAreaElement ||
+        focused instanceof HTMLSelectElement ||
+        (focused instanceof HTMLElement && focused.isContentEditable)
+      ) return
+      const horizontal = axis === 'both' || axis === 'horizontal'
+      const vertical = axis === 'both' || axis === 'vertical'
+      const forward = (horizontal && event.key === 'ArrowRight') ||
+        (vertical && event.key === 'ArrowDown')
+      const back = (horizontal && event.key === 'ArrowLeft') ||
+        (vertical && event.key === 'ArrowUp')
+      if ((forward || back) && count > 1) {
+        event.preventDefault()
+        // Arrow selection belongs to the garden, not the browser's focus
+        // ring. Release stale click/Tab focus without moving it to a new item.
+        if (focused instanceof HTMLElement) focused.blur()
+        setSelected((at) => {
+          const direction = forward ? 1 : -1
+          for (let step = 1; step <= count; step++) {
+            const raw = at + direction * step
+            if (!loop && (raw < 0 || raw >= count)) return at
+            const next = (raw + count) % count
+            const item = items.current[next]
+            if (!(item instanceof HTMLButtonElement) || !item.disabled) return next
+          }
+          return at
+        })
+        return
+      }
+      if (event.key !== 'Enter' || event.repeat || count === 0) return
+      // Native Tab + Enter is already correct. So is Enter on an unrelated
+      // button such as "back". With no real focus, activate the warm choice.
+      if (items.current.includes(focused as HTMLElement | null)) return
+      if (focused instanceof HTMLButtonElement || focused instanceof HTMLAnchorElement) return
       event.preventDefault()
-      driving.current = true
-      setSelected((at) => {
-        const next = at + (forward ? 1 : -1)
-        return loop ? (next + count) % count : Math.max(0, Math.min(count - 1, next))
-      })
+      items.current[selected]?.click()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [count, loop])
-
-  useEffect(() => {
-    if (!driving.current) return
-    // `preventScroll`, because the choices are usually already on screen and
-    // the browser's idea of scrolling them into view fights the layout.
-    items.current[selected]?.focus({ preventScroll: true })
-  }, [selected])
+  }, [active, axis, count, loop, selected])
 
   const ref = useCallback(
-    (index: number) => (node: HTMLElement | null) => {
-      items.current[index] = node
+    (index: number) => {
+      assigners.current[index] ??= (node: HTMLElement | null) => {
+        items.current[index] = node
+      }
+      return assigners.current[index]
     },
     [],
   )

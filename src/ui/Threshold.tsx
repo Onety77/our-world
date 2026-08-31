@@ -27,6 +27,8 @@ import { useStandings, type Standing } from '@/world/games/useRound'
 import { gameKey, roadKey, useDoorman } from '@/systems/locks'
 import { useQuestions } from '@/systems/questions'
 import { ambience } from '@/systems/ambience'
+import { useChoiceSwipe } from './useChoiceSwipe'
+import { useMenuKeys } from './useMenuKeys'
 
 /**
  * What there is to play, one at a time.
@@ -76,8 +78,16 @@ function LiveChoiceStage({
 }) {
   const [selected, setSelected] = useState(0)
   const stage = useRef<HTMLDivElement>(null)
+  const browser = useRef<HTMLDivElement>(null)
   const last = options.length - 1
   const option = options[selected]
+  const swipe = useCallback(
+    (direction: -1 | 1) => {
+      setSelected((at) => Math.max(0, Math.min(last, at + direction)))
+    },
+    [last],
+  )
+  useChoiceSwipe(browser, swipe)
 
   useEffect(() => {
     stage.current?.focus({ preventScroll: true })
@@ -85,13 +95,22 @@ function LiveChoiceStage({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const focused = document.activeElement
+      if (
+        focused instanceof HTMLInputElement ||
+        focused instanceof HTMLTextAreaElement ||
+        focused instanceof HTMLSelectElement
+      ) return
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
         event.preventDefault()
+        if (focused instanceof HTMLElement) focused.blur()
         setSelected((at) => Math.min(last, at + 1))
       } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
         event.preventDefault()
+        if (focused instanceof HTMLElement) focused.blur()
         setSelected((at) => Math.max(0, at - 1))
       } else if (event.key === 'Enter' && !event.repeat && option) {
+        if (focused instanceof HTMLButtonElement) return
         event.preventDefault()
         onChoose(option.id)
       } else if (event.key === 'Escape') {
@@ -124,7 +143,7 @@ function LiveChoiceStage({
         <p>{prompt.charAt(0).toUpperCase() + prompt.slice(1)}. Your invitation will open on this road.</p>
       </header>
 
-      <div className="live-choice-browser">
+      <div className="live-choice-browser" ref={browser}>
         <button
           type="button"
           className="live-choice-step previous"
@@ -180,7 +199,10 @@ function LiveChoiceStage({
             className={selected === index ? 'on' : ''}
             aria-label={`show ${road.name}`}
             aria-pressed={selected === index}
-            onClick={() => setSelected(index)}
+            onClick={(event) => {
+              setSelected(index)
+              event.currentTarget.blur()
+            }}
           />
         ))}
       </div>
@@ -361,16 +383,24 @@ function Waiting({
   standing,
   them,
   onPlay,
+  buttonRef,
+  selected,
+  onFocus,
 }: {
   name: string
   standing: Standing
   them: string
   onPlay(): void
+  buttonRef: RefCallback<HTMLButtonElement>
+  selected: boolean
+  onFocus(): void
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
-      className={`standing standing-${standing.turn}${standing.done ? ' is-done' : ''}`}
+      className={`standing standing-${standing.turn}${standing.done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
+      onFocus={onFocus}
       onClick={onPlay}
     >
       <span className="standing-game">{name}</span>
@@ -424,38 +454,31 @@ function Challenges({
   onPlay(id: string): void
   onBack(): void
 }) {
-  const [selected, setSelected] = useState(0)
+  const keys = useMenuKeys(games.length, false)
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const focused = document.activeElement
-      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
-      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-        event.preventDefault()
-        setSelected((at) => Math.min(games.length - 1, at + 1))
-      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-        event.preventDefault()
-        setSelected((at) => Math.max(0, at - 1))
-      } else if (event.key === 'Enter' && !event.repeat) {
-        event.preventDefault()
-        const game = games[selected]
-        if (game) onPlay(game.id)
-      }
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onBack()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [games, onPlay, selected])
+  }, [onBack])
 
   return (
     <div className="challenges">
       <span className="threshold-whisper">where everything stands, today</span>
       <div className="challenges-list">
         {games.map((game, index) => (
-          <span key={game.id} className={index === selected ? 'is-selected' : ''}>
+          <span key={game.id}>
             <Waiting
               name={game.name}
               standing={turns[game.id] ?? NOTHING}
               them={them}
+              buttonRef={keys.ref(index)}
+              selected={index === keys.selected}
+              onFocus={() => keys.choose(index)}
               onPlay={() => onPlay(game.id)}
             />
           </span>
@@ -745,9 +768,11 @@ function TheHollow() {
       if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
       if (showing === 'games' && e.key === 'ArrowRight') {
         e.preventDefault()
+        if (focused instanceof HTMLElement) focused.blur()
         go(1)
       } else if (showing === 'games' && e.key === 'ArrowLeft') {
         e.preventDefault()
+        if (focused instanceof HTMLElement) focused.blur()
         go(-1)
       } else if (
         showing === 'ways' &&
@@ -755,6 +780,7 @@ function TheHollow() {
         game
       ) {
         e.preventDefault()
+        if (focused instanceof HTMLElement) focused.blur()
         // A live-only game has exactly one way in, so there is nothing to
         // move between and the arrows must not park the cursor on a button
         // that was never rendered.
@@ -937,6 +963,8 @@ function TheHollow() {
             key={g.id}
             aria-current={index === at ? 'true' : undefined}
             aria-disabled={locked || undefined}
+            tabIndex={index === at ? 0 : -1}
+            onFocus={() => setAt(index)}
             onClick={() => {
               // A shut card still takes a tap — it just brings itself to the
               // middle so you can read why. What it will not do is open.
@@ -976,6 +1004,8 @@ function TheHollow() {
           type="button"
           className={`game-card game-card-coming${at === last ? ' is-selected' : ''}`}
           aria-current={at === last ? 'true' : undefined}
+          tabIndex={at === last ? 0 : -1}
+          onFocus={() => setAt(last)}
           onClick={() => setAt(last)}
         >
           <span className="game-card-number">{String(last + 1).padStart(2, '0')}</span>
@@ -1029,7 +1059,10 @@ function TheHollow() {
             key={i}
             className={i === at ? 'on' : ''}
             aria-label={`game ${i + 1}`}
-            onClick={() => setAt(i)}
+            onClick={(event) => {
+              setAt(i)
+              event.currentTarget.blur()
+            }}
           />
         ))}
       </div>
@@ -1103,6 +1136,7 @@ function alongTheRow(el: HTMLElement, go: (by: 1 | -1) => void): () => void {
  */
 function TheGlasshouse() {
   const start = useMemories((s) => s.leaveOne)
+  const keys = useMenuKeys(1)
   // What is still in the glass. A memory taken out keeps its document, and
   // therefore its place in the building, but it is not a pane any more.
   const count = useMemories((s) => standing(s.all).length)
@@ -1132,7 +1166,7 @@ function TheGlasshouse() {
         that arrives a tick later. See the note on the picked picture in
         systems/memories.
       */}
-      <button type="button" onClick={() => void start()}>
+      <button ref={keys.ref(0)} type="button" onClick={() => void start()}>
         leave a memory here
       </button>
     </div>
@@ -1155,10 +1189,17 @@ export function Threshold() {
   const tend = usePot((s) => s.show)
   const takenOver = useTakenOver()
   const questions = useWorldSlice((state) => state.questions)
+  const id = SECTIONS[index].id
+  const treeCount = 1 + (questions.current ? 1 : 0) +
+    (questions.availableSeeds > 0 ? 1 : 0) + (questions.history.length > 1 ? 1 : 0)
+  const thresholdKeys = useMenuKeys(
+    id === 'tree' ? treeCount : id === 'river' ? 1 : 0,
+    true,
+    entered && !takenOver && (id === 'tree' || id === 'river'),
+    id === 'tree' ? 'vertical' : 'both',
+  )
 
   if (!entered || takenOver) return null
-
-  const id = SECTIONS[index].id
 
   if (id === 'tree') {
     const current = questions.current
@@ -1166,23 +1207,46 @@ export function Threshold() {
     const both = Boolean(current?.answered.warm && current?.answered.cool)
     return (
       <div className="threshold tree-threshold">
-        <button type="button" onClick={write}>plant a thought</button>
+        <button
+          ref={thresholdKeys.ref(0)}
+          type="button"
+          className={thresholdKeys.selected === 0 ? 'is-selected' : undefined}
+          onFocus={() => thresholdKeys.choose(0)}
+          onClick={write}
+        >
+          plant a thought
+        </button>
         <div className="tree-rituals">
           {current ? (
-            <button type="button" onClick={useQuestions.getState().openCurrent}>
+            <button
+              ref={thresholdKeys.ref(1)}
+              type="button"
+              className={thresholdKeys.selected === 1 ? 'is-selected' : undefined}
+              onFocus={() => thresholdKeys.choose(1)}
+              onClick={useQuestions.getState().openCurrent}
+            >
               <span aria-hidden="true">✦</span>{' '}
               {both ? 'read the newest bloom' : mine ? 'your answer is waiting' : 'the Tree is asking'}
             </button>
           ) : null}
           {questions.availableSeeds > 0 ? (
-            <button type="button" onClick={useQuestions.getState().openPlanting}>
+            <button
+              ref={thresholdKeys.ref(1 + (current ? 1 : 0))}
+              type="button"
+              className={thresholdKeys.selected === 1 + (current ? 1 : 0) ? 'is-selected' : undefined}
+              onFocus={() => thresholdKeys.choose(1 + (current ? 1 : 0))}
+              onClick={useQuestions.getState().openPlanting}
+            >
               <span aria-hidden="true">◇</span>{' '}
               plant a question · {questions.availableSeeds}
             </button>
           ) : null}
           {questions.history.length > 1 ? (
             <button
+              ref={thresholdKeys.ref(1 + (current ? 1 : 0) + (questions.availableSeeds > 0 ? 1 : 0))}
               type="button"
+              className={thresholdKeys.selected === 1 + (current ? 1 : 0) + (questions.availableSeeds > 0 ? 1 : 0) ? 'is-selected' : undefined}
+              onFocus={() => thresholdKeys.choose(1 + (current ? 1 : 0) + (questions.availableSeeds > 0 ? 1 : 0))}
               onClick={() => useQuestions.getState().openArchive(questions.history.at(-1)!.id)}
             >
               all answered questions · {questions.history.length}
@@ -1201,7 +1265,7 @@ export function Threshold() {
     return (
       <div className="threshold river-threshold">
         <span className="threshold-whisper">make the water rise</span>
-        <button type="button" onClick={tend}>add to ours</button>
+        <button ref={thresholdKeys.ref(0)} type="button" onClick={tend}>add to ours</button>
       </div>
     )
   }

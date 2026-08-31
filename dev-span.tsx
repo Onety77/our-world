@@ -27,9 +27,12 @@
 import { StrictMode, useMemo, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Vector3, type Mesh } from 'three'
+import { Color, Vector3, type Mesh } from 'three'
 import { buildMoonbreak, MoonbreakWorld } from '@/world/games/ember-rally/Moonbreak'
 import { buildTunnel } from '@/world/games/ember-rally/geometry'
+import { buildStormcrown, StormcrownWorld } from '@/world/games/ember-rally/Stormcrown'
+import { storm } from '@/world/games/ember-rally/weather'
+import { galeStrengthAt, stormAt } from '@/world/games/ember-rally/track'
 import { basisAt, roadPoint } from '@/world/games/ember-rally/geometry'
 import { MOONBREAK, makeTrack, roadAt } from '@/world/games/ember-rally/track'
 import {
@@ -42,7 +45,10 @@ import {
 import { placeCar, useCarRig } from '@/world/games/ember-rally/rig'
 import { BoxGeometry } from 'three'
 
-const STAGE = (new URLSearchParams(location.search).get('stage') ?? 'moonbreak') as 'moonbreak' | 'rootway'
+const STAGE = (new URLSearchParams(location.search).get('stage') ?? 'moonbreak') as
+  | 'moonbreak'
+  | 'rootway'
+  | 'stormcrown'
 const track = makeTrack(7, STAGE)
 const params = new URLSearchParams(location.search)
 /** Where along the road to stand, and how far into the swing. */
@@ -57,7 +63,15 @@ const BACK = Number(params.get('back') ?? 13)
 export default function Span() {
   const lights = useMemo(() => createLights(), [])
   const rock = useRockMaterial(lights)
-  const chunks = useMemo(() => (STAGE === 'moonbreak' ? buildMoonbreak(track) : buildTunnel(track)), [])
+  const chunks = useMemo(
+    () =>
+      STAGE === 'moonbreak'
+        ? buildMoonbreak(track)
+        : STAGE === 'stormcrown'
+          ? buildStormcrown(track)
+          : buildTunnel(track),
+    [],
+  )
   const held = useRef(CLOCK)
   // Three cars across the deck: the middle of the road and both edges, which is
   // where a car floating off a rolling deck would show it first.
@@ -85,10 +99,57 @@ export default function Span() {
     lights.uniforms.uSway.value.x = held.current
     lights.uniforms.uTime.value = held.current
     // The night the road is actually played in, unless asked for daylight.
-    lights.uniforms.uAmbient.value.set(params.has('day') ? '#9fb3c4' : '#4a5b72')
-    lights.uniforms.uFogNear.value = 60
-    lights.uniforms.uFogFar.value = 460
+    /*
+      The road's own light, not a flat one of mine.
+
+      This used to force a single bright ambient and a very long fog on every
+      stage, which on the Stormcrown was badly wrong in a way that looked like a
+      bug in the road: the race blends three different lighting sets by how far
+      up the mountain you are — dark under the storm, blinding white *inside*
+      the cloud, deep and long above it — and flattening all three to one made
+      the mountainside render as a white sheet. A viewer that lights the world
+      differently from the game is a viewer that reports faults the game does
+      not have, and hides the ones it does.
+    */
+    if (STAGE === 'stormcrown') {
+      const cloud = storm.inCloud
+      const high = storm.above
+      const mix3 = (a: number, b: number, c: number) => a + (b - a) * cloud + (c - a) * high
+      lights.uniforms.uAmbient.value.set('#4a565e').lerp(new Color('#9aa7ab'), cloud).lerp(new Color('#56657e'), high)
+      lights.uniforms.uFogColor.value.set('#1b2327').lerp(new Color('#b9c3c4'), cloud).lerp(new Color('#0b1220'), high)
+      lights.uniforms.uFogNear.value = mix3(14, 5, 34)
+      lights.uniforms.uFogFar.value = mix3(60, 32, 900)
+    } else {
+      lights.uniforms.uAmbient.value.set(params.has('day') ? '#9fb3c4' : '#4a5b72')
+      lights.uniforms.uFogNear.value = 60
+      lights.uniforms.uFogFar.value = 460
+    }
     lights.uniforms.uHeadPower.value = params.has('day') ? 0 : 1
+    // Otherwise they stay at the world origin, lighting the start line from
+    // wherever the camera happens to be parked.
+    lights.headLeft.copy(eye)
+    lights.headRight.copy(eye)
+    lights.spot.copy(eye)
+    lights.headDir.copy(look).sub(eye).normalize()
+    if (STAGE === 'stormcrown') {
+      /*
+        The race writes `storm` once a frame and nothing is racing here, so this
+        stands in for it — at the height and exposure of wherever the camera is
+        parked, which is the whole point of being able to park it anywhere.
+      */
+      const where = roadAt(track, AT)
+      const sky = stormAt(track, AT)
+      storm.s = AT
+      storm.speed = 30
+      storm.inCloud = sky.inCloud
+      storm.above = sky.above
+      // ?rain= forces the drop count up, because 540 drops spread over a box
+      // 120 metres wide are too sparse to read a slant off in a still frame.
+      storm.rain = params.has('rain')
+        ? Number(params.get('rain'))
+        : Math.max(0.15, 1 - sky.above) * (0.5 + sky.inCloud * 0.5)
+      storm.wind = galeStrengthAt(where, AT, held.current)
+    }
     rigs.forEach((rig, i) => {
       placeCar(rig, track, AT + 6 + i * 16, (i - 1) * 2.4, 0, 0, 0, 0, 0, false, held.current)
     })
@@ -97,6 +158,7 @@ export default function Span() {
   return (
     <>
       {STAGE === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
+      {STAGE === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
       {chunks.map((chunk, i) => (
         <mesh
           key={i}

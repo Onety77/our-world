@@ -292,11 +292,36 @@ export function alongTheAisle(target: HTMLElement): () => void {
     walkTo(aisle.to + e.deltaY * 0.012)
   }
 
+  /** The same walk for a keyboard: one bay at a time, never a camera jump. */
+  const key = (e: KeyboardEvent) => {
+    const focused = document.activeElement
+    if (
+      focused instanceof HTMLInputElement ||
+      focused instanceof HTMLTextAreaElement ||
+      focused instanceof HTMLSelectElement ||
+      focus.open > 0.02
+    ) return
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      walkTo(aisle.to - 3.2)
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      walkTo(aisle.to + 3.2)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      walkTo(aisle.deepest)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      walkTo(0)
+    }
+  }
+
   target.addEventListener('pointerdown', down)
   window.addEventListener('pointermove', move)
   window.addEventListener('pointerup', up)
   window.addEventListener('pointercancel', up)
   window.addEventListener('wheel', wheel, { passive: true })
+  window.addEventListener('keydown', key)
 
   return () => {
     target.removeEventListener('pointerdown', down)
@@ -304,6 +329,7 @@ export function alongTheAisle(target: HTMLElement): () => void {
     window.removeEventListener('pointerup', up)
     window.removeEventListener('pointercancel', up)
     window.removeEventListener('wheel', wheel)
+    window.removeEventListener('keydown', key)
     aisle.grabbing = false
   }
 }

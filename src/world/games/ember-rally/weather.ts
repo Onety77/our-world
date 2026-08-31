@@ -46,6 +46,23 @@ export const storm = {
    */
   rain: 0,
   /**
+   * How hard the gale is blowing here and now, 0..1.
+   *
+   * -------------------------------------------------------------------------
+   * **This is the wind made visible, and it is not decoration.** The gale is a
+   * real sideways force on the car — see `galeAt` — and a force with no
+   * visible cause does not read as weather, it reads as the handling being
+   * broken. The Moonbreak's swinging deck had the same problem and was solved
+   * the same way: put the *reason* on the screen, in this case rain that slants
+   * over as the gust arrives and stands straight up again in the cedars.
+   *
+   * Read from `galeStrengthAt` rather than worked out again here, so the
+   * slant and the shove are the same number. Rain that leans a moment before or
+   * after the car is pushed would be worse than rain that fell straight down.
+   * -------------------------------------------------------------------------
+   */
+  wind: 0,
+  /**
    * How hard the sky is lit this instant, 0..1.
    *
    * Strikes are short and they come in pairs and threes, the way real ones do —

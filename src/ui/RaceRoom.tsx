@@ -22,6 +22,7 @@
 import { LOBBY_COUNTDOWN_MS } from '@/systems/lobby'
 import { useSay } from '@/systems/useSay'
 import type { Lobby } from '@/systems/useLobby'
+import { useMenuKeys } from './useMenuKeys'
 
 /** The one number, big, in the middle. Three, two, one, and the flag. */
 function Flag({ countdown }: { countdown: number }) {
@@ -76,6 +77,7 @@ export function RaceRoom({
 }) {
   const say = useSay()
   const counting = lobby.countdown !== null && lobby.countdown > 0
+  const keys = useMenuKeys(2, true, !counting)
 
   return (
     <>
@@ -101,15 +103,33 @@ export function RaceRoom({
           </p>
           <div className="rally-actions">
             {lobby.youAreReady ? (
-              <button type="button" className="quiet" onClick={lobby.wait}>
+              <button
+                ref={keys.ref(0)}
+                type="button"
+                className={`quiet${keys.selected === 0 ? ' is-selected' : ''}`}
+                onFocus={() => keys.choose(0)}
+                onClick={lobby.wait}
+              >
                 not yet
               </button>
             ) : (
-              <button type="button" onClick={lobby.ready}>
+              <button
+                ref={keys.ref(0)}
+                type="button"
+                className={keys.selected === 0 ? 'is-selected' : undefined}
+                onFocus={() => keys.choose(0)}
+                onClick={lobby.ready}
+              >
                 ready
               </button>
             )}
-            <button type="button" className="quiet" onClick={onLeave}>
+            <button
+              ref={keys.ref(1)}
+              type="button"
+              className={`quiet${keys.selected === 1 ? ' is-selected' : ''}`}
+              onFocus={() => keys.choose(1)}
+              onClick={onLeave}
+            >
               {leaveLabel}
             </button>
           </div>

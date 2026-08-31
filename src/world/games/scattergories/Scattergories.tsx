@@ -44,6 +44,7 @@ import { usePlaying } from '@/systems/playing'
 import { useLobby } from '@/systems/useLobby'
 import { useSay } from '@/systems/useSay'
 import { RaceRoom } from '@/ui/RaceRoom'
+import { useMenuKeys } from '@/ui/useMenuKeys'
 import type { ScatterMove, ScatterSetup, Sheet, Strike } from './index'
 
 /** The one place the game's name is spelled, since round ids are built from it. */
@@ -472,7 +473,6 @@ function Writing({
     }
   })
   const [sending, setSending] = useState(false)
-  const [openingChoice, setOpeningChoice] = useState(0)
   const [categoryAt, setCategoryAt] = useState(0)
   const fields = useRef<(HTMLInputElement | null)[]>([])
   const handed = useRef(false)
@@ -488,6 +488,7 @@ function Writing({
     fixed nine hundred milliseconds long.
   */
   const [landed, setLanded] = useState(false)
+  const openingKeys = useMenuKeys(2, true, landed && !glass.turned && !waitingForHer)
   useEffect(() => {
     const id = window.setTimeout(() => setLanded(true), 900)
     return () => window.clearTimeout(id)
@@ -526,31 +527,6 @@ function Writing({
   }, [glass.turned, glass.left, answers, hand])
 
   const written = answers.filter((a) => a.trim() !== '').length
-
-  // Not while the room is up: in there Enter belongs to the ready button,
-  // and this listener would turn a glass the two of you had not agreed on.
-  useEffect(() => {
-    if (!landed || glass.turned || waitingForHer) return
-    const onKey = (event: KeyboardEvent) => {
-      const focused = document.activeElement
-      if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
-      if (
-        event.key === 'ArrowDown' || event.key === 'ArrowRight' ||
-        event.key === 'ArrowUp' || event.key === 'ArrowLeft'
-      ) {
-        event.preventDefault()
-        const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight'
-        setOpeningChoice(forward ? 1 : 0)
-      } else if (event.key === 'Enter' && !event.repeat) {
-        if (focused instanceof HTMLButtonElement) return
-        event.preventDefault()
-        if (openingChoice === 0) glass.turn()
-        else onLeave()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [glass.turned, glass.turn, landed, onLeave, openingChoice, waitingForHer])
 
   useEffect(() => {
     if (!glass.turned) return
@@ -616,17 +592,19 @@ function Writing({
         </div>
         <div className={`duel-actions scatter-landed ${landed ? 'shown' : ''}`}>
           <button
+            ref={openingKeys.ref(0)}
             type="button"
-            className={`put-back${openingChoice === 0 ? ' is-selected' : ''}`}
-            onFocus={() => setOpeningChoice(0)}
+            className={`put-back${openingKeys.selected === 0 ? ' is-selected' : ''}`}
+            onFocus={() => openingKeys.choose(0)}
             onClick={glass.turn}
           >
             turn the glass
           </button>
           <button
+            ref={openingKeys.ref(1)}
             type="button"
-            className={`put-back quiet${openingChoice === 1 ? ' is-selected' : ''}`}
-            onFocus={() => setOpeningChoice(1)}
+            className={`put-back quiet${openingKeys.selected === 1 ? ' is-selected' : ''}`}
+            onFocus={() => openingKeys.choose(1)}
             onClick={onLeave}
           >
             not now

@@ -677,7 +677,8 @@ canvas {
 }
 
 .threshold > button:hover::after,
-.threshold > button:focus-visible::after {
+.threshold > button:focus-visible::after,
+.threshold > button.is-selected::after {
   transform: scaleX(1);
 }
 
@@ -746,7 +747,8 @@ canvas {
 }
 
 .tree-rituals button:hover,
-.tree-rituals button:focus-visible {
+.tree-rituals button:focus-visible,
+.tree-rituals button.is-selected {
   color: var(--ink);
   outline: none;
   transform: translateX(0.18rem);
@@ -1631,6 +1633,13 @@ canvas {
 .put-back:focus-visible {
   color: var(--ink);
   outline: none;
+}
+
+.opened .put-back.is-selected,
+.opened-say.is-selected {
+  color: var(--warm);
+  outline: none;
+  text-shadow: 0 0 0.9rem rgba(224, 145, 70, 0.34), var(--lift);
 }
 
 .duel-actions .put-back.is-selected {
@@ -2818,6 +2827,9 @@ canvas {
   align-items: center;
   gap: clamp(0.7rem, 2vw, 1.4rem);
   width: min(100%, 36rem);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .rally-course-window {
@@ -6070,7 +6082,7 @@ canvas {
   padding-block: 0.9rem;
 }
 
-.challenges-list > .is-selected .standing {
+.challenges-list .standing.is-selected {
   color: #ffd09a;
   text-shadow: 0 0 1rem rgba(255, 137, 49, 0.38), var(--lift);
 }
@@ -6962,7 +6974,8 @@ canvas {
 }
 
 .said-menu button:hover,
-.said-menu button:focus-visible {
+.said-menu button:focus-visible,
+.said-menu button.is-selected {
   color: var(--warm);
   outline: none;
 }
@@ -10578,6 +10591,7 @@ body:has(.rally-running) .player {
     linear-gradient(145deg, #0a0807, #17100d 54%, #08090d);
   isolation: isolate;
   animation: reader-in 0.45s cubic-bezier(0.2, 0.75, 0.2, 1) both;
+  outline: none;
 }
 
 .live-choice-stage::before {
@@ -10649,6 +10663,9 @@ body:has(.rally-running) .player {
   gap: clamp(0.7rem, 2vw, 1.4rem);
   width: min(100%, 38rem);
   min-height: 0;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .live-choice-window {
