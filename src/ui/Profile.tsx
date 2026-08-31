@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { useData, useWorldSlice } from '@/data/provider'
+import { useConnection, useData, useWorldSlice } from '@/data/provider'
 import { parseCoordinates } from '@/systems/geo'
 import { isValidTimeZone, localTimeLabel } from '@/systems/time'
 import { useProfileSheet } from '@/systems/profileSheet'
@@ -89,6 +89,82 @@ function Telling() {
           page cannot ask twice.
         </span>
       ) : null}
+    </p>
+  )
+}
+
+/**
+ * The way out of the garden on this machine.
+ *
+ * ===========================================================================
+ * **There was no way to sign out.** `signOutOfGarden` has existed in
+ * `data/firebase` since the door was built and nothing has ever called it, so
+ * the only way to end a session was the Firebase console or clearing the
+ * browser's site data by hand. That is fine right up until the evening you sign
+ * in somewhere you should not have — a friend's laptop, a machine at work — and
+ * then it is the one control the app is missing.
+ *
+ * **It is per device, and that is the point.** Signing out here ends the session
+ * in *this* browser and touches nothing else: the phone in your pocket stays
+ * signed in, and so does {her} everything. There is no limit on how many places
+ * one account may be open at once, and no reason there should be — most of them
+ * are you.
+ *
+ * **It asks once.** Not because it is dangerous — you sign in again and
+ * everything is exactly where you left it — but because the cost of an
+ * accidental press is finding your password on a phone at midnight, and the
+ * cost of the extra tap is nothing.
+ *
+ * Real backend only. There is nothing to sign out of on the mock, and a button
+ * that did nothing would be worse than no button.
+ * ===========================================================================
+ */
+function TheWayOut() {
+  const connection = useConnection()
+  const [asking, setAsking] = useState(false)
+  const [going, setGoing] = useState(false)
+  const [fault, setFault] = useState('')
+
+  if (connection.status === 'local') return null
+
+  const leave = async () => {
+    setGoing(true)
+    setFault('')
+    try {
+      const { signOutOfGarden } = await import('@/data/firebase')
+      await signOutOfGarden()
+      // Nothing after this: the provider is watching, sees the session end and
+      // puts the door back up by itself.
+    } catch {
+      setFault('That did not take. You are still signed in here.')
+      setGoing(false)
+      setAsking(false)
+    }
+  }
+
+  return (
+    <p className="profile-way-out">
+      {asking ? (
+        <>
+          <span className="profile-field">sign out of this device?</span>
+          <span className="profile-way-out-pair">
+            <button type="button" className="put-back" disabled={going} onClick={() => void leave()}>
+              {going ? 'going…' : 'yes, sign out'}
+            </button>
+            <button type="button" className="put-back quiet" onClick={() => setAsking(false)}>
+              stay
+            </button>
+          </span>
+        </>
+      ) : (
+        <button type="button" className="profile-leave" onClick={() => setAsking(true)}>
+          sign out of this device
+        </button>
+      )}
+      <span className="pot-why">
+        {fault ||
+          'Only this browser. Anywhere else you are signed in stays signed in, and nothing you have written goes anywhere.'}
+      </span>
     </p>
   )
 }
@@ -244,6 +320,7 @@ export function ProfileSheet() {
 
             <Telling />
             <MySound />
+            <TheWayOut />
 
             <p className="door-trouble" role="status" aria-live="polite">
               {trouble ?? ''}

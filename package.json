@@ -22,8 +22,7 @@
     "rally-stream": "npx --yes tsx scripts/rally-stream-check.ts",
     "hollow": "node scripts/hollow-check.mjs",
     "chase": "node scripts/chase-check.mjs",
-    "locks": "node scripts/locks-check.mjs",
-    "switchback": "npx --yes tsx scripts/switchback-check.ts"
+    "locks": "node scripts/locks-check.mjs"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",

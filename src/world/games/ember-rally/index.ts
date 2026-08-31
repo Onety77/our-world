@@ -38,7 +38,6 @@ export default {
       prompt: 'which road',
       options: [
         { id: 'rootway', name: 'The Rootway', note: 'fire and stone · close, changing, lantern-lit' },
-        { id: 'rootway-test', name: 'The Switchback', note: 'the same stone · a road you can learn' },
         { id: 'moonbreak', name: 'The Moonbreak', note: 'water and open sky · fast and exposed' },
         { id: 'stormcrown', name: 'The Stormcrown', note: 'rain and high stone · weather at the limit' },
       ],

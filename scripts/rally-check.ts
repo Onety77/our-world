@@ -385,7 +385,6 @@ function realRoad() {
     ['rootway 7', 7, 'rootway'],
     ['rootway 42', 42, 'rootway'],
     ['rootway 1234', 1234, 'rootway'],
-    ['switchback', 1, 'rootway-test'],
     ['moonbreak', 1, 'moonbreak'],
     ['stormcrown', 1, 'stormcrown'],
   ]

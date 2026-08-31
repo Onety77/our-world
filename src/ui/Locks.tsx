@@ -44,7 +44,6 @@ import { GAMES } from '@/world/games/registry'
  */
 const ROADS: readonly { id: string; name: string }[] = [
   { id: 'rootway', name: 'The Rootway' },
-  { id: 'rootway-test', name: 'The Switchback' },
   { id: 'moonbreak', name: 'The Moonbreak' },
   { id: 'stormcrown', name: 'The Stormcrown' },
 ]

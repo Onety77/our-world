@@ -52,7 +52,7 @@ import {
 
 type View = 'courses' | 'menu' | 'road' | 'replay'
 type RaceKind = 'qualifying' | 'chase'
-const STAGES: readonly StageId[] = ['rootway', 'rootway-test', 'moonbreak', 'stormcrown']
+const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown']
 
 /** Old saved rounds may still name a road that no longer exists. */
 function availableStage(value: unknown): StageId {
@@ -117,31 +117,6 @@ const COURSES: Record<StageId, {
     cleanWord: 'through the Rootway',
     enter: 'go below',
   },
-  /*
-    The Switchback Run.
-
-    Written rather than dealt — see `switchback.ts`. Everything it says about
-    itself is about the *road*, because the place is the Rootway: same cave,
-    same fires, same dust. It is the only course here you can learn, and the
-    copy is careful to promise exactly that and nothing else.
-  */
-  'rootway-test': {
-    name: 'The Switchback',
-    place: 'the same stone, a made road',
-    short: 'The Rootway cut to a plan: eight numbered corners, two hairpins, and one line through the lot.',
-    soloTitle: 'This one does not move',
-    soloCopy: 'Every other road down here is dealt out fresh. This one is drawn. Turn 2 keeps tightening after you have committed to it, the fifth and sixth are one shape and you cannot fix the second by rushing the first, and the seventh is where a race is won. There is a cut across the fourth if you are brave with the brake.',
-    spirit: 'the fire-spirit',
-    returnTo: 'return to the fire',
-    setTitle: 'Set a line {she} cannot see',
-    setCopy: 'The road is the same road every time, so a tenth found here is a tenth you keep. {Their} first run stays under the stone until yours is beside it — and yours stays under it until {hers} is.',
-    sealedTitle: 'The stone stays closed.',
-    chaseHome: 'home to the fire',
-    resultKicker: 'two lines through one plan',
-    finishPlace: 'the fire',
-    cleanWord: 'through the Switchback',
-    enter: 'go below',
-  },
   moonbreak: {
     name: 'The Moonbreak',
     place: 'water and open sky',
@@ -192,18 +167,6 @@ const SCENES: Record<StageId, ReactNode> = {
       <i className="course-vault one" />
       <i className="course-vault two" />
       <i className="course-road" />
-      <i className="course-lamps"><b /><b /></i>
-    </>
-  ),
-  /*
-    The Rootway's own vault, with the road drawn switching back through it —
-    because that is the honest picture: the same tunnel, a different line.
-  */
-  'rootway-test': (
-    <>
-      <i className="course-vault one" />
-      <i className="course-vault two" />
-      <i className="course-switchback" />
       <i className="course-lamps"><b /><b /></i>
     </>
   ),

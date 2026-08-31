@@ -11928,41 +11928,85 @@ body.on-the-road .broke-what {
   }
 }
 
-/*
-  The Switchback's card, which is the Rootway's vault with a different road in it.
 
-  A single ribbon that leaves the middle, doubles back and comes out the other
-  side — the shape of a hairpin seen down the tunnel, drawn with a border and a
-  clip rather than an image, like every other scene on these cards. It says the
-  one true thing about this course in one glance: same cave, road that switches
-  back.
-*/
-.rally-course .course-switchback {
-  position: absolute;
-  z-index: 2;
-  bottom: 0;
-  left: 50%;
-  width: 92%;
-  height: 52%;
-  translate: -50% 0;
-  background: linear-gradient(#31261e, #17100c);
-  clip-path: polygon(
-    42% 0, 58% 0,
-    58% 34%, 88% 34%, 88% 58%, 26% 58%, 26% 74%,
-    100% 100%, 0 100%,
-    14% 74%, 14% 46%, 76% 46%, 76% 22%, 42% 22%
-  );
+/* --------------------------------------------------------------------------
+   The way out, at the bottom of your own page
+
+   Ink on paper, not light on stone. The profile is the one cream surface in
+   the garden, so the world's ordinary  — pale text meant to sit on
+   a dark cave — comes out as a ghost here. Everything below is the same brown
+   ink the rest of this sheet is written in.
+
+   Quiet until it has asked, and warm only for the answer. The first press is a
+   question; the second is the answer, and only one of those should look like a
+   thing you meant.
+   -------------------------------------------------------------------------- */
+.profile-way-out {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding-top: 1.2rem;
+  /* The one rule on this sheet. Above it is who you are; this is the door, and
+     a door is worth telling apart from a form. */
+  border-top: 1px solid rgba(74, 58, 38, 0.16);
 }
 
-/* The line down the middle of it, the same pale dust the other roads carry. */
-.rally-course .course-switchback::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 49.4%,
-    rgba(229, 190, 143, 0.22) 50%,
-    transparent 50.6%
-  );
+.profile-leave,
+.profile-way-out-pair .put-back {
+  padding: 0.32rem 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  text-shadow: none;
+  transition: color 0.25s ease;
+}
+
+.profile-leave {
+  align-self: flex-start;
+  color: rgba(74, 58, 38, 0.62);
+  /* The same beam every other way-in in the garden is underlined with, in ink. */
+  border-bottom: 1px solid rgba(74, 58, 38, 0.28);
+}
+
+.profile-leave:hover,
+.profile-leave:focus-visible {
+  color: rgba(74, 58, 38, 0.92);
+  border-bottom-color: rgba(74, 58, 38, 0.55);
+  outline: none;
+}
+
+.profile-way-out-pair {
+  display: flex;
+  gap: 1.4rem;
+  align-items: baseline;
+}
+
+/* The answer you meant. Darker than anything else on the sheet, because it is
+   the only control here that ends something. */
+.profile-way-out-pair .put-back {
+  color: #6b2f18;
+  border-bottom: 1px solid rgba(107, 47, 24, 0.4);
+}
+
+.profile-way-out-pair .put-back.quiet {
+  color: rgba(74, 58, 38, 0.5);
+  border-bottom-color: transparent;
+}
+
+.profile-way-out-pair .put-back:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Room for a thumb: the one control here you press once and mean it. */
+@media (max-width: 30rem) {
+  .profile-leave,
+  .profile-way-out-pair .put-back {
+    min-height: 2.5rem;
+  }
 }
