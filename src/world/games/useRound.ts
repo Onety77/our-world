@@ -208,6 +208,25 @@ export function useStandings(games: readonly Listed[]): Record<string, Standing>
   const zone = useWorldSlice((s) => s.profiles[me].timeZone)
   const [turns, setTurns] = useState<Record<string, Standing>>({})
 
+  /*
+    Keyed on what the games *are*, not on the identity of the array they arrived in.
+
+    -----------------------------------------------------------------------
+    **This opens a live listener per game and clears its results whenever the
+    list changes**, so 'the list changed' has to mean something real. Keyed on
+    `games` itself it meant 'the caller rendered', and the caller — the Hollow —
+    was handing over a freshly filtered array every time. Every render: three
+    listeners closed, three opened, and the standings reset to empty. Firestore
+    never got a chance to answer, so the way in permanently read *nothing yet*
+    while there was a word waiting in it.
+
+    The doorman that caused it is fixed too, but a hook whose correctness
+    depends on its caller remembering to memoise is a hook that breaks again
+    the next time somebody adds a game to that list. A signature of the ids and
+    the day settles it here, where the cost of getting it wrong actually lives.
+    -----------------------------------------------------------------------
+  */
+  const signature = games.map((game) => game.id).join('|') + '@' + zone
   const ids = useMemo(
     () =>
       games.map((game) => ({
@@ -217,7 +236,9 @@ export function useStandings(games: readonly Listed[]): Record<string, Standing>
         // you would walk into rather than a second idea of which is today's.
         id: `${game.id}:${game.cadence === 'daily' ? localDateKey(zone) : 'current'}`,
       })),
-    [games, zone],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the signature is
+    // the dependency; see the note above.
+    [signature],
   )
 
   useEffect(() => {

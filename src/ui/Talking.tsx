@@ -34,12 +34,12 @@ import { shouldTell, tell } from '@/systems/notify'
 import { useDismissOutside } from './useDismissOutside'
 import { onActivity, useActivity, wakeWorld } from '@/systems/activity'
 
-/** How many messages carry legible words at once, above and below the head. */
-const ABOVE = 7
-const BELOW = 2
+/** How many messages stay laid out around the one being read. */
+const ABOVE = 12
+const BELOW = 4
 
 /** Sky between the bottom of one line and the top of the next, in pixels. */
-const AIR = 30
+const AIR = 24
 
 /**
  * How far above the newest message each message hangs, measured.
@@ -59,29 +59,39 @@ const AIR = 30
  * transforms, so this can be read while the sky is moving.
  * ---------------------------------------------------------------------------
  */
-function ladder(root: HTMLElement): number[] {
-  const kids = root.children
-  const n = kids.length
-  const tall = new Array<number>(n)
-  for (let i = 0; i < n; i++) tall[i] = (kids[i] as HTMLElement).offsetHeight
+interface Ladder {
+  first: number
+  up: number[]
+}
 
-  // Age 0 is the newest, which is the *last* child, and it is the origin.
-  const up = new Array<number>(n)
+function ladder(root: HTMLElement): Ladder {
+  const measured = Array.from(root.children, (kid) => ({
+    age: Number((kid as HTMLElement).dataset.age ?? '0'),
+    height: (kid as HTMLElement).offsetHeight,
+  })).sort((a, b) => a.age - b.age)
+
+  if (measured.length === 0) return { first: 0, up: [] }
+  const up = new Array<number>(measured.length)
   up[0] = 0
-  for (let a = 1; a < n; a++) {
-    up[a] = up[a - 1] + (tall[n - a] + tall[n - 1 - a]) / 2 + AIR
+  const air = window.innerWidth <= 544 ? 18 : AIR
+  for (let i = 1; i < measured.length; i++) {
+    up[i] = up[i - 1] + (measured[i - 1].height + measured[i].height) / 2 + air
   }
-  return up
+  return { first: measured[0].age, up }
 }
 
 /** The ladder read at a fractional age, because the walk eases between rungs. */
-function rung(up: number[], age: number): number {
-  if (up.length === 0) return age * (AIR + 44)
+function rung(ladder: Ladder, age: number): number {
+  const { first, up } = ladder
+  const local = age - first
+  if (up.length === 0) return local * (AIR + 44)
   const last = up.length - 1
-  if (age <= 0) return up[0] + age * (up.length > 1 ? up[1] - up[0] : AIR + 44)
-  if (age >= last) return up[last] + (age - last) * (last > 0 ? up[last] - up[last - 1] : AIR + 44)
-  const low = Math.floor(age)
-  return up[low] + (up[low + 1] - up[low]) * (age - low)
+  if (local <= 0) return up[0] + local * (up.length > 1 ? up[1] - up[0] : AIR + 44)
+  if (local >= last) {
+    return up[last] + (local - last) * (last > 0 ? up[last] - up[last - 1] : AIR + 44)
+  }
+  const low = Math.floor(local)
+  return up[low] + (up[low + 1] - up[low]) * (local - low)
 }
 
 function spoken(at: number): string {
@@ -140,6 +150,8 @@ function Said({
   answering,
   when,
   me,
+  delivery,
+  onOpenReply,
 }: {
   message: Message
   age: number
@@ -147,6 +159,8 @@ function Said({
   answering: Message | null
   when: string | null
   me: UserId
+  delivery: 'sending' | 'failed' | null
+  onOpenReply(id: string): void
 }) {
   const gestures = useSaidGestures(message)
   const yours = heartedBy(message, me)
@@ -170,7 +184,18 @@ function Said({
       */}
       {message.replyTo &&
         (answering ? (
-          <span className="said-answering">{answering.body}</span>
+          <button
+            type="button"
+            className="said-answering"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenReply(answering.id)
+            }}
+            aria-label={`go to the message: ${answering.body}`}
+          >
+            {answering.body}
+          </button>
         ) : (
           <span className="said-answering gone">something said a long time ago</span>
         ))}
@@ -187,6 +212,11 @@ function Said({
       )}
 
       {when && <span className="said-when">{when}</span>}
+      {delivery && (
+        <span className={`said-delivery ${delivery}`}>
+          {delivery === 'failed' ? 'not sent' : 'sending'}
+        </span>
+      )}
     </p>
   )
 }
@@ -196,6 +226,8 @@ export function Talking() {
   const data = useData()
   const me = data.me
   const messages = useTalking((s) => s.messages)
+  const optimistic = useTalking((s) => s.optimistic)
+  const failed = useTalking((s) => s.failed)
   const loading = useTalking((s) => s.loading)
   const composing = useTalking((s) => s.composing)
   const startWriting = useTalking((s) => s.startWriting)
@@ -223,8 +255,36 @@ export function Talking() {
     void data.markMessagesRead()
   }, [here, data, messages.length])
 
+  const [viewAge, setViewAgeState] = useState(0)
+  const viewAgeRef = useRef(0)
+  const [awayFromNewest, setAwayFromNewest] = useState(false)
+  const awayRef = useRef(false)
+
+  const showAge = (age: number) => {
+    const furthest = Math.max(0, messages.length - 1)
+    const next = Math.max(0, Math.min(furthest, age))
+    viewAgeRef.current = next
+    setViewAgeState(next)
+  }
+
+  const showAway = (away: boolean) => {
+    if (awayRef.current === away) return
+    awayRef.current = away
+    setAwayFromNewest(away)
+  }
+
+  const goNewest = () => {
+    toNewest()
+    showAge(0)
+    showAway(false)
+    wakeWorld()
+  }
+
   useEffect(() => {
-    if (here) toNewest()
+    if (here) goNewest()
+    // `messages.length` deliberately does not belong here: an arriving line
+    // must not drag somebody away from the history they are currently reading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [here])
 
   /*
@@ -255,16 +315,49 @@ export function Talking() {
     if (shouldTell(here)) tell(them.name, newest.body)
   }, [messages, me, here, them.name])
 
+  /*
+    A new line must not move the sentence currently under your finger.
+
+    Ages are counted from the newest message, so appending one makes every
+    existing age one larger. Shift the walk by that exact amount while history
+    is open; at the bottom, the ordinary incoming-message motion is wanted.
+  */
+  const previousNewest = useRef<string | null>(null)
+  useEffect(() => {
+    const newest = messages.at(-1)
+    const previous = previousNewest.current
+    previousNewest.current = newest?.id ?? null
+    if (!previous || !awayRef.current) return
+    const oldHead = messages.findIndex((message) => message.id === previous)
+    if (oldHead < 0) return
+    const added = messages.length - 1 - oldHead
+    if (added <= 0) return
+    walk.at += added
+    walk.to += added
+    showAge(viewAgeRef.current + added)
+  }, [messages])
+
   // --- walking back ---------------------------------------------------------
+  const surface = useRef<HTMLDivElement>(null)
   const column = useRef<HTMLDivElement>(null)
+
+  const moveWalk = (amount: number) => {
+    const furthest = Math.max(0, messages.length - 1)
+    walk.to = Math.max(0, Math.min(furthest, walk.to + amount))
+    if (Math.abs(walk.to - viewAgeRef.current) >= 2) showAge(Math.round(walk.to))
+    showAway(walk.to > 1.1)
+    wakeWorld()
+  }
 
   useEffect(() => {
     if (!here) return
+    const root = surface.current
+    if (!root) return
 
     const onWheel = (e: WheelEvent) => {
-      if (useTalking.getState().composing) return
       // Down through the wheel is back through time, the way a scrollback goes.
-      walk.to += e.deltaY * 0.006
+      e.preventDefault()
+      moveWalk(e.deltaY * 0.009)
     }
 
     let dragging = false
@@ -280,25 +373,25 @@ export function Talking() {
       lastY = e.clientY
       // Dragging down pulls the older messages toward you, the way dragging a
       // sheet of paper moves the paper.
-      walk.to += dy * 0.014
+      moveWalk(dy * 0.027)
     }
     const up = () => {
       dragging = false
     }
 
-    window.addEventListener('wheel', onWheel, { passive: true })
-    window.addEventListener('pointerdown', down)
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    window.addEventListener('pointercancel', up)
+    root.addEventListener('wheel', onWheel, { passive: false })
+    root.addEventListener('pointerdown', down)
+    window.addEventListener('pointermove', move, true)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
     return () => {
-      window.removeEventListener('wheel', onWheel)
-      window.removeEventListener('pointerdown', down)
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', up)
+      root.removeEventListener('wheel', onWheel)
+      root.removeEventListener('pointerdown', down)
+      window.removeEventListener('pointermove', move, true)
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
     }
-  }, [here])
+  }, [here, messages.length])
 
   /*
     Per frame, and never through React.
@@ -317,12 +410,12 @@ export function Talking() {
     let columnTop = 0
     // Measured once a layout, not once a frame: reading `offsetHeight` sixty
     // times a second for every line is a forced reflow per line per frame.
-    let up: number[] = []
+    let up: Ladder = { first: 0, up: [] }
+    let start = () => {}
     const remeasure = () => {
       if (column.current) {
         up = ladder(column.current)
         heights = Array.from(column.current.children, (kid) => (kid as HTMLElement).offsetHeight)
-        columnTop = column.current.getBoundingClientRect().top
       }
 
       /*
@@ -337,34 +430,51 @@ export function Talking() {
       */
       if (window.innerWidth <= 544) {
         const leave = document.querySelector<HTMLElement>('.leave-place')
-        const corner = document.querySelector<HTMLElement>('.corner')
+        const openPlayer = document.querySelector<HTMLElement>('.corner:not(.tucked) .player.open')
         const writer = document.querySelector<HTMLElement>('.start-saying, .saying')
-        const voices = document.querySelector<HTMLElement>('.voice-beacon')
         const visibleBox = (element: HTMLElement | null) => {
           if (!element) return null
           const box = element.getBoundingClientRect()
           return box.width > 0 && box.height > 0 ? box : null
         }
         const leaveBox = visibleBox(leave)
-        const cornerBox = visibleBox(corner)
+        const playerBox = visibleBox(openPlayer)
         const writerBox = visibleBox(writer)
-        const voiceBox = visibleBox(voices)
+        const viewportBottom = window.visualViewport
+          ? window.visualViewport.offsetTop + window.visualViewport.height
+          : window.innerHeight
         laneTop = Math.max(
           0,
           leaveBox?.bottom ?? 0,
-          cornerBox?.bottom ?? 0,
-        ) + 14
+          playerBox?.bottom ?? 0,
+        ) + 10
         laneBottom = Math.min(
-          window.innerHeight,
+          viewportBottom,
           writerBox?.top ?? window.innerHeight,
-          voiceBox?.top ?? window.innerHeight,
-        ) - 14
+        ) - 10
+
+        /*
+          The read head belongs beside the composer, not at a percentage of a
+          phone whose usable height changes whenever its keyboard does. The
+          currently read message gets a calm thirty-pixel breath above the
+          writing control; older lines use every real pixel above it.
+        */
+        if (column.current) {
+          const newest = Array.from(column.current.children).find(
+            (kid) => Number((kid as HTMLElement).dataset.age) === Math.round(walk.at),
+          ) as HTMLElement | undefined
+          const headHeight = newest?.offsetHeight ?? 54
+          const wanted = laneBottom - headHeight - 28
+          column.current.style.top = `${Math.max(laneTop + 18, wanted)}px`
+        }
       } else {
         laneTop = -Infinity
         laneBottom = Infinity
+        if (column.current) column.current.style.top = ''
       }
+      if (column.current) columnTop = column.current.getBoundingClientRect().top
+      start()
     }
-    remeasure()
     // A rotated phone, a font that arrived late, or a quote that wrapped
     // differently all change the rungs; the observer catches all three.
     const watch = new ResizeObserver(remeasure)
@@ -373,18 +483,21 @@ export function Talking() {
       for (const kid of column.current.children) watch.observe(kid)
     }
     for (const control of document.querySelectorAll<HTMLElement>(
-      '.leave-place, .corner, .start-saying, .saying, .voice-beacon',
+      '.leave-place, .player, .start-saying, .saying',
     )) {
       watch.observe(control)
     }
-    window.addEventListener('resize', remeasure)
+    const classes = new MutationObserver(remeasure)
+    for (const control of document.querySelectorAll<HTMLElement>('.corner, .player')) {
+      classes.observe(control, { attributes: true, attributeFilter: ['class'] })
+    }
 
     let lastFrame = 0
     let settledFrames = 0
     let previousWalk = Number.NaN
     let previousYaw = Number.NaN
     let previousPitch = Number.NaN
-    const start = () => {
+    start = () => {
       if (raf === 0) raf = requestAnimationFrame(tick)
     }
     const tick = (now: number) => {
@@ -473,17 +586,34 @@ export function Talking() {
       previousYaw = gaze.yaw
       previousPitch = gaze.pitch
       settledFrames = still ? settledFrames + 1 : 0
+      showAway(walk.at > 1.1)
       if (settledFrames < 4) start()
     }
+    const viewport = window.visualViewport
+    const fitViewport = () => {
+      const talking = surface.current
+      if (talking && viewport) {
+        talking.style.setProperty('--talking-top', `${viewport.offsetTop}px`)
+        talking.style.setProperty('--talking-height', `${viewport.height}px`)
+      }
+      remeasure()
+    }
+    window.addEventListener('resize', fitViewport)
+    viewport?.addEventListener('resize', fitViewport)
+    viewport?.addEventListener('scroll', fitViewport)
     const stopListening = onActivity(start)
+    fitViewport()
     start()
     return () => {
       cancelAnimationFrame(raf)
       stopListening()
       watch.disconnect()
-      window.removeEventListener('resize', remeasure)
+      classes.disconnect()
+      window.removeEventListener('resize', fitViewport)
+      viewport?.removeEventListener('resize', fitViewport)
+      viewport?.removeEventListener('scroll', fitViewport)
     }
-  }, [here, messages, composing, idle])
+  }, [here, messages, composing, idle, viewAge])
 
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')
@@ -492,7 +622,7 @@ export function Talking() {
 
   // The draft lives above the conditional render, so folding the composer
   // does not throw away an unfinished message.
-  useDismissOutside(here && composing, stopWriting, [composer])
+  useDismissOutside(here && composing, stopWriting, [composer], { allowOutsideDrag: true })
 
   useEffect(() => {
     if (composing) field.current?.focus()
@@ -538,12 +668,26 @@ export function Talking() {
   async function say() {
     const text = draft.trim()
     if (text === '') return
-    const sent = await attempt('that didn’t send', () =>
-      data.sendMessage(text, replyTo ?? undefined),
-    )
-    // Only let go of the words once they are actually somewhere.
-    if (!sent) return
+    const outgoing = {
+      id: `said-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+      at: Date.now(),
+    }
+    const message: Message = {
+      ...outgoing,
+      by: me,
+      body: text,
+      ...(replyTo ? { replyTo } : {}),
+    }
+    useTalking.getState().queue(message)
     setDraft('')
+    if (replyTo !== null) answer(null)
+    goNewest()
+    ambience.said(true)
+    field.current?.focus()
+    const sent = await attempt('that didn’t send', () =>
+      data.sendMessage(text, message.replyTo, outgoing),
+    )
+    if (!sent) useTalking.getState().fail(outgoing.id)
     /*
       The reply is answered, but the composer stays open.
 
@@ -558,16 +702,15 @@ export function Talking() {
       out of everything else here: tap somewhere else, or press escape. Both
       already exist a few lines up.
     */
-    if (replyTo !== null) answer(null)
     // Belt and braces: nothing above blurs the field, but if anything ever
     // does, the cursor belongs back where you were typing.
     field.current?.focus()
-    toNewest()
-    ambience.said(true)
   }
 
   const lines = useMemo(() => {
     const newest = messages.length - 1
+    const low = Math.max(0, Math.floor(viewAge) - BELOW)
+    const high = Math.min(messages.length - 1, Math.ceil(viewAge) + ABOVE)
     return messages
       .map((m, i) => ({
         m,
@@ -577,8 +720,22 @@ export function Talking() {
         // never show words that are not in this conversation.
         answering: messageById(messages, m.replyTo ?? null),
       }))
-      .filter(({ age }) => age <= ABOVE + 40 && age >= -BELOW)
-  }, [messages])
+      .filter(({ age }) => age >= low && age <= high)
+  }, [messages, viewAge])
+
+  const openReply = (id: string) => {
+    const index = messages.findIndex((message) => message.id === id)
+    if (index < 0) return
+    const age = messages.length - 1 - index
+    const distance = age - walk.at
+    walk.to = age
+    // A distant quote crosses the sky in four visible rungs rather than
+    // making somebody wait through hundreds of invisible messages.
+    if (Math.abs(distance) > 5) walk.at = age - Math.sign(distance) * 4
+    showAge(age)
+    showAway(age > 1.1)
+    wakeWorld()
+  }
 
   const answeringNow = useMemo(
     () => messageById(messages, replyTo),
@@ -594,7 +751,7 @@ export function Talking() {
   if (!here) return null
 
   return (
-    <div className="talking">
+    <div className="talking" ref={surface}>
       <div className="sky-column" ref={column}>
         {lines.map(({ m, age, stamped, answering }) => (
           <Said
@@ -605,9 +762,22 @@ export function Talking() {
             answering={answering}
             when={stamped ? spoken(m.at) : null}
             me={me}
+            delivery={failed[m.id] ? 'failed' : optimistic[m.id] ? 'sending' : null}
+            onOpenReply={openReply}
           />
         ))}
       </div>
+
+      {awayFromNewest && (
+        <button
+          type="button"
+          className="talking-newest"
+          onClick={goNewest}
+          aria-label="return to the newest message"
+        >
+          <span aria-hidden="true" />
+        </button>
+      )}
 
       {messages.length === 0 && !loading && (
         <p className="sky-empty">
@@ -661,19 +831,18 @@ export function Talking() {
               className="saying-field ink"
               value={draft}
               onChange={(e) => write(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  void say()
-                }
-              }}
               rows={1}
               aria-label={`say something to ${them.name}`}
-              /*
-                The phone's own return key says "send", because that is what it
-                does — and it is the fastest way to send without moving a thumb.
-              */
-              enterKeyHint="send"
+              /* Return belongs to the message now; the visible light is the
+                  only send action. Plain text semantics also keep mobile
+                  keyboards out of form-navigation and autofill modes. */
+              inputMode="text"
+              enterKeyHint="enter"
+              autoComplete="off"
+              autoCapitalize="sentences"
+              autoCorrect="on"
+              spellCheck
+              data-form-type="other"
             />
             <button
               type="button"

@@ -48,6 +48,7 @@ import { newId } from './ids'
 import { AMBIENCE_KEYS, GROWN_DAYS, USER_IDS } from './types'
 import { localDateKey } from '@/systems/time'
 import {
+  QUESTION_BUILD,
   QUESTION_DAY,
   QUESTION_PROMPTS,
   questionHash,
@@ -273,7 +274,7 @@ function questionView(
     history: rounds.filter((round) => round.completedAt !== null),
     availableSeeds,
     queued: stored.seeds.filter((seed) => seed.by === me && seed.usedAt === null).length,
-    nextAt: current?.completedAt ? current.openedAt + QUESTION_DAY : null,
+    nextAt: current?.completedAt ? current.completedAt + QUESTION_BUILD : null,
     loaded: true,
   }
 }
@@ -889,11 +890,14 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       const now = Date.now()
       const current = questions.rounds.toSorted((a, b) => a.openedAt - b.openedAt).at(-1)
 
-      // One question at a time, and never more than one in a rolling day. A
-      // late answer creates no backlog: the next question simply waits here.
+      /*
+        One question at a time, and the next one takes `QUESTION_BUILD` to grow
+        from the moment you both finished the last. A late answer creates no
+        backlog: the next question simply waits here.
+      */
       if (current) {
         const both = current.answered.warm && current.answered.cool
-        if (!both || now < current.openedAt + QUESTION_DAY) return
+        if (!both || now < (current.completedAt ?? now) + QUESTION_BUILD) return
       }
 
       const usedPrompts = new Set(questions.rounds.map((round) => round.prompt))
@@ -916,7 +920,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       }
 
       const round: StoredQuestionRound = {
-        id: `question-${Math.floor(now / QUESTION_DAY)}`,
+        id: `question-${Math.floor(now / QUESTION_BUILD)}`,
         prompt,
         openedAt: now,
         completedAt: null,
@@ -1228,7 +1232,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       }
     },
 
-    async sendMessage(body, replyTo) {
+    async sendMessage(body, replyTo, outgoing) {
       const text = body.trim()
       // An empty message is not a message. Refused here rather than disabled
       // in the UI alone, because the seam is the thing both layers share.
@@ -1238,7 +1242,13 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       const answers = replyTo && messages.some((m) => m.id === replyTo) ? replyTo : undefined
       messages = [
         ...messages,
-        { id: newId(), by: me, body: text, at: Date.now(), ...(answers ? { replyTo: answers } : {}) },
+        {
+          id: outgoing?.id ?? newId(),
+          by: me,
+          body: text,
+          at: outgoing?.at ?? Date.now(),
+          ...(answers ? { replyTo: answers } : {}),
+        },
       ]
       saveMessages()
       tellMessageWatchers()

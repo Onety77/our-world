@@ -66,7 +66,10 @@ export function CornerTab({ show }: { show: boolean }) {
     }
   }, [tucked, toggle, putAt])
 
-  if (!show) return null
+  // The mark is a way back to a corner that has actually been tucked. Leaving
+  // it on screen while the corner was open produced a stray vertical line at
+  // whichever height an old gesture happened to leave behind.
+  if (!show || !tucked) return null
 
   return (
     <button

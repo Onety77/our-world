@@ -114,6 +114,7 @@ import {
   writeRallyFrame,
 } from './rallyStream'
 import {
+  QUESTION_BUILD,
   QUESTION_DAY,
   QUESTION_PROMPTS,
   questionHash,
@@ -559,7 +560,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
           (entry) => entry.by === me && entry.inPotCurrency.minor > 0 && !spent.has(entry.id),
         ).length,
         queued: questionSeeds.filter((seed) => seed.usedAt === null).length,
-        nextAt: current?.completedAt ? current.openedAt + QUESTION_DAY : null,
+        nextAt: current?.completedAt ? current.completedAt + QUESTION_BUILD : null,
         loaded: questionRoundsLoaded && questionSeedsLoaded,
       },
     })
@@ -1054,9 +1055,14 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
             latestDoc.data() as Record<string, unknown>,
           )
         : null
+      /*
+        One at a time, and the next takes `QUESTION_BUILD` to grow from the moment
+        the two of you finished the last one — not from when it opened. See the
+        note beside the constant.
+      */
       if (current) {
         const both = current.answered.warm && current.answered.cool
-        if (!both || at < current.openedAt + QUESTION_DAY) return
+        if (!both || at < (current.completedAt ?? at) + QUESTION_BUILD) return
       }
 
       // Only this person's private pool is queryable. Her planted prompt never
@@ -1085,10 +1091,19 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       const pool = unused.length > 0 ? unused : [...QUESTION_PROMPTS]
       const prompt = planted?.prompt ?? pool[questionHash(`tree:${ordinal}`) % pool.length]
 
-      // One deterministic document per UTC day. If both phones arrive at the
-      // same instant, one create wins; the other cannot overwrite it because
-      // question rounds are create-only in the rules.
-      const id = `question-${Math.floor(at / QUESTION_DAY)}`
+      /*
+        One deterministic document per building period. If both phones arrive
+        at the same instant, one create wins; the other cannot overwrite it
+        because question rounds are create-only in the rules.
+
+        Bucketed by `QUESTION_BUILD` rather than by the day, and that is not
+        cosmetic: two questions can now legitimately open within one day, and a
+        day-shaped id would have given the second one the *same document id* as
+        the first. Create-only rules would then have refused it silently, and
+        the Tree would simply have stopped asking. Any two openings are more
+        than one building period apart, so this can never collide.
+      */
+      const id = `question-${Math.floor(at / QUESTION_BUILD)}`
       const roundRef = doc(db, QUESTION_ROUNDS, id)
       const body = {
         prompt,
@@ -1573,10 +1588,10 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       )
     },
 
-    async sendMessage(body, replyTo) {
+    async sendMessage(body, replyTo, outgoing) {
       const text = body.trim()
       if (text === '') return
-      const id = newId()
+      const id = outgoing?.id ?? newId()
       await setDoc(doc(db, MESSAGES, id), {
         by: me,
         body: text,
@@ -1584,7 +1599,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         // The server's clock, not this phone's. Two people seven timezones
         // apart with a minute of drift between their devices would otherwise
         // see the conversation in two different orders.
-        at: now(),
+        at: outgoing?.at ?? now(),
         sentAt: serverTimestamp(),
       })
       // Saying something is also reading everything up to it.

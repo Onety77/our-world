@@ -19,6 +19,10 @@ import type { Message, UserId } from '@/data/types'
 
 interface TalkingState {
   messages: Message[]
+  /** Messages already visible here but not yet confirmed by the live feed. */
+  optimistic: Record<string, Message>
+  /** Optimistic messages whose write was refused. */
+  failed: Record<string, true>
   /** True until the first snapshot lands, so "empty" and "not yet" differ. */
   loading: boolean
   /** The composer is open. */
@@ -37,6 +41,8 @@ interface TalkingState {
   whispering: boolean
 
   setMessages(messages: Message[]): void
+  queue(message: Message): void
+  fail(id: string): void
   startWriting(): void
   stopWriting(): void
   answer(id: string | null): void
@@ -45,12 +51,38 @@ interface TalkingState {
 
 export const useTalking = create<TalkingState>((set) => ({
   messages: [],
+  optimistic: {},
+  failed: {},
   loading: true,
   composing: false,
   replyTo: null,
   whispering: false,
 
-  setMessages: (messages) => set({ messages, loading: false }),
+  setMessages: (messages) => set((state) => {
+    const received = new Set(messages.map((message) => message.id))
+    const optimistic = { ...state.optimistic }
+    const failed = { ...state.failed }
+    for (const id of received) {
+      delete optimistic[id]
+      delete failed[id]
+    }
+    const waiting = Object.values(optimistic).filter((message) => !received.has(message.id))
+    return {
+      messages: [...messages, ...waiting].sort((a, b) => a.at - b.at),
+      optimistic,
+      failed,
+      loading: false,
+    }
+  }),
+  queue: (message) => set((state) => ({
+    messages: [...state.messages.filter((item) => item.id !== message.id), message]
+      .sort((a, b) => a.at - b.at),
+    optimistic: { ...state.optimistic, [message.id]: message },
+    failed: Object.fromEntries(
+      Object.entries(state.failed).filter(([id]) => id !== message.id),
+    ),
+  })),
+  fail: (id) => set((state) => ({ failed: { ...state.failed, [id]: true } })),
   startWriting: () => set({ composing: true }),
   // Closing the composer drops the reply with it. A quote left standing after
   // you changed your mind about answering is the next thing you say landing
@@ -98,13 +130,13 @@ export const walk = {
 export function stepWalk(delta: number) {
   const furthest = Math.max(0, walk.count - 1)
   walk.to = Math.max(0, Math.min(furthest, walk.to))
-  walk.at += (walk.to - walk.at) * (1 - Math.exp(-7 * delta))
+  walk.at += (walk.to - walk.at) * (1 - Math.exp(-11 * delta))
 }
 
 /** Snap straight back to the newest, without a long glide from far away. */
 export function toNewest() {
   walk.to = 0
-  if (walk.at > 6) walk.at = 6
+  if (walk.at > 4) walk.at = 4
 }
 
 // ---------------------------------------------------------------------------

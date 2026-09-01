@@ -9,7 +9,26 @@
 
 export type DataBackend = 'local' | 'firebase'
 
-const raw = import.meta.env as Record<string, string | undefined>
+/*
+  Vite's environment, or the process's when there is no Vite.
+
+  `import.meta.env` is a build-time substitution and simply does not exist
+  when a check script imports this module under Node — so reading a key off it
+  threw before any harness could get near the data layer. Falling through to
+  `process.env` costs nothing in the browser, where the first one is always
+  there, and is what lets the question ritual be walked end to end in a script
+  instead of only by hand in a phone.
+*/
+type Env = Record<string, string | undefined>
+
+/*
+  Reached through globalThis rather than named directly, because the browser
+  build has no Node types and a bare `process` does not typecheck against
+  them. This says the same thing and says it in a way both toolchains accept.
+*/
+const raw = (import.meta.env ??
+  (globalThis as { process?: { env?: Env } }).process?.env ??
+  {}) as Env
 
 function required(key: string): string {
   const value = raw[key]
@@ -103,6 +122,17 @@ export function firebaseConfig(): FirebaseConfig {
   return Object.fromEntries(
     Object.entries(keys).map(([field, envKey]) => [field, required(envKey)]),
   ) as unknown as FirebaseConfig
+}
+
+/**
+ * Public Web Push credential for this Firebase project.
+ *
+ * Kept optional at application startup: a missing push key must disable one
+ * device feature, never keep either person outside the whole garden. The
+ * profile sheet names the missing setup when somebody tries to enable it.
+ */
+export function firebaseVapidKey(): string {
+  return optional('VITE_FB_VAPID_KEY', '').trim()
 }
 
 /**

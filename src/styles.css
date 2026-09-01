@@ -1083,8 +1083,13 @@ canvas {
   font-size: clamp(1.6rem, 6vw, 2.4rem) !important;
 }
 
+/*
+  Wide enough for three capitals, which is not the same as four characters.
+  A ch is the width of a zero; NGN in this serif is wider than four of them, so
+  the code was being clipped at the edge of its own field.
+*/
 .pot-currency {
-  width: 4ch;
+  width: 5.5ch;
   text-align: center;
   font-size: 1rem !important;
   text-transform: uppercase;
@@ -1110,11 +1115,6 @@ canvas {
   color: rgba(74, 58, 38, 0.55);
   margin-top: 0.4rem;
   max-width: 34ch;
-}
-
-.pot-note {
-  width: 100%;
-  font-size: 1rem !important;
 }
 
 .pot-standing {
@@ -4381,9 +4381,26 @@ canvas {
 
 .talking {
   position: fixed;
-  inset: 0;
-  pointer-events: none;
+  inset: auto 0;
+  top: var(--talking-top, 0px);
+  height: var(--talking-height, 100dvh);
+  pointer-events: auto;
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
   z-index: 6;
+}
+
+.talking textarea,
+.talking .said-body,
+.talking .said-answering {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+body:has(.talking) .leave-place {
+  z-index: 8;
 }
 
 /*
@@ -4437,6 +4454,7 @@ canvas {
   line-height: 1.45;
   letter-spacing: 0.004em;
   text-wrap: pretty;
+  white-space: pre-wrap;
 }
 
 /*
@@ -6562,6 +6580,18 @@ canvas {
   font-size: 0.82rem;
   line-height: 1.4;
   color: rgba(242, 239, 230, 0.5);
+  background: none;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  cursor: pointer;
+}
+
+.said-answering:hover,
+.said-answering:focus-visible {
+  color: rgba(242, 239, 230, 0.78);
+  border-left-color: rgba(255, 205, 145, 0.58);
+  outline: none;
 }
 
 /* Out of the loaded window. Said plainly rather than left blank. */
@@ -6721,6 +6751,17 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 0.42rem;
+  cursor: pointer;
+  border-radius: 0.22rem;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
+.whisper-recent:hover,
+.whisper-recent:focus-visible {
+  opacity: 0.92;
+  background: rgba(195, 214, 255, 0.045);
+  outline: 1px solid rgba(195, 214, 255, 0.16);
+  outline-offset: 0.28rem;
 }
 
 .whisper-said {
@@ -6820,6 +6861,11 @@ canvas {
 .whisper-send:hover,
 .whisper-fold-away:hover {
   color: var(--warm);
+}
+
+.whisper-send:disabled {
+  cursor: default;
+  opacity: 0.34;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6978,6 +7024,49 @@ canvas {
 .said-menu button.is-selected {
   color: var(--warm);
   outline: none;
+}
+
+.said-delivery {
+  display: block;
+  margin-top: 0.24rem;
+  font-family: var(--sans);
+  font-size: 0.52rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.34);
+}
+
+.said-delivery.failed {
+  color: rgba(255, 164, 124, 0.78);
+}
+
+.talking-newest {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(5.8rem, calc(env(safe-area-inset-bottom) + 5.25rem));
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid rgba(195, 214, 255, 0.19);
+  border-radius: 50%;
+  background: rgba(6, 11, 25, 0.6);
+  box-shadow: 0 0.8rem 2.2rem rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.talking-newest span {
+  width: 0.58rem;
+  height: 0.58rem;
+  border-right: 1px solid rgba(221, 232, 255, 0.8);
+  border-bottom: 1px solid rgba(221, 232, 255, 0.8);
+  rotate: 45deg;
+  translate: 0 -0.14rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -9670,7 +9759,9 @@ body:has(.rally-running) .player {
 
 @media (max-width: 34rem) {
   body:has(.talking) .sky-column {
-    top: 66%;
+    /* ui/Talking writes the real read-head position from the composer and
+       visual viewport. This is only the no-JS first frame. */
+    top: 70%;
     width: min(30rem, 84vw);
     transition: opacity 0.3s ease;
   }
@@ -9779,7 +9870,7 @@ body:has(.rally-running) .player {
   body:has(.talking) .saying {
     left: max(1rem, env(safe-area-inset-left));
     right: max(1rem, env(safe-area-inset-right));
-    bottom: max(0.65rem, calc(env(safe-area-inset-bottom) + 0.35rem));
+    bottom: max(0.45rem, calc(env(safe-area-inset-bottom) + 0.2rem));
     width: auto;
     transform: none;
     gap: 0.35rem;
@@ -9789,7 +9880,7 @@ body:has(.rally-running) .player {
 
   body:has(.talking) .saying-field {
     min-height: 2.9rem;
-    max-height: 28dvh;
+    max-height: min(28dvh, 9.5rem);
     padding: 0.35rem 0.2rem;
     font-size: 1.08rem;
     line-height: 1.45;
@@ -9805,7 +9896,11 @@ body:has(.rally-running) .player {
   }
 
   body:has(.talking:has(.saying)) .sky-column {
-    opacity: 0.48;
+    opacity: 0.9;
+  }
+
+  body:has(.talking:has(.saying)) .talking-newest {
+    bottom: max(7.2rem, calc(env(safe-area-inset-bottom) + 6.7rem));
   }
 
   /* Opening voice-lights is entering a small drawer within the Stars. It is
@@ -9882,7 +9977,7 @@ body:has(.rally-running) .player {
   }
 
   body:has(.talking:has(.saying)) .sky-column {
-    opacity: 0.48;
+    opacity: 0.9;
   }
 }
 
@@ -12025,5 +12120,82 @@ body.on-the-road .broke-what {
   .profile-leave,
   .profile-way-out-pair .put-back {
     min-height: 2.5rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   What is in the pot, on the way into the Wellspring.
+
+   The figure leads and the words underneath explain it, rather than a sentence
+   with a number buried in it: this is the one thing anybody standing here wants
+   to know, and it should be readable from arm's length without being read.
+   Tabular figures so it does not jitter as the water rises.
+   --------------------------------------------------------------------------- */
+/*
+  A clear gap under it, because what follows is a different thought.
+
+  The figure and its caption are one group; the whisper and the button are the
+  invitation. Set half a line apart they were four stacked lines of small dim
+  type and the eye could not find the break — the number stopped leading and
+  the whole panel read as a paragraph.
+*/
+.river-total {
+  margin: 0 0 1.15rem;
+  line-height: 1.15;
+}
+
+.river-total b {
+  display: block;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.75rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.river-total span {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ink-dim);
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------------------
+   The next question, growing.
+
+   Sits under the Tree's rituals and is deliberately not a button: there is
+   nothing to press, which is the message. Quiet enough that a garden with
+   nothing to do in it still reads as a garden with nothing to do in it.
+   --------------------------------------------------------------------------- */
+.tree-growing {
+  margin: 0.55rem 0 0;
+  color: var(--ink-dim);
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.tree-growing span {
+  margin-right: 0.15rem;
+  opacity: 0.7;
+}
+
+@media (max-width: 30rem) {
+  .river-total b {
+    font-size: 1.5rem;
+  }
+
+  .river-total span {
+    font-size: 0.55rem;
+  }
+
+  .tree-growing {
+    font-size: 0.55rem;
   }
 }

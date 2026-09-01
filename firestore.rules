@@ -92,6 +92,28 @@ service cloud.firestore {
         && (who == 'warm' || who == 'cool');
     }
 
+    // ---- notification devices -----------------------------------------
+    /*
+      A push token is an address to one browser, not shared world content.
+      Each person may see and replace only their own addresses. The Cloud
+      Function uses the Admin SDK and therefore does not need a client-side
+      read door into hers.
+    */
+    match /pushDevices/{who}/devices/{device} {
+      allow read: if isOneOfUs() && who == me();
+
+      allow create, update: if isOneOfUs()
+        && who == me()
+        && request.resource.data.owner == me()
+        && request.resource.data.token is string
+        && request.resource.data.token.size() >= 20
+        && request.resource.data.token.size() <= 5000
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.keys().hasOnly(['owner', 'token', 'updatedAt']);
+
+      allow delete: if isOneOfUs() && who == me();
+    }
+
     // ---- letters --------------------------------------------------------
     // You may leave one, signed as yourself. Letters do not come down, and
     // they are not edited after the fact — the only thing that may change on

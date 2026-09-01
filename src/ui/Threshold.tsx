@@ -18,6 +18,8 @@ import type { GameDefinition, LiveChoice } from '@/world/games/types'
 import { useSay } from '@/systems/useSay'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
+import { potTotal } from '@/data/local'
+import { format, progressToward } from '@/data/money'
 import { useTakenOver } from '@/systems/attention'
 import { standing, useMemories } from '@/systems/memories'
 import { usePlaying } from '@/systems/playing'
@@ -26,6 +28,7 @@ import { theRoom } from '@/systems/waiting'
 import { useStandings, type Standing } from '@/world/games/useRound'
 import { gameKey, roadKey, useDoorman } from '@/systems/locks'
 import { useQuestions } from '@/systems/questions'
+import { until } from '@/systems/time'
 import { ambience } from '@/systems/ambience'
 import { useChoiceSwipe } from './useChoiceSwipe'
 import { useMenuKeys } from './useMenuKeys'
@@ -599,6 +602,30 @@ function TheHollow() {
       theRoom.waitingForYou = 0
     }
   }, [yours])
+
+  /*
+    If something is actually waiting for you, that is the screen you land on.
+
+    =======================================================================
+    The row of games is the right first screen when there is nothing to do —
+    you are choosing something to start. It is the wrong one when a word has
+    been left for you: then the answer to 'what am I doing here' already
+    exists, and making somebody find a link under the carousel to be told it
+    is asking them to go looking for their own notification.
+
+    Once, and only once. It fires the first time the standings resolve, so
+    pressing *back to the games* stays pressed rather than being overruled a
+    frame later — and it never fires at all on a quiet day, which is most of
+    them.
+    =======================================================================
+  */
+  const settled = Object.keys(turns).length > 0
+  const landed = useRef(false)
+  useEffect(() => {
+    if (landed.current || !settled) return
+    landed.current = true
+    if (yours > 0) setShowing('waiting')
+  }, [settled, yours])
 
   /*
     Where the row starts: the last game you were in, not the first one.
@@ -1189,6 +1216,7 @@ export function Threshold() {
   const tend = usePot((s) => s.show)
   const takenOver = useTakenOver()
   const questions = useWorldSlice((state) => state.questions)
+  const world = useWorldSlice((state) => state)
   const id = SECTIONS[index].id
   const treeCount = 1 + (questions.current ? 1 : 0) +
     (questions.availableSeeds > 0 ? 1 : 0) + (questions.history.length > 1 ? 1 : 0)
@@ -1253,6 +1281,23 @@ export function Threshold() {
             </button>
           ) : null}
         </div>
+        {/*
+          Why there is no new question, when there is no new question.
+
+          Without this the Tree simply goes quiet after a bloom, and quiet is
+          indistinguishable from broken — especially now the wait is measured
+          from the moment you both finished, so it begins exactly when you are
+          standing there having just finished. Saying it is growing turns an
+          absence into a thing that is happening.
+
+          Deliberately not a countdown to the minute. See `until`.
+        */}
+        {both && questions.nextAt !== null && questions.nextAt > data.now() ? (
+          <p className="tree-growing">
+            <span aria-hidden="true">❁</span> the next question is growing ·{' '}
+            {until(questions.nextAt, data.now())}
+          </p>
+        ) : null}
         <span className="tree-turn-guide">
           <span className="tree-turn-pointer">drag / scroll to turn · home resets</span>
           <span className="tree-turn-touch">drag sideways to turn · pinch to zoom</span>
@@ -1262,8 +1307,35 @@ export function Threshold() {
   }
 
   if (id === 'river') {
+    /*
+      What is actually in it, on the way in.
+
+      =====================================================================
+      The Wellspring is where the two of them keep real money they have
+      really set aside, and standing in it told you nothing whatever about
+      how much. The only figure anywhere was at the foot of the form for
+      *adding* to it — so the answer to "how are we doing" sat behind the act
+      of putting more in, which is the one moment you are least likely to be
+      asking it, and the rest of the time the place was a river with a button.
+
+      It leads with the number now and invites second. Somewhere whose whole
+      pleasure is watching a figure grow should show you the figure.
+      =====================================================================
+    */
+    const total = potTotal(world)
+    const goal = world.pot.goal
+    const progress = progressToward(total, goal?.amount ?? null)
     return (
       <div className="threshold river-threshold">
+        <p className="river-total">
+          <b>{format(total)}</b>
+          <span>
+            between you
+            {goal && progress !== null
+              ? ` \u00b7 ${Math.round(progress * 100)}% of ${goal.label || 'the goal'}`
+              : null}
+          </span>
+        </p>
         <span className="threshold-whisper">make the water rise</span>
         <button ref={thresholdKeys.ref(0)} type="button" onClick={tend}>add to ours</button>
       </div>

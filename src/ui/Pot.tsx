@@ -30,12 +30,10 @@ export function PotForm() {
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState(state.pot.currency)
   const [rate, setRate] = useState('1')
-  const [note, setNote] = useState('')
   const field = useRef<HTMLInputElement>(null)
   const sheet = useRef<HTMLDivElement>(null)
   const actions = useRef<HTMLDivElement>(null)
-  const untouched =
-    amount === '' && note === '' && currency === state.pot.currency && rate === '1'
+  const untouched = amount === '' && currency === state.pot.currency && rate === '1'
 
   useDismissOutside(open && untouched, close, [sheet, actions])
 
@@ -62,10 +60,15 @@ export function PotForm() {
   async function put() {
     if (!parsed || !rateOk) return
     const added = await attempt('that didn’t go in the pot', () =>
+      /*
+        No note any more — see the field that used to be below the amount.
+
+        `note` stays optional on the contribution and entries that already carry
+        one keep it; nothing displays it and nothing new writes one.
+      */
       data.addContribution({
         amount: parsed,
         rateUsed: sameCurrency ? 1 : rateValue,
-        ...(note.trim() ? { note: note.trim() } : {}),
       }),
     )
     // The figures stay in the form if it failed — this is real money either of
@@ -74,7 +77,6 @@ export function PotForm() {
     if (!added) return
     ambience.cue('water', 0.78)
     setAmount('')
-    setNote('')
     close()
     if (parsed.minor > 0) useQuestions.getState().announceSeed()
   }
@@ -128,14 +130,15 @@ export function PotForm() {
               </p>
             )}
 
-            <input
-              className="ink pot-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="what it was for, if you like"
-              aria-label="note"
-            />
+            {/*
+              There was a "what it was for" line here, and it has gone.
 
+              Every entry in this pot is for the same thing and the two of them
+              know what it is, so the field asked a question with one answer and
+              then made you type it. A form that asks for something nobody needs
+              is a form that is slower to use and slightly harder to trust —
+              you look for the reason it is being collected.
+            */}
             <p className="pot-standing">
               {format(total)} between you
               {goal && progress !== null && (

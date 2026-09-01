@@ -41,11 +41,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
-import { heartedBy, messageById, useTalking } from '@/systems/talking'
-import { useSaidGestures } from './Said'
+import { heartedBy, useTalking } from '@/systems/talking'
 import type { Message, UserId } from '@/data/types'
 import { useSections } from '@/systems/sections'
-import { SECTIONS } from '@/sections/registry'
+import { SECTIONS, sectionIndexById } from '@/sections/registry'
 import { useDismissOutside } from './useDismissOutside'
 
 /** How many of the most recent are worth showing in a corner. */
@@ -70,9 +69,9 @@ function useInTheStars(): boolean {
 /**
  * One line in the corner.
  *
- * The same gestures as the sky — right-click, double-tap, swipe to answer —
- * because these are the same messages and there is no version of this where
- * the two surfaces disagree about what a message can do. See `ui/Said`.
+ * This surface is a glance, not a second message-action menu. The visible
+ * hearts remain facts about the message, while tapping the recent conversation
+ * travels to the full Stars where replying and reacting belong.
  */
 function Line({
   message,
@@ -83,13 +82,12 @@ function Line({
   me: UserId
   theirName: string
 }) {
-  const gestures = useSaidGestures(message)
   const yours = heartedBy(message, me)
   const hers = heartedBy(message, me === 'warm' ? 'cool' : 'warm')
   const mine = message.by === me
 
   return (
-    <p className={`whisper-said ${mine ? 'mine' : 'hers'}`} {...gestures}>
+    <p className={`whisper-said ${mine ? 'mine' : 'hers'}`}>
       <span className="whisper-who">{mine ? 'you' : theirName}</span>
       {/*
         Two spans, and the inner one is not decoration.
@@ -119,7 +117,6 @@ export function Whisper() {
   const messages = useTalking((s) => s.messages)
   const open = useTalking((s) => s.whispering)
   const setOpen = useTalking((s) => s.whisper)
-  const replyTo = useTalking((s) => s.replyTo)
   const answer = useTalking((s) => s.answer)
   const profiles = useWorldSlice((s) => s.profiles)
   const lastReadAt = useWorldSlice((s) => s.lastReadAt)
@@ -135,7 +132,16 @@ export function Whisper() {
   useDismissOutside(open, () => setOpen(false), [panel])
 
   const recent = useMemo(() => messages.slice(-RECENT), [messages])
-  const answering = messageById(messages, replyTo)
+
+  const openStars = () => {
+    const stars = sectionIndexById('stars')
+    SECTIONS[stars]?.Scene.warm()
+    const sections = useSections.getState()
+    sections.go(stars)
+    sections.enter()
+    answer(null)
+    setOpen(false)
+  }
 
   /** Hers, since the last time you were actually in the Stars. */
   const unread = useMemo(
@@ -189,14 +195,21 @@ export function Whisper() {
   async function say() {
     const text = draft.trim()
     if (text === '') return
-    const sent = await attempt('that didn’t send', () =>
-      data.sendMessage(text, replyTo ?? undefined),
-    )
-    // Only let go of the words once they are actually somewhere.
-    if (!sent) return
+    const outgoing = {
+      id: `said-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+      at: Date.now(),
+    }
+    const message: Message = { ...outgoing, by: me, body: text }
+    useTalking.getState().queue(message)
     setDraft('')
     answer(null)
     ambience.said(true)
+    field.current?.focus()
+    const sent = await attempt('that didn’t send', () =>
+      data.sendMessage(text, undefined, outgoing),
+    )
+    if (!sent) useTalking.getState().fail(outgoing.id)
+    field.current?.focus()
   }
 
   /*
@@ -239,7 +252,18 @@ export function Whisper() {
 
   return (
     <div ref={panel} className="whisper open">
-      <div className="whisper-recent">
+      <div
+        className="whisper-recent"
+        role="link"
+        tabIndex={0}
+        aria-label="open the full conversation in the Stars"
+        onClick={openStars}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          openStars()
+        }}
+      >
         {recent.length === 0 ? (
           <p className="whisper-none">
             Nothing yet. The first thing said becomes the lowest light in the
@@ -252,16 +276,13 @@ export function Whisper() {
         )}
       </div>
 
-      {answering && (
-        <p className="whisper-answering">
-          <span className="whisper-quote">{answering.body}</span>
-          <button type="button" className="whisper-drop" onClick={() => answer(null)}>
-            not that one
-          </button>
-        </p>
-      )}
-
-      <div className="whisper-write">
+      <form
+        className="whisper-write"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void say()
+        }}
+      >
         <textarea
           ref={field}
           className="ink whisper-field"
@@ -276,11 +297,13 @@ export function Whisper() {
           rows={1}
           placeholder={`to ${them.name}`}
           aria-label={`say something to ${them.name}`}
+          enterKeyHint="send"
+          autoComplete="off"
         />
-        <button type="button" className="whisper-send" onClick={() => void say()}>
+        <button type="submit" className="whisper-send" disabled={draft.trim() === ''}>
           send
         </button>
-      </div>
+      </form>
 
       <button type="button" className="whisper-fold-away" onClick={() => setOpen(false)}>
         fold away

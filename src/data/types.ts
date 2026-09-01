@@ -519,6 +519,17 @@ export interface Message {
 }
 
 /**
+ * Identity chosen by a composer before a message reaches the data layer.
+ *
+ * Letting the UI and the database use the same id is what makes an immediate
+ * local message become the real message without a duplicate or a visual jump.
+ */
+export interface OutgoingMessage {
+  id: string
+  at: number
+}
+
+/**
  * A short recording kept as one light in the Stars.
  *
  * These are slots rather than a feed: `warm-0` is always warm's first place,
@@ -867,7 +878,7 @@ export interface DataLayer {
    * `replyTo` is the id of the message being answered, if any. It is refused
    * the same way an empty body is if it names nothing.
    */
-  sendMessage(body: string, replyTo?: string): Promise<void>
+  sendMessage(body: string, replyTo?: string, outgoing?: OutgoingMessage): Promise<void>
 
   /**
    * Put a heart on something she said, or take yours off.

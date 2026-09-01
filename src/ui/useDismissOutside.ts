@@ -18,6 +18,7 @@ export function useDismissOutside(
   active: boolean,
   onDismiss: () => void,
   boundaries: readonly Boundary[],
+  options?: { allowOutsideDrag?: boolean },
 ): void {
   const dismissNow = useRef(onDismiss)
   const insideNow = useRef(boundaries)
@@ -44,17 +45,35 @@ export function useDismissOutside(
     }
 
     let outsideWorldTap = false
+    let movedOutside = false
+    let ignoreClick = false
+    let from = { x: 0, y: 0 }
     let dismissTimer = 0
 
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0) return
       const info = targetInfo(event)
       outsideWorldTap = Boolean(info && !info.inside && !info.control)
-      if (outsideWorldTap) consume(event)
+      movedOutside = false
+      from = { x: event.clientX, y: event.clientY }
+      if (outsideWorldTap && !options?.allowOutsideDrag) consume(event)
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!outsideWorldTap) return
+      if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > 9) {
+        movedOutside = true
+      }
     }
 
     const onPointerUp = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || !outsideWorldTap) return
+      if (movedOutside) {
+        outsideWorldTap = false
+        movedOutside = false
+        ignoreClick = true
+        return
+      }
       consume(event)
       // A prevented pointer sequence may not produce a click on every mobile
       // browser, so this is the backstop. The zero-delay leaves the capture
@@ -64,6 +83,10 @@ export function useDismissOutside(
 
     const onClick = (event: MouseEvent) => {
       if (event.button !== 0) return
+      if (ignoreClick) {
+        ignoreClick = false
+        return
+      }
       const info = targetInfo(event)
       if (!info || info.inside) return
 
@@ -86,15 +109,17 @@ export function useDismissOutside(
     }
 
     document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointermove', onPointerMove, true)
     document.addEventListener('pointerup', onPointerUp, true)
     document.addEventListener('pointercancel', onPointerCancel, true)
     document.addEventListener('click', onClick, true)
     return () => {
       window.clearTimeout(dismissTimer)
       document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointermove', onPointerMove, true)
       document.removeEventListener('pointerup', onPointerUp, true)
       document.removeEventListener('pointercancel', onPointerCancel, true)
       document.removeEventListener('click', onClick, true)
     }
-  }, [active])
+  }, [active, options?.allowOutsideDrag])
 }

@@ -1,37 +1,20 @@
 /**
- * Being told when she says something.
+ * Notifications on one device.
  *
- * ---------------------------------------------------------------------------
- * **What this can honestly do, and what it cannot.**
- *
- * It fires a real system notification when a message of hers arrives and you
- * are not looking at the conversation. That covers the case that actually
- * happens: the garden open in a tab behind something else, or on a phone with
- * the screen locked and the page still alive. You get the notification, you
- * tap it, you are in the Stars.
- *
- * It does **not** work when the page is closed. Nothing in a web page can —
- * that needs a service worker holding a push subscription and a server pushing
- * to it, which is the PWA work in the plan and is not this. So the setting
- * says *while the garden is open*, in those words, because the design law here
- * is honest states and a toggle that quietly promises more than it delivers is
- * the worst kind of lie: it fails silently, at night, for somebody waiting.
- * ---------------------------------------------------------------------------
- *
- * **The setting is per device, not per person**, and that is why it lives in
- * localStorage rather than in the shared world. Whether you want your laptop
- * to make a noise is not a fact about you that belongs in a document she can
- * read; it is a fact about this browser. It also means turning it on here
- * never touches the database, and the two of you can have different answers on
- * four different devices without any of them disagreeing.
+ * `wanted` is local intent, `standing` is the browser's permission, and
+ * `push` says whether this device also has a server-reachable address. The
+ * distinction matters: ordinary `new Notification()` only works while this
+ * page is alive; Web Push wakes the service worker after it has been closed.
  */
 
 import { create } from 'zustand'
+import { DATA_BACKEND } from '@/config'
+import type { UserId } from '@/data/types'
 
 const KEY = 'garden:notify:v1'
 
-/** What the browser will let us do, right now. */
 export type Standing = 'unsupported' | 'default' | 'granted' | 'denied'
+export type PushStanding = 'idle' | 'syncing' | 'active' | 'unavailable' | 'failed'
 
 function standingNow(): Standing {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
@@ -42,49 +25,60 @@ function wantedAtStart(): boolean {
   try {
     return localStorage.getItem(KEY) === 'on'
   } catch {
-    // A browser with site data blocked. Off is the right default for something
-    // that makes a noise.
     return false
   }
 }
 
+function remember(wanted: boolean): void {
+  try {
+    localStorage.setItem(KEY, wanted ? 'on' : 'off')
+  } catch {
+    /* The choice still lasts for this session. */
+  }
+}
+
+function pushWords(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'This device could not finish registering for notifications.'
+}
+
 interface NotifyState {
-  /** Whether you have asked for them on this device. */
   wanted: boolean
   standing: Standing
-  /** True when a notification would actually appear. */
-  readonly live: boolean
-  /** Turn them on — asking the browser if it has not been asked. */
-  want(on: boolean): Promise<void>
+  push: PushStanding
+  issue: string
+  /** True when an open-page notification can at least be shown. */
+  live(): boolean
+  want(on: boolean, me?: UserId): Promise<void>
+  sync(me: UserId): Promise<void>
   refresh(): void
 }
 
 export const useNotify = create<NotifyState>((set, get) => ({
   wanted: wantedAtStart(),
   standing: standingNow(),
-  get live() {
-    return get().wanted && get().standing === 'granted'
-  },
+  push: 'idle',
+  issue: '',
+  live: () => get().wanted && get().standing === 'granted',
 
-  async want(on) {
+  async want(on, me) {
     if (!on) {
-      try {
-        localStorage.setItem(KEY, 'off')
-      } catch {
-        /* nothing to do: the toggle still works for this session */
+      remember(false)
+      set({ wanted: false, push: 'idle', issue: '' })
+      if (DATA_BACKEND === 'firebase' && me) {
+        try {
+          const { unregisterPushDevice } = await import('@/data/push')
+          await unregisterPushDevice(me)
+        } catch (error) {
+          set({ issue: pushWords(error), push: 'failed' })
+        }
       }
-      set({ wanted: false })
       return
     }
 
     let standing = standingNow()
-    /*
-      Asked only when you turn it on, never on load.
-
-      A permission prompt that appears because a page opened is a prompt
-      everybody refuses, and a refusal is permanent — `denied` cannot be asked
-      again from script. So the one chance we get is spent on a deliberate act.
-    */
+    // Permission is spent only on the deliberate tap of this switch. On iOS,
+    // direct user interaction is also a platform requirement.
     if (standing === 'default') {
       try {
         standing = (await Notification.requestPermission()) as Standing
@@ -94,57 +88,69 @@ export const useNotify = create<NotifyState>((set, get) => ({
     }
 
     const wanted = standing === 'granted'
-    try {
-      localStorage.setItem(KEY, wanted ? 'on' : 'off')
-    } catch {
-      /* as above */
+    remember(wanted)
+    set({ wanted, standing, issue: '', push: wanted ? 'idle' : 'unavailable' })
+    if (wanted && me) await get().sync(me)
+  },
+
+  async sync(me) {
+    const standing = standingNow()
+    set({ standing })
+    if (!get().wanted || standing !== 'granted') return
+
+    // The local story has no server and keeps the original open-page
+    // notification. This also keeps screenshots and the offline mock honest.
+    if (DATA_BACKEND !== 'firebase') {
+      set({ push: 'unavailable', issue: '' })
+      return
     }
-    set({ wanted, standing })
+
+    set({ push: 'syncing', issue: '' })
+    try {
+      const { registerPushDevice } = await import('@/data/push')
+      await registerPushDevice(me)
+      set({ push: 'active', issue: '' })
+    } catch (error) {
+      set({
+        push: error instanceof Error && error.name === 'PushUnavailable' ? 'unavailable' : 'failed',
+        issue: pushWords(error),
+      })
+    }
   },
 
   refresh: () => set({ standing: standingNow() }),
 }))
 
 /**
- * Whether a notification is worth firing at all.
- *
- * Being on the page and looking at the conversation is the one case where a
- * system notification is pure noise — you are reading the thing it is telling
- * you about. Anything else counts: another tab, another window, minimised, or
- * the garden open at the Tree.
+ * Do not let the live Firestore listener duplicate a notification the push
+ * worker is already responsible for. In a visible non-Stars section, push is
+ * delivered to the page without being displayed, so the local path still has
+ * one useful job there.
  */
 export function shouldTell(inTheStars: boolean): boolean {
-  if (!useNotify.getState().live) return false
-  if (typeof document === 'undefined') return false
+  const state = useNotify.getState()
+  if (!state.live() || typeof document === 'undefined') return false
+  if (state.push === 'active' && document.visibilityState !== 'visible') return false
   return document.visibilityState !== 'visible' || !inTheStars
 }
 
-/**
- * Say it.
- *
- * One notification, replacing any previous one — `tag` is what does that, and
- * it matters more than it looks: somebody who has been away for an hour should
- * come back to *one* notification saying she said something, not to eleven
- * stacked up saying it eleven times.
- */
+/** Show the open-page fallback and take a tap directly to the Stars. */
 export function tell(from: string, body: string): void {
   if (typeof window === 'undefined' || !('Notification' in window)) return
   if (Notification.permission !== 'granted') return
   try {
     const note = new Notification(from, {
       body,
+      icon: '/icons/icon-192.png',
       tag: 'garden:said',
       silent: false,
     })
     note.onclick = () => {
       window.focus()
       note.close()
+      window.location.assign('/?section=stars')
     }
   } catch {
-    /*
-      Some browsers refuse the constructor outright and require a service
-      worker registration instead. Nothing to recover here — the message is
-      already in the conversation, which is the part that matters.
-    */
+    // Browsers which require the worker are covered by the push path.
   }
 }

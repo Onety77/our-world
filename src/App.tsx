@@ -60,6 +60,7 @@ import { atTheDoor, useHourOverride } from '@/systems/dev'
 import { later } from '@/systems/later'
 import { useWatchLocks } from '@/systems/locks'
 import { usePublishedOutdoors } from '@/systems/outdoorsSync'
+import { useNotify } from '@/systems/notify'
 
 /**
  * `?hour=18.6` pins the clock, `?section=river` opens straight into a place,
@@ -103,7 +104,32 @@ function Garden() {
   // And what is shut while it is being worked on — see systems/locks.
   useWatchLocks()
   const me = data.me
+  const syncNotifications = useNotify((state) => state.sync)
   const profiles = useWorldSlice((s) => s.profiles)
+
+  // Refresh a previously enabled device on every authenticated visit. FCM
+  // addresses can rotate; leaving yesterday's token in Firestore would make a
+  // switch that still looks on quietly stop working.
+  useEffect(() => {
+    void syncNotifications(me)
+  }, [me, syncNotifications])
+
+  // If a notification focuses an already-open PWA, the service worker cannot
+  // manipulate React state itself. It asks this live page to make the same
+  // smooth trip into the Stars as any other entrance.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'garden:open-stars') return
+      const stars = sectionIndexById('stars')
+      SECTIONS[stars]?.Scene.warm()
+      const sections = useSections.getState()
+      sections.go(stars)
+      sections.enter()
+    }
+    navigator.serviceWorker.addEventListener('message', onWorkerMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onWorkerMessage)
+  }, [])
 
   /*
     The corner needs to know whether the top right is free.

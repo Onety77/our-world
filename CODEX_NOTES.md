@@ -651,3 +651,61 @@ shared-file changes, measurements, and anything another agent should preserve.
   page with no outline, Enter opens the chosen road, and the live waiting room
   changes and confirms its choice by keyboard. TypeScript and production build
   pass.
+
+## 1 September 2026 - Codex - Stars conversation overhaul
+
+- Replaced the mobile Stars' fixed player/composer reservations with a measured
+  visual-viewport lane. An opened music panel hides only the sky it physically
+  occupies; folding it immediately gives that space back, and keyboard resize
+  or collapse now wakes and remeasures the messages on the same frame.
+- Rebuilt history rendering as a small moving window around the current read
+  head. At least thirteen nearby lines are ready without laying out the whole
+  500-message feed, drags are faster and no longer sticky, new arrivals do not
+  displace history being read, and a return-to-newest light appears only when
+  it is useful.
+- Messages now appear optimistically with the same id and timestamp Firebase
+  will store, removing the visible database round trip without duplicates.
+  A refused write remains visibly marked rather than silently disappearing.
+- Enter is a newline and the visible send light is the only send action.
+  Mobile text semantics opt out of autofill/form navigation, multiline messages
+  preserve their breaks, and scrolling outside the composer while its keyboard
+  is open is distinguished from a tap-to-dismiss gesture.
+- Reply quotations are real buttons that travel to the quoted message, including
+  distant messages inside the loaded history window. The stray corner handle is
+  no longer rendered while its music/conversation panel is already open.
+- Verified folded/open player layouts, history scrolling, newest return, quote
+  travel, multiline entry, send and desktop layout at 390 x 844 and 1365 x 768.
+  Browser console/error checks, TypeScript and the production build pass; only
+  the established Firebase bundle warning remains.
+
+### Mini-chat follow-up
+
+- Removed the full Stars reply gestures from mini-chat message lines, so its
+  context menu can no longer offer “answer this”; existing hearts remain
+  visible as message state.
+- The recent-message area is now a mouse, touch and keyboard shortcut directly
+  into the full Stars conversation. The mini composer remains independent.
+- Enter and the visible SEND button now share the same reliable send path.
+  Mini-chat sends are optimistic too, use the eventual Firebase document id,
+  keep focus in the field and visibly retain a failed write.
+- Verified both send paths and the Tree-to-Stars shortcut at 390 x 844. Browser
+  error checks, TypeScript and the production build pass.
+
+## 1 September 2026 - Codex - Closed-app message notifications
+
+- Added a device-specific Firebase Web Push registration behind the existing
+  profile switch. Tokens are private to their Warm/Cool owner, refresh on each
+  signed-in visit, are removed when switched off or signed out, and stale FCM
+  addresses are cleaned by the server after a failed delivery.
+- Added the background messaging service worker. A closed or locked installed
+  app can now show one replacing message notification; tapping it opens the
+  Stars, or asks an already-open garden to make its normal eased trip there.
+- Added the `notifyNewMessage` Firestore function. It derives the recipient on
+  the server, reads only that person's devices, sends a compact data-only push,
+  caps scaling at two instances, and never exposes the other person's tokens
+  to client code.
+- Prevented duplicate alerts between the old live-page listener and Web Push,
+  while retaining the useful visible-page notification when somebody is in a
+  different place. Added the VAPID setup and one-time deploy instructions.
+- Generated the updated rules. TypeScript, production Vite build, function
+  syntax check and the rules generator pass.

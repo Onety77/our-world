@@ -126,6 +126,24 @@ export function orbPosition(hour: number, radius: number): [number, number, numb
  * that is not a bug to design out. Picking one timezone as the "real" one
  * would quietly make the garden belong to that person.
  */
+/**
+ * How long until something, in words, rounded down and never alarming.
+ *
+ * Down rather than up, and coarse: 'ready in 3 hours' that turns out to be
+ * three hours and fifty minutes is a small lie every time somebody checks,
+ * whereas one that arrives early is a nice surprise. Under an hour it stops
+ * counting minutes and says 'soon', because a garden that shows you a
+ * countdown is a garden asking to be waited at.
+ */
+export function until(at: number, now: number = Date.now()): string {
+  const left = at - now
+  if (left <= 0) return 'now'
+  const hours = Math.floor(left / 3_600_000)
+  if (hours < 1) return 'soon'
+  if (hours === 1) return 'in an hour'
+  return `in  hours`
+}
+
 export function localDateKey(timeZone: string, at = Date.now()): string {
   try {
     return new Intl.DateTimeFormat('en-CA', {

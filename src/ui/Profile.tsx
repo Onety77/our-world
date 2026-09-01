@@ -42,16 +42,18 @@ const ZONES = [
  * settings are — but also because it is *about this device*, and so is
  * everything else on this sheet.
  *
- * **The words have to be exact.** A web page cannot notify you once it is
- * closed; that needs a service worker holding a push subscription, which is
- * the PWA work in the plan and is not built. So it says "while the garden is
- * open" and means it. The honesty law is not a style — a toggle that implies
- * more than it does fails silently, at night, for somebody who was waiting.
+ * The switch now owns both halves: permission in this browser and its private
+ * push address in Firestore. Its short status line says when the second half
+ * has actually completed, rather than treating a granted permission as proof
+ * that a closed phone can already be reached.
  */
 function Telling() {
+  const data = useData()
   const say = useSay()
   const wanted = useNotify((s) => s.wanted)
   const standing = useNotify((s) => s.standing)
+  const push = useNotify((s) => s.push)
+  const issue = useNotify((s) => s.issue)
   const want = useNotify((s) => s.want)
   const refresh = useNotify((s) => s.refresh)
 
@@ -67,21 +69,11 @@ function Telling() {
         <input
           type="checkbox"
           checked={wanted && !blocked}
-          disabled={blocked}
-          onChange={(e) => void want(e.target.checked)}
+          disabled={blocked || push === 'syncing'}
+          onChange={(e) => void want(e.target.checked, data.me)}
         />
         <span className="profile-field">{say('tell me when {she} says something')}</span>
       </label>
-{/*
-        The caveat, only when it is one.
-
-        Refused is worth explaining, because there is something to go and do
-        about it and no other way to find out. The working case is not: "while
-        the garden is open, on this device, in another tab, with the screen
-        off, but not once the page is closed" is four conditions in front of
-        somebody who has just ticked a box, and none of them change what they
-        would do next.
-      */}
       {blocked ? (
         <span className="pot-why">
           This browser is refusing notifications for the garden. It has to be
@@ -89,6 +81,13 @@ function Telling() {
           page cannot ask twice.
         </span>
       ) : null}
+      {!blocked && push === 'syncing' ? (
+        <span className="pot-why">Connecting this device…</span>
+      ) : null}
+      {!blocked && push === 'active' ? (
+        <span className="pot-why">This device can hear the garden even after it is closed.</span>
+      ) : null}
+      {!blocked && issue ? <span className="pot-why">{issue}</span> : null}
     </p>
   )
 }
@@ -120,6 +119,7 @@ function Telling() {
  * ===========================================================================
  */
 function TheWayOut() {
+  const data = useData()
   const connection = useConnection()
   const [asking, setAsking] = useState(false)
   const [going, setGoing] = useState(false)
@@ -131,6 +131,9 @@ function TheWayOut() {
     setGoing(true)
     setFault('')
     try {
+      // Once this browser has no signed-in owner, it must not keep receiving
+      // private message previews addressed to the account that just left.
+      await useNotify.getState().want(false, data.me)
       const { signOutOfGarden } = await import('@/data/firebase')
       await signOutOfGarden()
       // Nothing after this: the provider is watching, sees the session end and

@@ -83,6 +83,31 @@ export const QUESTION_PROMPTS = [
 
 export const QUESTION_DAY = 86_400_000
 
+/**
+ * How long the next question takes to grow, once you have both answered.
+ *
+ * ===========================================================================
+ * **Measured from the moment the two of you finished, not from when the last
+ * one opened.** Those are different clocks and the difference is the whole
+ * point. Off `openedAt`, a question answered a day late produced the next one
+ * *instantly* — you sealed your answer, and the reply you had been waiting for
+ * was replaced by a new blank question in the same breath. The pause is
+ * supposed to be the reward for finishing, and it was being spent by whoever
+ * finished last.
+ *
+ * Off `completedAt`, the twelve hours start when the pair of you are done, so
+ * there is always a stretch afterwards that belongs to the answers rather than
+ * to the next question. Nothing is waiting to be done, and the bloom is the
+ * only thing at the Tree.
+ *
+ * Twelve rather than twenty-four because these two are seven time zones apart:
+ * a full day means the question effectively arrives at the same hour for ever,
+ * and whichever of them that hour suits badly never gets a first look at it.
+ * Twelve walks it around the clock.
+ * ===========================================================================
+ */
+export const QUESTION_BUILD = 43_200_000
+
 /** Stable, small hash used for ordering—not security and never presented as it. */
 export function questionHash(value: string): number {
   let hash = 2166136261

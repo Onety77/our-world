@@ -1,0 +1,68 @@
+/*
+ * The Garden's background ear.
+ *
+ * This file deliberately has no private configuration. Firebase's web config
+ * is public and arrives in the registration URL; the only authority lives in
+ * Firestore rules and in the server function's Admin credentials.
+ */
+
+/* global firebase */
+importScripts('https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js')
+importScripts('https://www.gstatic.com/firebasejs/12.17.1/firebase-messaging-compat.js')
+
+const params = new URL(self.location.href).searchParams
+firebase.initializeApp({
+  apiKey: params.get('apiKey'),
+  authDomain: params.get('authDomain'),
+  projectId: params.get('projectId'),
+  messagingSenderId: params.get('messagingSenderId'),
+  appId: params.get('appId'),
+})
+
+const messaging = firebase.messaging()
+
+/*
+ * Data-only messages give this worker one display path on every platform.
+ * Sending a Firebase `notification` payload as well would make some browsers
+ * display it automatically and then this callback would create a duplicate.
+ */
+messaging.onBackgroundMessage((payload) => {
+  const data = payload.data || {}
+  return self.registration.showNotification(data.title || 'The Garden Between Us', {
+    body: data.body || 'Something is waiting in the Stars.',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/favicon-32.png',
+    tag: 'garden:said',
+    renotify: true,
+    data: { url: data.url || '/?section=stars' },
+  })
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const destination = event.notification.data?.url || '/?section=stars'
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windows) => {
+      const existing = windows.find((client) => {
+        const url = new URL(client.url)
+        return url.pathname !== '/dev7731'
+          && !url.pathname.startsWith('/dev7731/')
+          && !url.searchParams.has('dev7731')
+      }) || windows[0]
+      if (existing) {
+        await existing.focus()
+        // The control room does not mount the garden listener. Replace that
+        // window outright; an ordinary garden can make its authored transition.
+        const existingUrl = new URL(existing.url)
+        if (existingUrl.pathname.startsWith('/dev7731') || existingUrl.searchParams.has('dev7731')) {
+          await existing.navigate(destination)
+          return
+        }
+        existing.postMessage({ type: 'garden:open-stars' })
+        return
+      }
+      await self.clients.openWindow(destination)
+    }),
+  )
+})

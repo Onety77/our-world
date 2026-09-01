@@ -25,7 +25,7 @@
  * ---------------------------------------------------------------------------
  */
 
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { create } from 'zustand'
 import { useData } from '@/data/provider'
 import { shutFor, type Locks } from '@/data/types'
@@ -84,11 +84,29 @@ export function useShutFor(key: string): boolean {
 /**
  * The same question without a subscription, for lists that are already
  * re-rendering on the locks anyway.
+ *
+ * ---------------------------------------------------------------------------
+ * **Stable, and that turned out to matter a great deal.** This returned a
+ * fresh closure on every render, which is the ordinary careless thing to do
+ * with a hook that hands back a function and is almost always harmless.
+ *
+ * It was not harmless here. The Hollow builds its list of games with
+ * `useMemo(..., [shut])`, and that list is what `useStandings` subscribes to —
+ * so a doorman with a new identity every render meant a new games array every
+ * render, which meant every round listener in the Hollow was torn down and
+ * rebuilt every render, and the standings were cleared to empty each time.
+ *
+ * What that looked like from the outside is the whole feature not working:
+ * she left a word, and the way in said *nothing yet*, because the answer was
+ * being thrown away faster than Firestore could deliver it.
+ *
+ * The dependency was always meant to be the locks. Now it is.
+ * ---------------------------------------------------------------------------
  */
 export function useDoorman(): (key: string) => boolean {
-  const data = useData()
+  const me = useData().me
   const locks = useShut((s) => s.locks)
-  return (key) => shutFor(locks, key, data.me)
+  return useCallback((key: string) => shutFor(locks, key, me), [locks, me])
 }
 
 /** `game:word-duel`, `road:moonbreak`. One place that spells them. */

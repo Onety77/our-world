@@ -200,11 +200,47 @@ function PlantQuestion() {
 export function Questions() {
   const view = useQuestions((state) => state.view)
   const questions = useWorldSlice((state) => state.questions)
+
+  /*
+    The question you opened is the question you keep reading.
+
+    ===========================================================================
+    **This is what made the answers vanish at the moment they arrived.** The
+    sheet resolved `current` on every render, and `current` is *the newest
+    round* — so the instant the second of you sealed an answer and the Tree
+    opened the next one, the open sheet stopped being the question you had both
+    just answered and became a blank box asking something else.
+
+    From inside it there is no way to read that as anything but the panel
+    disappearing on you. You answer, and the thing you answered is gone, along
+    with the reply you had been waiting on since yesterday. It is the one
+    moment the whole ritual is built to deliver and it was the one moment that
+    could not be seen.
+
+    So the id is caught the first time the sheet opens and held until it is
+    closed, and the round is looked up in `current` *or* `history` — a round
+    that has just completed is briefly in both, and shortly only in the second.
+    Closing and opening again gets you whatever is newest, which is what
+    opening it again means.
+    ===========================================================================
+  */
+  const held = useRef<string | null>(null)
+  const openId =
+    view?.kind === 'current'
+      ? held.current ?? questions.current?.id ?? null
+      : view?.kind === 'archive'
+        ? view.roundId
+        : null
+  useEffect(() => {
+    held.current = view?.kind === 'current' ? openId : null
+  }, [view?.kind, openId])
+
   if (!view) return null
   if (view.kind === 'plant') return <PlantQuestion />
-  const round = view.kind === 'current'
-    ? questions.current
-    : questions.history.find((item) => item.id === view.roundId) ?? null
+  const round =
+    (questions.current?.id === openId ? questions.current : null) ??
+    questions.history.find((item) => item.id === openId) ??
+    null
   if (!round) return null
   return <RoundSheet key={round.id} round={round} />
 }

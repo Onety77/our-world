@@ -456,12 +456,22 @@ once in Storage and once in Firestore. It takes about a minute per song and
 **Part 8 is the whole procedure**. If you end up adding more than a handful,
 say so and I will build the way in properly.
 
-**Notifications only fire while the garden is open in a tab.** The setting says
-exactly that, deliberately, because that is all a web page can do without a
-service worker and web push — neither of which is built. On iOS they
-additionally require the site to have been added to the home screen. A
-notification that arrives when her phone is asleep needs real push, which is a
-separate piece of work.
+**Closed-app notifications are built, but have a one-time publish step.** In
+Firebase Console → Project settings → Cloud Messaging → Web Push certificates,
+generate a key pair. Add its public key as `VITE_FB_VAPID_KEY` in `.env.local`
+and Vercel, then redeploy the site. Re-run `npm run rules` and publish the new
+Firestore rule before either phone enables the switch. Finally deploy the
+message trigger:
+
+```powershell
+npx firebase-tools login
+npx firebase-tools deploy --only functions:notifyNewMessage --project our-world-c9a07
+```
+
+On iPhone the garden must be added to the Home Screen. Open the profile on each
+phone and enable notifications once; the confirmation must say that the device
+can hear the garden after it is closed. Signing out removes that phone's push
+address before ending its session.
 
 **There is no offline mode.** No service worker, so with no connection there is
 no garden.
