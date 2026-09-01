@@ -13254,3 +13254,531 @@ body.on-the-road .broke-what {
 }
 
 .together-go:disabled { opacity: 0.25; cursor: default; }
+
+/* ===========================================================================
+   The night screen — the authored Watch Together place
+
+   This deliberately overrides the first working prototype above. The iframe
+   remains one persistent node, but the room is now an opaque destination with
+   its own horizon instead of a modal laid across whatever garden text happened
+   to be behind it.
+   =========================================================================== */
+
+.together.full {
+  --night-edge: clamp(1rem, 3vw, 3.5rem);
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow: hidden;
+  isolation: isolate;
+  color: #f2efe6;
+  pointer-events: auto;
+}
+
+.together-place {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 115%, rgba(109, 83, 48, 0.34), transparent 37%),
+    linear-gradient(180deg, #080b14 0%, #0a0d17 52%, #10100f 100%);
+}
+
+.together-place::before,
+.together-place::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.together-place::before {
+  opacity: 0.66;
+  background-image:
+    radial-gradient(circle at 9% 16%, rgba(255,255,255,.74) 0 1px, transparent 1.4px),
+    radial-gradient(circle at 23% 38%, rgba(255,255,255,.52) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 37% 12%, rgba(255,255,255,.62) 0 1px, transparent 1.4px),
+    radial-gradient(circle at 61% 26%, rgba(255,255,255,.48) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 77% 9%, rgba(255,255,255,.7) 0 1px, transparent 1.4px),
+    radial-gradient(circle at 89% 34%, rgba(255,255,255,.52) 0 1px, transparent 1.5px);
+  background-size: 22rem 18rem, 29rem 23rem, 31rem 27rem, 25rem 22rem, 34rem 25rem, 28rem 19rem;
+}
+
+.together-place::after {
+  top: 46%;
+  background:
+    linear-gradient(178deg, transparent 0 18%, rgba(4, 6, 10, 0.65) 18.3% 43%, transparent 43.3%),
+    linear-gradient(182deg, transparent 0 28%, rgba(2, 4, 7, 0.72) 28.3% 54%, transparent 54.3%);
+  filter: blur(10px);
+  opacity: 0.82;
+}
+
+.together-glow {
+  position: absolute;
+  top: 22%;
+  width: min(34rem, 46vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.18;
+}
+
+.together-glow.warm { left: -12%; background: #d69151; }
+.together-glow.cool { right: -12%; background: #7599db; }
+
+.together-horizon {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 6%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 213, 162, .2), rgba(197, 214, 255, .18), transparent);
+  box-shadow: 0 0 26px rgba(216, 204, 177, .13);
+}
+
+.together-header {
+  position: absolute;
+  z-index: 5;
+  top: max(.9rem, env(safe-area-inset-top));
+  left: var(--night-edge);
+  right: var(--night-edge);
+  min-height: 4.5rem;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+}
+
+.together-back,
+.together-end {
+  width: max-content;
+  background: none;
+  border: 0;
+  padding: .55rem 0;
+  font-family: var(--sans);
+  font-size: .65rem;
+  letter-spacing: .16em;
+  text-transform: lowercase;
+  color: rgba(242, 239, 230, .68);
+  cursor: pointer;
+  text-shadow: 0 2px 8px #000;
+}
+
+.together-back { justify-self: start; }
+.together-back span { margin-right: .55rem; }
+.together-end { justify-self: end; text-transform: uppercase; font-size: .56rem; }
+.together-back:hover,
+.together-end:hover { color: #fff5e8; }
+.together-end-space { width: 1px; }
+
+.together-place-name {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .24rem;
+  text-align: center;
+  text-shadow: 0 2px 14px #000;
+}
+
+.together-place-name > span {
+  font-family: var(--serif);
+  font-size: clamp(1rem, 2vw, 1.24rem);
+  letter-spacing: .035em;
+}
+
+.together-place-name small {
+  display: flex;
+  align-items: center;
+  gap: .38rem;
+  font-family: var(--sans);
+  font-size: .5rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, .44);
+}
+
+.together-presence {
+  width: .32rem;
+  height: .32rem;
+  border-radius: 50%;
+  opacity: .28;
+}
+.together-presence.warm { background: #e4a562; }
+.together-presence.cool { background: #9ebaff; }
+.together-presence.online {
+  opacity: 1;
+  box-shadow: 0 0 9px currentColor;
+  animation: together-presence 3.2s ease-in-out infinite;
+}
+@keyframes together-presence { 50% { opacity: .58; } }
+
+/* The only hard rectangle in the place is the thing that is truly a screen. */
+.together.full .together-screen {
+  position: absolute;
+  z-index: 2;
+  left: var(--night-edge);
+  top: max(7rem, calc(env(safe-area-inset-top) + 6.2rem));
+  width: min(62vw, calc((100vh - 10rem) * 1.7778));
+  right: auto;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid rgba(255, 232, 201, .12);
+  border-radius: .42rem;
+  background: #030408;
+  box-shadow: 0 1.8rem 5rem rgba(0, 0, 0, .62), 0 0 0 1px rgba(0,0,0,.35);
+  transition: none;
+}
+
+.together-stage,
+.together-stage > * {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.together-screen.has-trouble .together-stage { opacity: 0; visibility: hidden; }
+.together-screen.dark { display: block; }
+
+.together-nothing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .45rem;
+  margin: 0;
+  padding: 2rem;
+  text-align: center;
+  color: rgba(242, 239, 230, .78);
+}
+.together-nothing p { margin: 0; font: 1.35rem/1.2 var(--serif); }
+.together-nothing small { font: .64rem/1.5 var(--sans); letter-spacing: .07em; color: rgba(242,239,230,.45); }
+.together-empty-mark { color: #ebc38d; font-size: 1.2rem; text-shadow: 0 0 18px rgba(235,195,141,.5); }
+
+.together-screen-trouble {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  padding: 1.5rem;
+  text-align: center;
+  background: radial-gradient(circle at 50% 40%, #16101b, #050609 62%);
+  color: rgba(242, 239, 230, .76);
+}
+.together-screen-trouble p { max-width: 27rem; margin: 0; font: clamp(.82rem, 1.4vw, 1rem)/1.5 var(--serif); }
+.together-trouble-mark { color: #d8a776; text-shadow: 0 0 16px #9f5b37; }
+.together-screen-trouble button {
+  margin-top: .25rem;
+  background: none;
+  border: 0;
+  padding: .45rem;
+  color: #ffd9a8;
+  font: .56rem var(--sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.together-join {
+  z-index: 5;
+  background: rgba(3, 4, 8, .72);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.together-room {
+  position: absolute;
+  z-index: 3;
+  top: max(7rem, calc(env(safe-area-inset-top) + 6.2rem));
+  right: var(--night-edge);
+  bottom: max(1.5rem, env(safe-area-inset-bottom));
+  left: auto;
+  width: min(30rem, 31vw);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+  padding: 1.15rem 1.2rem 1rem;
+  overflow: hidden;
+  background: linear-gradient(155deg, rgba(24, 21, 24, .74), rgba(7, 10, 17, .65));
+  border: 1px solid rgba(244, 219, 184, .11);
+  border-radius: .75rem;
+  box-shadow: 0 1.7rem 4.5rem rgba(0,0,0,.35);
+  backdrop-filter: blur(22px) saturate(.9);
+  -webkit-backdrop-filter: blur(22px) saturate(.9);
+}
+
+.together-transport { flex: 0 0 auto; }
+.together-now { gap: 1rem; }
+.together-title { font-size: 1.02rem; }
+.together-by { font-size: .52rem; }
+.together-beamline { margin-top: .5rem; }
+.together-moves { min-height: 2.2rem; gap: 1rem; }
+.together-clock { min-width: 4.2rem; }
+.together-go,
+.together-next { min-width: 2rem; min-height: 2rem; }
+.together-tuck { white-space: nowrap; }
+
+.together-tabs {
+  flex: 0 0 auto;
+  gap: 1.5rem;
+  border-bottom: 1px solid rgba(242, 239, 230, .1);
+}
+.together-tab { position: relative; padding: .55rem 0 .7rem; }
+.together-tab.on::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: #e9b675;
+  box-shadow: 0 0 8px rgba(233,182,117,.6);
+}
+
+.together-talk,
+.together-queue { min-height: 0; overflow: hidden; }
+.together-said { padding: .25rem .3rem .25rem 0; scrollbar-width: thin; }
+.together-line { font-size: .92rem; }
+.together-write,
+.together-hunt { flex: 0 0 auto; }
+.together-hunt { padding-top: .2rem; }
+
+.together-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .5rem;
+  padding: .15rem 0 .2rem;
+}
+.together-prompts > span,
+.together-list-label {
+  width: 100%;
+  margin: 0 0 .15rem;
+  font: .5rem var(--sans);
+  letter-spacing: .17em;
+  text-transform: uppercase;
+  color: rgba(242,239,230,.35);
+}
+.together-prompts button {
+  border: 1px solid rgba(242, 217, 181, .13);
+  border-radius: 999px;
+  background: rgba(255,255,255,.025);
+  padding: .36rem .6rem;
+  color: rgba(242,239,230,.62);
+  font: .56rem var(--sans);
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+.together-prompts button:hover { color: #ffd9a8; border-color: rgba(255,217,168,.32); }
+
+.together-discovery,
+.together-up-next {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .38rem;
+}
+.together-discovery { flex: 1 1 56%; }
+.together-up-next { flex: 0 1 38%; }
+.together-discovery + .together-up-next { padding-top: .45rem; border-top: 1px solid rgba(242,239,230,.08); }
+
+.together-found,
+.together-lined {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-right: .2rem;
+}
+.together-found li {
+  display: grid;
+  grid-template-columns: 4.8rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .7rem;
+  padding: .2rem 0 .48rem;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 4.2rem;
+}
+.together-found img { width: 4.8rem; border-radius: .24rem; }
+.together-found-words { gap: .16rem; }
+.together-found-actions { display: flex; flex-direction: column; align-items: flex-end; gap: .25rem; }
+.together-found-actions button {
+  display: block;
+  width: auto;
+  background: none;
+  border: 0;
+  padding: .15rem 0;
+  color: rgba(242,239,230,.42);
+  font: .48rem var(--sans);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.together-found-actions button:first-child { color: #ffd9a8; }
+.together-found-actions button:hover { color: #fff; }
+.together-lined li { padding: .25rem 0; }
+
+/* A miniature is a guest in the garden: small, quiet, and fully authored. */
+.together.tucked {
+  position: fixed;
+  z-index: 24;
+  right: max(.85rem, env(safe-area-inset-right));
+  bottom: max(10.5rem, calc(env(safe-area-inset-bottom) + 9.5rem));
+  width: min(18rem, 42vw);
+  aspect-ratio: 16 / 9;
+  pointer-events: auto;
+}
+.together.tucked .together-screen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid rgba(255, 231, 198, .16);
+  border-radius: .48rem;
+  background: #030408;
+  box-shadow: 0 .9rem 2.8rem rgba(0,0,0,.58);
+  transition: box-shadow .2s ease, transform .2s ease;
+}
+.together.tucked.mini-awake .together-screen { box-shadow: 0 1rem 3.4rem rgba(0,0,0,.72), 0 0 0 1px rgba(255,213,162,.12); }
+.together-mini-reveal { position: absolute; inset: 0; z-index: 5; border: 0; background: transparent; cursor: pointer; }
+.together-mini-actions {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  background: rgba(3,5,9,.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .18s ease, visibility .18s ease;
+}
+.together.mini-awake .together-mini-actions { opacity: 1; visibility: visible; pointer-events: auto; }
+.together-mini-actions button {
+  display: flex;
+  align-items: center;
+  gap: .28rem;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px;
+  background: rgba(0,0,0,.28);
+  padding: .42rem .65rem;
+  color: #f2efe6;
+  font: .52rem var(--sans);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.together-mini-actions button span { font-size: .85rem; }
+.together.tucked .together-screen-trouble { padding: .65rem; gap: .2rem; }
+.together.tucked .together-screen-trouble p { font: .62rem/1.35 var(--sans); }
+.together.tucked .together-trouble-mark { display: none; }
+
+/* The Watch threshold belongs inside the expanded shelf, never above folded music. */
+.player-watch {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .65rem;
+  width: 100%;
+  margin: .62rem 0 0;
+  padding: .7rem 0 .18rem;
+  border: 0;
+  border-top: 1px solid rgba(240, 216, 178, .12);
+  background: none;
+  text-align: left;
+  color: rgba(242,239,230,.68);
+  cursor: pointer;
+}
+.player-watch-mark { color: #e8b777; font-size: .8rem; text-shadow: 0 0 10px rgba(232,183,119,.4); }
+.player-watch-words { display: flex; flex-direction: column; gap: .12rem; min-width: 0; }
+.player-watch-kicker { font: .5rem var(--sans); letter-spacing: .17em; text-transform: uppercase; color: #e8b777; }
+.player-watch-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: .72rem var(--serif); color: rgba(242,239,230,.68); }
+.player-watch-arrow { color: rgba(242,239,230,.42); }
+.player-watch:hover .player-watch-title,
+.player-watch:focus-visible .player-watch-title { color: #fff; }
+.player-watch.on .player-watch-kicker,
+.player-watch.on .player-watch-mark { color: #ffd9a8; }
+
+/* The dedicated room owns focus as well as pixels; folded garden controls are
+   not left tabbable behind an opaque full-screen place. */
+.corner:has(.together.full) > .whisper,
+.corner:has(.together.full) > .player {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (max-width: 719px) {
+  .together.full { --night-edge: max(1rem, env(safe-area-inset-left)); overflow: hidden; }
+  .together-header {
+    top: max(.45rem, env(safe-area-inset-top));
+    min-height: 5.7rem;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'back end' 'name name';
+    align-content: center;
+    gap: .1rem 1rem;
+  }
+  .together-back { grid-area: back; }
+  .together-end,
+  .together-end-space { grid-area: end; }
+  .together-place-name { grid-area: name; margin-top: .05rem; }
+  .together-place-name > span { font-size: 1rem; }
+  .together.full .together-screen {
+    top: max(7rem, calc(env(safe-area-inset-top) + 6.2rem));
+    left: var(--night-edge);
+    right: var(--night-edge);
+    width: auto;
+  }
+  .together-room {
+    top: calc(max(7rem, env(safe-area-inset-top) + 6.2rem) + (100vw - 2 * max(1rem, env(safe-area-inset-left))) * .5625 + .72rem);
+    left: var(--night-edge);
+    right: var(--night-edge);
+    bottom: max(.6rem, env(safe-area-inset-bottom));
+    width: auto;
+    padding: .82rem .9rem .72rem;
+    border-radius: .62rem;
+  }
+  .together-title { font-size: .93rem; }
+  .together-by { font-size: .46rem; }
+  .together-moves { gap: .65rem; }
+  .together-clock { font-size: .52rem; min-width: 3.1rem; }
+  .together-tuck { font-size: .5rem; letter-spacing: .12em; }
+  .together-talk,
+  .together-queue { gap: .42rem; }
+  .together-found li { grid-template-columns: 4.4rem minmax(0, 1fr); gap: .55rem; }
+  .together-found img { width: 4.4rem; grid-row: 1 / span 2; }
+  .together-found-actions { grid-column: 2; flex-direction: row; align-items: center; gap: .8rem; }
+  .together-found-title { font-size: .8rem; }
+  .together.tucked {
+    top: max(10rem, calc(env(safe-area-inset-top) + 9rem));
+    bottom: auto;
+    width: min(14.5rem, 48vw);
+  }
+}
+
+@media (max-width: 390px), (max-width: 719px) and (max-height: 700px) {
+  .together-place-name > span { display: none; }
+  .together-header { min-height: 4.5rem; }
+  .together.full .together-screen { top: max(5.5rem, calc(env(safe-area-inset-top) + 4.8rem)); }
+  .together-room {
+    top: calc(max(5.5rem, env(safe-area-inset-top) + 4.8rem) + (100vw - 2 * max(1rem, env(safe-area-inset-left))) * .5625 + .55rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .together-presence.online { animation: none; }
+  .together-mini-actions { transition: none; }
+}

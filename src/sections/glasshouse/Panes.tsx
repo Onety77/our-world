@@ -577,6 +577,93 @@ export function FarPanes({
 }
 
 /**
+ * How wide a photograph is drawn *into the glass*, in pixels.
+ *
+ * ---------------------------------------------------------------------------
+ * **The stored copy is 2560 across, and putting that on a pane was the whole
+ * problem.** At full size one photograph is about seventeen megabytes of video
+ * memory, so only five could ever be held at once — which is exactly why the
+ * Glasshouse was a corridor of blurred colour that resolved one pane at a time
+ * as you arrived at it, and why the pictures only really appeared once opened.
+ *
+ * The 2560 is not wasted; it is simply not for this. **The photograph you open
+ * is a DOM `<img>` over the world** — see the note at the top of
+ * `ui/Glasshouse` — so it takes the whole file and is as sharp as the file is.
+ * What a *pane* needs is a picture two metres away, behind glass, multiplied by
+ * a glass body and sitting in fog. Six hundred and forty pixels is more than
+ * that can show.
+ *
+ * The arithmetic is the point: 640 across is about a megabyte instead of
+ * seventeen, so the room can hold twenty-odd photographs for less memory than
+ * it used to spend on two — and the wall becomes *made of pictures* rather than
+ * of colour with pictures arriving in it one at a time.
+ * ---------------------------------------------------------------------------
+ */
+const PANE_PX = 640
+
+/**
+ * How many pane textures are kept once they have been made.
+ *
+ * They used to be disposed the moment a pane left range, so walking back down
+ * the aisle decoded every photograph again — the same pictures, over and over,
+ * and a fresh blur every time you turned around. A room you have already walked
+ * through should stay looking like itself.
+ *
+ * Bounded, because "keep everything" is how a long Glasshouse eventually runs a
+ * phone out of memory. Least recently used goes first.
+ */
+const KEEP = 26
+
+const panes = new Map<string, Texture>()
+
+/**
+ * A pane-sized texture for a photograph, made once and then remembered.
+ *
+ * The downscale happens on a canvas rather than by letting the GPU sample it
+ * small, because a `Texture` holds on to whatever image it was handed —
+ * drawing it small does not make it *cost* small.
+ */
+async function paneTexture(url: string): Promise<Texture> {
+  const had = panes.get(url)
+  if (had) {
+    // Re-inserted, so the map's own order is least-recently-used.
+    panes.delete(url)
+    panes.set(url, had)
+    return had
+  }
+
+  const image = new Image()
+  // The mock hands back a blob: URL and the real layer a signed one on another
+  // origin; without this the canvas is tainted and WebGL refuses the texture
+  // with a security error rather than a broken picture.
+  image.crossOrigin = 'anonymous'
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('that photograph did not load'))
+    image.src = url
+  })
+
+  const longest = Math.max(image.naturalWidth, image.naturalHeight, 1)
+  const scale = Math.min(1, PANE_PX / longest)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+  canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+  const texture = new Texture(canvas)
+  texture.needsUpdate = true
+  panes.set(url, texture)
+
+  while (panes.size > KEEP) {
+    const oldest = panes.keys().next().value
+    if (oldest === undefined) break
+    panes.get(oldest)?.dispose()
+    panes.delete(oldest)
+  }
+  return texture
+}
+
+/**
  * One pane close enough to be worth its picture.
  *
  * The texture starts as the preview that came down in the document — no
@@ -664,6 +751,11 @@ export function NearPane({
     without that, walking the length of the Glasshouse leaks a texture per
     memory and the tab is out of GPU memory by the far end.
   */
+  /*
+    Only the preview belongs to this pane; the photograph belongs to `panes`,
+    which outlives it. Disposing it here is what made walking back down the
+    aisle decode every picture again.
+  */
   const held = useRef<Texture[]>([])
   useEffect(() => {
     return () => {
@@ -693,20 +785,17 @@ export function NearPane({
   useEffect(() => {
     if (!picture) return
     let gone = false
-    const image = new Image()
-    // The mock hands back a blob: URL and the real layer a signed one on
-    // another origin; without this the second is a tainted texture and WebGL
-    // refuses it with a security error rather than a broken picture.
-    image.crossOrigin = 'anonymous'
-    image.onload = () => {
-      if (gone) return
-      const texture = new Texture(image)
-      texture.needsUpdate = true
-      held.current.push(texture)
-      material.uniforms.uMap.value = texture
-      sharp.current = 0
-    }
-    image.src = picture
+    void paneTexture(picture)
+      .then((texture) => {
+        if (gone) return
+        material.uniforms.uMap.value = texture
+        sharp.current = 0
+        material.uniforms.uSharp.value = 0
+      })
+      .catch(() => {
+        /* The pane keeps its preview and its colour, which is honestly what we
+           have. Walking past again asks once more. */
+      })
     return () => {
       gone = true
     }

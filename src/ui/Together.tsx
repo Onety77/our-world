@@ -46,6 +46,8 @@ import {
 } from '@/systems/watching'
 import {
   ENDED,
+  PAUSED,
+  PLAYING,
   canSearch,
   makeScreen,
   search,
@@ -63,6 +65,7 @@ export function Together() {
   const data = useData()
   const me = data.me
   const profiles = useWorldSlice((s) => s.profiles)
+  const presence = useWorldSlice((s) => s.presence)
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
 
   const shared = useWatching((s) => s.shared)
@@ -77,6 +80,8 @@ export function Together() {
 
   const stage = useRef<HTMLDivElement>(null)
   const screen = useRef<Screen | null>(null)
+  /** The id actually loaded in the persistent iframe. */
+  const screenVideo = useRef<string | null>(null)
   /** True while this device is applying the shared truth, so it ignores itself. */
   const applying = useRef(false)
   const [trouble, setTrouble] = useState('')
@@ -84,6 +89,7 @@ export function Together() {
   /** Where the picture is, for the beam. Not state — it moves twice a second. */
   const [where, setWhere] = useState(0)
   const [span, setSpan] = useState(0)
+  const [miniControls, setMiniControls] = useState(false)
 
   // --- the feed -------------------------------------------------------------
   useEffect(
@@ -114,6 +120,10 @@ export function Together() {
     if (open && !live) useWatching.getState().setTab('queue')
   }, [open, live])
 
+  useEffect(() => {
+    if (!live) setTrouble('')
+  }, [live])
+
   // --- the screen -----------------------------------------------------------
   useEffect(() => {
     if (!live || !stage.current) return
@@ -137,6 +147,7 @@ export function Together() {
       host,
       { videoId: anchor.videoId, at: positionOf(anchor, data.now()), playing: anchor.playing },
       (state: number) => {
+        if (state === PLAYING || state === PAUSED) setTrouble('')
         if (state === ENDED && !applying.current) void onEnded()
       },
       (why) => setTrouble(why),
@@ -148,6 +159,7 @@ export function Together() {
         }
         made = built
         screen.current = built
+        screenVideo.current = anchor.videoId
         setTrouble('')
       })
       .catch((why: unknown) => {
@@ -158,6 +170,7 @@ export function Together() {
       alive = false
       made?.stop()
       screen.current = null
+      screenVideo.current = null
       // Whatever is left of it — the div, or the iframe it became.
       stage.current?.replaceChildren()
     }
@@ -165,6 +178,23 @@ export function Together() {
     // is the thing the note at the top of this file is about.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live])
+
+  /*
+    The iframe survives a queue change, so it must explicitly be shown the new
+    id. Previously only the Firestore anchor changed: the title and timer moved
+    to the next item while YouTube stayed on the old one. This is the actual
+    reason the old “next” control appeared unreliable.
+  */
+  useEffect(() => {
+    const player = screen.current
+    if (!live || !player || shared.videoId === null) return
+    if (screenVideo.current === shared.videoId) return
+    setJoined(true)
+    applying.current = true
+    player.show(shared.videoId, positionOf(shared, data.now()), shared.playing)
+    screenVideo.current = shared.videoId
+    window.setTimeout(() => { applying.current = false }, 80)
+  }, [live, shared.videoId, shared.playing, shared.at, shared.since, data])
 
   /* The garden's music fader owns this too — it is music, whatever it is. */
   useEffect(() => {
@@ -249,6 +279,12 @@ export function Together() {
     at: number
     queue: Queued[]
   }) => {
+    if (next.videoId !== null && next.videoId !== screenVideo.current) {
+      applying.current = true
+      screen.current?.show(next.videoId, next.at, next.playing)
+      screenVideo.current = next.videoId
+      window.setTimeout(() => { applying.current = false }, 80)
+    }
     void attempt('that didn’t reach her screen', () => data.setWatching(next))
   }
 
@@ -275,6 +311,19 @@ export function Together() {
     move({ ...shared, at: Math.max(0, seconds) })
   }
 
+  const fold = () => {
+    setMiniControls(false)
+    tuck()
+  }
+
+  const endSession = () => {
+    screen.current?.pause()
+    setTrouble('')
+    useWatching.getState().close()
+    setMiniControls(false)
+    move({ videoId: null, title: '', playing: false, at: 0, queue: shared.queue })
+  }
+
   // --- what is on --------------------------------------------------------
   const shown = shared.playing ? Math.max(where, 0) : shared.at
   const through = span > 0 ? Math.max(0, Math.min(1, shown / span)) : 0
@@ -298,49 +347,90 @@ export function Together() {
   if (!open && !live) return null
 
   return (
-    <div className={`together ${open ? 'full' : 'tucked'}`}>
-      {open && <div className="together-hush" aria-hidden="true" />}
+    <div className={`together ${open ? 'full' : 'tucked'}${miniControls ? ' mini-awake' : ''}`}>
+      {open && (
+        <>
+          <div className="together-place" aria-hidden="true">
+            <i className="together-glow warm" />
+            <i className="together-glow cool" />
+            <i className="together-horizon" />
+          </div>
+          <header className="together-header">
+            <button type="button" className="together-back" onClick={live ? fold : tuck}>
+              <span aria-hidden="true">←</span> back to the garden
+            </button>
+            <div className="together-place-name">
+              <span>the night screen</span>
+              <small>
+                <i className={`together-presence warm${presence[me]?.online ? ' online' : ''}`} />
+                you
+                <i className={`together-presence cool${presence[them.id]?.online ? ' online' : ''}`} />
+                {presence[them.id]?.online ? `${them.name} is here` : `${them.name} is away`}
+              </small>
+            </div>
+            {live ? (
+              <button type="button" className="together-end" onClick={endSession}>end screen</button>
+            ) : <span className="together-end-space" />}
+          </header>
+        </>
+      )}
 
-      {/*
-        The screen itself, and the only element in here that matters.
-
-        It is outside every conditional on purpose: React must never be given a
-        reason to take it out of the document, because YouTube stops the moment
-        it does. Everything else in this file may come and go.
-      */}
-      <div className={`together-screen${live ? '' : ' dark'}`}>
+      {/* The persistent YouTube host never leaves the document between views. */}
+      <div className={`together-screen${live ? '' : ' dark'}${trouble ? ' has-trouble' : ''}`}>
         <div ref={stage} className="together-stage" />
         {!live && open && (
-          <p className="together-nothing">
-            Nothing on. Find something below, or paste a link.
-          </p>
+          <div className="together-nothing">
+            <span className="together-empty-mark" aria-hidden="true">◇</span>
+            <p>Nothing on yet.</p>
+            <small>Find the first thing below, or bring a YouTube link.</small>
+          </div>
         )}
         {!open && (
-          <button
-            type="button"
-            className="together-open"
-            onClick={() => useWatching.getState().show()}
-            aria-label="back to the full screen"
-          >
-            <span aria-hidden="true">⤢</span>
-          </button>
+          <>
+            <button
+              type="button"
+              className="together-mini-reveal"
+              onClick={() => setMiniControls((shown) => !shown)}
+              aria-expanded={miniControls}
+              aria-label="show miniature screen controls"
+            />
+            <div className="together-mini-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setMiniControls(false)
+                  useWatching.getState().show()
+                }}
+              >
+                <span aria-hidden="true">↗</span> open
+              </button>
+              <button type="button" onClick={endSession}>
+                <span aria-hidden="true">×</span> close
+              </button>
+            </div>
+          </>
         )}
-        {trouble !== '' && <p className="together-trouble">{trouble}</p>}
-        {open && !joined && (
+        {trouble !== '' && (
+          <div className="together-screen-trouble" role="status">
+            <span className="together-trouble-mark" aria-hidden="true">◇</span>
+            <p>{trouble}</p>
+            {open && shared.queue.length > 0 && (
+              <button type="button" onClick={skip}>try what is next</button>
+            )}
+          </div>
+        )}
+        {open && !joined && trouble === '' && (
           <button type="button" className="together-join" onClick={playPause}>
-            tap to watch with {them.name}
+            tap to join {them.name} here
           </button>
         )}
       </div>
 
       {open && (
-        <div className="together-room">
+        <aside className="together-room" aria-label="shared screen controls">
           <Transport
             live={live}
-            onStop={() => {
-              move({ videoId: null, title: '', playing: false, at: 0, queue: shared.queue })
-              useWatching.getState().tuck()
-            }}
+            onStop={endSession}
             playing={shared.playing}
             through={through}
             shown={shown}
@@ -351,7 +441,7 @@ export function Together() {
             onPlayPause={playPause}
             onSkip={skip}
             onSeek={goTo}
-            onTuck={tuck}
+            onTuck={fold}
           />
 
           <div className="together-tabs" role="tablist" aria-label="beside the screen">
@@ -364,7 +454,7 @@ export function Together() {
                 className={`together-tab${tab === which ? ' on' : ''}`}
                 onClick={() => setTab(which)}
               >
-                {which === 'talk' ? 'talk' : `up next${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
+                {which === 'talk' ? 'talk' : `find & queue${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
               </button>
             ))}
           </div>
@@ -381,7 +471,7 @@ export function Together() {
               onDrop={(id) => move({ ...shared, queue: shared.queue.filter((q) => q.id !== id) })}
             />
           )}
-        </div>
+        </aside>
       )}
     </div>
   )
@@ -507,11 +597,12 @@ function Talk({ messages, theirName }: { messages: Message[]; theirName: string 
   const data = useData()
   const me = data.me
   const [draft, setDraft] = useState('')
-  const foot = useRef<HTMLDivElement>(null)
+  const said = useRef<HTMLDivElement>(null)
   const recent = useMemo(() => messages.slice(-40), [messages])
 
   useEffect(() => {
-    foot.current?.scrollIntoView({ block: 'end' })
+    const conversation = said.current
+    if (conversation) conversation.scrollTop = conversation.scrollHeight
   }, [recent.length])
 
   async function say() {
@@ -532,7 +623,7 @@ function Talk({ messages, theirName }: { messages: Message[]; theirName: string 
 
   return (
     <div className="together-talk">
-      <div className="together-said">
+      <div ref={said} className="together-said">
         {recent.length === 0 ? (
           <p className="together-none">Nothing said yet. Say something while it plays.</p>
         ) : (
@@ -542,7 +633,6 @@ function Talk({ messages, theirName }: { messages: Message[]; theirName: string 
             </p>
           ))
         )}
-        <div ref={foot} />
       </div>
       <div className="together-write">
         <Ink
@@ -594,8 +684,46 @@ function Queue({
   const [found, setFound] = useState<Found[]>([])
   const [looking, setLooking] = useState(false)
   const [trouble, setTrouble] = useState('')
+  const request = useRef<AbortController | null>(null)
 
   const pasted = videoIdIn(hunt)
+
+  const findWords = async (words: string) => {
+    request.current?.abort()
+    const next = new AbortController()
+    request.current = next
+    setLooking(true)
+    setTrouble('')
+    try {
+      const suggestions = await search(words, next.signal)
+      if (!next.signal.aborted) setFound(suggestions)
+    } catch (why) {
+      if (next.signal.aborted) return
+      setTrouble(why instanceof Error ? why.message : String(why))
+      setFound([])
+    } finally {
+      if (request.current === next) {
+        request.current = null
+        setLooking(false)
+      }
+    }
+  }
+
+  /* Search while the thought is being typed; Enter remains a shortcut, not a requirement. */
+  useEffect(() => {
+    const words = hunt.trim()
+    if (!canSearch || pasted !== null || words.length < 2) {
+      request.current?.abort()
+      if (words === '' || pasted !== null) setFound([])
+      return
+    }
+    const wait = window.setTimeout(() => { void findWords(words) }, 320)
+    return () => window.clearTimeout(wait)
+    // `findWords` deliberately reads no render state beyond this search term.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hunt, pasted])
+
+  useEffect(() => () => request.current?.abort(), [])
 
   async function look() {
     if (pasted !== null) {
@@ -618,20 +746,11 @@ function Queue({
       return
     }
     if (hunt.trim() === '') return
-    setLooking(true)
-    setTrouble('')
-    try {
-      setFound(await search(hunt.trim()))
-    } catch (why) {
-      setTrouble(why instanceof Error ? why.message : String(why))
-      setFound([])
-    } finally {
-      setLooking(false)
-    }
+    await findWords(hunt.trim())
   }
 
-  const take = (video: Found) => {
-    if (nothingOn) onPlayNow(video.videoId, video.title)
+  const take = (video: Found, choice: 'now' | 'next') => {
+    if (choice === 'now') onPlayNow(video.videoId, video.title)
     else onQueue(queueItem(data.me, { videoId: video.videoId, title: video.title }))
     setFound([])
     setHunt('')
@@ -671,24 +790,39 @@ function Queue({
         </p>
       )}
 
+      {canSearch && hunt.trim() === '' && (
+        <div className="together-prompts" aria-label="things to discover">
+          <span>begin somewhere</span>
+          {['music films', 'something funny', 'short documentaries', 'racing onboard'].map((idea) => (
+            <button type="button" key={idea} onClick={() => setHunt(idea)}>{idea}</button>
+          ))}
+        </div>
+      )}
+
       {found.length > 0 && (
-        <ul className="together-found">
-          {found.map((video) => (
-            <li key={video.videoId}>
-              <button type="button" onClick={() => take(video)}>
+        <div className="together-discovery">
+          <p className="together-list-label">suggestions</p>
+          <ul className="together-found">
+            {found.map((video) => (
+              <li key={video.videoId}>
                 {video.thumb !== '' && <img src={video.thumb} alt="" loading="lazy" />}
                 <span className="together-found-words">
                   <span className="together-found-title">{video.title}</span>
                   <span className="together-found-who">{video.channel}</span>
                 </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+                <span className="together-found-actions">
+                  <button type="button" onClick={() => take(video, 'now')}>play now</button>
+                  <button type="button" onClick={() => take(video, 'next')}>{nothingOn ? 'line up' : 'add next'}</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
-      {found.length === 0 && (
-        queue.length === 0 ? (
+      <div className="together-up-next">
+        <p className="together-list-label">up next · {queue.length}</p>
+        {queue.length === 0 ? (
           <p className="together-none">
             Nothing lined up. Whatever either of you adds plays next.
           </p>
@@ -711,8 +845,8 @@ function Queue({
               </li>
             ))}
           </ol>
-        )
-      )}
+        )}
+      </div>
     </div>
   )
 }

@@ -26,6 +26,7 @@ import { useProfileSheet } from './profileSheet'
 import { useArrival } from './arrival'
 import { useMemories } from './memories'
 import { useQuestions } from './questions'
+import { useWatching } from './watching'
 
 /**
  * True while anything is filling the screen.
@@ -56,7 +57,8 @@ export function useTakenOver(): boolean {
   // way to hanging one. Both are things you are *in*.
   const memory = useMemories((s) => s.openId !== null || s.hanging)
   const question = useQuestions((s) => s.view !== null)
-  return shut || playing || reading || composing || pot || profile || memory || question
+  const watching = useWatching((s) => s.open)
+  return shut || playing || reading || composing || pot || profile || memory || question || watching
 }
 
 /**
@@ -78,5 +80,6 @@ export function takenOverNow(): boolean {
     useMemories.getState().openId !== null ||
     useMemories.getState().hanging
     || useQuestions.getState().view !== null
+    || useWatching.getState().open
   )
 }

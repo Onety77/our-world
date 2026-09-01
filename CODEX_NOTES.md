@@ -774,3 +774,28 @@ shared-file changes, measurements, and anything another agent should preserve.
 - TypeScript, Cloud Function syntax and the production build pass. The updated
   `notifyNewMessage` function was deployed successfully to `our-world-c9a07` as
   active revision `notifynewmessage-00002-tec`.
+
+## 1 September 2026 - Codex - Watch Together became the Night Screen
+
+- Moved the Watch Together entrance to the final row of the expanded music
+  shelf. Folded music is small again, and either person can prepare the room
+  before the other arrives.
+- Rebuilt the full experience as an opaque, dedicated Night Screen environment
+  on desktop and mobile: one true video rectangle, a responsive control room,
+  warm/cool presence lights, shared chat and a readable discovery/queue lane.
+- Search now responds while typing, cancels stale requests, offers useful
+  starting prompts and separates “play now” from “add next.” YouTube search is
+  restricted to embeddable, syndicated results so it offers fewer dead ends.
+- Repaired Next at the player boundary. Queue changes now load the new id into
+  the persistent iframe immediately instead of only changing the shared title
+  and clock while the old picture remained.
+- Covered YouTube refusals with the garden's own readable state, kept the raw
+  iframe unfocusable underneath, and made the miniature reveal only Open and
+  Close when tapped. On mobile it sits below the media dock instead of across
+  the place title.
+- Found and fixed a room-level scroll leak during browser verification: the
+  shared chat's `scrollIntoView` was scrolling the entire Watch place upward.
+  It now scrolls only its own conversation lane.
+- Verified the empty, unavailable, full desktop, full mobile, folded miniature,
+  miniature actions and close states in-browser. Watch checks, TypeScript and
+  the production build pass.

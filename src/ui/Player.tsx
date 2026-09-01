@@ -92,9 +92,6 @@ export function Player() {
   */
   const watchingLive = useWatching((s) => s.live)
   const watchingTitle = useWatching((s) => s.shared.title)
-  const watchable =
-    watchingLive ||
-    (presence[me]?.online === true && presence[them.id]?.online === true)
   const track = tracks.find((t) => t.id === anchor.trackId)
 
   // --- the feeds ------------------------------------------------------------
@@ -484,52 +481,33 @@ export function Player() {
               ))}
             </ul>
           )}
+
+          {/* The screen is the final destination on the opened music shelf. */}
+          <button
+            type="button"
+            className={`player-watch ready${watchingLive ? ' on' : ''}`}
+            onClick={() => {
+              wake()
+              close()
+              useWatching.getState().show()
+            }}
+            aria-label={watchingLive ? 'return to the shared screen' : `open the screen for you and ${them.name}`}
+          >
+            <span className="player-watch-mark" aria-hidden="true">▷</span>
+            <span className="player-watch-words">
+              <span className="player-watch-kicker">watch together</span>
+              <span className="player-watch-title">
+                {watchingLive
+                  ? (watchingTitle || 'return to the screen')
+                  : presence[them.id]?.online === true
+                    ? `${them.name} is here · open the night screen`
+                    : `open the night screen · ${them.name} can join later`}
+              </span>
+            </span>
+            <span className="player-watch-arrow" aria-hidden="true">→</span>
+          </button>
         </div>
       )}
-
-      {/*
-        The way into the screen the two of you share, on a line of its own.
-
-        ---------------------------------------------------------------------
-        It began life as a fourth mark in the transport row, beside back, play
-        and forward. On a laptop that was fine; on a phone it pushed a row that
-        was already four things wide into something cramped and slightly wrong,
-        and it also said the wrong thing — it is not a transport control, it
-        does not move the music, and sitting among the things that do made it
-        read as one.
-
-        A line of its own, in words rather than a glyph, because that is what
-        the rest of this corner is: the whisper above it is a sentence, and
-        "fold away" is a sentence. And it can then *say* something — when a
-        screen is going it reports what is on, which is the corner's whole job.
-        ---------------------------------------------------------------------
-      */}
-      <button
-        type="button"
-        className={`player-watch${watchable ? ' ready' : ''}${watchingLive ? ' on' : ''}`}
-        onClick={() => {
-          if (!watchable) return
-          wake()
-          useWatching.getState().show()
-        }}
-        disabled={!watchable}
-        aria-label={
-          watchingLive
-            ? 'back to the screen you are sharing'
-            : watchable
-              ? `watch something with ${them.name}`
-              : `${them.name} isn't here to watch anything with`
-        }
-      >
-        <span className="player-watch-mark" aria-hidden="true">▷</span>
-        <span className="player-watch-words">
-          {watchingLive
-            ? (watchingTitle || `watching with ${them.name}`)
-            : watchable
-              ? `watch with ${them.name}`
-              : `watch together when ${them.name} is here`}
-        </span>
-      </button>
 
       <div className="player-bar">
         <button

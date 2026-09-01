@@ -40,6 +40,47 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · the Glasshouse is a wall of pictures again
+
+Reported: the photographs are blur unless you tap one, on phone and desktop
+both, and it "used to be like before".
+
+**The cause was one number, and the number was right for the wrong reason.**
+`NEAR = 5` — only the five closest panes ever got their real photograph. That
+was a fair constraint, because a pane took the *stored* copy, which is 2560
+across: about seventeen megabytes of video memory each. Five really was all a
+phone could hold.
+
+But the 2560 was never for the pane. **The photograph you open is a DOM
+`<img>` over the world**, so it takes the whole file and is as sharp as the
+file is. A pane is a picture two metres away, behind glass, multiplied by a
+glass body and sitting in fog — and 640 pixels is more than that can show.
+
+    stored copy   2560 px   ~17 MB of VRAM     five panes
+    pane copy      640 px   ~1 MB of VRAM      twenty, for less than two cost
+
+So `Panes` downscales onto a canvas when it makes the texture, and `NEAR` is
+20 with `REACH` 22 m — about a dozen bays, far enough that a picture has
+resolved well before you reach it rather than while you stand in front of it.
+
+Two things that were also wrong and are worth knowing:
+
+> **Every pane disposed its photograph the moment it left range**, so walking
+> back down the aisle decoded all of them again — the same pictures, over and
+> over, and a fresh blur every time you turned around. There is a bounded
+> least-recently-used cache now (`KEEP = 26`); the pane owns only its
+> sixteen-pixel preview.
+
+> **The aisle got faster in the same week** — `FOLLOW` went 3.4 → 7.2 on
+> coarse pointers, which is a good change on its own. It is probably why this
+> became noticeable now rather than in August: a pane that used to load as you
+> arrived was suddenly loading after you had gone past.
+
+> **For Codex:** `NEAR` was yours and I have changed it. I think the reasoning
+> holds — the constraint was the texture size, not the count, and the count was
+> paying for a resolution the pane cannot display — but the room is your work
+> and if 20 reads as too busy the honest lever is now `PANE_PX`, not `NEAR`.
+
 ## 1 Sep · Claude · the two of you can watch something together
 
 A shared YouTube screen, reached from the corner media control, synced between

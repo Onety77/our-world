@@ -303,6 +303,8 @@ export async function search(words: string, signal?: AbortSignal): Promise<Found
   // Embeddable only. Offering something that cannot play in the screen it is
   // being searched from is offering a dead end.
   url.searchParams.set('videoEmbeddable', 'true')
+  url.searchParams.set('videoSyndicated', 'true')
+  url.searchParams.set('safeSearch', 'moderate')
   url.searchParams.set('maxResults', '14')
   url.searchParams.set('q', words)
   url.searchParams.set('key', SEARCH_KEY)

@@ -60,16 +60,35 @@ import { openPane } from './view'
 /**
  * How many panes get their actual photograph.
  *
- * Five. Each one is a texture, a decode and — the first time — a request, and
- * on a phone walking the length of a long Glasshouse that is the difference
- * between a place and a slideshow of loading spinners. Everything else is its
- * own average colour, which is not a fallback: a wall of coloured glass
- * receding into the dark is what this place looks like.
+ * ---------------------------------------------------------------------------
+ * **This was five, and five was the room's whole character — wrongly.** Each
+ * pane took the stored 2560-pixel copy, which is about seventeen megabytes of
+ * video memory apiece, so five was genuinely all a phone could hold. The result
+ * was a corridor of coloured blur in which exactly one picture sharpened at a
+ * time, as you arrived at it, and the photographs really only appeared when you
+ * opened them. That is not what a room full of hung photographs looks like.
+ *
+ * The constraint was never the count, it was the size. A pane is drawn at 640
+ * across now — see `PANE_PX` in `Panes` — which is more than a picture two
+ * metres away behind glass can show, and about a megabyte instead of seventeen.
+ * Twenty of them cost less than two used to.
+ *
+ * So the Glasshouse is a wall of pictures again, and the flat colour goes back
+ * to being what it was for: the far end of a long building, receding.
+ * ---------------------------------------------------------------------------
  */
-const NEAR = 5
+const NEAR = 20
 
-/** Metres either side of where you stand that count as near. */
-const REACH = 9
+/**
+ * Metres either side of where you stand that count as near.
+ *
+ * Two panes to a 3.25-metre bay, so this is about a dozen bays — far enough
+ * that a photograph has resolved well before you reach it, rather than while
+ * you are standing in front of it. That margin is what the aisle's own speed
+ * ate: the phone settle was made firmer in the same week, and a pane that
+ * loaded on arrival was suddenly loading after departure.
+ */
+const REACH = 22
 
 /**
  * How far past the last memory the ironwork runs.
