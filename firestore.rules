@@ -651,6 +651,15 @@ service cloud.firestore {
             .data.answeredWarm == true
           && get(/databases/$(database)/documents/questionRounds/$(request.resource.data.activeRoundId))
             .data.answeredCool == true
+        )
+        && (
+          get(/databases/$(database)/documents/questionRounds/$(request.resource.data.activeRoundId))
+            .data.answeredWarm == true
+          || get(/databases/$(database)/documents/questionRounds/$(request.resource.data.activeRoundId))
+            .data.answeredCool == true
+          || request.time.toMillis() <
+            get(/databases/$(database)/documents/questionRounds/$(request.resource.data.activeRoundId))
+              .data.openedAt + 86400000
         );
       allow delete: if false;
     }

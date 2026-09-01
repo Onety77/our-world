@@ -28,7 +28,11 @@
 
 import { readFileSync } from 'node:fs'
 import { QUESTION_BUILD, QUESTION_DAY } from '../src/data/questionPrompts'
-import { activeQuestion } from '../src/data/questionOrder'
+import {
+  activeQuestion,
+  isQuestionExpired,
+  QUESTION_UNTOUCHED_LIFE,
+} from '../src/data/questionOrder'
 import type { QuestionRound } from '../src/data/types'
 
 let failed = 0
@@ -205,11 +209,39 @@ const archived = round('already-finished', 3, true, true)
 const anomaly = [buried, stray, archived]
 
 ok('the oldest unfinished round wins instead of the newest document',
-  activeQuestion(anomaly, null)?.id === buried.id)
+  activeQuestion(anomaly, null, 10)?.id === buried.id)
 ok('dev7731 can deliberately select another unfinished round',
-  activeQuestion(anomaly, stray.id)?.id === stray.id)
+  activeQuestion(anomaly, stray.id, 10)?.id === stray.id)
 ok('a stale pointer to a completed round falls back safely',
-  activeQuestion(anomaly, archived.id)?.id === buried.id)
+  activeQuestion(anomaly, archived.id, 10)?.id === buried.id)
+
+console.log(`\nOnly an untouched question can fade\n`)
+store.clear()
+clock = Date.UTC(2026, 8, 20, 8, 0, 0)
+await as('warm').ensureQuestion()
+const untouched = questionsNow().current!
+clock += hours(23)
+await as('warm').ensureQuestion()
+ok('twenty-three untouched hours do not replace it',
+  questionsNow().current?.id === untouched.id)
+clock += hours(2)
+await as('warm').ensureQuestion()
+ok('after a full untouched day the Tree may replace it',
+  questionsNow().current?.id !== untouched.id)
+ok('the untouched lifetime is exactly twenty-four hours',
+  QUESTION_UNTOUCHED_LIFE === hours(24))
+
+store.clear()
+clock = Date.UTC(2026, 8, 24, 8, 0, 0)
+await as('warm').ensureQuestion()
+const protectedRound = questionsNow().current!
+await as('cool').answerQuestion(protectedRound.id, 'hers, whenever you arrive')
+clock += hours(72)
+await as('warm').ensureQuestion()
+ok('one answer protects the question even three days later',
+  questionsNow().current?.id === protectedRound.id)
+ok('a one-answer question is never considered expired',
+  !isQuestionExpired(questionsNow().current!, clock))
 
 /*
   =========================================================================

@@ -818,3 +818,20 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Added regression coverage for buried rounds, explicit activation and stale
   completed pointers. Question checks, generated rules, TypeScript and the
   production build pass.
+
+## 1 September 2026 - Codex - The Tree's exact question lifecycle
+
+- Clarified that twelve hours is not a repeating interval: the growth clock is
+  minted by the second answer and runs once from that exact completion moment.
+- Added the only expiry the ritual permits. A question untouched by both people
+  may fade after twenty-four hours; the first answer removes that expiry
+  forever, so the other person can arrive three days or three weeks later.
+- Repaired the visual ritual as well as the clock. When both answers meet, the
+  answered round blooms into the vine and a new bud remains visibly growing.
+  Touching that bud opens a quiet sheet explaining that its twelve-hour growth
+  began when both answers met and roughly how long remains.
+- Marked untouched expired rounds honestly in dev7731 and prevented them from
+  being reactivated. Extended the control-pointer rule with the same rule.
+- Added real local-backend walks for 23-hour survival, 24-hour replacement and
+  a one-answer question still active after 72 hours. Questions and TypeScript
+  checks pass.

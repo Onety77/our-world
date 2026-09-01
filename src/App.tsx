@@ -325,20 +325,28 @@ function Garden() {
     (state) => state.questions.current?.completedAt != null,
   )
   const nextQuestionAt = useWorldSlice((state) => state.questions.nextAt)
+  const currentQuestionExpiresAt = useWorldSlice((state) => state.questions.expiresAt)
 
-  // Questions never form a backlog. Ask immediately on an empty Tree, then
-  // wake at the rolling-day boundary even if this tab has stayed open all day.
+  // A completed pair grows the next question for twelve hours. An untouched
+  // question gets a full day; one answer removes that expiry entirely.
   useEffect(() => {
-    if (currentQuestionId && !currentQuestionComplete) return
+    if (currentQuestionId && !currentQuestionComplete && currentQuestionExpiresAt === null) return
     const open = () => void data.ensureQuestion().catch(() => {})
-    const delay = nextQuestionAt === null ? 0 : Math.max(0, nextQuestionAt - data.now())
+    const wakeAt = currentQuestionComplete ? nextQuestionAt : currentQuestionExpiresAt
+    const delay = wakeAt === null ? 0 : Math.max(0, wakeAt - data.now())
     if (delay === 0) {
       open()
       return
     }
     const timer = window.setTimeout(open, Math.min(delay, 2_147_000_000))
     return () => window.clearTimeout(timer)
-  }, [data, currentQuestionId, currentQuestionComplete, nextQuestionAt])
+  }, [
+    data,
+    currentQuestionId,
+    currentQuestionComplete,
+    currentQuestionExpiresAt,
+    nextQuestionAt,
+  ])
   useEffect(() => {
     ambience.setWind(wind)
   }, [wind])

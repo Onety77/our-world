@@ -12681,6 +12681,28 @@ body.on-the-road .broke-what {
   opacity: 0.7;
 }
 
+.question-growing-sheet .sheet-body {
+  text-align: center;
+}
+
+.question-growth-copy {
+  max-width: 28rem;
+  margin: 1.1rem auto 0;
+  color: rgba(47, 36, 24, 0.62);
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.question-growth-time {
+  margin: 1.4rem 0 0;
+  color: #302519;
+  font-family: var(--sans);
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 @media (max-width: 30rem) {
   .river-total b {
     font-size: 1.5rem;

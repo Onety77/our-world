@@ -44,6 +44,7 @@ import { Outdoors } from './Outdoors'
 import { useSay } from '@/systems/useSay'
 import { AddMusic } from './AddMusic'
 import { useRemembered } from './remember'
+import { isQuestionExpired, isQuestionWaiting } from '@/data/questionOrder'
 
 /** Somewhere to start from. Any IANA name works — this is just convenience. */
 const COMMON_ZONES = [
@@ -474,17 +475,22 @@ export function Admin() {
             {questions.rounds.map((round, index) => {
               const active = round.id === questions.activeRoundId
               const complete = round.answered.warm && round.answered.cool
+              const expired = isQuestionExpired(round, data.now())
               const activeIndex = questions.rounds.findIndex(
                 (entry) => entry.id === questions.activeRoundId,
               )
-              const place = active
+              const place = expired
+                ? 'passed unanswered'
+                : active
                 ? 'active now'
                 : index < activeIndex
                   ? 'before active'
                   : 'after active'
               const mine = round.answered[me]
               const theirs = round.answered[them]
-              const answerState = complete
+              const answerState = expired
+                ? 'nobody answered within twenty-four hours'
+                : complete
                 ? 'both answered · in the archive'
                 : mine && theirs
                   ? 'both answers are being joined'
@@ -506,7 +512,7 @@ export function Admin() {
                   <p>{round.prompt}</p>
                   <div className="admin-question-foot">
                     <span>{answerState}</span>
-                    {!complete ? (
+                    {!complete && !expired ? (
                       <button
                         type="button"
                         className={active ? 'on' : ''}
@@ -527,7 +533,7 @@ export function Admin() {
           </ol>
         )}
         {questions.rounds.filter(
-          (round) => !round.answered.warm || !round.answered.cool,
+          (round) => isQuestionWaiting(round, data.now()),
         ).length > 1 ? (
           <p className="admin-warn">
             More than one unfinished round exists. That is the old bug made

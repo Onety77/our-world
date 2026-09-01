@@ -105,7 +105,11 @@ import {
   type RallyStreamInput,
   type VoiceLight,
 } from './types'
-import { activeQuestion, isQuestionWaiting } from './questionOrder'
+import {
+  activeQuestion,
+  isQuestionWaiting,
+  questionExpiresAt,
+} from './questionOrder'
 import { AMBIENCE_KEYS } from './types'
 import { newId } from './ids'
 import {
@@ -280,6 +284,7 @@ function emptyWorld(): WorldState {
       availableSeeds: 0,
       queued: 0,
       nextAt: null,
+      expiresAt: null,
       loaded: false,
     },
     firstArrivalAt: null,
@@ -577,7 +582,8 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         .filter((seed) => seed.contributionId)
         .map((seed) => seed.contributionId as string),
     )
-    const current = activeQuestion(hydrated, activeQuestionId)
+    const at = now()
+    const current = activeQuestion(hydrated, activeQuestionId, at)
     const lastCompletedAt = hydrated.reduce(
       (latest, round) => Math.max(latest, round.completedAt ?? 0),
       0,
@@ -594,9 +600,10 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         ).length,
         queued: questionSeeds.filter((seed) => seed.usedAt === null).length,
         nextAt:
-          current && !isQuestionWaiting(current) && lastCompletedAt > 0
+          current && !isQuestionWaiting(current, at) && lastCompletedAt > 0
             ? lastCompletedAt + QUESTION_BUILD
             : null,
+        expiresAt: questionExpiresAt(current),
         loaded: questionRoundsLoaded && questionSeedsLoaded && questionControlLoaded,
       },
     })
@@ -1123,7 +1130,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       // Any unfinished round blocks a new one, not merely the newest round.
       // This is the invariant that prevents a patiently waiting question from
       // ever being buried by a later document again.
-      if (rounds.some(isQuestionWaiting)) return
+      if (rounds.some((round) => isQuestionWaiting(round, at))) return
       if (current && at < lastCompletedAt + QUESTION_BUILD) return
 
       // Only this person's private pool is queryable. Her planted prompt never
@@ -1255,7 +1262,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       if (me !== 'warm') throw new Error('Only the control-room account can choose the active question.')
       const round = questionRounds.find((entry) => entry.id === roundId)
       if (!round) throw new Error('That question is no longer in the opened rounds.')
-      if (!isQuestionWaiting(round)) throw new Error('Completed questions stay in the archive and cannot be made active.')
+      if (!isQuestionWaiting(round, now())) throw new Error('Completed or expired questions cannot be made active.')
       await setDoc(doc(db, QUESTION_CONTROL, 'ours'), { activeRoundId: roundId })
     },
 

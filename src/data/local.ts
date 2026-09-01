@@ -37,7 +37,11 @@ import type { ScreenTalk,
   VoiceLight,
   VoiceLightGarden,
 } from './types'
-import { activeQuestion, isQuestionWaiting } from './questionOrder'
+import {
+  activeQuestion,
+  isQuestionWaiting,
+  questionExpiresAt,
+} from './questionOrder'
 import { forgetPicture, forgetPictures, pictureFromStore, putPicture } from './pictures'
 import { forgetSong, putSong, songFromStore } from './songs'
 import {
@@ -138,6 +142,7 @@ function seedState(): WorldState {
       availableSeeds: 0,
       queued: 0,
       nextAt: null,
+      expiresAt: null,
       loaded: true,
     },
     firstArrivalAt: null,
@@ -274,7 +279,8 @@ function questionView(
       }
       return { ...round, answers }
     })
-  const current = activeQuestion(rounds, stored.activeRoundId)
+  const at = Date.now()
+  const current = activeQuestion(rounds, stored.activeRoundId, at)
   const lastCompletedAt = rounds.reduce(
     (latest, round) => Math.max(latest, round.completedAt ?? 0),
     0,
@@ -288,9 +294,10 @@ function questionView(
     availableSeeds,
     queued: stored.seeds.filter((seed) => seed.by === me && seed.usedAt === null).length,
     nextAt:
-      current && !isQuestionWaiting(current) && lastCompletedAt > 0
+      current && !isQuestionWaiting(current, at) && lastCompletedAt > 0
         ? lastCompletedAt + QUESTION_BUILD
         : null,
+    expiresAt: questionExpiresAt(current),
     loaded: true,
   }
 }
@@ -964,7 +971,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         from the moment you both finished the last. A late answer creates no
         backlog: the next question simply waits here.
       */
-      if (ordered.some((round) => isQuestionWaiting(round))) return
+      if (ordered.some((round) => isQuestionWaiting(round, now))) return
       if (current && now < lastCompletedAt + QUESTION_BUILD) return
 
       const usedPrompts = new Set(questions.rounds.map((round) => round.prompt))
@@ -1084,7 +1091,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       if (me !== 'warm') throw new Error('Only the control-room account can choose the active question.')
       const round = questions.rounds.find((entry) => entry.id === roundId)
       if (!round) throw new Error('That question is no longer in the opened rounds.')
-      if (!isQuestionWaiting(round)) throw new Error('Completed questions stay in the archive and cannot be made active.')
+      if (!isQuestionWaiting(round, Date.now())) throw new Error('Completed or expired questions cannot be made active.')
       questions = { ...questions, activeRoundId: roundId }
       settleQuestions()
     },

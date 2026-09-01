@@ -197,6 +197,52 @@ function PlantQuestion() {
   )
 }
 
+function growthTime(target: number, now: number): string {
+  const minutes = Math.max(0, Math.ceil((target - now) / 60_000))
+  if (minutes <= 1) return 'almost ready'
+  if (minutes < 60) return `about ${minutes} minutes remain`
+  const hours = Math.ceil(minutes / 60)
+  return `about ${hours} ${hours === 1 ? 'hour remains' : 'hours remain'}`
+}
+
+/** What touching the new bud reveals while the next question forms. */
+function GrowingQuestion() {
+  const data = useData()
+  const close = useQuestions((state) => state.close)
+  const nextAt = useWorldSlice((state) => state.questions.nextAt)
+  const sheet = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
+  const [clock, setClock] = useState(() => data.now())
+
+  useDismissOutside(true, close, [sheet, actions])
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(data.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [data])
+
+  return (
+    <div className="reader question-reader">
+      <div ref={sheet} className="sheet question-sheet question-growing-sheet">
+        <div className="sheet-scroll">
+          <div className="sheet-body">
+            <p className="addressed">a new bud is forming</p>
+            <h2 className="question-prompt">The next question is growing.</h2>
+            <p className="question-growth-copy">
+              Its twelve hours began when both of your answers met beneath the bark.
+            </p>
+            <p className="question-growth-time">
+              {nextAt === null ? 'the roots are settling' : growthTime(nextAt, clock)}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div ref={actions} className="sheet-actions question-actions">
+        <button type="button" className="put-back quiet" onClick={close}>back to the tree</button>
+      </div>
+    </div>
+  )
+}
+
 export function Questions() {
   const view = useQuestions((state) => state.view)
   const questions = useWorldSlice((state) => state.questions)
@@ -237,6 +283,7 @@ export function Questions() {
 
   if (!view) return null
   if (view.kind === 'plant') return <PlantQuestion />
+  if (view.kind === 'growing') return <GrowingQuestion />
   const round =
     (questions.current?.id === openId ? questions.current : null) ??
     questions.history.find((item) => item.id === openId) ??

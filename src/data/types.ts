@@ -729,6 +729,8 @@ export interface QuestionGarden {
   queued: number
   /** Earliest moment another question may open; null while this one waits. */
   nextAt: number | null
+  /** When an entirely untouched current question fades; one answer clears this forever. */
+  expiresAt: number | null
   /** False until the question collections have answered once. */
   loaded: boolean
 }
@@ -915,7 +917,7 @@ export interface DataLayer {
 
   // ---- the question vine -------------------------------------------------
 
-  /** Open today's question when the previous one is complete and 24h old. */
+  /** Open a question after the last bloom grows, or replace one untouched for 24h. */
   ensureQuestion(): Promise<void>
 
   /** Seal my answer. It cannot be edited or taken back. */

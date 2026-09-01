@@ -168,7 +168,7 @@ export function QuestionVine() {
     [],
   )
   const bud = useMemo(
-    () => questions.current && questions.current.completedAt === null ? buildBud(budPosition) : null,
+    () => questions.current ? buildBud(budPosition) : null,
     [questions.current, budPosition],
   )
 
@@ -210,10 +210,16 @@ export function QuestionVine() {
         return
       }
 
-      if (questions.current?.completedAt === null) {
+      if (questions.current) {
         point.set(budPosition[0], budPosition[1] + 0.82, budPosition[2])
         const distance = raySphere(ray.ray.origin, ray.ray.direction, point, 0.76)
-        if (distance !== null) useQuestions.getState().openCurrent()
+        if (distance !== null) {
+          if (questions.current.completedAt !== null && questions.nextAt !== null) {
+            useQuestions.getState().openGrowing()
+          } else {
+            useQuestions.getState().openCurrent()
+          }
+        }
       }
     }
     window.addEventListener('pointerup', onUp)
