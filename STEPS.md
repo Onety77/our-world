@@ -596,9 +596,11 @@ npm run rally       the car: acceleration, braking, stability, the drift,
                     stalls, wall-riding and anything gone NaN
 npm run drift       what a drift costs, as a speed trace per second
 npm run tuning      that every one of the forty-two dials still reaches the car
-npm run sound       the Rootway's soundscape against a stub Web Audio API:
-                    every value finite, every layer actually reached over a
-                    real lap, nothing left running afterwards
+npm run sound       the Rootway's and the Stormcrown's soundscapes against a
+                    stub Web Audio API: every value finite, every layer
+                    actually reached over a real lap, the thunder's
+                    flash-to-bang gap a real distance, and nothing left
+                    running afterwards
 npm run shaders     the shader mistake this codebase keeps making
 npm run tris        what the garden costs in triangles, by object
 npm run scatter     Scattergories, played headless
@@ -616,6 +618,13 @@ non-finite value reaching an AudioParam. That throws exactly once and takes the
 whole ambient bed down with it — no crash on screen, no red in a console you
 are looking at, just a world that stopped making noise somewhere around the
 third corner, on one machine, sometimes.
+
+It also holds the two claims the Stormcrown's thunder makes about physics — the
+flash-to-bang gap really is the distance over 343 m/s, and near and far are a
+range rather than two presets — and the one thing there that could fail
+silently and for ever: the mix ducks under a close strike and **comes back**.
+If that return were ever dropped the mountain would get quieter with every
+stroke and nothing on screen would say so.
 
 ---
 

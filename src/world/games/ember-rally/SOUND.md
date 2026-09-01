@@ -5,87 +5,84 @@ for the graph everything here plugs into. This file is only about the ear.
 
 It exists because a brief arrived proposing that every road gets a downloaded
 music loop, two downloaded intensity stems and a folder of environmental
-recordings. The instincts in it are good and most of the recordings are already
+recordings. The instincts in it are good and most of the recordings were already
 in the repo — synthesised, and steering. What follows is that brief reconciled
-against what is actually here, and then an order of work.
+against what is actually here, what has since been built, and what is left.
 
 ---
 
-## What already exists
+## What exists
 
-Roughly 3,600 lines of Web Audio, all of it synthesis, none of it sampled.
+About four thousand lines of Web Audio, all of it synthesis, none of it sampled.
 
 | File | Lines | What it is |
 |---|---|---|
 | `systems/ambience.ts` | 1476 | the one `AudioContext`, a 19-second shared noise buffer, six ambient layers crossfaded per place, world cues, and `synthesisBus()` — the seam a road voice plugs into |
 | `systems/engine.ts` | 1046 | the car: engine, exhaust, induction, road, wind, front/rear scrub, squeal, brakes, cave reverb. Events derived from edges in the state, not from extra calls |
+| `systems/rootway.ts` | 460 | the Rootway road voice — room tone, draught, your own dust, seep, drips, lantern fire, root creaks, the rock taking its weight |
 | `systems/moonbreak.ts` | 447 | the Moonbreak road voice — exposed air, water below, wet growth, arches overhead, the pressure and glass of the Drowned Mile |
 | `systems/stormcrown.ts` | 487 | the Stormcrown road voice — rainwood, cloud, the clear crown above the storm, waterfalls with pan, lightning, the rods |
 | `systems/volume.ts` | 122 | three faders: `world`, `effects`, `music`, per device, squared |
 
-And the bridges, which are the established pattern for getting frame-rate truth
-to a voice without React:
+Each road follows the same three-file shape, and a new one should too:
 
 ```
-weather.ts  -> storm  --+
-                        +-- plain object, written once a frame by Race.tsx
-depth.ts    -> deep   --+   read by a *Sound.tsx bridge inside useFrame,
-                            which calls voice.set(state) — one entry point
+weather.ts  -> storm   --+
+depth.ts    -> deep     +-- plain object, written once a frame by Race.tsx
+tunnel.ts   -> tunnel  --+   read by a *Sound.tsx bridge inside useFrame,
+                             which calls voice.set(state) — one entry point
 ```
 
-`StormcrownSound.tsx` reads `storm`; `MoonbreakSound.tsx` reads `deep`. Neither
-subscribes to anything. Both acquire their voice lazily from
+Nothing subscribes to anything. Each bridge acquires its voice lazily from
 `ambience.synthesisBus()`, because the context may not exist until the first
-gesture.
-
-**The music, meanwhile, is not here at all.** `ui/Player.tsx` is the corner
-player — songs the two of you chose, uploaded through `ui/AddMusic.tsx`, synced
-between two phones. Line 167 already ducks it to `0.14` while a game is running.
-There is no road music and never has been.
+gesture. `npm run sound` drives the Rootway's over a real lap against a stub
+Web Audio API.
 
 ---
 
-## The three real gaps
+## What was built, and why the download list shrank
 
-### 1. The Rootway has no voice
+### The Rootway had no voice at all
 
-`Moonbreak.tsx:1191` mounts `<MoonbreakSound>`. `Stormcrown.tsx:833` mounts
-`<StormcrownSound>`. Nothing mounts anything on the Rootway. Drive it and you
-get the engine and the garden's ambient bed — which is open-meadow air inside a
-tunnel, the exact failure `ambience.ts` was rewritten to stop.
+`Moonbreak.tsx` mounted a soundscape, `Stormcrown.tsx` mounted one, and nothing
+mounted anything on the Rootway — so driving underground played the *garden's*
+ambient bed, which is open-meadow air, in a cave. That was the largest hole in
+the racing audio and **not one byte of it was a download problem.**
 
-This is the largest hole in the racing audio and **not one byte of it is a
-download problem.** Every item on the Rootway environmental list — cave room
-tone, narrow tunnel wind, gravel, stone scrapes, root creaks, drips at several
-distances, lantern fire, the shortcut's debris, deep pressure rumbles — is
-filtered noise and short envelopes, and every one of them needs to be *steered*
-by position along the road, ceiling height, speed and shortcut depth. A recording
-cannot narrow when the tunnel narrows. That is the whole argument the two
-existing road voices already won.
+Every item on the original Rootway environmental list — cave room tone, narrow
+tunnel wind, gravel, stone scrapes, root creaks, drips at several distances,
+lantern fire, deep pressure rumbles — is filtered noise and short envelopes, and
+every one of them needed to be *steered*. A recording cannot narrow when the
+tunnel narrows, and the Rootway is a road that opens and closes for its whole
+length. See the note at the top of `systems/rootway.ts`.
 
-> Note: `STEPS.md` documents `npm run sound` as checking "the Rootway's
-> soundscape". There is no such script in `package.json` and no such file. The
-> doc is ahead of the code. Fix that line when the voice lands.
+> **The brief asked for a shortcut layer and there is no shortcut.** Rootwake
+> came out of the road when the ordinary corners were sharpened — the tunnel was
+> a curve drawn between two points that real corners had pulled together, so
+> every feature in it folded. `makeTrack` sets `split: null` on every seed. What
+> replaced it as the Rootway's subject is enclosure, which is better for the ear
+> anyway: it is always happening rather than once per lap.
 
-### 2. There is no path for a sample at all
+### The music does not coexist with a road
 
-`SynthesisBus` hands out `{ context, output, noise, noiseSeconds }`. There is no
-decoder, no buffer bank, no fetch, no cache. Nothing downloaded can enter this
-codebase today without that being built first. It is small — see below — but it
-does not exist, so "download some thunder" is currently a two-day job, not a
-five-minute one.
+The original brief assumed the corner player would duck under road music. It
+also reported that `Player.tsx` already ducked to 14% during a game — **that was
+wrong.** The 14% duck is for voice-lights, and there was no interaction between
+the games and the music at all.
 
-### 3. Music, which synthesis genuinely cannot do
-
-Everything above argues for synthesis. Music is the honest exception. Nobody is
-writing a hybrid drum-and-bass bed in `AudioParam` calls, and it would be worse
-if they did. **This is the one bucket where downloading is the right answer.**
+There is now, and it is not a duck: **driving onto a road stops the music on that
+device.** `useRace.open` and `.watch` call `silence()`; the player honours it in
+its sound *and* in what it draws, so the bars and the ▶ never claim to be playing
+something you cannot hear. It is local — if she is in step with you, her song
+carries on untouched in Lagos — and it does not come back on its own. The next
+deliberate press starts it again and nothing else does. See `silenced` in
+`systems/listening.ts`.
 
 ---
 
 ## What NOT to download
 
-Do not download environmental recordings for the Moonbreak or the Stormcrown.
+Environmental recordings for any of the three roads, **thunder included.**
 
 They exist, they are steered, and layering a rain-on-metal loop over
 `stormcrown.ts` would add megabytes to duplicate something that already responds
@@ -93,81 +90,80 @@ to how high up the mountain you are and whether you are inside the cloud. A loop
 laid over a voice that moves does not add realism; it adds a second, static
 opinion about the weather that the first one has to fight.
 
-The single defensible exception is thunder — see stage 2.
+Thunder was the one exception in the first draft of this file and it is not one
+any more — see stage 2. The general rule it turned out to be an example of:
+**a recording cannot be a continuum.** Everything on these three roads that the
+brief wanted to buy is something the road changes continuously — how enclosed
+the rock is, how deep the water is, how far up the storm you have climbed, how
+far away the last stroke was. Five files cannot say any of that, and a
+synthesiser steered by the same number the renderer uses says it for free.
 
 ---
 
 ## The downloads, in order
 
-### Stage 0 — nothing. Build the Rootway voice first.
+### Stage 0 — done
 
-Before any download. Three files, mirroring the two roads that work:
+`tunnel.ts`, `RootwaySound.tsx`, `systems/rootway.ts`, `scripts/sound-check.ts`,
+and the music silencing. No downloads.
 
-1. `ember-rally/tunnel.ts` — the plain state object, sibling to `weather.ts` and
-   `depth.ts`. Written once a frame by `Race.tsx`, guarded on
-   `track.stage === 'rootway'` the way `deep` is guarded on `'moonbreak'`
-   (`Race.tsx:1073`). Carries at least: `s`, `speed`, ceiling height / how
-   enclosed, distance to the nearest lantern, shortcut depth, surface looseness.
-2. `ember-rally/RootwaySound.tsx` — the `useFrame` bridge. Lazy
-   `ambience.synthesisBus()`, allocation-free, one `voice.set(state)` per frame,
-   edges for one-shots (a root creak passing, a rock fall).
-3. `systems/rootway.ts` — the voice itself. Layers, in the idiom of the other
-   two: room tone that narrows with the ceiling, tunnel wind whose whistle
-   tightens as the walls close, loose-earth broadband riding speed, drips at
-   three distances on unrelated periods, lantern fire near the lanterns, a
-   sub-pressure that comes up in the deep sections.
+### Stage 1 — the sample path · no longer needed for sound effects
 
-The shortcut is the interesting part and it is a filter, not a file: the whole
-mix narrows — high end rolled off, the reverb shortened, the sub raised — and
-opens back out where the roads rejoin. That is four `AudioParam` ramps driven by
-one `shortcut` number, and it is impossible with a loop.
+`SynthesisBus` hands out `{ context, output, noise, noiseSeconds }` — no
+decoder, no buffer bank, no fetch, no cache. Nothing downloaded can enter the
+*synthesis* graph without one.
 
-Also add `scripts/sound-check.ts` and a `"sound"` script to `package.json`, so
-the claim in `STEPS.md` becomes true. It catches the bug that matters: a
-non-finite value reaching an `AudioParam` kills the entire bed silently.
+With thunder synthesised, nothing wants to. **The only thing left that needs a
+file is music, and music does not go through this bus at all** — it is an
+`<audio>` element on the `music` fader, which already exists and already works.
+So this stage is now optional, and should stay unbuilt until something concrete
+needs it. Building a loader with nothing to load is how you end up maintaining a
+cache for one file.
 
-### Stage 1 — the sample path
+If a genuine gap ever turns up, the shape it wants is: `bank(name)` returning
+null until decoded and never blocking; one `decodeAudioData` per file, cached
+and shared; one-shots on the **`effects`** gain if they happen because of you and
+**`world`** if the place did them (`volume.ts` has the rule); and a missing file
+that is silent and logged rather than thrown — this ships to two phones on bad
+mobile data and a 404 must not take the ambient bed down.
 
-Still no downloads. Extend `SynthesisBus` with a one-shot bank:
+### Stage 2 — thunder · done, and synthesised
 
-- `bank(name): AudioBuffer | null` — returns null until decoded, never blocks
-- fetch, then `decodeAudioData` once, cached, shared across every voice
-- one-shots route through the **`effects`** gain if they happen because of you,
-  **`world`** if the place did them (`volume.ts` has the rule)
-- a missing file must be silent and logged, never a throw — this ships to two
-  phones on bad mobile data and a 404 must not take the ambient bed down
+**This was going to be the one download that mattered, and it turned out not to
+need downloading.** The argument for buying it was that a real close crack has a
+spectral density and a multi-second decay that noise convolution approximates
+and never lands. That is true of the *old* thunder, and the reason was not that
+synthesis could not do it — it was that the old one was written as a sound
+effect rather than as a distance. Four things were wrong, and all four were the
+same mistake:
 
-Test it with one file before downloading a hundred.
+| | was | now |
+|---|---|---|
+| flash-to-bang | capped at 1.2 s — every stroke inside 400 m | `distance / 343`, out to 8 s |
+| high frequencies | fixed filters | air absorption, so far strokes have *no* crack at all |
+| the crack | fired on the flash, i.e. at the speed of light | arrives with the shock front, after a stepped-leader crackle |
+| the roll | one burst and one late return, ~2.5 s | 5–9 unevenly spaced peals, each its own level, colour and side |
 
-### Stage 2 — Sonniss GDC bundle · thunder and a small handful
+Plus the duck: everything that is not the thunder drops ~3 dB as the front lands
+and comes back over a third of a second. That is what lets the crack be *no
+louder* than before and land twice as hard.
 
-**Source:** [gdc.sonniss.com](https://gdc.sonniss.com/) — the GDC 2026 bundle is
-7.47 GB, 347 WAVs, from 17 vendors. Royalty-free, commercial use, **no
-attribution**, unlimited projects, files identical to the ones Sonniss sells.
-The full multi-year archive is around 160 GB; you do not want it. Take one year.
+`npm run sound` holds the physics — near 0.41 s, far 8.0 s, a 19.6× range — and
+holds the duck's return, which is the one thing here that could fail silently
+and permanently. Confirmed in a live browser too: a stroke at 316 m arrived
+0.92 s after its flash, which is 316/343 to the hundredth.
 
-**Download the 2026 bundle. Take at most a dozen files out of it.**
+**So there is nothing to buy here.** Recordings would now be a downgrade in the
+only way that matters: five files cannot be a continuum, and the whole point of
+this road is that you are climbing out of the weather and the storm is getting
+further away. A sampler picking between five fixed distances cannot say that.
 
-The case for real thunder is the strongest one on the list. `stormcrown.ts`
-already synthesises it — `mountainImpulse()` builds a 2.75-second irregular
-convolution with three unequal slope returns, which is genuinely good work — but
-a real close crack has a spectral density and a multi-second decay that noise
-convolution approximates and never lands. And the Stormcrown's identity rests on
-that sound more than on anything else in the road.
-
-What to pull:
-
-- **5 thunder recordings.** Not variations of one. One close crack with almost no
-  tail, one crack with a long rolling tail, two mid-distance rolls, one very
-  distant rumble. The existing `lightning(force, remoteness, below)` signature
-  already selects between them — remoteness picks the file, force picks the gain
-  and the low-pass.
-- **2–3 impacts** for suspension landings on the stair sections, if the current
-  synthesised ones are thin. Listen first.
-- Nothing else. Everything else in the environmental list is already playing.
-
-Keep the WAV masters in a folder outside the repo. Only the compressed exports
-get committed.
+The rain got the smaller half of the same fix. Discrete drops already existed —
+`rainImpact`, seven to thirteen a second — but every drop was the same drop, and
+eleven identical ticks a second is a texture rather than weather. They have a
+size now, skewed hard toward small, and the fat ones get a low ring off the
+bodywork underneath the splash. One big drop a second gives the ear a scale to
+measure the small ones against.
 
 ### Stage 3 — music beds
 
@@ -189,19 +185,23 @@ The musical directions in the original brief are right and worth following:
 plus an intensity layer plus a danger layer; that is nine files, and finding nine
 free tracks that are genuinely stem-separated and in the same key is a week of
 searching for something the ear will barely resolve at speed. Take a primary bed
-and one layer that joins above about 70% of top speed. If that works, add the
-third later.
+and one layer that joins above about 70% of top speed. If that works, add a third
+later.
 
-Ship **AAC (`.m4a`)**, not Opus. Opus is smaller and it is the technically better
+Ship **AAC (`.m4a`)**, not Opus. Opus is smaller and technically the better
 answer, but a silent iPhone is the worst possible outcome for a gift and AAC is
-the format nothing anywhere refuses. Test Opus on her actual phone before
-switching.
+the format nothing anywhere refuses. Test Opus on her actual phone first.
 
-Budget: a 90-second stereo loop at 128 kbps is about 1.4 MB. Six files is about
-8 MB. That is a lot on mobile data in Kano or Shanghai, so: nothing loads until a
+Budget: a 90-second stereo loop at 128 kbps is about 1.4 MB; six files is about
+8 MB. That is a lot on mobile data in Kano or Shanghai, so nothing loads until a
 road is entered, the primary bed loads first and starts, and the layer arrives
-behind it at silent gain. A layer that has not downloaded yet is simply a layer
-that has not joined yet.
+behind it at silent gain. A layer that has not downloaded yet is a layer that has
+not joined yet.
+
+**The seam it plugs into already exists.** The corner player is stopped on a road
+rather than ducked, so a road bed has the `music` fader entirely to itself and
+nothing to fight. It belongs on that fader, not on `world` — it is the one sound
+in a race that nobody in the fiction can hear.
 
 ### Stage 4 — Freesound, only for named gaps
 
@@ -209,51 +209,43 @@ that has not joined yet.
 Freesound carries several licenses; some require attribution and some forbid
 commercial use, and they are mixed together in every search result.
 
-Do not open this until stages 0–3 are done and there is a written list of
-specific sounds that are still missing. Otherwise it is an afternoon of browsing.
+Do not open this until the music is in and there is a written list of specific
+sounds that are still missing. Otherwise it is an afternoon of browsing.
 
 ---
 
-## The one decision that is not technical
+## Where the files go
 
-**What happens to her song when a race starts?**
+**In the project, not in Storage.** Three reasons, and the first is decisive:
+`storage.rules:141` requires `isOneOfUs()` on every read, so a Storage-hosted
+asset is an authenticated fetch against a rules evaluation and cannot exist
+before sign-in. It is also a second origin — a fresh DNS and TLS handshake
+before a byte moves, 200–400 ms on a phone — and a single-region bucket rather
+than an edge CDN, which matters for Kano and matters more for Shanghai.
 
-`Player.tsx:167` currently ducks the corner player to `0.14` during a game. Add
-road music on top of that and 14% of a chosen song is playing underneath a
-drum-and-bass bed — which is neither of them, and it is the worse of the two
-failures because it makes a deliberate choice sound like a mistake.
+The line is: **if you chose it for the road, it is code; if either of you
+uploaded it, it is data.** Road music is level design and ships with the level.
+The corner player's songs are genuinely user content and stay exactly where they
+are.
 
-**The recommendation: on a road, road music replaces the player entirely.** Duck
-the `<audio>` element to zero over about 400 ms on entry and restore it on exit.
-The garden's rule is that music is something playing while you are somewhere
-else, chosen on purpose — and the roads are the one place in this world with a
-tempo of their own that a chosen song will fight. Racing is the exception that
-proves the corner player right everywhere else.
+Import them rather than dropping them in `public/`, so Vite content-hashes them:
+a re-mixed track gets a new URL and can be cached for ever, and a typo'd
+filename is a missing key at build time instead of a 404 nobody notices. Commit
+compressed exports only — keep the masters outside the repo and audition from
+there, so each file enters git history once, when it is chosen.
 
-The alternative — no road music at all, corner player left at full — is
-defensible and cheaper, and it keeps `PLAN.md`'s rule unbroken. It is worth one
-moment's thought before stage 3, because stage 3 is pointless under it.
-
-### And the duck that makes the storm real
-
-When `lightning()` fires close, everything except the thunder drops about 3 dB
-for roughly 200 ms and comes back over 800. One gain node between the road mix
-and the master, one `setTargetAtTime`. It costs almost nothing and it is the
-single largest gain in this document — it is the difference between thunder
-playing over a race and thunder happening in one.
+While you are there: `vercel.json` is only the SPA rewrite. Hashed assets want
+`Cache-Control: public, max-age=31536000, immutable`, or every visit
+re-validates the lot.
 
 ---
 
-## Order of work
+## What is left
 
-1. `tunnel.ts` + `RootwaySound.tsx` + `systems/rootway.ts` — the missing road
-2. `scripts/sound-check.ts`, and make `STEPS.md` true
-3. The one-shot bank on `SynthesisBus`
-4. Sonniss 2026, five thunder files, wired into `stormcrown.lightning()`
-5. The 3 dB lightning duck
-6. Decide the music question above
-7. Pixabay, six files, per-road bed with a speed layer
-8. Freesound CC0, against a written list of what is still missing
+**One thing: the music.** Everything else in this document is either built or
+deliberately not wanted.
 
-Steps 1–3 are the whole of the real engineering, and none of them require a
-download. Steps 4–8 are shopping, and they are cheap once the seams exist.
+1. Pixabay, six files, per-road bed with a speed layer — the beds go on the
+   `music` fader, which a road now has entirely to itself
+2. `Cache-Control` on hashed assets in `vercel.json`
+3. Freesound CC0, only against a written list of what is actually missing

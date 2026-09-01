@@ -71,6 +71,36 @@ interface ListeningState {
    */
   apart: boolean
   setApart(apart: boolean): void
+  /**
+   * This device has gone quiet because you drove onto a road.
+   *
+   * -------------------------------------------------------------------------
+   * **The roads are the one place in the garden with a tempo of their own.**
+   * Everywhere else music is something playing while you are somewhere else —
+   * that is the whole reason it lives in the corner instead of being a place
+   * you visit. A race is the exception: it has its own speed, its own weather
+   * and now its own soundscape, and a song chosen for a quiet evening playing
+   * underneath all of that is not a mood, it is two moods cancelling.
+   *
+   * **Local, and it never touches an anchor.** Going racing is a fact about
+   * this phone, not about what the two of you are listening to — the same
+   * reason the volume faders are per-device. If she is in step with you her
+   * song carries on in Lagos exactly as it was; yours simply stops.
+   *
+   * **And it does not come back on its own.** Not on leaving the road, not
+   * when she skips a track, not when the road unmounts. The next deliberate
+   * press starts it again and nothing else does, because a song that resumes
+   * by itself two minutes after you stopped noticing it is a jump-scare with
+   * good manners. `sounding` in `ui/Player` is where that is enforced, and it
+   * is also what the player *shows*, so the bars and the ▶ never claim to be
+   * playing something you cannot hear.
+   * -------------------------------------------------------------------------
+   */
+  silenced: boolean
+  /** Driving onto a road. One way; only `unsilence` undoes it. */
+  silence(): void
+  /** Somebody pressed play, or chose a track. */
+  unsilence(): void
   /** The player is open rather than folded away. */
   open: boolean
 
@@ -88,6 +118,7 @@ export const useListening = create<ListeningState>((set) => ({
   mine: quiet(),
   together: false,
   apart: readApart(),
+  silenced: false,
   open: false,
 
   setTracks: (tracks) => set({ tracks }),
@@ -102,6 +133,8 @@ export const useListening = create<ListeningState>((set) => ({
     }
     set({ apart })
   },
+  silence: () => set({ silenced: true }),
+  unsilence: () => set({ silenced: false }),
   toggleOpen: () => set((s) => ({ open: !s.open })),
   close: () => set({ open: false }),
 }))

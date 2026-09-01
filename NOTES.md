@@ -40,6 +40,125 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · the thunder is a distance now, not a thump
+
+Codex's sound brief said the one thing worth *buying* was thunder, and I agreed
+with that in `SOUND.md` before reading the old `lightning()` properly. It was
+wrong. Thunder did not need a recording, it needed to stop being written as a
+sound effect and start being written as a distance.
+
+Four faults, all the same fault:
+
+- **The flash-to-bang gap was capped at 1.2 s**, which puts every stroke inside
+  four hundred metres. Everyone on earth knows this sound — you count between
+  the flash and the bang — so a storm you are supposed to be *climbing out of*
+  was permanently on top of you and the flash meant nothing. It is `metres/343`
+  now, out to eight seconds.
+- **No air absorption.** Distance eats the top of a sound long before the
+  bottom, and that is what a rumble *is*. One exponential on the cutoff gives
+  the whole family from tear to rumble, so near and far are the same
+  synthesiser rather than two presets.
+- **No crack.** The bright transient fired on the *flash* — at the speed of
+  light, so it arrived with the light and not with the sound. There is a
+  stepped-leader crackle a few milliseconds ahead of the shock front now, and
+  the front itself.
+- **Thunder is not one event.** A crooked channel kilometres long sends a
+  separate peal from every bend. Five to nine of them, unevenly spaced, each
+  with its own level, colour and side — that irregular sequence is the whole
+  difference between thunder and a drum.
+
+And the duck, which was already in the brief as the cheapest win available: a
+`weather` bus that everything continuous goes through, down about 3 dB as the
+front lands and back over a third of a second. The crack is no louder than it
+was and lands twice as hard, because the ear reads the hole around it. It does
+not reach the car — that is a separate voice on the effects bus and reaching
+across for it would be a layering violation.
+
+Rain got the small version of the same treatment. Discrete drops already existed
+(`rainImpact`, 7–13 a second) — I had assumed they did not and was wrong — but
+every drop was the same drop, and eleven identical ticks a second is a texture
+rather than weather. Drops have a size now, skewed hard to small, and the fat
+ones get a low ring off the bodywork under the splash.
+
+`npm run sound` covers the Stormcrown too now, with 75 strokes across the whole
+remoteness range: near 0.41 s, far 8.0 s, a 19.6× spread. Verified both new
+assertions bite — restoring the old 1.2 s cap fails the range, and deleting the
+duck's return-to-1 fails the recovery. That last one is the only thing here that
+could have failed *silently and for ever*: the mountain would have got quieter
+with every strike and nothing on screen would have said so.
+
+In a live browser: a stroke at 316 m arrived 0.92 s behind its flash, which is
+316/343 to the hundredth. Worth knowing for anyone else driving this headlessly
+— the Stormcrown renders at a few fps under the software renderer, so the game
+clock crawls and you get about six strokes a minute instead of thirty. The road
+is fine; the harness is slow.
+
+Net effect on the shopping list in `SOUND.md`: **only the music is left.**
+
+## 1 Sep · Claude · the Rootway can be heard, and the music gets out of its way
+
+The other two roads had a soundscape and this one never did, so driving
+underground played the *garden's* ambient bed — open-meadow air, in a cave,
+which is the exact failure the top of `ambience.ts` was rewritten to stop.
+
+Three files in the shape yours already use: `tunnel.ts` is the plain per-frame
+object beside `weather.ts` and `depth.ts`, `RootwaySound.tsx` is the bridge,
+`systems/rootway.ts` is the voice. Room tone, draught, your own dust off a close
+wall, seep, drips at three distances, lantern fire, root creaks, and the rock
+taking its weight — all noise off the shared buffer, no second context.
+
+**The subject is enclosure**, because that is what this road actually does: a
+chamber is thirteen metres to the vault and the throat before the arrival hall
+is under four. `enclosed` drives the reverb send *and* the pre-send filter
+together, so a hall reads as distance rather than as volume. Crossing a
+threshold is derived from the edge in the state rather than announced by the
+racer — the road is already telling the voice everything it needs.
+
+There is no fork any more, so the "shortcut narrows the mix" idea in the brief
+that started this became "the road narrows the mix", which is better: it happens
+all lap instead of once.
+
+Two things measured, both of which changed the code:
+
+- **The lantern field pinned.** Corner lanterns are eleven metres apart and four
+  or five overlap, so the fire layer sat clamped at 1 for about half the road —
+  measured in a real browser over a real lap. Weight down from 0.5 to 0.17; it
+  now peaks at 1 only at the two hearths and is pinned for 2% of a lap.
+- **The root field was worse** — mean 0.97, pinned for 79%, on every seed. A
+  field that is always full cannot say *here* is rootier than *there*. Scaled to
+  0.16: mean 0.37, never pins, and rather less than half the road is over the
+  threshold the creaks need. Both fields moved into `tunnel.ts` so the check can
+  drive the real lantern layout instead of a plausible-looking sine.
+
+`npm run sound` now exists, which makes the line in `STEPS.md` true — it was
+describing a script that had never been written. Stub Web Audio, a real lap,
+and it fails on a non-finite AudioParam, an exponential ramp to zero, a gain
+that never becomes audible, and anything still running after `stop()`. Verified
+it bites: injecting one `Infinity` fails 6109 writes and exits 1.
+
+One thing worth not repeating: the drip assertion first said `> 30`, and the
+drip schedule is randomised on purpose — over twelve laps the count runs 28 to
+38, so it failed about one run in three. A check that cries wolf teaches you to
+run it again. It asks `> 12` now, which is far below anything a working layer
+produces and far above the zero a broken one gives. Ten runs, ten passes.
+
+**And the corner player stops on a road.** Not ducked — the brief that started
+this claimed `Player.tsx` already ducked to 14% during a game, and that is the
+*voice-light* duck; there was no interaction with the games at all. `silenced`
+in `systems/listening.ts` is local to the device, never touches either anchor —
+so if you are in step, her song carries on untouched — and nothing turns it back
+on but a deliberate press. The player draws itself stopped while silenced,
+including the lock-screen card, because a ▶▶ that is making no sound is the
+interface lying about the one thing it reports.
+
+Measured in headless Chrome over a driven lap: rms 0.03–0.16, peak 0.28,
+`enclosed` swinging 0.06 to 0.96, fire 0.01 to 1.00, drips and thresholds both
+accumulating. `npm run rally` and `npm run typecheck` unchanged.
+
+`ember-rally/SOUND.md` is the whole picture — what exists, what not to download
+and why, and the four stages that are left. The short version: almost nothing
+needs downloading except thunder and music.
+
 ## 27 Aug · Claude · the control room has tabs
 
 The owner opened the page for the first time and the verdict was fair: one

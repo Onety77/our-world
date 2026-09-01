@@ -62,6 +62,22 @@ export function Player() {
 
   // Re-read as a whole so `current` sees a consistent pair.
   const anchor = useListening(current)
+  const silenced = useListening((s) => s.silenced)
+
+  /*
+    What this device is actually doing, as opposed to what the anchor says.
+
+    The two differ in exactly one situation: you drove onto a road and the race
+    stopped the music here — see `silenced` in `systems/listening`. Everything
+    below reads *this* rather than `anchor.playing`, and that includes the bars
+    and the ▶, because a player drawing itself as playing while it makes no
+    sound is the interface lying about the one thing it exists to report.
+
+    Her copy is untouched. If the two of you are in step, the shared anchor
+    still says playing, her phone is still playing it, and the moment you press
+    play in here you are back in the same second of the same song as her.
+  */
+  const sounding = anchor.playing && !silenced
 
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
   const track = tracks.find((t) => t.id === anchor.trackId)
@@ -118,17 +134,36 @@ export function Player() {
 
   const position = () => positionOf(anchor, data.now())
 
-  const playPause = () =>
+  /*
+    Any of the three deliberate presses ends the road's silence.
+
+    Not leaving the road, and not a timer. "It stopped when I started driving
+    and it came back when I asked for it" is one sentence somebody can hold;
+    anything cleverer is the music making decisions on your behalf again, which
+    is the thing the corner player exists to stop doing.
+  */
+  const wake = () => useListening.getState().unsilence()
+
+  const playPause = () => {
+    // Silenced, the button is a play button whatever the anchor claims —
+    // toggling `anchor.playing` here would read the shared truth (playing) and
+    // helpfully pause her.
+    const next = silenced ? true : !anchor.playing
+    wake()
     void move({
       trackId: anchor.trackId ?? tracks[0]?.id ?? null,
-      playing: !anchor.playing,
+      playing: next,
       at: position(),
     })
+  }
 
-  const skip = (by: 1 | -1) =>
+  const skip = (by: 1 | -1) => {
+    wake()
     void move({ trackId: step(tracks, anchor.trackId, by), playing: true, at: 0 })
+  }
 
-  const choose = (id: string) =>
+  const choose = (id: string) => {
+    wake()
     void move({
       trackId: id,
       // Tapping a track you are already on restarts it, which is what tapping
@@ -136,6 +171,7 @@ export function Player() {
       playing: true,
       at: 0,
     })
+  }
 
   // --- the sound ------------------------------------------------------------
   const audio = useRef<HTMLAudioElement>(null)
@@ -216,8 +252,10 @@ export function Player() {
         { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
       ],
     })
-    media.playbackState = anchor.playing ? 'playing' : 'paused'
-  }, [track, anchor.playing])
+    // The lock screen is a display like any other and gets the same truth: on
+    // a road this phone is not playing, whatever the shared anchor believes.
+    media.playbackState = sounding ? 'playing' : 'paused'
+  }, [track, sounding])
 
   useEffect(() => {
     const media = navigator.mediaSession
@@ -308,8 +346,16 @@ export function Player() {
       if (!el.src) return
       const want = positionOf(anchor, data.now())
       if (Math.abs(el.currentTime - want) > 0.5) el.currentTime = want
-      if (anchor.playing && el.paused) void el.play().catch(() => {})
-      if (!anchor.playing && !el.paused) el.pause()
+      /*
+        `sounding`, not `anchor.playing`, and this is the line that actually
+        stops the music on a road. The anchor is left alone — hers is still
+        playing and yours still remembers where it was — and this device simply
+        declines to follow it until somebody presses something. Correcting the
+        position above regardless is deliberate: come back after a race and the
+        song is where it would have been, not where you left it.
+      */
+      if (sounding && el.paused) void el.play().catch(() => {})
+      if (!sounding && !el.paused) el.pause()
     }
     sync()
     el.addEventListener('timeupdate', sync)
@@ -318,7 +364,7 @@ export function Player() {
       el.removeEventListener('timeupdate', sync)
       document.removeEventListener('visibilitychange', sync)
     }
-  }, [anchor, data])
+  }, [anchor, data, sounding])
 
   // --- the beam, written straight to the DOM -------------------------------
   const beam = useRef<HTMLSpanElement>(null)
@@ -344,7 +390,7 @@ export function Player() {
     // file has not reached this device yet. Neither exists while paused.
     const mediaEvents = ['timeupdate', 'durationchange', 'loadedmetadata', 'seeked'] as const
     for (const name of mediaEvents) el?.addEventListener(name, paint)
-    const timer = anchor.playing ? window.setInterval(paint, 500) : null
+    const timer = sounding ? window.setInterval(paint, 500) : null
     return () => {
       if (timer !== null) window.clearInterval(timer)
       for (const name of mediaEvents) el?.removeEventListener(name, paint)
@@ -434,7 +480,7 @@ export function Player() {
           aria-expanded={open}
           aria-label={open ? 'fold the music away' : 'open the music'}
         >
-          <Bars playing={anchor.playing} />
+          <Bars playing={sounding} />
           <span className="player-now">
             {track ? track.title : nothing ? 'nothing to play' : 'nothing playing'}
           </span>
@@ -449,9 +495,9 @@ export function Player() {
             className="player-go"
             onClick={playPause}
             disabled={nothing}
-            aria-label={anchor.playing ? 'pause' : 'play'}
+            aria-label={sounding ? 'pause' : 'play'}
           >
-            {anchor.playing ? '❚❚' : '▶'}
+            {sounding ? '❚❚' : '▶'}
           </button>
           <button type="button" onClick={() => skip(1)} disabled={nothing} aria-label="next">
             ›

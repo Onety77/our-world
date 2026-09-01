@@ -16,6 +16,7 @@
  */
 
 import { create } from 'zustand'
+import { useListening } from '@/systems/listening'
 import type { RallyRun } from './model'
 import type { Track } from './track'
 
@@ -144,7 +145,29 @@ export const useRace = create<RaceSession>((set) => ({
   rush: null,
   onFinish: null,
 
-  open: ({ track, ghost, ghostName = '', wheelToWheel = false, grid = 0, onFinish }) =>
+  /*
+    Driving onto a road stops the music on this phone.
+
+    ---------------------------------------------------------------------------
+    Not ducked, not paused-and-resumed: stopped, and it stays stopped until
+    somebody presses play. The three roads have a soundscape of their own now —
+    the rock, the water, the weather, the car — and a song chosen for a quiet
+    evening playing underneath that is two moods cancelling rather than either
+    one. See `silenced` in `systems/listening` for why it is local to this
+    device and why nothing turns it back on by itself.
+
+    Called from here rather than from a component effect because *this* is the
+    moment a road opens, in both ways in: `open` for driving one and `watch` for
+    watching a run back. A component would have to mount first, which on a cold
+    load means a second and a half of a kilometre of tunnel being built with
+    her song still going.
+    ---------------------------------------------------------------------------
+  */
+  open: ({ track, ghost, ghostName = '', wheelToWheel = false, grid = 0, onFinish }) => {
+    // Beside the `set` rather than inside it: an updater may be called more
+    // than once for one change, and reaching outside the store from in there is
+    // how you get a thing that happens twice on a good day.
+    useListening.getState().silence()
     set((s) => ({
       phase: 'ready',
       paused: false,
@@ -156,9 +179,11 @@ export const useRace = create<RaceSession>((set) => ({
       grid,
       replay: null,
       onFinish,
-    })),
+    }))
+  },
 
-  watch: ({ track, replay }) =>
+  watch: ({ track, replay }) => {
+    useListening.getState().silence()
     set((s) => ({
       phase: 'replay',
       paused: false,
@@ -167,7 +192,8 @@ export const useRace = create<RaceSession>((set) => ({
       replay,
       ghost: null,
       onFinish: null,
-    })),
+    }))
+  },
 
   setSurface: (surface) => set({ surface }),
   setEmberBar: (emberBar) => set({ emberBar }),

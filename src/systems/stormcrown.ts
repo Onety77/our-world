@@ -51,8 +51,13 @@ export const stormcrownSoundTelemetry = {
   wind: 0,
   waterfall: 0,
   lightning: 0,
+  /** Metres to the last stroke, and its flash-to-bang gap in seconds. */
+  distance: 0,
+  gap: 0,
 }
-if (import.meta.env.DEV) {
+/* Optional, so `npm run sound` can import this file into Node, where Vite's
+   `import.meta.env` does not exist. Same reason as `rootway.ts`. */
+if (import.meta.env?.DEV) {
   const host = globalThis as typeof globalThis & { __rallySound?: Record<string, unknown> }
   host.__rallySound ??= {}
   host.__rallySound.stormcrown = stormcrownSoundTelemetry
@@ -111,9 +116,38 @@ export function createStormcrownVoice(bus: SynthesisBus): StormcrownVoice {
   let meterFrame = 0
   out.connect(speakerCut).connect(safety).connect(analyser).connect(output)
 
+  /*
+    Two buses, and the split exists for one reason: **the thunder has to be
+    able to duck everything that is not the thunder.**
+
+    A real close strike does not sit politely on top of the rain — it takes the
+    whole soundstage for about a fifth of a second, and everything else comes
+    back underneath it. Mixed flat, the crack has to be made *loud* to be heard
+    over the weather, which is how you get a sound effect that hurts on
+    headphones and still does not feel powerful. Ducked, it can be no louder
+    than before and land twice as hard, because the ear reads the hole around it.
+
+    `weather` is everything continuous — rain, wind, cedars, cloud, the falls —
+    plus the small events that belong to the road. `strike` is the thunder's
+    direct path and is never ducked. The mountain return is not ducked either:
+    the slopes answering *is* the thunder.
+
+    It only reaches this road's own layers. The car is a separate voice on the
+    effects bus and reaching across to it from here would be a layering
+    violation for a few tenths of a decibel — the rain and the wind dropping
+    away is the part the ear actually reads.
+  */
+  const weather = ctx.createGain()
+  weather.gain.value = 1
+  weather.connect(out)
+
+  const strike = ctx.createGain()
+  strike.gain.value = 1
+  strike.connect(out)
+
   const dry = ctx.createGain()
   dry.gain.value = 1
-  dry.connect(out)
+  dry.connect(weather)
 
   const mountain = ctx.createConvolver()
   mountain.buffer = mountainImpulse(ctx)
@@ -292,22 +326,69 @@ export function createStormcrownVoice(bus: SynthesisBus): StormcrownVoice {
   }
 
   /** Individual drops hitting metal/glass keep the rain from becoming hiss. */
+  /**
+   * One drop, big or small.
+   *
+   * ---------------------------------------------------------------------------
+   * **Drops have a size now, and that is the whole change.** Every drop used to
+   * be the same drop: one high-passed tick at 1.45 kHz and up, 35–60 ms long.
+   * Which is a fine drop — and eleven of them a second, all identical in
+   * everything but pitch, is a *texture*, not weather. The ear stops hearing
+   * individual water almost immediately and starts hearing a mechanism.
+   *
+   * Rain is not graded. A few of them are fat, and a fat one landing on a metal
+   * panel is a different event: it has a low thock under the splash, it lasts
+   * three times as long, and you notice it. That is what makes the small ones
+   * read as small rather than as filler — one big drop every second or so gives
+   * the ear a scale to measure the rest against.
+   *
+   * `size` is skewed hard toward small, because rain is.
+   * ---------------------------------------------------------------------------
+   */
   function rainImpact(when: number, amount: number, fast: number) {
-    const source = ctx.createBufferSource()
-    source.buffer = noise
-    source.playbackRate.value = 1.55 + Math.random() * 1.5
-    const high = ctx.createBiquadFilter()
-    high.type = 'highpass'
-    high.frequency.value = 1450 + Math.random() * 2200 + fast * 900
-    const gain = ctx.createGain()
-    gain.gain.setValueAtTime(0.0001, when)
-    gain.gain.exponentialRampToValueAtTime(0.018 + amount * 0.036, when + 0.002)
-    gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.035 + Math.random() * 0.025)
+    const roll = Math.random()
+    const size = roll * roll * roll
     const pan = ctx.createStereoPanner()
     pan.pan.value = Math.random() * 1.6 - 0.8
-    source.connect(high).connect(gain).connect(pan).connect(dry)
-    source.start(when, Math.random() * Math.max(0.1, noiseSeconds - 0.15), 0.09)
-    source.stop(when + 0.1)
+    pan.connect(dry)
+
+    // The splash. Brighter and shorter the smaller it is.
+    const source = ctx.createBufferSource()
+    source.buffer = noise
+    source.playbackRate.value = 1.55 + Math.random() * 1.5 - size * 0.55
+    const high = ctx.createBiquadFilter()
+    high.type = 'highpass'
+    high.frequency.value = (1450 + Math.random() * 2200 + fast * 900) * (1 - size * 0.55)
+    const gain = ctx.createGain()
+    const life = 0.035 + Math.random() * 0.025 + size * 0.07
+    gain.gain.setValueAtTime(0.0001, when)
+    gain.gain.exponentialRampToValueAtTime((0.018 + amount * 0.036) * (1 + size * 1.5), when + 0.002)
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + life)
+    source.connect(high).connect(gain).connect(pan)
+    source.start(when, Math.random() * Math.max(0.1, noiseSeconds - 0.2), life + 0.05)
+    source.stop(when + life + 0.06)
+
+    /*
+      And the panel it landed on, for the big ones only.
+
+      A short low ring rather than more noise: what you are hearing is the car's
+      own bodywork answering, which has a pitch, and the pitch is what says
+      *metal* instead of *more rain*.
+    */
+    if (size > 0.25) {
+      const thock = ctx.createOscillator()
+      thock.type = 'sine'
+      const base = 150 + Math.random() * 130
+      thock.frequency.setValueAtTime(base, when)
+      thock.frequency.exponentialRampToValueAtTime(base * 0.55, when + 0.06)
+      const body = ctx.createGain()
+      body.gain.setValueAtTime(0.0001, when)
+      body.gain.exponentialRampToValueAtTime(size * (0.02 + amount * 0.03), when + 0.003)
+      body.gain.exponentialRampToValueAtTime(0.0001, when + 0.07)
+      thock.connect(body).connect(pan)
+      thock.start(when)
+      thock.stop(when + 0.09)
+    }
   }
 
   out.gain.setTargetAtTime(1.06, born, 0.32)
@@ -399,35 +480,154 @@ export function createStormcrownVoice(bus: SynthesisBus): StormcrownVoice {
       }
     },
 
+    /*
+      =========================================================================
+      Thunder, from the distance up.
+
+      The version this replaced was a thump: one low burst, a falling tone, and
+      one late slope return, all inside about two and a half seconds, with a
+      flash-to-bang gap that never exceeded 1.2 s. Four things were wrong with
+      it and all four are the same mistake — it was written as a *sound effect*
+      rather than as a distance.
+
+      **1. The gap is the distance, and it was capped far too short.** Sound
+      covers 343 m in a second and everybody on earth knows this sound: you
+      count between the flash and the bang. Capping it at 1.2 s put every
+      stroke inside four hundred metres, so a storm you were supposed to be
+      climbing out of was permanently on top of you and the flash meant nothing.
+      It is worked out from a real distance now, and the far end runs to eight
+      seconds. That is a long time to wait, and waiting is the point.
+
+      **2. Distance eats the top, and that is what a rumble *is*.** Air absorbs
+      high frequencies with distance far faster than low ones. A strike two
+      kilometres off has no crack in it at all — not a quiet crack, *none* —
+      which is why distant thunder rumbles and near thunder tears. One
+      exponential on the filter cutoff gives the whole family, and it means the
+      close and far sounds are the same synthesiser rather than two presets.
+
+      **3. There was no crack.** The old bright transient fired on the *flash*,
+      which is to say at the speed of light, so it arrived with the light and
+      not with the sound. A close strike now gets a stepped-leader crackle a few
+      milliseconds ahead of the shock front, and then the front itself: a
+      near-instant attack, gone in under a fifth of a second.
+
+      **4. Thunder is not one event.** A channel is kilometres long and crooked,
+      so different parts of it arrive at different times from different
+      directions, and each bend sends a separate peal. That irregular sequence
+      of swells is the difference between thunder and a drum. There are five to
+      nine of them here, unevenly spaced, each with its own level, colour and
+      side — and they are why this now lasts as long as it does.
+      =========================================================================
+    */
     lightning(force, remoteness, below) {
       if (stopped) return
       const now = ctx.currentTime
       const amount = clamp(force)
       const far = clamp(remoteness)
-      stormcrownSoundTelemetry.lightning++
 
-      // Every visible stroke gets a tiny electrical tear. Repeated strokes in
-      // one channel do not each get a full thunder body.
-      if (now - lastElectric > 0.045) {
+      /*
+        Where it actually was.
+
+        Squared, so most strokes land in the near half of the range and the far
+        end stretches — which matches both the shape of a storm and the fact
+        that `remoteness` is mostly driven by how far above the cloud you have
+        climbed. The top is a little under three kilometres rather than the ten
+        a real storm can manage: eight seconds of waiting is already the far
+        edge of what reads as connected to the flash you saw.
+      */
+      const metres = 140 + far * far * 2600
+      const delay = metres / 343
+      const at = now + delay
+
+      /*
+        Air absorption, as one number.
+
+        Everything below is filtered by this, and the fall-off is what turns the
+        same construction into a tear at a hundred metres and a rumble at two
+        and a half kilometres. The floor stops the far end disappearing entirely
+        into inaudible sub.
+      */
+      const air = Math.max(150, 9000 * Math.exp(-metres / 700))
+      const near = clamp(1 - metres / 900)
+
+      stormcrownSoundTelemetry.lightning++
+      stormcrownSoundTelemetry.distance = metres
+      stormcrownSoundTelemetry.gap = delay
+
+      /*
+        The stepped leader, which is the only part that is *not* delayed by much
+        — it is the last few tens of metres of channel forming right beside you,
+        so it is only heard when the strike is genuinely close. Sparse ticks,
+        never a rhythm.
+      */
+      if (near > 0.55 && now - lastElectric > 0.045) {
         lastElectric = now
-        burst(now, 0.052 + amount * 0.085, 0.07, 'highpass', 1850 + amount * 1600, 0.48, 1.85)
-        if (far < 0.2) burst(now, 0.035 + amount * 0.045, 0.1, 'bandpass', 620, 3.4, 1.1)
+        const ticks = 2 + Math.floor(Math.random() * 4)
+        for (let i = 0; i < ticks; i++) {
+          const tick = at - 0.012 * (ticks - i) - Math.random() * 0.01
+          if (tick <= now) continue
+          burst(tick, near * (0.012 + Math.random() * 0.03), 0.012,
+            'bandpass', 2600 + Math.random() * 4200, 1.1, 2.2, strike)
+        }
       }
+
       if (now - lastThunder < 0.72) return
       lastThunder = now
 
-      const delay = 0.14 + far * 1.05
-      const at = now + delay
-      const body = (0.19 + amount * 0.19) * (1 - far * 0.28)
-      // The first body is physical and near. The parallel mountain send is the
-      // weather coming back from slopes after the direct sound has landed.
-      burst(at, body * 0.78, 1.15 + far * 0.5, 'lowpass', 205 - far * 65, 0.7, 0.29)
-      burst(at, body, 1.65 + far * 0.9, 'lowpass', 230 - far * 80, 0.72, 0.31, mountainSend)
-      burst(at + 0.035, body * 0.62, 0.72, 'bandpass', 105 + (below ? 24 : 0), 1.35, 0.22, mountainSend)
-      fallingTone(at, below ? 91 : 78, 34, body * 0.3, 1.25 + far * 0.5, dry)
-      fallingTone(at, below ? 91 : 78, 34, body * 0.58, 1.4 + far * 0.5, mountainSend)
-      // A slope answers later. It is deliberately not a copy of the first hit.
-      burst(at + 0.42 + far * 0.36, body * 0.48, 1.45, 'lowpass', 135, 0.8, 0.18, mountainSend)
+      const body = (0.2 + amount * 0.2) * (0.55 + near * 0.45)
+
+      /*
+        The shock front. Only close, and it is the fastest thing in the road:
+        an attack measured in a millisecond or two and gone before the body
+        underneath it has finished arriving.
+      */
+      if (near > 0.12) {
+        const crack = near * near * (0.22 + amount * 0.2)
+        burst(at, crack, 0.055, 'highpass', Math.min(air, 2200), 0.5, 2.4, strike)
+        burst(at + 0.004, crack * 0.8, 0.16, 'bandpass', Math.min(air, 900), 0.8, 1.5, strike)
+      }
+
+      // The clap: the main body of it, straight at you.
+      burst(at, body * 0.9, 0.42 + far * 0.5, 'lowpass', Math.min(air, 420), 0.7, 0.34, strike)
+      burst(at + 0.02, body * 0.7, 0.9 + far * 0.7, 'lowpass', Math.min(air, 240), 0.72, 0.26, mountainSend)
+      fallingTone(at, below ? 94 : 80, 32, body * 0.34, 1.1 + far * 0.7, strike)
+
+      /*
+        And then the peals.
+
+        Unevenly spaced on purpose — `gap` grows as it goes so the roll spreads
+        out rather than ticking, and every one of them gets its own level,
+        colour and side. A distant strike gets more of them over a longer window
+        because there is more crooked channel between you and it, which is the
+        physical reason distant thunder rolls for longer than near thunder does.
+      */
+      const peals = 5 + Math.floor(Math.random() * 5)
+      let when = at + 0.18 + Math.random() * 0.12
+      for (let i = 0; i < peals; i++) {
+        const life = i / peals
+        // Loud early, but never monotonically: a roll that only decays is a
+        // reverb tail, and the swells are the whole character of the thing.
+        const level = body * (0.5 - life * 0.34) * (0.45 + Math.random())
+        const colour = Math.min(air, 90 + Math.random() * 260 * (0.4 + near * 0.6))
+        burst(when, Math.max(0.002, level), 0.35 + Math.random() * (0.6 + far * 1.1),
+          'lowpass', colour, 0.65 + Math.random() * 0.5, 0.16 + Math.random() * 0.16,
+          Math.random() < 0.45 ? strike : mountainSend)
+        when += (0.12 + Math.random() * 0.4) * (1 + life * (1.4 + far * 2.2))
+      }
+
+      /*
+        The duck.
+
+        Only when it is close enough to be the loudest thing on the mountain.
+        Down about three decibels as the front lands, then most of a second
+        coming back — fast enough to be the crack making room for itself,
+        slow enough that nobody hears a compressor.
+      */
+      if (near > 0.35) {
+        const depth = 1 - 0.29 * near
+        weather.gain.setTargetAtTime(depth, at, 0.05)
+        weather.gain.setTargetAtTime(1, at + 0.22, 0.34)
+      }
     },
 
     rod(force, charged) {

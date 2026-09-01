@@ -49,6 +49,8 @@ import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { deep } from './depth'
 import { storm } from './weather'
+import { enclosureOf, tunnel } from './tunnel'
+import { RootwaySound } from './RootwaySound'
 import {
   LAMP_SLOTS,
   createLights,
@@ -584,6 +586,12 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {track.stage === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
+      {/*
+        The Rootway has no world component of its own — the tunnel, the lamps
+        and the fires are all built inline above — so its soundscape mounts
+        here rather than inside one. It draws nothing.
+      */}
+      {track.stage === 'rootway' ? <RootwaySound track={track} /> : null}
 
       {chunks.map((chunk, i) => (
         <mesh
@@ -776,6 +784,8 @@ interface FrameArgs {
  */
 /** Scratch for the weather's once-a-frame look at the road under the car. */
 const stormRoad = emptyRoad()
+/** The same, for the Rootway's look at how big the rock around it is. */
+const rootRoad = emptyRoad()
 
 class Driving {
   private readonly car: CarState
@@ -1035,6 +1045,31 @@ class Driving {
       if (storm.flash > 0.001) {
         u.uAmbient.value.lerp(FLASH, storm.flash * (0.55 + high * 0.25))
       }
+    }
+
+    /*
+      How big the rock is around the car, for the ear.
+
+      Sampled a little way *up* the road rather than under the wheels, for the
+      same reason the Moonbreak reads its depth eight metres ahead: a chamber
+      that arrives in the sound on the frame the bonnet enters it has already
+      been visible for half a second, and a room you can see before you can
+      hear it is a painting. Twelve metres is about a third of a second at
+      racing speed, which is enough to lead the eye without leading it visibly.
+
+      Eased, and not much — a metre of road either side of a throat genuinely is
+      a step in the geometry, but stepping the *sound* would make every seam
+      between two bands audible as a click in the reverb.
+    */
+    if (this.track.stage === 'rootway') {
+      const road = roadAtRoute(this.track, this.car.s + 12, this.car.shortcut, rootRoad)
+      const want = enclosureOf(road.ceiling, road.width + vergeWidth(road.room))
+      const ease = 1 - Math.exp(-4.5 * args.delta)
+      tunnel.s = this.car.s
+      tunnel.speed = Math.hypot(this.car.vs, this.car.vn)
+      tunnel.enclosed += (want - tunnel.enclosed) * ease
+      tunnel.ceiling += (road.ceiling - tunnel.ceiling) * ease
+      tunnel.wet += (road.wet - tunnel.wet) * ease
     }
 
     /*

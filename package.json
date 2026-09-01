@@ -25,6 +25,7 @@
     "locks": "node scripts/locks-check.mjs",
     "lift": "npx --yes tsx scripts/lift-check.ts",
     "moonbreak": "npx --yes tsx scripts/moonbreak-check.ts",
+    "sound": "npx --yes tsx scripts/sound-check.ts",
     "storm": "npx --yes tsx scripts/storm-check.ts",
     "questions": "npx --yes tsx scripts/questions-check.ts"
   },
