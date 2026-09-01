@@ -334,6 +334,14 @@ export interface Memory {
   height: number
 
   /**
+   * Which part of the photograph lives inside its three-by-two glass pane.
+   * Normalised left-to-right and top-to-bottom; old memories without these
+   * values are centred at 0.5.
+   */
+  cropX?: number
+  cropY?: number
+
+  /**
    * The average colour of the picture, '#rrggbb'.
    *
    * What a pane *is* until it is close enough to be worth loading. Most of the
@@ -1010,6 +1018,8 @@ export interface DataLayer {
     ext: string
     width: number
     height: number
+    cropX?: number
+    cropY?: number
     tint: string
     blur: string
     when?: string

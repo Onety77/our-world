@@ -24,10 +24,11 @@ changes that. It leans sideways too, which is the smaller half. The same
 photograph is a hundred and thirty-two pixels now: thirty-four per cent of a
 phone screen.
 
-**Every frame is the same shape.** Three by two, with the picture centre-
-cropped into it. Identical frames disappear, and once they disappear you are
-looking at photographs rather than at a row of differently-shaped outlines.
-Cropped only in the wall — opening a memory shows the whole thing.
+**Every frame is the same shape.** Three by two, with the part of the picture
+chosen before it is hung. Identical frames disappear, and once they disappear
+you are looking at photographs rather than at a row of differently-shaped
+outlines. Opening keeps that authored pane; holding the photograph temporarily
+reveals everything outside the frame, and releasing closes it again.
 
 **Every memory grows a flower** on the floor in front of it, in that
 photograph's own colours pushed away from grey so it reads as a flower rather
@@ -141,14 +142,16 @@ at.
 
 ## What a memory is
 
-Six things are stored that are not the picture, and each earns its place:
+Eight things are stored that are not the picture, and each earns its place:
 
 - `tint` — what the pane *is* at any distance. Averaged in linear light, not
   over the sRGB bytes; a flat mean of encoded values is the classic way to turn
   a sunset into mud.
 - `blur` — sixteen pixels as a data URI, a few hundred bytes, in the document.
-- `width`/`height` — so the glass is cut to the right shape before anything has
-  been decoded, and nothing is ever cropped to fit.
+- `width`/`height` — so the glass knows the photograph's true proportions
+  before anything has been decoded, including how much lies beyond its frame.
+- `cropX`/`cropY` — the point chosen inside the fixed pane. Old memories that
+  predate the editor read as `0.5, 0.5`, so none of their glass moves.
 - `when` and `why` — free text, both optional, and the only two questions asked.
   Not a title, a description, tags, an album, a place and a rating. Every field
   that could be left blank is a small accusation that you have not finished.

@@ -1,5 +1,6 @@
 /**
- * The Rootway's soundscape, driven over a real lap against a stub Web Audio API.
+ * The roads' soundscapes, driven over real laps against a stub Web Audio API —
+ * and the music's volume law, driven directly.
  *
  * ---------------------------------------------------------------------------
  * **The bug this exists to catch is a non-finite value reaching an AudioParam.**
@@ -25,12 +26,23 @@
  *               output disconnected — otherwise leaving a road and coming back
  *               stacks a second cave on the first
  *
+ * The Stormcrown adds the two claims its thunder makes about physics — the
+ * flash-to-bang gap is a real distance, and near and far are a range rather
+ * than two presets — plus the duck, which is the one thing here that could fail
+ * silently and for ever: if its return to 1 were dropped the mountain would get
+ * quieter with every strike and nothing on screen would say so.
+ *
+ * And the music's `musicWant`, which is pure for exactly this reason: it is the
+ * only real judgement in `roadMusic` and everything around it is an `<audio>`
+ * element and an AudioContext, neither of which exists here.
+ *
  *   npm run sound
  * ---------------------------------------------------------------------------
  */
 
 import { createRootwayVoice, rootwaySoundTelemetry } from '../src/systems/rootway'
 import { createStormcrownVoice, stormcrownSoundTelemetry } from '../src/systems/stormcrown'
+import { musicWant, type RaceMusicState } from '../src/world/games/ember-rally/roadMusic'
 import {
   enclosureOf,
   fieldAt,
@@ -532,6 +544,88 @@ ok(
   stormRunning.map((x) => x.kind).join(', '),
 )
 ok('the output was disconnected', disconnects >= 2)
+
+// ---------------------------------------------------------------------------
+// And the music, which belongs to the race
+// ---------------------------------------------------------------------------
+
+/*
+  `musicWant` is the only real judgement in `roadMusic`, and until it was pulled
+  out it was also the only part nothing could reach: everything around it is an
+  `<audio>` element and an AudioContext, and Node has neither.
+
+  What is being checked is the *shape* rather than any particular number — that
+  the thing is silent when it should be silent, that it arrives rather than
+  appears, and that each of the three ducks actually pulls. The numbers
+  themselves are a mix decision and belong in the file, not here.
+*/
+console.log('\nthe music, which belongs to the race\n')
+
+const race = (over: Partial<RaceMusicState> = {}): RaceMusicState => ({
+  phase: 'running', paused: false, since: 60, drift: 0, depth: 0, thunder: 0, ...over,
+})
+
+ok('silent before the green light', musicWant(race({ phase: 'ready' }), 0) === 0)
+ok('silent at the flag', musicWant(race({ phase: 'finished' }), 0) === 0)
+ok('silent off the road', musicWant(race({ phase: 'off' }), 0) === 0)
+ok('silent while paused', musicWant(race({ paused: true }), 0) === 0)
+ok('and a replay gets the music too', musicWant(race({ phase: 'replay' }), 0) > 0.5)
+
+const opening = musicWant(race({ since: 0 }), 0)
+const settled = musicWant(race({ since: 60 }), 0)
+ok(`it starts almost silent — ${opening.toFixed(3)}`, opening > 0 && opening < 0.1)
+ok(`and arrives completely — ${settled.toFixed(3)}`, settled > 0.98)
+
+/*
+  And that the climb is *slow at first*, which is the whole instruction. A
+  linear fade would be at half by halfway; this must be well under that or the
+  music is simply being turned up rather than arriving.
+*/
+const halfway = musicWant(race({ since: 7.5 }), 0)
+ok(`half way through the arrival it is only at ${(halfway * 100).toFixed(0)}%`,
+  halfway > 0.1 && halfway < 0.35)
+
+let climbing = true
+let last = -1
+for (let t = 0; t <= 30; t += 0.5) {
+  const now = musicWant(race({ since: t }), 0)
+  if (now < last - 1e-9) climbing = false
+  last = now
+}
+ok('and it never goes backwards on the way up', climbing)
+
+for (const [what, state] of [
+  ['a drift', race()],
+  ['the water', race({ depth: 1 })],
+  ['thunder', race({ thunder: 1 })],
+] as const) {
+  const quiet = what === 'a drift'
+    ? musicWant(state, 1)
+    : musicWant(state, 0)
+  const loud = musicWant(race(), 0)
+  ok(
+    `${what} pulls it down — ${loud.toFixed(2)} to ${quiet.toFixed(2)}`,
+    quiet < loud * 0.75 && quiet > 0,
+  )
+}
+
+/*
+  Nothing may leave 0..1, and nothing may be NaN. The ducks multiply, so three
+  at once is the case that would go negative if any of them were ever allowed
+  over 1 — and three at once is a real moment: sideways, underwater, in a storm.
+*/
+let strayed = ''
+for (const since of [0, 3, 15, 90]) {
+  for (const d of [0, 0.5, 1, 2, -1]) {
+    for (const w of [0, 0.5, 1, 2, -1]) {
+      for (const th of [0, 0.5, 1, 2, -1]) {
+        const v = musicWant(race({ since, depth: w, thunder: th }), d)
+        if (!Number.isFinite(v) || v < 0 || v > 1) strayed ||= `since ${since} drift ${d} depth ${w} thunder ${th} -> ${v}`
+      }
+    }
+  }
+}
+ok('and every combination stays a real number between 0 and 1', strayed === '', strayed)
 
 console.log(failed === 0 ? '\nall good\n' : `\n${failed} failed\n`)
 process.exit(failed === 0 ? 0 : 1)

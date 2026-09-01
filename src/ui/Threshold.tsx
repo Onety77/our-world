@@ -1196,6 +1196,13 @@ function TheGlasshouse() {
       <button ref={keys.ref(0)} type="button" onClick={() => void start()}>
         leave a memory here
       </button>
+      {count > 0 && (
+        <span className="glasshouse-walk-guide">
+          <span className="glasshouse-walk-touch">swipe up or down</span>
+          <span className="glasshouse-walk-pointer">scroll or use the arrow keys</span>
+          {' '}to walk backward through what we kept
+        </span>
+      )}
     </div>
   )
 }

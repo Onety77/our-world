@@ -709,3 +709,26 @@ shared-file changes, measurements, and anything another agent should preserve.
   different place. Added the VAPID setup and one-time deploy instructions.
 - Generated the updated rules. TypeScript, production Vite build, function
   syntax check and the rules generator pass.
+
+## 1 September 2026 - Codex - The Glasshouse, rebuilt around the pane
+
+- Rebuilt the leave-memory ritual as a three-by-two pane composer. A photograph
+  can be turned in quarter rotations, dragged to choose exactly what its glass
+  will keep, or nudged with the arrow keys. Rotation is baked once from the
+  original pixels; the chosen crop is shared by the WebGL pane and opened view.
+- Opening a memory now preserves that authored frame instead of unexpectedly
+  expanding the full photograph. Pressing and holding reveals the original
+  proportions only while held, then release returns it to its pane.
+- Repaired the mobile aisle gesture with pointer capture and a post-drag tap
+  guard, stopped browser overscroll from stealing it, added an in-world walking
+  guide, and made phone movement settle promptly without losing its softness.
+- Found the real cause of the very slow memory approach: the overlay reduced
+  the world to eight frames per second while the camera was still moving, then
+  the safety delta clamp turned that into literal slow motion. Open memories
+  now keep a measured 30 fps lane while other covered scenes remain throttled.
+- Tiered the surrounding trees, vines and floating motes by device quality so
+  mobile spends its detail on the glass, flowers and photographs themselves.
+  Existing memories remain centred through backward-compatible crop defaults.
+- Updated the Glasshouse documentation and Firestore crop validation. Verified
+  the mobile and desktop room in-browser, including swipe travel, quick camera
+  arrival and press/hold release; rules, TypeScript and production build pass.

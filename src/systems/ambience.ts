@@ -103,7 +103,7 @@ export const worldSoundTelemetry = {
   last: '' as WorldCue | '',
   cues: 0,
 }
-if (import.meta.env.DEV) {
+if (import.meta.env?.DEV) {
   const host = globalThis as typeof globalThis & { __gardenSound?: typeof worldSoundTelemetry }
   host.__gardenSound = worldSoundTelemetry
 }
@@ -149,8 +149,10 @@ export interface AmbienceHandle {
   setMaster(value: number): void
   /** Suspend synthesis while no page can hear it. Music uses another element. */
   setSuspended(suspended: boolean): void
-  /** The world and effects faders. Music is applied at the player. */
-  setLevels(levels: { world: number; effects: number }): void
+  /** All three faders, as they live in the graph. See the note on the method. */
+  setLevels(levels: { world: number; effects: number; music: number }): void
+  /** The music fader as a node, for a road's soundtrack. Null before the graph. */
+  musicOut(): { context: AudioContext; output: AudioNode } | null
   /**
    * One stroke of a pen on paper. Called per character while writing.
    *
@@ -304,6 +306,19 @@ export function createAmbience(): AmbienceHandle {
   let allSamples: Float32Array<ArrayBuffer> | null = null
   /** Things that happen because of you: the car, the stones, the pen. */
   let effectsBus: GainNode | null = null
+  /**
+   * Music, which for a long time was not in this graph at all.
+   *
+   * The corner player is an `<audio>` element with its fader applied to
+   * `element.volume`, and that is still true and still right — it is a song
+   * playing, and nothing needs to happen to it. A road's music is different:
+   * it has to duck under a drift, drop away underwater and get out of the way
+   * of thunder, and none of that is reachable from a number on an element.
+   *
+   * So there is a bus for it now, and it is the third of the three the fader
+   * model in `systems/volume` has always claimed. See `ember-rally/roadMusic`.
+   */
+  let musicBus: GainNode | null = null
   let running = false
 
   /** One gain per layer, kept so the place and the wind can steer them. */
@@ -905,6 +920,10 @@ function aWeight(hz: number): number {
       effectsBus.gain.value = gainOf(levelsNow().effects)
       effectsBus.connect(master)
 
+      musicBus = ctx.createGain()
+      musicBus.gain.value = gainOf(levelsNow().music)
+      musicBus.connect(master)
+
       const buffer = noiseBuffer(ctx)
       grain = buffer
 
@@ -1117,10 +1136,12 @@ function aWeight(hz: number): number {
     },
 
     /**
-     * Move the two faders that live in the audio graph.
+     * Move the faders that live in the audio graph.
      *
-     * Music is not here: it is an `<audio>` element in the corner player and
-     * never enters this context, so its fader is applied where it plays.
+     * All three now. The corner player still applies the music fader to its own
+     * element — nothing about that changed — but a road's music goes through
+     * `musicBus` so it can be ducked, and a fader that moved one and not the
+     * other would be two different music volumes wearing one label.
      */
     setLevels(levels) {
       worldEnabled = levels.world > 0.001
@@ -1130,6 +1151,18 @@ function aWeight(hz: number): number {
       // playing should not step.
       worldBus?.gain.setTargetAtTime(gainOf(levels.world), now, 0.08)
       effectsBus?.gain.setTargetAtTime(gainOf(levels.effects), now, 0.08)
+      musicBus?.gain.setTargetAtTime(gainOf(levels.music), now, 0.08)
+    },
+
+    /**
+     * The music fader, as a node to hang a road's soundtrack on.
+     *
+     * Null until the graph exists, exactly like `synthesisBus`. The caller owns
+     * whatever it connects and must disconnect on the way out.
+     */
+    musicOut(): { context: AudioContext; output: AudioNode } | null {
+      if (!ctx || !musicBus) return null
+      return { context: ctx, output: musicBus }
     },
 
     setMaster(value) {
@@ -1461,12 +1494,12 @@ export const ambience = createAmbience()
   against another — quieter, darker, or not — without anybody having to trust a
   description of it.
 */
-if (import.meta.env.DEV) {
+if (import.meta.env?.DEV) {
   const host = globalThis as typeof globalThis & { __ambience?: AmbienceHandle }
   host.__ambience = ambience
 }
 
-if (import.meta.env.DEV) {
+if (import.meta.env?.DEV) {
   const host = globalThis as typeof globalThis & {
     __gardenSoundPlay?: (kind: WorldCue, weight?: number) => void
   }

@@ -242,10 +242,20 @@ re-validates the lot.
 
 ## What is left
 
-**One thing: the music.** Everything else in this document is either built or
-deliberately not wanted.
+**Almost nothing.** The music is in — one file per road in `./music/`, picked up
+by name, played by `roadMusic.ts` and driven per frame from the race loop. It is
+not a level soundtrack: it starts at the green light, arrives over about fifteen
+seconds from almost silence, ducks for the drift, the Drowned Mile and a close
+strike, fades on a pause and again at the flag.
 
-1. Pixabay, six files, per-road bed with a speed layer — the beds go on the
-   `music` fader, which a road now has entirely to itself
-2. `Cache-Control` on hashed assets in `vercel.json`
-3. Freesound CC0, only against a written list of what is actually missing
+1. **`Cache-Control` on hashed assets in `vercel.json`** — the one real gap.
+   Without it every visit re-validates the beds, and they are the biggest thing
+   the app ships (the Stormcrown's is 5.6 MB).
+2. **Convert the beds to `.m4a`** when convenient. AAC at the same bitrate is
+   meaningfully better, and the loader already prefers `.m4a` over `.mp3` for
+   the same name — so it is a drop-in, not a migration.
+3. **A second intensity layer** per road, if the single bed ever feels flat. Two
+   files started together need a shared clock, so this wants decoded buffers
+   rather than a second element; it is a real piece of work rather than a
+   filename, and the single bed may well be enough.
+4. Freesound CC0, only against a written list of what is actually missing.

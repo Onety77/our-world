@@ -94,6 +94,7 @@ export interface RallyTuning {
   driftGrip: number
   driftScrub: number
   driftSwingCost: number
+  driftHold: number
   driftTopSpeed: number
   driftLineHold: number
   driftPlace: number
@@ -163,6 +164,7 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
   driftGrip: 2.05,
   driftScrub: 0.2,
   driftSwingCost: 0.34,
+  driftHold: 0.85,
   driftTopSpeed: 20,
   driftLineHold: 0.85,
   driftPlace: 0.5,
@@ -881,6 +883,21 @@ export const DIALS: readonly Dial[] = [
     max: 1,
     step: 0.01,
     show: (v) => `${Math.round(v * 100)}% of the width`,
+  },
+  {
+    key: 'driftHold',
+    group: 'drift',
+    name: 'Does a held slide keep its speed',
+    note: 'A drift you are holding steady stops paying for its angle. Hanging the car out costs speed — that is the entry, and it should — but a slide already settled at its angle is not scrubbing any harder this second than it was last second, and it used to go on being charged as though it were. Measured, holding one direction against a dial reading 72 km/h: it fell to 57 and sat there. Only for a *held* slide: swinging the pose across for a chicane still costs everything it did, because that really is the tyres being dragged bodily across the road.',
+    low: 'bleeds all the way',
+    high: 'keeps it all',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    show: (v) =>
+      v <= 0.005
+        ? 'off — angle always costs'
+        : `keeps ${Math.round(v * 100)}% of it back`,
   },
   {
     key: 'driftTopSpeed',

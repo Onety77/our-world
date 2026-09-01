@@ -298,7 +298,7 @@ export const useOutdoors = create<PlaceVolumeState>((set, get) => ({
   measure what came out is the difference between believing that and knowing
   it. See `scripts/places.mjs`.
 */
-if (import.meta.env.DEV) {
+if (import.meta.env?.DEV) {
   const host = globalThis as typeof globalThis & { __outdoors?: typeof useOutdoors }
   host.__outdoors = useOutdoors
 }

@@ -40,6 +40,116 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · a held drift keeps its speed, and the music belongs to the race
+
+Two things, both reported from actually playing it.
+
+### The drift bled away to nothing
+
+Holding one direction bled to 57 km/h against a dial reading 72 — on every
+seed, with the scrub dial wound to zero, which is why turning dials had not
+helped. `npm run drift` reproduced it exactly.
+
+The whole deficit was `DRIFT_ANGLE_COST` applied to a *held* pose. That cost is
+right about the entry — hanging the car out scrubs speed and should — and wrong
+about every second after it. A slide already settled at its angle is not
+scrubbing harder this second than last; it is sliding, which is the point of it.
+What genuinely costs is *moving* the pose, and that is the swing term, untouched.
+
+So `car.driftSettled` counts how long the pose has been still (knocked back
+hard when `|swing|` is over 0.35 rad/s), and the angle's bite fades with it.
+`TUNE.driftHold`, new dial in the drift group, default 0.85.
+
+    before   108 · 65 · 59 · 58 · 57 · 57 · 57
+    after    108 · 65 · 67 · 70 · 70 · 70 · 70
+
+The entry still costs; then it holds. **Both side-swap traces are byte-identical
+to before** — a swap never settles, so it never gets the relief, which is what
+keeps a chicane expensive.
+
+### The music belonged to the level, not the race
+
+My mistake, and the owner caught it: the first version started on `open()` and
+stopped on `close()`, so it played over the road-choice screen, over the result,
+and over the menu. It is driven per frame now from the race loop — one `want`,
+the product of an arrival curve and three ducks, all smoothed:
+
+- **arrival** 15 s from a floor of 0.06, smoothstep *squared*, so the loud half
+  is the second half and it reads as arriving rather than as a fader being
+  pushed. Measured over a real Rootway race: 0.026 → 0.413.
+- **drift** −42%, down in 0.14 s and back over 0.55. Hand-driven with real key
+  events, because the fire-spirit is far too tidy to ever trigger it: drift 0 →
+  1.00, `want` 0.242 → 0.188 on entry, released on exit.
+- **depth** −50% *and* a lowpass from 20 kHz to 620 Hz. Measured on the dive:
+  the sweep tracks `deep.at` exactly.
+- **thunder** −55%. This one needed a new signal: the flash and the bang are up
+  to eight seconds apart, so `lightning()` now returns when the sound will
+  arrive and `StormcrownSound` books the envelope into `storm.thunder`.
+
+Three things worth not rediscovering:
+
+> **`frame()` returns early when paused**, before anything I had added — so the
+> music never learned it was paused and held its last level under the paused
+> screen. It is driven from `driveMusic()` above that guard now.
+
+> **`ambience` had no music bus.** `volume.ts` has documented three faders for
+> a long time and the graph only ever had two, because the corner player applies
+> its own. A road bed needs a real node to be ducked and filtered on, so there
+> is a third now, and `setLevels` moves all three.
+
+> **`import.meta.glob` does not exist in Node**, and `roadMusic` reaching
+> `session.ts` took `npm run rally` down on the import line. Wrapped in a
+> try/catch — Vite transforms the call before the browser sees it, so the try
+> wraps an object literal and costs nothing. The same import chain then hit bare
+> `import.meta.env.DEV` at module scope in four `systems` files; those are
+> optional-chained now, which makes the whole audio layer Node-importable.
+
+`musicWant` is exported and pure so `npm run sound` can drive it — it is the
+only real judgement in the module and everything around it is an element and a
+context. Thirteen new assertions, including that every combination of the three
+ducks stays a finite number in 0..1.
+
+## 1 Sep · Claude · a road can bring its own music
+
+`ember-rally/roadMusic.ts`, and an empty `ember-rally/music/` folder with a
+README in it. Drop `rootway.m4a` — or `.mp3`, see below — into that folder and
+the road plays it. There is nothing else to wire up.
+
+`import.meta.glob('./music/*.{m4a,mp3}', { query: '?url' })` rather than files in
+`public/`, so the build content-hashes them: `rootway-BOjAqwDR.m4a`. Change a
+sample and the URL changes, so a phone holding the old mix cannot keep playing
+it, and the old one can be cached for ever. With a fixed path in `public/` that
+problem is unsolvable without renaming files by hand.
+
+**Both `.m4a` and `.mp3`, and the mp3 is not a grudging fallback.** Pixabay hands
+you an mp3. If only `.m4a` were read, adding a song would begin with installing
+ffmpeg — a real step, on a real evening, between somebody and the thing they
+wanted to do. `.m4a` wins when both exist, because converting is worth doing
+eventually and worth nothing first.
+
+One real bug found by driving it, and it is not a StrictMode curiosity:
+
+> `open()` is an effect in `EmberRally` and `close()` is that effect's cleanup,
+> so every road in development is opened, closed and opened again within a few
+> ms. The close scheduled a 700 ms fade-out; the fade-out ended *after* the
+> second open had a track playing and called `pause()` on it. Symptom:
+> `AbortError: The play() request was interrupted by a call to pause()`, and the
+> road came up silent every time. **Production reaches the same race by pressing
+> "again" while a road is still fading out.** Fixed with a generation counter —
+> every start or stop takes a number and a deferred step does nothing unless its
+> number is still current. Last call wins.
+
+`__roadMusic` in dev carries `stage`, `level`, `silent`, `source`, `sounding` and
+`problem`. `problem` earns its place: a track that will not play is the failure
+somebody will actually hit, and its symptom is silence — which is also what
+success looks like on a road with no music. Without it, "I added the song and
+nothing happened" has no next step.
+
+Measured in a browser: corner song playing → enter the Rootway → corner stops,
+bed fades to full, `sounding: true` → leave the road → bed stops and the road
+lets go of it. Repo left with the folder empty, so nothing ships until a real
+file does.
+
 ## 1 Sep · Claude · the thunder is a distance now, not a thump
 
 Codex's sound brief said the one thing worth *buying* was thunder, and I agreed

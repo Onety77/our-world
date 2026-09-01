@@ -48,8 +48,10 @@ const FADERS: { key: keyof Levels; name: string; what: string }[] = [
  */
 function useLiveFaders(levels: Levels) {
   useEffect(() => {
-    ambience.setLevels({ world: levels.world, effects: levels.effects })
-  }, [levels.world, levels.effects])
+    ambience.setLevels({ world: levels.world, effects: levels.effects, music: levels.music })
+    // Music is in the dependencies now: a road's soundtrack goes through the
+    // graph's own music bus, so dragging that fader has to reach in here too.
+  }, [levels.world, levels.effects, levels.music])
 }
 
 export function Volumes() {

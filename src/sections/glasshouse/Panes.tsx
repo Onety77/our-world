@@ -242,6 +242,8 @@ const NEAR_FRAG = /* glsl */ `
    * layout.ts.
    */
   uniform vec2 uCrop;
+  /** The chosen point inside that crop, left-to-right and bottom-to-top. */
+  uniform vec2 uCropFocus;
   /** 0 by day, 1 after dark: the glass holds its own light. */
   uniform float uNight;
 
@@ -263,7 +265,7 @@ const NEAR_FRAG = /* glsl */ `
   ${GLASS_BODY}
 
   void main() {
-    vec2 shot = (vUv - 0.5) * uCrop + 0.5;
+    vec2 shot = vUv * uCrop + (vec2(1.0) - uCrop) * uCropFocus;
     vec3 picture = texture2D(uMap, shot).rgb;
 
     /*
@@ -622,6 +624,7 @@ export function NearPane({
           uWhose: { value: memory.by === 'cool' ? 1 : 0 },
           uTogether: { value: 0 },
           uCrop: { value: new Vector2(1, 1) },
+          uCropFocus: { value: new Vector2(0.5, 0.5) },
           uNight: { value: 0 },
           uHush: { value: 0 },
           uFogColor: { value: new Color('#c3cebe') },
@@ -647,6 +650,8 @@ export function NearPane({
     ;(u.uFace.value as Vector2).set(slot.side, slot.tilt)
     ;(u.uTint.value as Color).set(memory.tint)
     ;(u.uCrop.value as Vector2).set(...cropFor(memory.width, memory.height))
+    // Stored top-to-bottom for DOM/CSS; texture UVs rise bottom-to-top.
+    ;(u.uCropFocus.value as Vector2).set(memory.cropX ?? 0.5, 1 - (memory.cropY ?? 0.5))
     u.uWhose.value = memory.by === 'cool' ? 1 : 0
   }, [material, slot, size, memory])
 

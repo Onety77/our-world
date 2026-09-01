@@ -30,6 +30,7 @@ import type { Memory } from '@/data/types'
 import { useSections } from '@/systems/sections'
 import { useMemories } from '@/systems/memories'
 import { ambience } from '@/systems/ambience'
+import { useQuality } from '@/systems/quality'
 import { isHersAndNew, useStoodIn } from '@/systems/newness'
 import { buildInstanced, useFormMaterial } from '@/world/forms'
 import { useSceneEnv } from '@/world/SceneEnv'
@@ -101,6 +102,7 @@ const SHOT =
 
 export default function Glasshouse() {
   const { palette } = useSceneEnv()
+  const tier = useQuality((quality) => quality.tier)
   const memories = useMemories((s) => s.all)
   const openId = useMemories((s) => s.openId)
   const open = useMemories((s) => s.open)
@@ -109,6 +111,11 @@ export default function Glasshouse() {
   const me = useData().me
   const presence = useWorldSlice((s) => s.presence)
   const theirs = presence[otherUser(me)]
+
+  useEffect(() => {
+    document.body.classList.add('in-glasshouse')
+    return () => document.body.classList.remove('in-glasshouse')
+  }, [])
 
   /** How long the building is, in metres, including the empty frame's bay. */
   const length = useMemo(() => {
@@ -521,6 +528,10 @@ export default function Glasshouse() {
   useEffect(() => {
     const onUp = (e: PointerEvent) => {
       if (!useSections.getState().entered) return
+      // The opened photograph owns its whole gesture, including the release
+      // after a hold-to-reveal. Never let that same release raycast through it
+      // and silently replace the memory being looked at.
+      if (useMemories.getState().openId) return
       // A drag along the aisle ends in a pointerup too, and it is not a tap.
       if (pulling()) return
       const target = e.target as HTMLElement | null
@@ -625,10 +636,11 @@ export default function Glasshouse() {
       of making the Glasshouse feel properly overgrown is a few thousand
       triangles and no extra draw call.
     */
-    const built = buildInstanced(base, vines(length, Math.round(length * 2.5)))
+    const density = tier === 'low' ? 1.15 : tier === 'medium' ? 1.75 : 2.5
+    const built = buildInstanced(base, vines(length, Math.round(length * density)))
     base.dispose()
     return built
-  }, [length])
+  }, [length, tier])
   useEffect(() => () => growth.dispose(), [growth])
 
   return (
@@ -646,16 +658,16 @@ export default function Glasshouse() {
         palette={palette}
         openings={[Math.PI * 0.5, Math.PI * 1.5]}
         seed="glasshouse:wood"
-        count={130}
+        count={tier === 'low' ? 54 : tier === 'medium' ? 82 : 130}
         centre={[GLASS_X, 0]}
         innerRadius={22}
         outerRadius={64}
         gapWidth={0.9}
         flatten={0.4}
-        leafDetail={0.34}
+        leafDetail={tier === 'low' ? 0.2 : tier === 'medium' ? 0.27 : 0.34}
         /* The heaviest thing in the Glasshouse was never the Glasshouse — it
             was the branchwork of these hundred and thirty trees. See woodDetail. */
-        woodDetail={0.3}
+        woodDetail={tier === 'low' ? 0.16 : tier === 'medium' ? 0.23 : 0.3}
       />
 
       {/*
@@ -710,7 +722,11 @@ export default function Glasshouse() {
 
         <Flowers memories={memories} palette={palette} />
         <EmptyFrame index={memories.length} palette={palette} />
-        <Motes length={length} palette={palette} />
+        <Motes
+          length={length}
+          palette={palette}
+          density={tier === 'low' ? 0.85 : tier === 'medium' ? 1.45 : 2.2}
+        />
       </group>
       </group>
       </group>

@@ -29,8 +29,6 @@ import type { SkyPalette } from '@/systems/palette'
 import { ambientLightLevel } from '@/world/forms'
 import { HALF, RIDGE } from './layout'
 
-/** Motes per metre of building. Sparse: this is dust, not snow. */
-const DENSITY = 2.2
 /** However long the Glasshouse gets, never more than this. */
 const MOST = 900
 
@@ -101,8 +99,17 @@ const FRAG = /* glsl */ `
   }
 `
 
-export function Motes({ length, palette }: { length: number; palette: SkyPalette }) {
-  const count = Math.min(MOST, Math.round(length * DENSITY))
+export function Motes({
+  length,
+  palette,
+  density = 2.2,
+}: {
+  length: number
+  palette: SkyPalette
+  /** Motes per metre. Quality tiers thin these before dropping frame rate. */
+  density?: number
+}) {
+  const count = Math.min(MOST, Math.round(length * density))
 
   const geometry = useMemo(() => {
     const quad = new PlaneGeometry(1, 1)

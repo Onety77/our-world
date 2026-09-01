@@ -110,6 +110,15 @@ export interface Prepared {
   tint: string
   /** A data: URI of a sixteen-pixel version. A few hundred bytes. */
   blur: string
+  /**
+   * The picker result, kept only until the memory is hung.
+   *
+   * Rotation is chosen after the first preparation pass. Keeping the source
+   * lets the final turn be drawn once from the original pixels instead of
+   * repeatedly re-encoding an already-compressed preview every time somebody
+   * taps the rotate control. This value never crosses the data seam.
+   */
+  source: Blob
 }
 
 /** Something went wrong with a picture, in words a person can act on. */
@@ -260,7 +269,7 @@ function averageOf(pixels: Uint8ClampedArray): string {
  * Nothing here touches the network and nothing here touches the seam. Throws
  * `PictureTrouble` with a sentence worth showing a person.
  */
-export async function prepare(file: Blob): Promise<Prepared> {
+export async function prepare(file: Blob, quarterTurns = 0): Promise<Prepared> {
   if (file.size > TOO_BIG) {
     throw new PictureTrouble(
       'That picture is enormous — over forty megabytes. Something smaller, or a ' +
@@ -279,13 +288,39 @@ export async function prepare(file: Blob): Promise<Prepared> {
       blowing a 400-pixel photograph up to sixteen hundred would store four
       times the bytes for exactly the same picture, slightly softer.
     */
-    const shrink = Math.min(1, LONGEST / Math.max(source.width, source.height))
-    const width = Math.round(source.width * shrink)
-    const height = Math.round(source.height * shrink)
+    const turns = ((Math.round(quarterTurns) % 4) + 4) % 4
+    const turned = turns % 2 === 1
+    const orientedWidth = turned ? source.height : source.width
+    const orientedHeight = turned ? source.width : source.height
+    const shrink = Math.min(1, LONGEST / Math.max(orientedWidth, orientedHeight))
+    const width = Math.round(orientedWidth * shrink)
+    const height = Math.round(orientedHeight * shrink)
 
     const [big, ctx] = canvasOf(width, height)
     ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(source, 0, 0, width, height)
+    /*
+      The pixels are turned before they are stored, not merely tagged.
+
+      That keeps every reader honest: the WebGL pane, the tiny preview, the
+      opened DOM photograph and a downloaded Storage object all agree about
+      which way is up, including old browsers that know nothing about a custom
+      orientation field.
+    */
+    if (turns === 1) {
+      ctx.translate(width, 0)
+      ctx.rotate(Math.PI / 2)
+      ctx.drawImage(source, 0, 0, height, width)
+    } else if (turns === 2) {
+      ctx.translate(width, height)
+      ctx.rotate(Math.PI)
+      ctx.drawImage(source, 0, 0, width, height)
+    } else if (turns === 3) {
+      ctx.translate(0, height)
+      ctx.rotate(-Math.PI / 2)
+      ctx.drawImage(source, 0, 0, height, width)
+    } else {
+      ctx.drawImage(source, 0, 0, width, height)
+    }
     const encoded = await toBlob(big, QUALITY)
 
     // The sixteen-pixel version, drawn off the already-shrunk one so the
@@ -330,6 +365,7 @@ export async function prepare(file: Blob): Promise<Prepared> {
       height,
       tint,
       blur,
+      source: file,
     }
   } finally {
     source.close()

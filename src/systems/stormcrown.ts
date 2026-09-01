@@ -36,8 +36,16 @@ export interface StormcrownSoundState {
 
 export interface StormcrownVoice {
   set(state: StormcrownSoundState): void
-  /** One visible stroke. The voice groups close repeats into one thunder body. */
-  lightning(force: number, remoteness: number, below: boolean): void
+  /**
+   * One visible stroke. The voice groups close repeats into one thunder body.
+   *
+   * Returns **when the sound will arrive** — seconds from now, and how close it
+   * was, 0..1 — or null when this stroke was folded into one already rolling.
+   * The flash and the bang are separated by as much as eight seconds here, so
+   * anything that wants to react to the *thunder* rather than to the lightning
+   * cannot use the moment of the call. See `storm.thunder` in `weather.ts`.
+   */
+  lightning(force: number, remoteness: number, below: boolean): { in: number; near: number } | null
   /** The old metal landmark passing the car. */
   rod(force: number, charged: number): void
   stop(): void
@@ -520,7 +528,7 @@ export function createStormcrownVoice(bus: SynthesisBus): StormcrownVoice {
       =========================================================================
     */
     lightning(force, remoteness, below) {
-      if (stopped) return
+      if (stopped) return null
       const now = ctx.currentTime
       const amount = clamp(force)
       const far = clamp(remoteness)
@@ -571,7 +579,7 @@ export function createStormcrownVoice(bus: SynthesisBus): StormcrownVoice {
         }
       }
 
-      if (now - lastThunder < 0.72) return
+      if (now - lastThunder < 0.72) return null
       lastThunder = now
 
       const body = (0.2 + amount * 0.2) * (0.55 + near * 0.45)
@@ -628,6 +636,10 @@ export function createStormcrownVoice(bus: SynthesisBus): StormcrownVoice {
         weather.gain.setTargetAtTime(depth, at, 0.05)
         weather.gain.setTargetAtTime(1, at + 0.22, 0.34)
       }
+
+      // So anything outside this graph can meet the thunder when it lands
+      // rather than when the sky lit up. See `storm.thunder`.
+      return { in: delay, near }
     },
 
     rod(force, charged) {

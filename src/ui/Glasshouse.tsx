@@ -31,9 +31,211 @@ import { openPane } from '@/sections/glasshouse/view'
 // Named apart from this file's own `say`, which puts words on the glass.
 import { useSay as useWords } from '@/systems/useSay'
 import { useMenuKeys } from './useMenuKeys'
+import { prepare } from '@/systems/picture'
 
 /** How long the glass takes to form, in milliseconds. Matches the shader. */
 const FORMING_MS = 2400
+
+interface CropPoint {
+  x: number
+  y: number
+}
+
+const centreCrop = (): CropPoint => ({ x: 0.5, y: 0.5 })
+
+/**
+ * The pane before it exists.
+ *
+ * A canvas rather than a CSS `object-position` preview because a quarter-turn
+ * changes which dimension is being cropped. Drawing the actual three-by-two
+ * result means the preview, the WebGL shader and the memory somebody later
+ * opens all make the same promise.
+ */
+function MemoryCropEditor({
+  src,
+  turns,
+  crop,
+  onCrop,
+  onTurn,
+}: {
+  src: string
+  turns: number
+  crop: CropPoint
+  onCrop(point: CropPoint): void
+  onTurn(turns: number): void
+}) {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const image = useRef<HTMLImageElement | null>(null)
+  const [ready, setReady] = useState(0)
+  const drag = useRef<{
+    id: number
+    x: number
+    y: number
+    crop: CropPoint
+    overflowX: number
+    overflowY: number
+  } | null>(null)
+
+  useEffect(() => {
+    let gone = false
+    const next = new Image()
+    next.onload = () => {
+      if (gone) return
+      image.current = next
+      setReady((n) => n + 1)
+    }
+    next.src = src
+    return () => {
+      gone = true
+      image.current = null
+    }
+  }, [src])
+
+  const measure = useCallback(() => {
+    const img = image.current
+    const el = canvas.current
+    if (!img || !el) return null
+    const quarter = ((turns % 4) + 4) % 4
+    const sideways = quarter % 2 === 1
+    const sourceW = sideways ? img.naturalHeight : img.naturalWidth
+    const sourceH = sideways ? img.naturalWidth : img.naturalHeight
+    const scale = Math.max(el.width / sourceW, el.height / sourceH)
+    const width = sourceW * scale
+    const height = sourceH * scale
+    return {
+      img,
+      el,
+      quarter,
+      width,
+      height,
+      left: -(width - el.width) * crop.x,
+      top: -(height - el.height) * crop.y,
+      overflowX: Math.max(0, width - el.width),
+      overflowY: Math.max(0, height - el.height),
+    }
+  }, [turns, crop])
+
+  useEffect(() => {
+    const at = measure()
+    if (!at) return
+    const ctx = at.el.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, at.el.width, at.el.height)
+    ctx.save()
+    if (at.quarter === 1) {
+      ctx.translate(at.left + at.width, at.top)
+      ctx.rotate(Math.PI / 2)
+      ctx.drawImage(at.img, 0, 0, at.height, at.width)
+    } else if (at.quarter === 2) {
+      ctx.translate(at.left + at.width, at.top + at.height)
+      ctx.rotate(Math.PI)
+      ctx.drawImage(at.img, 0, 0, at.width, at.height)
+    } else if (at.quarter === 3) {
+      ctx.translate(at.left, at.top + at.height)
+      ctx.rotate(-Math.PI / 2)
+      ctx.drawImage(at.img, 0, 0, at.height, at.width)
+    } else {
+      ctx.drawImage(at.img, at.left, at.top, at.width, at.height)
+    }
+    ctx.restore()
+
+    // Old silvering and one quiet inner bevel: this is a pane being composed,
+    // not a generic crop rectangle from a photo editor.
+    const edge = ctx.createLinearGradient(0, 0, at.el.width, at.el.height)
+    edge.addColorStop(0, 'rgba(239, 229, 201, .44)')
+    edge.addColorStop(0.45, 'rgba(239, 229, 201, 0)')
+    edge.addColorStop(1, 'rgba(10, 14, 13, .5)')
+    ctx.strokeStyle = edge
+    ctx.lineWidth = 8
+    ctx.strokeRect(4, 4, at.el.width - 8, at.el.height - 8)
+  }, [measure, ready])
+
+  const start = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const at = measure()
+    if (!at) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drag.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      crop: { ...crop },
+      overflowX: at.overflowX,
+      overflowY: at.overflowY,
+    }
+  }
+
+  const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const held = drag.current
+    if (!held || held.id !== event.pointerId) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const scaleX = event.currentTarget.width / Math.max(1, rect.width)
+    const scaleY = event.currentTarget.height / Math.max(1, rect.height)
+    const dx = (event.clientX - held.x) * scaleX
+    const dy = (event.clientY - held.y) * scaleY
+    onCrop({
+      x: held.overflowX > 0
+        ? Math.max(0, Math.min(1, held.crop.x - dx / held.overflowX))
+        : 0.5,
+      y: held.overflowY > 0
+        ? Math.max(0, Math.min(1, held.crop.y - dy / held.overflowY))
+        : 0.5,
+    })
+  }
+
+  const stop = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (drag.current?.id !== event.pointerId) return
+    drag.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  const nudge = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+    const by = event.shiftKey ? 0.1 : 0.035
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+    event.preventDefault()
+    onCrop({
+      x: Math.max(0, Math.min(1, crop.x + (event.key === 'ArrowLeft' ? -by : event.key === 'ArrowRight' ? by : 0))),
+      y: Math.max(0, Math.min(1, crop.y + (event.key === 'ArrowUp' ? -by : event.key === 'ArrowDown' ? by : 0))),
+    })
+  }
+
+  const rotate = (by: number) => {
+    onCrop(centreCrop())
+    onTurn(((turns + by) % 4 + 4) % 4)
+  }
+
+  return (
+    <div className="memory-editor">
+      <div className="memory-editor-frame">
+        <canvas
+          ref={canvas}
+          width={720}
+          height={480}
+          tabIndex={0}
+          role="img"
+          aria-label="The part of the photograph that will appear in its glass pane"
+          onPointerDown={start}
+          onPointerMove={move}
+          onPointerUp={stop}
+          onPointerCancel={stop}
+          onKeyDown={nudge}
+          onContextMenu={(event) => event.preventDefault()}
+        />
+        <span className="memory-editor-corners" aria-hidden="true" />
+      </div>
+      <div className="memory-editor-tools">
+        <button type="button" onClick={() => rotate(-1)} aria-label="Rotate left 90 degrees">
+          <span aria-hidden="true">&#8634;</span> turn left
+        </button>
+        <span>drag the photograph to choose what the glass keeps</span>
+        <button type="button" onClick={() => rotate(1)} aria-label="Rotate right 90 degrees">
+          turn right <span aria-hidden="true">&#8635;</span>
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Leaving one
@@ -58,6 +260,8 @@ export function LeavingAMemory() {
   const [when, setWhen] = useState('')
   const [why, setWhy] = useState('')
   const [busy, setBusy] = useState(false)
+  const [turns, setTurns] = useState(0)
+  const [crop, setCrop] = useState<CropPoint>(centreCrop)
 
   /*
     One object URL per prepared picture, revoked when it is replaced.
@@ -76,12 +280,19 @@ export function LeavingAMemory() {
     return () => URL.revokeObjectURL(url)
   }, [chosen])
 
+  useEffect(() => {
+    setTurns(0)
+    setCrop(centreCrop())
+  }, [chosen])
+
   const close = useCallback(() => {
     setHanging(false)
     setPreview(null)
     setWhen('')
     setWhy('')
     setBusy(false)
+    setTurns(0)
+    setCrop(centreCrop())
   }, [setHanging])
 
   if (!hanging) return null
@@ -90,7 +301,22 @@ export function LeavingAMemory() {
     if (!chosen || busy) return
     setBusy(true)
     try {
-      const memory = await data.hangMemory({ ...chosen, when, why })
+      /*
+        Turn the source once, at the end.
+
+        The editor rotates a canvas instantly while somebody decides; doing a
+        real encode on every tap would repeatedly compress the same picture.
+        Only the chosen turn is baked into the stored pixels.
+      */
+      const ready = turns === 0 ? chosen : await prepare(chosen.source, turns)
+      const { source: _source, ...picture } = ready
+      const memory = await data.hangMemory({
+        ...picture,
+        cropX: crop.x,
+        cropY: crop.y,
+        when,
+        why,
+      })
       /*
         Three things, in this order, and the order is the ceremony.
 
@@ -122,11 +348,12 @@ export function LeavingAMemory() {
             answers are about this picture and you cannot write them from
             memory of a photograph you glanced at in a picker.
           */}
-          <img
-            className="leaving-picture"
+          <MemoryCropEditor
             src={preview}
-            alt=""
-            style={{ aspectRatio: `${chosen.width} / ${chosen.height}` }}
+            turns={turns}
+            crop={crop}
+            onCrop={setCrop}
+            onTurn={setTurns}
           />
 
           <div className="leaving-lines">
@@ -158,7 +385,7 @@ export function LeavingAMemory() {
 
           <div className="leaving-ways">
             <button type="button" className="leaving-go" onClick={() => void hang()} disabled={busy}>
-              {busy ? 'putting it in the glass' : 'put it in the glass'}
+              {busy ? (turns ? 'turning it into glass' : 'putting it in the glass') : 'put it in the glass'}
             </button>
             <button type="button" className="put-back quiet" onClick={close} disabled={busy}>
               not this one
@@ -201,6 +428,7 @@ export function OpenMemory() {
   const [lost, setLost] = useState(false)
   const [taking, setTaking] = useState(false)
   const [saying, setSaying] = useState<string | null>(null)
+  const [revealing, setRevealing] = useState(false)
   const field = useRef<HTMLTextAreaElement>(null)
   const mine = memory?.by === me
   const theirLine = memory?.theirs
@@ -247,6 +475,7 @@ export function OpenMemory() {
     setTaking(false)
     setPicture(null)
     setLost(false)
+    setRevealing(false)
     if (!memory) return
     let gone = false
     data
@@ -304,11 +533,10 @@ export function OpenMemory() {
     every frame for the length of the turn and a re-render per frame of a
     full-resolution photograph is the exact thing the technical law forbids.
 
-    The **width** matches the pane and the **height** comes from the picture's
-    own proportions, which is the one place the two deliberately differ: the
-    frame crops to three by two, and opening is where the rest of the
-    photograph comes back. So it grows past the top and bottom of its own
-    frame, which is a nice way of saying *this is all of it*.
+    The normal state matches the pane in both dimensions and uses the crop that
+    was chosen before it was hung. Pressing and holding is the deliberate
+    exception: the box expands to the photograph's own proportions for exactly
+    as long as the hand remains down.
     ---------------------------------------------------------------------------
   */
   const laid = useRef<HTMLDivElement>(null)
@@ -326,41 +554,30 @@ export function OpenMemory() {
         el.style.opacity = '0'
         return
       }
-      /*
-        The pane's width, and the photograph's own height.
-
-        This is where the crop comes back: the glass in the wall is three by
-        two whatever shape the picture is, and opening one lets the top and
-        bottom a portrait lost grow back past the frame. Which is the right
-        gesture and, unbounded, walks a nine-by-sixteen straight off the top of
-        a phone and through the words at the bottom. So it is capped by the
-        room left on screen, and a very tall picture gives back some width to
-        keep its shape — a portrait hung on a wide pane, which is what it is.
-      */
+      /* The pane normally stays the pane. Holding temporarily reveals all. */
       let w = openPane.halfW * 2
-      let h = w / ratio
-      /*
-        Half again as tall as the glass, and no taller.
-
-        A portrait cropped to a three-by-two pane and then allowed all its
-        height back is twice the height of the frame it came out of, which on a
-        phone is the whole screen and the words at the bottom as well — the
-        lightbox this whole pass exists to get rid of, arriving by the back
-        door. Measured against the *pane* rather than the viewport because that
-        is the thing it has to look right next to, and because the pane is
-        already the right size for the screen: the standing distance was solved
-        to make it so. The viewport line underneath is a backstop for a very
-        short window.
-      */
-      const tallest = Math.min(openPane.halfH * 3, window.innerHeight * 0.66)
-      if (h > tallest) {
-        h = tallest
-        w = h * ratio
+      let h = openPane.halfH * 2
+      let x = openPane.x
+      let y = openPane.y
+      if (revealing) {
+        const widest = window.innerWidth * 0.9
+        const tallest = window.innerHeight * 0.72
+        w = widest
+        h = w / ratio
+        if (h > tallest) {
+          h = tallest
+          w = h * ratio
+        }
+        x = window.innerWidth / 2
+        y = Math.max(
+          h / 2 + 20,
+          Math.min(window.innerHeight * 0.45, window.innerHeight - h / 2 - 110),
+        )
       }
       el.style.width = `${w}px`
       el.style.height = `${h}px`
-      el.style.left = `${openPane.x - w / 2}px`
-      el.style.top = `${openPane.y - h / 2}px`
+      el.style.left = `${x - w / 2}px`
+      el.style.top = `${y - h / 2}px`
       /*
         It arrives at the very end of the turn.
 
@@ -386,7 +603,7 @@ export function OpenMemory() {
     }
     frame = requestAnimationFrame(place)
     return () => cancelAnimationFrame(frame)
-  }, [memory, turned])
+  }, [memory, turned, revealing])
 
   /*
     Nothing to look at once it has been taken out.
@@ -432,7 +649,7 @@ export function OpenMemory() {
 
   return (
     <div
-      className={`opened ${together ? 'together' : ''}`}
+      className={`opened ${together ? 'together' : ''}${revealing ? ' revealing-memory' : ''}`}
       // The whole colour of the room, handed to CSS once. Everything tinted by
       // this — the wash behind, the rules under the text — reads off one value,
       // so the picture and its surroundings can never disagree.
@@ -446,7 +663,27 @@ export function OpenMemory() {
         of glass you walked to. It sits outside the flip container because the
         flip is a thing the back does; see below.
       */}
-      <div ref={laid} className="opened-laid" aria-hidden={turned}>
+      <div
+        ref={laid}
+        className={`opened-laid${revealing ? ' revealing' : ''}`}
+        aria-hidden={turned}
+        role="img"
+        aria-label={memory.why ?? memory.when ?? 'A memory'}
+        onPointerDown={(event) => {
+          if (turned || lost) return
+          event.currentTarget.setPointerCapture(event.pointerId)
+          setRevealing(true)
+        }}
+        onPointerUp={(event) => {
+          setRevealing(false)
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }
+        }}
+        onPointerCancel={() => setRevealing(false)}
+        onLostPointerCapture={() => setRevealing(false)}
+        onContextMenu={(event) => event.preventDefault()}
+      >
         {/*
           The preview underneath and the photograph over it.
 
@@ -456,11 +693,19 @@ export function OpenMemory() {
           — a tunnel, a bucket that has gone — what is left is still true, just
           very blurry, which is the honest failure.
         */}
-        <img className="opened-blur" src={memory.blur} alt="" aria-hidden="true" />
+        <img
+          className="opened-blur"
+          src={memory.blur}
+          alt=""
+          aria-hidden="true"
+          style={{ objectPosition: `${(memory.cropX ?? 0.5) * 100}% ${(memory.cropY ?? 0.5) * 100}%` }}
+        />
         <img
           className={`opened-picture ${picture ? 'here' : ''}`}
           src={picture ?? memory.blur}
           alt={memory.why ?? memory.when ?? 'A memory'}
+          draggable={false}
+          style={{ objectPosition: `${(memory.cropX ?? 0.5) * 100}% ${(memory.cropY ?? 0.5) * 100}%` }}
         />
       </div>
 
@@ -550,6 +795,9 @@ export function OpenMemory() {
         )}
         {memory.when && <p className="opened-when">{memory.when}</p>}
         {memory.why && <p className="opened-why">{memory.why}</p>}
+        {!turned && !lost && (
+          <p className="opened-reveal-hint">hold the photograph to see beyond the frame</p>
+        )}
         {together && (
           <p className="opened-both">
             {/* Only ever while it is true. See `looking` on Presence. */}

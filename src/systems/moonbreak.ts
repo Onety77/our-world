@@ -47,7 +47,7 @@ export const moonbreakSoundTelemetry = {
   creature: 0,
   arches: 0,
 }
-if (import.meta.env.DEV) {
+if (import.meta.env?.DEV) {
   const host = globalThis as typeof globalThis & { __rallySound?: Record<string, unknown> }
   host.__rallySound ??= {}
   host.__rallySound.moonbreak = moonbreakSoundTelemetry

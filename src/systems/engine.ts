@@ -85,7 +85,7 @@ export interface EngineState {
 
 /** Development-only mix reference for balancing the world against the car. */
 export const engineSoundTelemetry = { rms: 0, peak: 0 }
-if (import.meta.env.DEV) {
+if (import.meta.env?.DEV) {
   const host = globalThis as typeof globalThis & { __rallySound?: Record<string, unknown> }
   host.__rallySound ??= {}
   host.__rallySound.engine = engineSoundTelemetry

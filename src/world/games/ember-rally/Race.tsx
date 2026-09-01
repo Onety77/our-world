@@ -50,6 +50,7 @@ import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { deep } from './depth'
 import { storm } from './weather'
 import { enclosureOf, tunnel } from './tunnel'
+import { setRaceMusic, type RaceMusicState } from './roadMusic'
 import { RootwaySound } from './RootwaySound'
 import {
   LAMP_SLOTS,
@@ -102,7 +103,7 @@ import { useData } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { readSitting } from '@/systems/lobby'
 import { keepRallyDiagnostics } from '@/systems/rallyDiagnostics'
-import { useRace } from './session'
+import { useRace, type RaceSession } from './session'
 import {
   KEEPALIVE_MS,
   Rolling,
@@ -786,6 +787,21 @@ interface FrameArgs {
 const stormRoad = emptyRoad()
 /** The same, for the Rootway's look at how big the rock around it is. */
 const rootRoad = emptyRoad()
+/**
+ * One frame of the race, as the music hears it.
+ *
+ * Module-level and rewritten in place, like the three road-state objects — this
+ * is written sixty times a second and allocating a fresh one each frame is the
+ * kind of garbage that turns into a stutter on a phone halfway down a road.
+ */
+const music: RaceMusicState = {
+  phase: 'off',
+  paused: false,
+  since: 0,
+  drift: 0,
+  depth: 0,
+  thunder: 0,
+}
 
 class Driving {
   private readonly car: CarState
@@ -852,6 +868,8 @@ class Driving {
   private sunk = 0
   /** And how deep into Rootwake, eased the same way. See ROOTWAKE_DARK. */
   private hidden = 0
+  /** Seconds of *racing* — not of being on the road. The music's own clock. */
+  private musicSince = 0
   /** Seconds until the next stroke, and how many are left in this flash. */
   private nextStrike = 2
   private strokesLeft = 1
@@ -948,6 +966,41 @@ class Driving {
     this.cleared = false
   }
 
+  /**
+   * The music, which is the one sound here that belongs to the *race* rather
+   * than to the road.
+   *
+   * All three of its ducks come from numbers something else is already using:
+   * the slip the tyres are running, the depth the water is drawn at, and the
+   * thunder envelope the mountain's own soundscape books when a stroke is
+   * dealt. Nothing is computed for the music's benefit — the same rule the
+   * engine's inputs follow, and the reason the drift ducks on the exact frame
+   * the tyres let go rather than a moment after it.
+   *
+   * The clock is its own rather than `car.elapsed`, for two reasons. A replay
+   * does not advance the car's timer the way a run does, and the music should
+   * arrive over a replay exactly as it arrived over the race. And a pause must
+   * not go on counting: coming back from a minute in the menu should resume the
+   * swell, not skip past it.
+   */
+  private driveMusic(args: FrameArgs, session: RaceSession) {
+    const racing = session.phase === 'running' || session.phase === 'replay'
+    if (!racing) this.musicSince = 0
+    else if (!session.paused) this.musicSince += args.delta
+
+    const sideways = Math.abs(slipOf(this.car))
+    music.drift = Math.max(
+      this.car.driftBlend,
+      Math.max(0, Math.min(1, (sideways - 0.1) / 0.32)),
+    )
+    music.depth = this.track.stage === 'moonbreak' ? deep.at : 0
+    music.thunder = this.track.stage === 'stormcrown' ? storm.thunder : 0
+    music.phase = session.phase
+    music.paused = session.paused
+    music.since = this.musicSince
+    setRaceMusic(music, args.delta)
+  }
+
   frame(args: FrameArgs) {
     const session = useRace.getState()
     if (session.attempt !== this.attempt) this.restart(session.attempt)
@@ -967,6 +1020,18 @@ class Driving {
       down, because rebuilding the voice would cost the tunnel's reverb tail
       and you would come back to silence.
     */
+    /*
+      The music is told first, and it is told even while paused.
+
+      Everything else in this method is *stepping the world*, and the world does
+      not step while you are in the menu — so returning early is right for all
+      of it. The music is the exception, because the pause is a thing that
+      happened *to* it and it has a fade to run: told nothing, it simply held
+      whatever it was playing at full level under the paused screen, which is
+      the one place a soundtrack must not be.
+    */
+    this.driveMusic(args, session)
+
     if (session.paused) {
       this.engine?.set(SILENT)
       this.engine?.pressure(0)
@@ -1124,6 +1189,18 @@ class Driving {
       deep.far = u.uFogFar.value
     }
 
+    /*
+      And the music, which is the one sound here that belongs to the *race*
+      rather than to the road.
+
+      Everything it needs is already worked out by this point in the frame, and
+      all three of its ducks come from numbers something else is already using:
+      the slip the tyres are running, the depth the water is drawn at, and the
+      thunder envelope the mountain's own soundscape books when a stroke is
+      dealt. Nothing here is computed for the music's benefit — which is the
+      same rule the engine's inputs follow, and the reason the drift ducks on
+      the exact frame the tyres let go rather than a moment after it.
+    */
     if (session.phase === 'replay') this.stepReplay(args)
     else this.stepRace(args)
 

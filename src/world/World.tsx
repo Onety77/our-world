@@ -34,6 +34,7 @@ import { Ground } from './Ground'
 import { Horizon } from './Horizon'
 import { useActivity, useActivityMonitor } from '@/systems/activity'
 import { useRace } from '@/world/games/ember-rally/session'
+import { useMemories } from '@/systems/memories'
 
 /** `?shot=1` — see the `gl` options on the Canvas below. */
 const SHOTS =
@@ -453,6 +454,17 @@ const FRAMES: Record<Tier, number> = { low: 30, medium: 45, high: 60 }
  */
 const HIDDEN_FRAMES = 8
 
+/**
+ * An opened memory is translucent furniture, not an opaque sheet.
+ *
+ * The camera is still walking and turning toward its pane when the overlay
+ * mounts. Treating it as fully covered dropped that motion to eight frames a
+ * second; the Glasshouse clamps large deltas for safety, so the walk then ran
+ * in literal slow motion. Thirty is smooth on a phone and half the high-tier
+ * garden's ceiling once the room has settled.
+ */
+const OPEN_MEMORY_FRAMES = 30
+
 /** Motion that is still alive, but no longer spending a phone to prove it. */
 const IDLE_FRAMES = 12
 
@@ -496,13 +508,14 @@ function Pacer() {
   const idle = useActivity((s) => s.idle)
   const racePaused = useRace((s) => s.paused)
   const racePhase = useRace((s) => s.phase)
+  const lookingAtMemory = useMemories((s) => s.openId !== null)
   const stoppedRoad = stage && (racePaused || racePhase === 'finished')
   const wanted = !visible
     ? 0
     : stoppedRoad
       ? STOPPED_ROAD_FRAMES
       : covered && !stage
-        ? HIDDEN_FRAMES
+        ? lookingAtMemory ? OPEN_MEMORY_FRAMES : HIDDEN_FRAMES
         : idle && !stage
           ? IDLE_FRAMES
           : FRAMES[tier]

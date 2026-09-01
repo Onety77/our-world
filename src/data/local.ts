@@ -1155,6 +1155,8 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         at: Date.now(),
         width: input.width,
         height: input.height,
+        cropX: Math.max(0, Math.min(1, input.cropX ?? 0.5)),
+        cropY: Math.max(0, Math.min(1, input.cropY ?? 0.5)),
         tint: input.tint,
         blur: input.blur,
         path,

@@ -17,6 +17,7 @@
 
 import { create } from 'zustand'
 import { useListening } from '@/systems/listening'
+import { armRoadMusic, stopRoadMusic } from './roadMusic'
 import type { RallyRun } from './model'
 import type { Track } from './track'
 
@@ -161,6 +162,13 @@ export const useRace = create<RaceSession>((set) => ({
     watching a run back. A component would have to mount first, which on a cold
     load means a second and a half of a kilometre of tunnel being built with
     her song still going.
+
+    **And the road's own music is only *armed* here, not started.** Arming
+    fetches the file so the green light does not have to wait for it. Starting
+    it belongs to the race — see `roadMusic`, which had this wrong first: music
+    that begins when a level opens plays over the road-choice screen, over the
+    result, and over the menu afterwards, which is a level soundtrack rather
+    than a race.
     ---------------------------------------------------------------------------
   */
   open: ({ track, ghost, ghostName = '', wheelToWheel = false, grid = 0, onFinish }) => {
@@ -168,6 +176,7 @@ export const useRace = create<RaceSession>((set) => ({
     // than once for one change, and reaching outside the store from in there is
     // how you get a thing that happens twice on a good day.
     useListening.getState().silence()
+    armRoadMusic(track.stage)
     set((s) => ({
       phase: 'ready',
       paused: false,
@@ -184,6 +193,7 @@ export const useRace = create<RaceSession>((set) => ({
 
   watch: ({ track, replay }) => {
     useListening.getState().silence()
+    armRoadMusic(track.stage)
     set((s) => ({
       phase: 'replay',
       paused: false,
@@ -232,7 +242,10 @@ export const useRace = create<RaceSession>((set) => ({
     one node that was put back was the one that never appeared broken.
     ---------------------------------------------------------------------------
   */
-  close: () =>
+  close: () => {
+    // The road's music leaves with the road. The corner player stays silenced
+    // — coming back out is not a press, and only a press starts music again.
+    stopRoadMusic()
     set({
       phase: 'off',
       paused: false,
@@ -241,5 +254,6 @@ export const useRace = create<RaceSession>((set) => ({
       ghostName: '',
       replay: null,
       onFinish: null,
-    }),
+    })
+  },
 }))

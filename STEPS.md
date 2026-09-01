@@ -599,8 +599,10 @@ npm run tuning      that every one of the forty-two dials still reaches the car
 npm run sound       the Rootway's and the Stormcrown's soundscapes against a
                     stub Web Audio API: every value finite, every layer
                     actually reached over a real lap, the thunder's
-                    flash-to-bang gap a real distance, and nothing left
-                    running afterwards
+                    flash-to-bang gap a real distance, nothing left running
+                    afterwards — and the race music's volume law, which is
+                    silent before the green light and ducks for the drift,
+                    the water and the thunder
 npm run shaders     the shader mistake this codebase keeps making
 npm run tris        what the garden costs in triangles, by object
 npm run scatter     Scattergories, played headless

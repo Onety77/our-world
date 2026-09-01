@@ -267,6 +267,19 @@ const DRIFT_BLEND_IN = 7
 const DRIFT_BLEND_OUT = 5
 /** How far hanging it right out pulls the ceiling below TUNE.driftTopSpeed. */
 const DRIFT_ANGLE_COST = 0.45
+/**
+ * How fast the pose has to be moving to count as *being swung* rather than held.
+ *
+ * Radians per second. A swap is worth around three of these at its peak and a
+ * held slide sits near zero, so there is a wide gap between the two and nothing
+ * has to be finely judged.
+ */
+const DRIFT_SETTLE_SWING = 0.35
+/** How long a still pose has to be still before the angle stops being charged. */
+const DRIFT_SETTLE_FROM = 0.45
+const DRIFT_SETTLE_TO = 1.5
+/** And how fast being swung takes that back. Quick: a swap is not a held slide. */
+const DRIFT_UNSETTLE = 4
 /** How hard the ceiling pulls, per second. Fast enough to be the entry cost. */
 const DRIFT_CEILING_RATE = 1.3
 /*
@@ -405,6 +418,16 @@ export interface CarState {
   driftAngle: number
   /** Seconds the arrows have been near centre while drifting. Two lets go. */
   driftStraight: number
+  /**
+   * Seconds the pose has been *held* rather than swung, 0 when it is moving.
+   *
+   * Deliberately not `driftCharge`, which is the ember's and counts any slip at
+   * all: this one has to know the difference between a slide sitting at its
+   * angle and a slide being thrown across to the other side, because the first
+   * has stopped costing anything and the second is the most expensive thing you
+   * can do. See the ceiling in `integrate`.
+   */
+  driftSettled: number
 
   // --- how it is sitting ---------------------------------------------------
   /** Radians. Positive leans the car to its right. */
@@ -514,6 +537,7 @@ export function createCar(track: Track): CarState {
     driftBlend: 0,
     driftAngle: 0,
     driftStraight: 0,
+    driftSettled: 0,
     roll: 0,
     pitch: 0,
     heave: 0,
@@ -722,6 +746,8 @@ function driftMode(car: CarState, input: CarInput, dt: number, v: number) {
   if (!car.drifting && car.driftBlend < 0.01) {
     car.driftBlend = 0
     car.driftAngle = 0
+    // The next drift starts paying for its own entry. Nothing is inherited.
+    car.driftSettled = 0
   }
 }
 
@@ -1366,7 +1392,44 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     const sideways = Math.abs(Math.sin(car.driftAngle))
     const slide = sideways * sideways + Math.abs(swing) * TUNE.driftSwingCost
     let kept = speed * (1 - TUNE.driftScrub * slide * dt * car.driftBlend)
-    const ceiling = TUNE.driftTopSpeed * (1 - DRIFT_ANGLE_COST * sideways)
+
+    /*
+      ------------------------------------------------------------------------
+      **And whether the pose is being held or being moved**, which turns out to
+      be the difference between a drift that works and one that dies.
+
+      The angle cost above is right about the *entry*: hanging the car out
+      scrubs speed, and it should. It was wrong about everything after it. Held
+      at full lock the ceiling sat at its lowest for as long as you stayed
+      there, so a long corner taken on one arrow bled away to a crawl — measured
+      at 57 km/h against a dial reading 72, on every seed, with the scrub dial
+      wound to zero. The dial was not lying about the ceiling; the ceiling was
+      simply never the thing that held you.
+
+      A slide already settled at its angle is not scrubbing harder this second
+      than it was last second. It is sliding, which is the whole point of it —
+      the tyres found their equilibrium a second ago and the car is travelling
+      across the road at a steady attitude. What genuinely costs is *moving* the
+      pose, and that is the swing term, and it is untouched: throw it across for
+      a chicane and you pay for every radian, exactly as before.
+
+      So the angle's bite fades once the pose stops moving, and comes straight
+      back the moment it is thrown. `TUNE.driftHold` is how much of it fades —
+      at zero this whole block does nothing and the car behaves as it did.
+      ------------------------------------------------------------------------
+    */
+    if (Math.abs(swing) > DRIFT_SETTLE_SWING) {
+      car.driftSettled = Math.max(0, car.driftSettled - dt * DRIFT_UNSETTLE)
+    } else {
+      car.driftSettled += dt
+    }
+    const settledAt = Math.max(
+      0,
+      Math.min(1, (car.driftSettled - DRIFT_SETTLE_FROM) / (DRIFT_SETTLE_TO - DRIFT_SETTLE_FROM)),
+    )
+    const settled = settledAt * settledAt * (3 - 2 * settledAt)
+    const bite = DRIFT_ANGLE_COST * (1 - TUNE.driftHold * settled)
+    const ceiling = TUNE.driftTopSpeed * (1 - bite * sideways)
     if (kept > ceiling) {
       /*
         The further past it goes the harder it is pulled back, for the same

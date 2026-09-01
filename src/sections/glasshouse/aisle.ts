@@ -20,8 +20,20 @@
  * second of a wall of photographs.
  */
 
-/** How quickly the aisle settles on where you asked to be, per second. */
-const FOLLOW = 3.4
+const COARSE =
+  typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true
+
+/**
+ * How quickly the aisle settles on where you asked to be, per second.
+ *
+ * A phone is controlled in short thumb gestures and was spending several
+ * seconds coasting after the hand had already stopped. It gets a firmer settle;
+ * a mouse/trackpad keeps the longer gallery-like glide.
+ */
+const FOLLOW = COARSE ? 7.2 : 4.2
+
+/** The last real pull, so its pointer-up can never also open a pane. */
+let lastDraggedAt = 0
 
 export const aisle = {
   /** Live, eased. Metres from the oldest pane. */
@@ -180,10 +192,11 @@ export const focus = { open: 0 }
  * open one while looking. `opening` is 1 once a memory has been tapped.
  */
 export function stepLean(delta: number, toward: -1 | 0 | 1, opening: boolean): void {
-  const ease = 1 - Math.exp(-2.4 * delta)
+  const ease = 1 - Math.exp(-(COARSE ? 4.8 : 3.2) * delta)
   // Slower than the lean: this is a whole body turning rather than a glance,
   // and at this size a fast one reads as the room being yanked.
-  focus.open += ((opening ? 1 : 0) - focus.open) * (1 - Math.exp(-2.9 * delta))
+  focus.open += ((opening ? 1 : 0) - focus.open) *
+    (1 - Math.exp(-(COARSE ? 6.2 : 4.1) * delta))
 
   const want = toward * (TURN + (FACING - TURN) * focus.open)
   // Facing a wall means the building turns the other way about the point in
@@ -248,19 +261,23 @@ export function alongTheAisle(target: HTMLElement): () => void {
   const SLOP = 6
 
   let from: number | null = null
+  let pointer: number | null = null
   let base = 0
   let moved = 0
 
   const down = (e: PointerEvent) => {
     // Anything that is a control keeps its own gesture.
     if ((e.target as HTMLElement | null)?.closest('button, input, textarea, a')) return
+    if (!e.isPrimary) return
     from = e.clientY
+    pointer = e.pointerId
     base = aisle.at
     moved = 0
+    target.setPointerCapture?.(e.pointerId)
   }
 
   const move = (e: PointerEvent) => {
-    if (from === null) return
+    if (from === null || e.pointerId !== pointer) return
     // Not while a memory is open: you are standing in front of a picture, and
     // the building sliding under the thumb that is trying to read it is the
     // gesture fighting the moment.
@@ -268,7 +285,9 @@ export function alongTheAisle(target: HTMLElement): () => void {
     const dy = e.clientY - from
     moved = Math.max(moved, Math.abs(dy))
     if (moved < SLOP) return
+    e.preventDefault()
     aisle.grabbing = true
+    lastDraggedAt = performance.now()
     /*
       Written to `at` rather than to `drag`, and `drag` is left at zero.
 
@@ -282,13 +301,20 @@ export function alongTheAisle(target: HTMLElement): () => void {
     aisle.to = aisle.at
   }
 
-  const up = () => {
+  const up = (e: PointerEvent) => {
+    if (pointer !== null && e.pointerId !== pointer) return
+    if (moved >= SLOP) lastDraggedAt = performance.now()
+    if (pointer !== null && target.hasPointerCapture?.(pointer)) {
+      target.releasePointerCapture(pointer)
+    }
     from = null
+    pointer = null
     aisle.grabbing = false
   }
 
   /** A wheel or a trackpad, for whoever is looking at this on a laptop. */
   const wheel = (e: WheelEvent) => {
+    e.preventDefault()
     walkTo(aisle.to + e.deltaY * 0.012)
   }
 
@@ -317,17 +343,17 @@ export function alongTheAisle(target: HTMLElement): () => void {
   }
 
   target.addEventListener('pointerdown', down)
-  window.addEventListener('pointermove', move)
-  window.addEventListener('pointerup', up)
-  window.addEventListener('pointercancel', up)
-  window.addEventListener('wheel', wheel, { passive: true })
+  target.addEventListener('pointermove', move, { passive: false })
+  target.addEventListener('pointerup', up)
+  target.addEventListener('pointercancel', up)
+  window.addEventListener('wheel', wheel, { passive: false })
   window.addEventListener('keydown', key)
 
   return () => {
     target.removeEventListener('pointerdown', down)
-    window.removeEventListener('pointermove', move)
-    window.removeEventListener('pointerup', up)
-    window.removeEventListener('pointercancel', up)
+    target.removeEventListener('pointermove', move)
+    target.removeEventListener('pointerup', up)
+    target.removeEventListener('pointercancel', up)
     window.removeEventListener('wheel', wheel)
     window.removeEventListener('keydown', key)
     aisle.grabbing = false
@@ -336,5 +362,5 @@ export function alongTheAisle(target: HTMLElement): () => void {
 
 /** True while the aisle is being pulled, so a tap is not also a drag. */
 export function pulling(): boolean {
-  return aisle.grabbing
+  return aisle.grabbing || performance.now() - lastDraggedAt < 180
 }

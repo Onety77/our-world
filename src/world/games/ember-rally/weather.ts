@@ -18,6 +18,22 @@
  */
 
 export const storm = {
+  /**
+   * 0..1 — a thunder front *arriving*, which is not the same event as the flash.
+   *
+   * -------------------------------------------------------------------------
+   * The two are separated by as much as eight seconds on this road, because the
+   * gap between them is the distance and the distance is the whole point — see
+   * the note on `lightning` in `systems/stormcrown`. So anything that wants to
+   * react to the bang cannot watch `flash`, which is light and arrives at once.
+   *
+   * `StormcrownSound` schedules this off what `lightning()` reports back, and
+   * it is here rather than in the sound module because the sound module is in
+   * `systems` and must not know that a game exists. Read by the music, which
+   * gets out of the way of a close strike.
+   * -------------------------------------------------------------------------
+   */
+  thunder: 0,
   /** Metres along the authored climb, shared with its soundscape. */
   s: 0,
   /** True car speed in metres per second; camera motion is not vehicle motion. */

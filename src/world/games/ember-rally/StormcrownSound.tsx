@@ -33,6 +33,9 @@ export function StormcrownSound({ track }: { track: Track }) {
   const voice = useRef<StormcrownVoice | null>(null)
   const lastS = useRef(storm.s)
   const lastFlash = useRef(storm.flash)
+  /** Thunder that has been dealt and is still on its way here. */
+  const pending = useRef<{ at: number; force: number }[]>([])
+  const clock = useRef(0)
   const state = useRef<StormcrownSoundState>({
     speed: 0,
     s: 0,
@@ -56,7 +59,7 @@ export function StormcrownSound({ track }: { track: Track }) {
     [],
   )
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!voice.current) {
       const bus = ambience.synthesisBus()
       if (bus) voice.current = createStormcrownVoice(bus)
@@ -110,8 +113,38 @@ export function StormcrownSound({ track }: { track: Track }) {
       // one complete thunder roll follows a pair or triplet.
       if (storm.flash > lastFlash.current + 0.16 && storm.flash > 0.32) {
         const remoteness = clamp(0.06 + storm.above * 0.78 + (1 - storm.inCloud) * (1 - storm.above) * 0.2)
-        ear.lightning(storm.flash, remoteness, storm.above > 0.45)
+        const coming = ear.lightning(storm.flash, remoteness, storm.above > 0.45)
+        /*
+          Book the *arrival*, not the flash.
+
+          The voice knows how far away it was and therefore when the sound gets
+          here; nothing else does. Kept as a list because a distant roll can
+          still be on its way when the next stroke is dealt, and dropping the
+          earlier one would silently mean only the last strike in a storm was
+          ever heard by anything outside the audio graph.
+        */
+        if (coming !== null) {
+          pending.current.push({ at: clock.current + coming.in, force: coming.near })
+        }
       }
+
+      /*
+        And the envelope it makes when it lands: a hard edge, then most of a
+        second of decay. `storm.thunder` is what the music ducks under.
+      */
+      clock.current += Math.min(0.1, delta)
+      let loudest = 0
+      for (let i = pending.current.length - 1; i >= 0; i--) {
+        const strike = pending.current[i]
+        const age = clock.current - strike.at
+        if (age < 0) continue
+        if (age > 1.4) {
+          pending.current.splice(i, 1)
+          continue
+        }
+        loudest = Math.max(loudest, strike.force * Math.exp(-age * 2.6))
+      }
+      storm.thunder = loudest
 
       const travelled = s - lastS.current
       if (travelled >= 0 && travelled < 60) {
