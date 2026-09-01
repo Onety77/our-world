@@ -91,6 +91,7 @@ export function Player() {
     that is still playing on your own device.
   */
   const watchingLive = useWatching((s) => s.live)
+  const watchingTitle = useWatching((s) => s.shared.title)
   const watchable =
     watchingLive ||
     (presence[me]?.online === true && presence[them.id]?.online === true)
@@ -486,6 +487,50 @@ export function Player() {
         </div>
       )}
 
+      {/*
+        The way into the screen the two of you share, on a line of its own.
+
+        ---------------------------------------------------------------------
+        It began life as a fourth mark in the transport row, beside back, play
+        and forward. On a laptop that was fine; on a phone it pushed a row that
+        was already four things wide into something cramped and slightly wrong,
+        and it also said the wrong thing — it is not a transport control, it
+        does not move the music, and sitting among the things that do made it
+        read as one.
+
+        A line of its own, in words rather than a glyph, because that is what
+        the rest of this corner is: the whisper above it is a sentence, and
+        "fold away" is a sentence. And it can then *say* something — when a
+        screen is going it reports what is on, which is the corner's whole job.
+        ---------------------------------------------------------------------
+      */}
+      <button
+        type="button"
+        className={`player-watch${watchable ? ' ready' : ''}${watchingLive ? ' on' : ''}`}
+        onClick={() => {
+          if (!watchable) return
+          wake()
+          useWatching.getState().show()
+        }}
+        disabled={!watchable}
+        aria-label={
+          watchingLive
+            ? 'back to the screen you are sharing'
+            : watchable
+              ? `watch something with ${them.name}`
+              : `${them.name} isn't here to watch anything with`
+        }
+      >
+        <span className="player-watch-mark" aria-hidden="true">▷</span>
+        <span className="player-watch-words">
+          {watchingLive
+            ? (watchingTitle || `watching with ${them.name}`)
+            : watchable
+              ? `watch with ${them.name}`
+              : `watch together when ${them.name} is here`}
+        </span>
+      </button>
+
       <div className="player-bar">
         <button
           type="button"
@@ -515,41 +560,6 @@ export function Player() {
           </button>
           <button type="button" onClick={() => skip(1)} disabled={nothing} aria-label="next">
             ›
-          </button>
-          {/*
-            And the way into the screen the two of you share.
-
-            ---------------------------------------------------------------
-            **It is only a door while she is on the other side of it.** Watching
-            something together is the one thing in this garden that is worthless
-            alone — everything else here is built for two people who are almost
-            never awake at once, and this is the exception that only works when
-            they are. So it is present but inert when she is not here, and it
-            says which of the two it is rather than vanishing: a control that
-            disappears teaches you nothing, and you would go looking for it.
-
-            It sits in this row because that is what the row is. The corner
-            already holds the things that happen *while* you are somewhere
-            else, and a screen the two of you are in front of is exactly that.
-            ---------------------------------------------------------------
-          */}
-          <button
-            type="button"
-            className={`player-together${watchable ? ' ready' : ''}`}
-            onClick={() => {
-              if (!watchable) return
-              wake()
-              useWatching.getState().show()
-            }}
-            disabled={!watchable}
-            aria-label={
-              watchable
-                ? `watch something with ${them.name}`
-                : `${them.name} isn't here to watch anything with`
-            }
-            title={watchable ? `watch with ${them.name}` : `${them.name} isn't here`}
-          >
-            <span aria-hidden="true">▷</span>
           </button>
         </div>
       </div>

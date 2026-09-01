@@ -4609,38 +4609,24 @@ body:has(.talking) .leave-place {
   text-shadow: var(--lift);
   field-sizing: content;
   max-height: 34vh;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /*
-  ---------------------------------------------------------------------------
-  **Both composers are editable elements now, not form controls** — see
-  `ui/Ink` for why (iOS puts its form-navigation bar over the keyboard for any
-  focused form control, and there is no way to refuse it while being one).
-
-  A `<textarea>` brings a few behaviours for free that a `div` does not, and
-  all of them have to be put back or the field is subtly broken:
-
-    the caret     an empty editable box can collapse to nothing and take the
-                  cursor with it, so it holds one line's height
-    wrapping      a textarea wraps and keeps whitespace; a div collapses runs
-                  of spaces and will happily run one long word off the edge
-    growing       `field-sizing: content` is a form-control property. An
-                  editable element is already content-sized, which is the same
-                  behaviour arrived at from the other direction
-    scrolling     it still has to stop growing somewhere and scroll instead
-
-  The placeholder is drawn rather than declared, because `::placeholder` only
-  exists on form controls. It reads from `data-placeholder` and shows only
-  while the field is genuinely empty.
-  ---------------------------------------------------------------------------
+  These are real textareas again. WebKit shows the native iOS form assistant
+  for both textareas and contenteditable hosts, so pretending the fields are
+  divs did not remove it. Native fields give selection, composition, dictation
+  and multiline editing back without changing the garden's visual language.
 */
 .saying-field,
 .whisper-field {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  -webkit-user-modify: read-write-plaintext-only;
   cursor: text;
   overflow-y: auto;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .saying-field {
@@ -4652,23 +4638,10 @@ body:has(.talking) .leave-place {
   max-height: 22vh;
 }
 
-.saying-field[data-empty='yes']::before,
-.whisper-field[data-empty='yes']::before {
-  content: attr(data-placeholder);
+.saying-field::placeholder,
+.whisper-field::placeholder {
   color: var(--ink-faint);
-  pointer-events: none;
-}
-
-/*
-  Nothing to say and nothing said about it.
-
-  The Stars' field has no placeholder on purpose — see the note beside it in
-  `ui/Talking` — and an empty `attr()` still creates a box that pushes the
-  caret, so the rule is switched off entirely when there is no text for it.
-*/
-.saying-field:not([data-placeholder])::before,
-.whisper-field:not([data-placeholder])::before {
-  content: none;
+  opacity: 1;
 }
 
 /*
@@ -5158,6 +5131,19 @@ body:has(.talking) .leave-place {
   /* The beam and the clock belong under the bar, so they move with it. */
   .player-beamline {
     order: -1;
+  }
+
+  /*
+    And the way into the shared screen goes to the top of the block.
+
+    The stack is reversed here, so document order alone dropped it between the
+    transport and the beam — which splits a control from the line that measures
+    it. Above everything, it sits with the whisper: the two things in this
+    corner that are about the two of you, over the one that is about a song.
+  */
+  .player-watch {
+    order: 2;
+    margin: 0 0 0.1rem;
   }
 
   .player-elapsed {
@@ -7003,7 +6989,7 @@ body:has(.talking) .leave-place {
   border-bottom-color: rgba(242, 239, 230, 0.8);
 }
 
-.whisper-field[data-empty='yes']::before {
+.whisper-field::placeholder {
   color: rgba(242, 239, 230, 0.55);
 }
 
@@ -12954,8 +12940,10 @@ body.on-the-road .broke-what {
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  -webkit-user-modify: read-write-plaintext-only;
   cursor: text;
+  resize: none;
+  -webkit-appearance: none;
+  appearance: none;
   min-height: 1.3em;
   max-height: 18vh;
   overflow-y: auto;
@@ -12963,10 +12951,9 @@ body.on-the-road .broke-what {
 
 .together-field:focus { outline: none; border-bottom-color: rgba(242, 239, 230, 0.78); }
 
-.together-field[data-empty='yes']::before {
-  content: attr(data-placeholder);
+.together-field::placeholder {
   color: rgba(242, 239, 230, 0.5);
-  pointer-events: none;
+  opacity: 1;
 }
 
 .together-send,
@@ -13072,28 +13059,6 @@ body.on-the-road .broke-what {
 
 /* ---- the way in, in the corner ------------------------------------------ */
 
-.player-together {
-  background: none;
-  border: 0;
-  padding: 0.3rem 0.1rem;
-  font-size: 0.78rem;
-  line-height: 1;
-  color: var(--ink-faint);
-  cursor: pointer;
-  transition: color 200ms ease, opacity 200ms ease;
-}
-
-/*
-  Inert until she is here, and it says so by being dim rather than by leaving.
-
-  A control that disappears when it cannot be used teaches nobody anything and
-  sends you looking for it; one that is visibly waiting says "this needs her",
-  which is true and is the whole character of the thing.
-*/
-.player-together:disabled { opacity: 0.3; cursor: default; }
-.player-together.ready { color: #ffd9a8; }
-.player-together.ready:hover { color: var(--ink); }
-
 /* ---- wider than a phone ------------------------------------------------- */
 
 @media (min-width: 720px) {
@@ -13122,3 +13087,76 @@ body.on-the-road .broke-what {
   .together-screen { transition-duration: 0.01ms; }
   .together-hush { animation-duration: 0.01ms; }
 }
+
+/*
+  The way into the shared screen, on its own line in the corner.
+
+  Replaces the glyph that used to sit in the transport row — see the note in
+  `ui/Player`. It is a sentence because everything else in this corner is a
+  sentence, it is quiet because it is not the thing you came here for, and it
+  reports what is on when something is, which is what the corner is for.
+*/
+.player-watch {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0 0 0.35rem;
+  padding: 0.2rem 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  transition: color 200ms ease, opacity 200ms ease;
+}
+
+.player-watch-mark {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.player-watch-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+  Inert until she is here, and it says so by being dim rather than by leaving.
+
+  A control that disappears when it cannot be used teaches nobody anything and
+  sends you looking for it; one that is visibly waiting says "this needs her",
+  which is true and is the whole character of the thing.
+*/
+.player-watch:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+.player-watch.ready { color: rgba(242, 239, 230, 0.8); }
+.player-watch.ready:hover { color: var(--ink); }
+
+/* Something is on. The corner carries its name, in the colour of the beam. */
+.player-watch.on,
+.player-watch.on .player-watch-mark { color: #ffd9a8; }
+
+/* Nothing on, and the screen open anyway — the state that used to be missing. */
+.together-screen.dark { display: grid; place-items: center; }
+
+.together-nothing {
+  margin: 0;
+  padding: 0 1.4rem;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(242, 239, 230, 0.6);
+}
+
+.together-go:disabled { opacity: 0.25; cursor: default; }

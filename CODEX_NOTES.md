@@ -743,3 +743,16 @@ shared-file changes, measurements, and anything another agent should preserve.
   lines until their first measured transform is applied.
 - Verified the Stars at 390 x 844 with real pointer travel. Browser error and
   overlay checks, TypeScript and the production build pass.
+
+## 1 September 2026 - Codex - Corrected the iOS keyboard workaround
+
+- Confirmed the Previous/Next/Done strip is WebKit's native form assistant and
+  cannot be removed by HTML, CSS or JavaScript in the installed web app.
+- Removed the ineffective contenteditable workaround. WebKit treats an editable
+  host as a native text editor too, so it retained the strip while weakening
+  selection, dictation, composition and accessibility.
+- Restored proper controlled textareas across the main Stars composer, mini
+  chat and shared-watch fields. Preserved multiline input, Return behaviour,
+  native plain-text paste, focus restoration, placeholders and auto-growing.
+- TypeScript and the production build pass. Actually hiding the system strip
+  remains possible only through a native iOS wrapper such as Capacitor.

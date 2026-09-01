@@ -959,7 +959,7 @@ export function Talking() {
 
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')
-  const field = useRef<HTMLDivElement>(null)
+  const field = useRef<HTMLTextAreaElement>(null)
   const composer = useRef<HTMLDivElement>(null)
 
   // The draft lives above the conditional render, so folding the composer
@@ -1168,15 +1168,7 @@ export function Talking() {
             already is at the end of a sentence.
           */}
           <div className="saying-row">
-            {/*
-              Not a `<textarea>`, and that is the whole of the iOS fix.
-
-              Return belongs to the message; the visible light is the only send
-              action. See `ui/Ink` for why an editable element rather than a
-              form control — in short, WebKit puts its form-navigation bar over
-              the keyboard for any focused form control, and there is no way to
-              refuse it while being one.
-            */}
+            {/* Return belongs to the message; the visible light sends it. */}
             <Ink
               innerRef={field}
               className="saying-field ink"

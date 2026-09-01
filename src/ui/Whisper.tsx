@@ -125,7 +125,7 @@ export function Whisper() {
 
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
   const [draft, setDraft] = useState('')
-  const field = useRef<HTMLDivElement>(null)
+  const field = useRef<HTMLTextAreaElement>(null)
   const panel = useRef<HTMLDivElement>(null)
 
   // Folding keeps the draft in this mounted component, so an outside tap is
@@ -281,17 +281,7 @@ export function Whisper() {
         )}
       </button>
 
-      {/*
-        Not a `<form>`, and not a `<textarea>`.
-
-        A form with a field and a submit button in it is the clearest possible
-        instruction to iOS to put its form-navigation bar over the keyboard —
-        previous, next and Done, above a chat message. There is nothing here for
-        those arrows to walk between; it was never a form in any sense except
-        the markup. Return sends, the button sends, and neither needed one.
-
-        See `ui/Ink` for the field itself and the whole of that investigation.
-      */}
+      {/* This compact composer sends with either Return or its visible button. */}
       <div className="whisper-write">
         <Ink
           innerRef={field}

@@ -103,6 +103,17 @@ export function Together() {
     if (live) useListening.getState().silence()
   }, [live])
 
+  /*
+    Landing on the half that has something to do.
+
+    Opening a dark screen on the conversation is opening it on the one thing
+    that cannot start a film. Only on the way *in* — once something is on, the
+    tab is yours and switching to talk should stick.
+  */
+  useEffect(() => {
+    if (open && !live) useWatching.getState().setTab('queue')
+  }, [open, live])
+
   // --- the screen -----------------------------------------------------------
   useEffect(() => {
     if (!live || !stage.current) return
@@ -268,7 +279,23 @@ export function Together() {
   const shown = shared.playing ? Math.max(where, 0) : shared.at
   const through = span > 0 ? Math.max(0, Math.min(1, shown / span)) : 0
 
-  if (!live) return null
+  /*
+    ------------------------------------------------------------------------
+    **Open, or playing. Not "playing" alone.**
+
+    This read `if (!live) return null`, and `live` means a video has been
+    chosen — so pressing the way in on a garden that had never watched anything
+    set `open` and rendered nothing at all. You could not reach the search
+    without a video, and you could not get a video without the search. The
+    control worked perfectly and appeared to do nothing, which is the worst
+    shape a bug can have.
+
+    Open with nothing on is a real state and has to look like one: the screen is
+    dark, and the queue is the half you land on, because choosing something is
+    the only thing there is to do.
+    ------------------------------------------------------------------------
+  */
+  if (!open && !live) return null
 
   return (
     <div className={`together ${open ? 'full' : 'tucked'}`}>
@@ -281,8 +308,13 @@ export function Together() {
         reason to take it out of the document, because YouTube stops the moment
         it does. Everything else in this file may come and go.
       */}
-      <div className="together-screen">
+      <div className={`together-screen${live ? '' : ' dark'}`}>
         <div ref={stage} className="together-stage" />
+        {!live && open && (
+          <p className="together-nothing">
+            Nothing on. Find something below, or paste a link.
+          </p>
+        )}
         {!open && (
           <button
             type="button"
@@ -304,6 +336,11 @@ export function Together() {
       {open && (
         <div className="together-room">
           <Transport
+            live={live}
+            onStop={() => {
+              move({ videoId: null, title: '', playing: false, at: 0, queue: shared.queue })
+              useWatching.getState().tuck()
+            }}
             playing={shared.playing}
             through={through}
             shown={shown}
@@ -358,6 +395,8 @@ export function Together() {
  * second visual language for the same fact would be two answers to one question.
  */
 function Transport({
+  live,
+  onStop,
   playing,
   through,
   shown,
@@ -370,6 +409,8 @@ function Transport({
   onSeek,
   onTuck,
 }: {
+  live: boolean
+  onStop(): void
   playing: boolean
   through: number
   shown: number
@@ -432,7 +473,7 @@ function Transport({
 
       <div className="together-moves">
         <span className="together-clock">{clock(shown)}{span > 0 ? ` / ${clock(span)}` : ''}</span>
-        <button type="button" className="together-go" onClick={onPlayPause}
+        <button type="button" className="together-go" onClick={onPlayPause} disabled={!live}
           aria-label={playing ? 'pause for both of us' : 'play for both of us'}>
           {playing ? '❚❚' : '▶'}
         </button>
@@ -440,8 +481,21 @@ function Transport({
           aria-label="next in the queue">
           ›
         </button>
+        {/*
+          Two ways out, and they are genuinely different.
+
+          Folding away leaves it playing in the corner — that is the point of
+          the tucked pane. Stopping ends it for *both* of you, which is why it
+          is only offered while something is actually on: a "stop" on a dark
+          screen is a control that cannot do anything.
+        */}
+        {live && (
+          <button type="button" className="together-tuck" onClick={onStop}>
+            stop
+          </button>
+        )}
         <button type="button" className="together-tuck" onClick={onTuck}>
-          fold away
+          {live ? 'fold away' : 'close'}
         </button>
       </div>
     </div>

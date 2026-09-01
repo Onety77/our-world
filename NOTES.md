@@ -94,7 +94,34 @@ and the two thresholds staying far enough apart to hide a correction in.
 > `VITE_YOUTUBE_API_KEY`; the asymmetry is deliberate — a missing key should
 > cost the convenience, not the feature.
 
+### The chicken-and-egg that shipped
+
+Reported from the deployed site: both online, the corner offered to watch with
+her, and tapping it did nothing at all.
+
+`Together` began with `if (!live) return null`, and `live` means *a video has
+been chosen*. So on a garden that had never watched anything the component
+rendered nothing — you could not reach the search without a video and could not
+get a video without the search. **The control worked perfectly and appeared to
+be dead**, which is the worst shape a bug can have, and no amount of driving the
+happy path would have found it because every check I wrote put a video on first.
+
+It opens on `open || live` now. Nothing on is a real state: dark screen, the
+invitation on it, and it lands on *up next* rather than *talk*, because choosing
+something is the only thing there is to do. `npm run watch` cannot catch this
+one — the fresh-start browser run in the scratchpad can, and does.
+
+There is a *stop* beside *fold away* now too, which there wasn't: folding leaves
+it playing in the corner, and there was no way to end a session at all.
+
 ### And the shape of it
+
+The way in is a line of its own in the corner, not a fourth glyph in the
+transport row — on a phone that row was already four things wide and a screen
+is not a music control. In words, like everything else in that corner, and it
+reports what is on while something is. Watch the `order` there: the player
+stack is `column-reverse` under 544px, so document order alone dropped it
+between the transport and the beam that measures it.
 
 Screen across the top, transport under it — one beam, the same beam the corner
 player uses, because a second visual language for "how far through this is"
