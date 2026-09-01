@@ -4446,6 +4446,10 @@ body:has(.talking) .leave-place {
   left: 0;
   right: 0;
   margin: 0;
+  /* A newly windowed line starts hidden until the same animation frame that
+     gives it its measured position. Without this one frame, an edge message
+     briefly appeared at the column anchor before joining the moving sky. */
+  opacity: 0;
   /* The transform is written every frame — see the note above, and nothing
      may transition *that*. `translate` is a separate property and belongs to
      the swipe; see the block at the end of this file. */
@@ -12581,4 +12585,540 @@ body.on-the-road .broke-what {
   background: none;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* ===========================================================================
+   Watching something together
+
+   The rules the rest of this file lives by apply here too, and they are harder
+   here: a video *is* a rectangle, and a media player is the single most
+   over-decorated object on the web. So everything around the picture is the
+   garden's language — text on the world, one beam of light, no panels, no
+   cards, no borders — and the only rectangle in the room is the one that is
+   genuinely a screen.
+
+   The layout never changes shape between full and tucked. Only the class on
+   `.together` does, and the stage inside is moved and resized by these rules
+   rather than by React, because an iframe that is re-parented stops playing.
+   See the note at the top of `ui/Together`.
+   =========================================================================== */
+
+.together {
+  --together-edge: 1.1rem;
+}
+
+.together-hush {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  backdrop-filter: blur(18px) saturate(0.8) brightness(0.42);
+  -webkit-backdrop-filter: blur(18px) saturate(0.8) brightness(0.42);
+  animation: together-hush-in 0.4s cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+
+@keyframes together-hush-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---- the screen --------------------------------------------------------- */
+
+.together-screen {
+  position: fixed;
+  z-index: 1;
+  overflow: hidden;
+  background: #05070a;
+  /*
+    The one soft edge in the garden, and it is doing a job rather than being a
+    style: a hard-cornered black rectangle floating over a meadow reads as a
+    dialog, and a barely-rounded one reads as a pane of dark glass. Two pixels.
+  */
+  border-radius: 2px;
+  box-shadow: 0 0.6rem 3rem rgba(2, 4, 8, 0.7);
+  transition:
+    inset 0.42s cubic-bezier(0.3, 0.75, 0.25, 1),
+    width 0.42s cubic-bezier(0.3, 0.75, 0.25, 1);
+}
+
+.together-stage,
+.together-stage > * {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Full: across the top, sixteen by nine, under the way out. */
+.together.full .together-screen {
+  left: var(--together-edge);
+  right: var(--together-edge);
+  top: max(3.6rem, calc(env(safe-area-inset-top) + 3.2rem));
+  aspect-ratio: 16 / 9;
+  height: auto;
+}
+
+/*
+  Tucked: small, in the corner it came from, and deliberately no bigger.
+
+  It has to be large enough to follow what is happening and small enough that
+  the garden is still the thing you are looking at — this is a video playing
+  *while* you are somewhere, not a video with a garden behind it.
+*/
+.together.tucked .together-screen {
+  right: max(1rem, env(safe-area-inset-right));
+  /*
+    High enough to clear the name of the place and the way into it.
+
+    At nine rems it sat straight across "The Tree of Thoughts" — every corner of
+    this world is spoken for, and the bottom left is that one. A tucked video is
+    a guest here and gets out of the way of the things that live here.
+  */
+  bottom: max(14.5rem, calc(env(safe-area-inset-bottom) + 14rem));
+  left: auto;
+  top: auto;
+  width: min(11rem, 42vw);
+  aspect-ratio: 16 / 9;
+  cursor: pointer;
+}
+
+.together-open {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(4, 6, 12, 0);
+  border: 0;
+  cursor: pointer;
+  font-size: 1.15rem;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 180ms ease, background 180ms ease;
+}
+
+.together-open:hover,
+.together-open:focus-visible,
+.together-open:active {
+  opacity: 1;
+  background: rgba(4, 6, 12, 0.42);
+  outline: none;
+}
+
+.together-trouble {
+  position: absolute;
+  inset: auto var(--together-edge) 1rem;
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: #ffb9a0;
+  text-shadow: var(--lift);
+}
+
+.together-trouble.flat {
+  position: static;
+  margin: 0.5rem 0 0;
+}
+
+.together-join {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(4, 6, 12, 0.55);
+  border: 0;
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  color: var(--ink);
+  text-shadow: var(--lift);
+}
+
+/* ---- the room under it -------------------------------------------------- */
+
+.together.full {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+}
+
+.together.tucked {
+  position: static;
+}
+
+.together-room {
+  position: fixed;
+  z-index: 1;
+  left: var(--together-edge);
+  right: var(--together-edge);
+  /* Under the screen: its own top edge plus the height a 16:9 pane takes. */
+  top: calc(max(3.6rem, env(safe-area-inset-top) + 3.2rem) + (100vw - var(--together-edge) * 2) * 0.5625 + 0.9rem);
+  bottom: max(0.9rem, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+/* ---- the transport ------------------------------------------------------ */
+
+.together-now {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.9rem;
+  margin: 0;
+  text-shadow: var(--lift);
+}
+
+.together-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: 0.98rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.together-by {
+  flex: 0 0 auto;
+  font-family: var(--sans);
+  font-size: 0.56rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/*
+  The beam, which is the same beam the corner player uses.
+
+  One horizontal line is allowed in this garden and this is it — it is not a
+  border, it is the light the thing is travelling along. Making a second, wider
+  language for the same fact is how a design stops being one design.
+*/
+.together-beamline {
+  position: relative;
+  height: 1px;
+  margin: 0.15rem 0 0;
+  background: rgba(242, 239, 230, 0.16);
+  cursor: pointer;
+  touch-action: none;
+}
+
+/* A generous target over a one-pixel line. Invisible, and the reason it can be
+   scrubbed with a thumb at all. */
+.together-beamline::before {
+  content: '';
+  position: absolute;
+  inset: -0.7rem 0;
+}
+
+.together-beam {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  background: linear-gradient(to right, rgba(255, 214, 160, 0.9), rgba(255, 236, 205, 0.95));
+  box-shadow: 0 0 10px rgba(255, 206, 150, 0.55);
+}
+
+.together-moves {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.together-clock {
+  flex: 1 1 auto;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+}
+
+.together-go,
+.together-next,
+.together-tuck {
+  background: none;
+  border: 0;
+  padding: 0.3rem 0.1rem;
+  cursor: pointer;
+  color: var(--ink);
+  text-shadow: var(--lift);
+}
+
+.together-go { font-size: 0.92rem; }
+.together-next { font-size: 1.3rem; line-height: 1; }
+.together-next:disabled { opacity: 0.25; cursor: default; }
+
+.together-tuck {
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.together-tuck:hover { color: var(--ink); }
+
+/* ---- the two halves ----------------------------------------------------- */
+
+.together-tabs {
+  display: flex;
+  gap: 1.3rem;
+}
+
+/*
+  Tabs without tabs.
+
+  A selected tab is a word that is lit and a word that is not; the underline the
+  web reaches for first is a border, and there are none of those here. The lit
+  one carries the beam's own colour so it belongs to the same object.
+*/
+.together-tab {
+  background: none;
+  border: 0;
+  padding: 0.2rem 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+  transition: color 160ms ease;
+}
+
+.together-tab.on { color: #ffd9a8; }
+.together-tab:hover { color: var(--ink); }
+
+.together-talk,
+.together-queue {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 0;
+}
+
+.together-said {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  padding-right: 0.2rem;
+}
+
+.together-line {
+  margin: 0;
+  max-width: 84%;
+  font-family: var(--serif);
+  font-size: 0.92rem;
+  line-height: 1.42;
+  text-shadow: var(--lift);
+}
+
+.together-line.mine { align-self: flex-end; text-align: right; color: #ffdcab; }
+.together-line.hers { align-self: flex-start; text-align: left; color: #c3d6ff; }
+
+.together-none {
+  margin: 0.3rem 0;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+}
+
+.together-write,
+.together-hunt {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.7rem;
+}
+
+.together-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.4);
+  padding: 0.2rem 0 0.3rem;
+  font-family: var(--serif);
+  font-size: 0.92rem;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-modify: read-write-plaintext-only;
+  cursor: text;
+  min-height: 1.3em;
+  max-height: 18vh;
+  overflow-y: auto;
+}
+
+.together-field:focus { outline: none; border-bottom-color: rgba(242, 239, 230, 0.78); }
+
+.together-field[data-empty='yes']::before {
+  content: attr(data-placeholder);
+  color: rgba(242, 239, 230, 0.5);
+  pointer-events: none;
+}
+
+.together-send,
+.together-find,
+.together-drop {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0.3rem 0;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #ffd9a8;
+  text-shadow: var(--lift);
+}
+
+.together-send:disabled,
+.together-find:disabled { color: var(--ink-faint); cursor: default; }
+
+.together-drop { color: var(--ink-faint); }
+.together-drop:hover { color: #ffb9a0; }
+
+/* ---- what is lined up --------------------------------------------------- */
+
+.together-found,
+.together-lined {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.together-found button {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.together-found img {
+  flex: 0 0 auto;
+  width: 4.4rem;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.together-found-words {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.together-found-title,
+.together-lined-title {
+  font-family: var(--serif);
+  font-size: 0.86rem;
+  line-height: 1.32;
+  color: var(--ink);
+  text-shadow: var(--lift);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.together-found-who,
+.together-lined-who {
+  font-family: var(--sans);
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+}
+
+.together-lined li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+}
+
+.together-lined-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  -webkit-line-clamp: 1;
+}
+
+/* ---- the way in, in the corner ------------------------------------------ */
+
+.player-together {
+  background: none;
+  border: 0;
+  padding: 0.3rem 0.1rem;
+  font-size: 0.78rem;
+  line-height: 1;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 200ms ease, opacity 200ms ease;
+}
+
+/*
+  Inert until she is here, and it says so by being dim rather than by leaving.
+
+  A control that disappears when it cannot be used teaches nobody anything and
+  sends you looking for it; one that is visibly waiting says "this needs her",
+  which is true and is the whole character of the thing.
+*/
+.player-together:disabled { opacity: 0.3; cursor: default; }
+.player-together.ready { color: #ffd9a8; }
+.player-together.ready:hover { color: var(--ink); }
+
+/* ---- wider than a phone ------------------------------------------------- */
+
+@media (min-width: 720px) {
+  /*
+    Side by side, because at this width stacking wastes the screen: the picture
+    can be large and the conversation can be beside it rather than under it,
+    which is how two people actually sit in front of a television.
+  */
+  .together.full .together-screen {
+    right: auto;
+    width: min(62vw, calc((100vh - 6rem) * 1.7778));
+    top: max(4rem, calc(env(safe-area-inset-top) + 3.4rem));
+  }
+
+  .together-room {
+    left: auto;
+    right: var(--together-edge);
+    width: min(30rem, 34vw);
+    top: max(4rem, calc(env(safe-area-inset-top) + 3.4rem));
+  }
+
+  .together.tucked .together-screen { width: min(14rem, 22vw); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .together-screen { transition-duration: 0.01ms; }
+  .together-hush { animation-duration: 0.01ms; }
 }

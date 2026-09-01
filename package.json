@@ -27,7 +27,8 @@
     "moonbreak": "npx --yes tsx scripts/moonbreak-check.ts",
     "sound": "npx --yes tsx scripts/sound-check.ts",
     "storm": "npx --yes tsx scripts/storm-check.ts",
-    "questions": "npx --yes tsx scripts/questions-check.ts"
+    "questions": "npx --yes tsx scripts/questions-check.ts",
+    "watch": "npx --yes tsx scripts/watch-check.ts"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",

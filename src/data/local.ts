@@ -30,6 +30,7 @@ import type {
   Memory,
   Track,
   Listening,
+  Watching,
   QuestionAnswer,
   QuestionGarden,
   QuestionRound,
@@ -188,6 +189,7 @@ export interface LocalDataLayer extends DataLayer {
 }
 
 const LISTENING_KEY = 'garden:listening:v1'
+const WATCHING_KEY = 'garden:watching:v1'
 const TRACKS_KEY = 'garden:tracks:v1'
 /*
   Which IndexedDB key each track's audio is under.
@@ -329,6 +331,25 @@ function seedTracks(): Track[] {
     { id: 'track-3', title: 'something slow', artist: '', by: 'warm', duration: 246, url: null },
     { id: 'track-4', title: 'for the mornings', artist: '', by: 'cool', duration: 173, url: null },
   ]
+}
+
+/** The screen, dark, with nothing lined up. */
+function nothingOn(): Watching {
+  return { videoId: null, title: '', playing: false, at: 0, since: Date.now(), by: 'warm', seq: 0, queue: [] }
+}
+
+function loadWatching(): Watching {
+  const dark = nothingOn()
+  if (typeof localStorage === 'undefined') return dark
+  try {
+    const raw = JSON.parse(localStorage.getItem(WATCHING_KEY) ?? 'null')
+    if (!raw || typeof raw !== 'object') return dark
+    // The queue is the one part a bad save could make a wrong *shape* rather
+    // than merely a wrong value, and it is iterated on the very first frame.
+    return { ...dark, ...raw, queue: Array.isArray(raw.queue) ? raw.queue : [] }
+  } catch {
+    return dark
+  }
 }
 
 function loadListening(): Listening {
@@ -607,6 +628,17 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
   let listening = loadListening()
   const listeningWatchers = new Set<(l: Listening) => void>()
+  let watching = loadWatching()
+  const watchingWatchers = new Set<(w: Watching) => void>()
+
+  function saveWatching() {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(WATCHING_KEY, JSON.stringify(watching))
+    } catch {
+      /* it still holds for this session */
+    }
+  }
 
   function saveListening() {
     if (typeof localStorage === 'undefined') return
@@ -1125,6 +1157,20 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       for (const w of listeningWatchers) w(listening)
     },
 
+    watchWatching(listener) {
+      watchingWatchers.add(listener)
+      listener(watching)
+      return () => {
+        watchingWatchers.delete(listener)
+      }
+    },
+
+    async setWatching(next) {
+      watching = { ...next, by: me, since: Date.now(), seq: watching.seq + 1 }
+      saveWatching()
+      for (const w of watchingWatchers) w(watching)
+    },
+
     // ---- the Glasshouse ----------------------------------------------------
 
     watchMemories(listener) {
@@ -1462,6 +1508,13 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       for (const w of trackWatchers) w(tracks)
       listening = loadListening()
       for (const w of listeningWatchers) w(listening)
+      try {
+        localStorage.removeItem(WATCHING_KEY)
+      } catch {
+        /* nothing was saved anyway */
+      }
+      watching = nothingOn()
+      for (const w of watchingWatchers) w(watching)
       questions = { rounds: [], seeds: [] }
       const fresh = seedState()
       commit({ ...fresh, questions: questionView(questions, fresh, me) }, { save: false })

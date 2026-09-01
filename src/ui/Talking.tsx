@@ -159,6 +159,79 @@ function rung(ladder: Ladder, age: number): number {
   return up[low] + (up[low + 1] - up[low]) * (local - low)
 }
 
+/** A line's mask, and whether anything of it is left to draw. */
+interface LaneMask {
+  image: string
+  visibility: number
+}
+
+/**
+ * Clip a line at the reading lane, by the line rather than by the message.
+ *
+ * ---------------------------------------------------------------------------
+ * A message is not an atom. The rule this replaced faded a whole paragraph by
+ * how much of its *full box* had reached the controls, so anything taller than
+ * the lane could never be shown at all — which is the hole that used to sit at
+ * the bottom of the sky where the longest thing either of you had said should
+ * have been.
+ *
+ * So the boundary is a mask in the element's own coordinates: what is inside
+ * the lane is drawn at full strength, and the part that has reached the edge
+ * fades over about a line of text and is gone. The words slide *under* the
+ * controls instead of blinking out beside them.
+ *
+ * **The fade starts before the crossing, not after it.** The band is placed
+ * inside the lane rather than at its edge, so a line is already going as it
+ * arrives rather than being whole in one frame and cut in the next.
+ *
+ * Returns null when no mask is needed — a mask on every line all the time is a
+ * compositing layer per line for nothing.
+ * ---------------------------------------------------------------------------
+ */
+function maskForLane(
+  top: number,
+  drawn: number,
+  laneTop: number,
+  laneBottom: number,
+): LaneMask | null {
+  if (!Number.isFinite(laneTop) || !Number.isFinite(laneBottom) || drawn <= 0) return null
+
+  const bottom = top + drawn
+  const alphaAt = (y: number) => Math.max(
+    0,
+    Math.min(
+      1,
+      (y - laneTop) / LINE_FADE,
+      (laneBottom - y) / LINE_FADE,
+    ),
+  )
+  const points = [top, bottom]
+  for (const edge of [
+    laneTop,
+    laneTop + LINE_FADE,
+    laneBottom - LINE_FADE,
+    laneBottom,
+  ]) {
+    if (edge > top && edge < bottom) points.push(edge)
+  }
+  points.sort((a, b) => a - b)
+
+  const stops = points.map((y) => ({
+    at: ((y - top) / drawn) * 100,
+    alpha: alphaAt(y),
+  }))
+  const visibility = stops.reduce((highest, stop) => Math.max(highest, stop.alpha), 0)
+  if (stops.every((stop) => stop.alpha > 0.999)) return null
+  if (visibility < 0.001) return { image: '', visibility: 0 }
+
+  return {
+    image: `linear-gradient(to bottom, ${stops
+      .map((stop) => `rgba(0, 0, 0, ${stop.alpha.toFixed(4)}) ${stop.at.toFixed(3)}%`)
+      .join(', ')})`,
+    visibility,
+  }
+}
+
 function spoken(at: number): string {
   const d = new Date(at)
   const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
@@ -557,6 +630,7 @@ export function Talking() {
     let laneTop = -Infinity
     let laneBottom = Infinity
     let columnTop = 0
+    let surfaceTop = 0
     let air = AIR
     /*
       Everything in age order, because that is the order the ladder stacks in
@@ -574,6 +648,7 @@ export function Talking() {
     let heights: number[] = []
     let start = () => {}
     const remeasure = () => {
+      surfaceTop = surface.current?.getBoundingClientRect().top ?? 0
       if (column.current) {
         lines = (Array.from(column.current.children) as HTMLElement[]).sort(
           (a, b) => Number(a.dataset.age ?? '0') - Number(b.dataset.age ?? '0'),
@@ -637,11 +712,9 @@ export function Talking() {
             writing — and lets the mask show as much of a long message as there
             is room for. See the note on `maskFor`.
           */
-          const at = ages.indexOf(Math.round(walk.at))
-          const headHeight = at >= 0 ? heights[at] : 54
-          const room = Math.max(120, laneBottom - laneTop - 96)
-          const wanted = laneBottom - Math.min(headHeight, room) - 28
-          column.current.style.top = `${Math.max(laneTop + 18, wanted)}px`
+          // The height-sensitive anchor is placed continuously in `tick`.
+          // Doing it here chose one rounded message at a time and stepped the
+          // whole column whenever a differently sized neighbour took over.
         }
       } else {
         laneTop = -Infinity
@@ -691,6 +764,26 @@ export function Talking() {
       lastFrame = now
       const root = column.current
       if (!root) return
+
+      /*
+        Keep the read head beside the composer without choosing a new anchor
+        one message at a time. Interpolating neighbouring message heights
+        removes the small vertical step that used to happen at half-rungs.
+      */
+      if (window.innerWidth <= 544 && Number.isFinite(laneTop) && Number.isFinite(laneBottom)) {
+        const first = ages[0] ?? 0
+        const local = Math.max(0, Math.min(Math.max(0, ages.length - 1), walk.at - first))
+        const low = Math.floor(local)
+        const high = Math.min(heights.length - 1, low + 1)
+        const blend = local - low
+        const lowHeight = heights[low] ?? 54
+        const headHeight = lowHeight + ((heights[high] ?? lowHeight) - lowHeight) * blend
+        const room = Math.max(120, laneBottom - laneTop - 96)
+        const wanted = laneBottom - surfaceTop - Math.min(headHeight, room) - 28
+        const top = Math.max(laneTop - surfaceTop + 18, wanted)
+        root.style.top = `${top}px`
+        columnTop = surfaceTop + top
+      }
 
       // Rebuilt every frame from the scales that are about to be drawn, so the
       // gap between two lines is the same gap at every point in the walk.
@@ -804,33 +897,17 @@ export function Talking() {
           ----------------------------------------------------------------
         */
         const drawn = height * shrink
-        let masked = false
-        if (Number.isFinite(laneTop) && Number.isFinite(laneBottom) && drawn > 0) {
-          //  already cancels the scaling inset, so the drawn top is
-          // simply where the ladder put it.
-          const top = columnTop + lift + gaze.pitch * 90 + (height - drawn) / 2
-          const overTop = laneTop - top
-          const overBottom = top + drawn - laneBottom
-          if (overTop > 0 || overBottom > 0) {
-            if (overTop >= drawn || overBottom >= drawn) {
-              fade = 0
-            } else {
-              // As a fraction of the element's own height: the mask lives in
-              // untransformed space, and the scale cancels on both sides.
-              const from = Math.max(0, overTop / drawn) * 100
-              const to = 100 - Math.max(0, overBottom / drawn) * 100
-              const band = Math.min(28, (LINE_FADE / drawn) * 100)
-              el.style.webkitMaskImage = el.style.maskImage =
-                `linear-gradient(to bottom, transparent ${from}%,` +
-                ` #000 ${Math.min(100, from + band)}%,` +
-                ` #000 ${Math.max(0, to - band)}%, transparent ${to}%)`
-              masked = true
-            }
-          }
-        }
-        if (!masked && el.style.maskImage !== '') {
+        // `lift` already cancels the scaling inset, so the drawn top is where
+        // the ladder put it. The stationary lane mask begins fading *before*
+        // the crossing, rather than appearing after it in a single frame.
+        const top = columnTop + lift + gaze.pitch * 90 + (height - drawn) / 2
+        const laneMask = maskForLane(top, drawn, laneTop, laneBottom)
+        if (laneMask?.image) {
+          el.style.webkitMaskImage = el.style.maskImage = laneMask.image
+        } else if (el.style.maskImage !== '') {
           el.style.webkitMaskImage = el.style.maskImage = ''
         }
+        if (laneMask?.visibility === 0) fade = 0
 
         el.style.transform =
           `translate3d(${side + gaze.yaw * -150 + Math.sin(own * 1.7) * 6}px,` +
@@ -839,7 +916,8 @@ export function Talking() {
         // Once a line is faint enough to be unreadable it must also stop
         // catching the pointer, or the newest message sits under a stack of
         // invisible ones.
-        el.style.pointerEvents = fade > 0.5 ? 'auto' : 'none'
+        const visible = fade * (laneMask?.visibility ?? 1)
+        el.style.pointerEvents = visible > 0.5 ? 'auto' : 'none'
       }
 
       const still =

@@ -28,6 +28,7 @@ import { Playing } from '@/ui/Playing'
 import { Talking } from '@/ui/Talking'
 import { VoiceLights } from '@/ui/VoiceLights'
 import { Whisper } from '@/ui/Whisper'
+import { Together } from '@/ui/Together'
 import { SaidMenu } from '@/ui/Said'
 import { Trouble } from '@/ui/Trouble'
 import { Arrival } from '@/ui/Arrival'
@@ -429,6 +430,7 @@ function Garden() {
         ref={cornerNode}
         className={`${corner}${tucked && byThumb ? ' tucked' : ''}`}
       >
+        <Together />
         <Whisper />
         <Player />
       </div>

@@ -34,6 +34,7 @@ import {
 } from '@/systems/listening'
 import type { Listening } from '@/data/types'
 import { useDismissOutside } from './useDismissOutside'
+import { useWatching } from '@/systems/watching'
 
 /**
  * How many songs the list shows before it starts scrolling.
@@ -80,6 +81,19 @@ export function Player() {
   const sounding = anchor.playing && !silenced
 
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
+
+  /*
+    Both of you here — or a screen already going, which is its own permission.
+
+    Read from presence like everything else that asks this question. The second
+    half matters: she can leave in the middle of a film, and a door that locked
+    behind you the moment she closed her phone would strand you outside a video
+    that is still playing on your own device.
+  */
+  const watchingLive = useWatching((s) => s.live)
+  const watchable =
+    watchingLive ||
+    (presence[me]?.online === true && presence[them.id]?.online === true)
   const track = tracks.find((t) => t.id === anchor.trackId)
 
   // --- the feeds ------------------------------------------------------------
@@ -501,6 +515,41 @@ export function Player() {
           </button>
           <button type="button" onClick={() => skip(1)} disabled={nothing} aria-label="next">
             ›
+          </button>
+          {/*
+            And the way into the screen the two of you share.
+
+            ---------------------------------------------------------------
+            **It is only a door while she is on the other side of it.** Watching
+            something together is the one thing in this garden that is worthless
+            alone — everything else here is built for two people who are almost
+            never awake at once, and this is the exception that only works when
+            they are. So it is present but inert when she is not here, and it
+            says which of the two it is rather than vanishing: a control that
+            disappears teaches you nothing, and you would go looking for it.
+
+            It sits in this row because that is what the row is. The corner
+            already holds the things that happen *while* you are somewhere
+            else, and a screen the two of you are in front of is exactly that.
+            ---------------------------------------------------------------
+          */}
+          <button
+            type="button"
+            className={`player-together${watchable ? ' ready' : ''}`}
+            onClick={() => {
+              if (!watchable) return
+              wake()
+              useWatching.getState().show()
+            }}
+            disabled={!watchable}
+            aria-label={
+              watchable
+                ? `watch something with ${them.name}`
+                : `${them.name} isn't here to watch anything with`
+            }
+            title={watchable ? `watch with ${them.name}` : `${them.name} isn't here`}
+          >
+            <span aria-hidden="true">▷</span>
           </button>
         </div>
       </div>

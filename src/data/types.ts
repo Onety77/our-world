@@ -479,6 +479,68 @@ export interface Listening {
 }
 
 // ---------------------------------------------------------------------------
+// Watching
+// ---------------------------------------------------------------------------
+
+/**
+ * One thing waiting to be watched.
+ *
+ * `videoId` is YouTube's own eleven characters and is the only part that has to
+ * be right — everything else is what makes the queue readable while you are
+ * deciding, and is whatever the search or the page title happened to say.
+ */
+export interface Queued {
+  /** Ours, so removing the same thing twice is harmless. */
+  id: string
+  /** YouTube's video id. Eleven characters, `dQw4w9WgXcQ`. */
+  videoId: string
+  title: string
+  /** Seconds, or 0 when nothing said. Shown, never trusted for timing. */
+  seconds: number
+  by: UserId
+  at: number
+}
+
+/**
+ * What the two of you are watching, as one shared fact.
+ *
+ * ---------------------------------------------------------------------------
+ * **The same anchor as the music, for the same reason.** What is stored is not
+ * a position that ticks — it is "this video was `at` seconds in when the server
+ * clock read `since`, and it is playing". Where it is *now* is arithmetic both
+ * devices can do independently, so they cannot drift apart between updates, and
+ * a phone that was asleep or on a train catches up correctly the instant it
+ * wakes rather than resuming where it left off. See `Listening`, which learned
+ * this first.
+ *
+ * It matters more here than it does for music. Two people watching the same
+ * thing seven timezones apart are watching it *together* or they are not
+ * watching it together at all, and a second of drift is the difference between
+ * laughing at the same moment and hearing her laugh at nothing.
+ *
+ * `seq` counts deliberate moves. It is what lets a device tell "she pressed
+ * pause" from "this is the same anchor arriving again", which matters because
+ * pausing at the position you are already at is otherwise indistinguishable
+ * from a snapshot echo.
+ * ---------------------------------------------------------------------------
+ */
+export interface Watching {
+  videoId: string | null
+  title: string
+  playing: boolean
+  /** Seconds into the video at `since`. */
+  at: number
+  /** Server time in ms when `at` was true. */
+  since: number
+  /** Who last moved it. */
+  by: UserId
+  /** Bumped on every deliberate move. */
+  seq: number
+  /** What is lined up next, oldest first. */
+  queue: Queued[]
+}
+
+// ---------------------------------------------------------------------------
 // Talking
 // ---------------------------------------------------------------------------
 
@@ -1109,6 +1171,25 @@ export interface DataLayer {
 
   /** Put the music somewhere. Stamps `by` and `since` itself. */
   setListening(next: { trackId: string | null; playing: boolean; at: number }): Promise<void>
+
+  /** What the two of you are watching, and what is lined up. */
+  watchWatching(listener: (state: Watching) => void): () => void
+
+  /**
+   * Move the screen. Stamps `by`, `since` and the next `seq` itself.
+   *
+   * The queue is passed whole rather than patched. It is a handful of items in
+   * one document and both of you write to it from different countries — a
+   * read-modify-write of the whole list is one round trip and cannot interleave
+   * into a half-applied state, which a per-item update genuinely can.
+   */
+  setWatching(next: {
+    videoId: string | null
+    title: string
+    playing: boolean
+    at: number
+    queue: Queued[]
+  }): Promise<void>
 
   /**
    * Server time, corrected for this device's clock drift. Everything that has

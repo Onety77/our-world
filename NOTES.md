@@ -40,6 +40,80 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · the two of you can watch something together
+
+A shared YouTube screen, reached from the corner media control, synced between
+two devices with no server in the middle.
+
+**It is not a sixth place**, for the reason the music is not one: it is
+something that happens *while* you are somewhere. So it lives in the corner the
+player and the whisper already share, and the way in is a mark in that row —
+inert and dim until she is actually online, because this is the one thing in the
+garden that is worthless alone.
+
+### How two phones stay on the same second
+
+The same anchor the music uses, and it earns it more here. Nothing stores a
+position that ticks: the shared record says *this video was `at` seconds in when
+the server clock read `since`, and it is playing*, and both devices do the
+arithmetic themselves. One write per press instead of a write a second from both
+sides for the length of a film; no drift between updates; and a phone that was
+asleep wakes up **where the film got to** rather than where it stopped.
+
+Corrections are graded, because a seek is not free — the picture stalls and the
+sound cuts, so a player that fixes a tenth of a second every two seconds is
+*less* in sync than one that does nothing:
+
+    under 0.75 s   leave it alone
+    0.75 – 2.5 s   recover it by playing 6% faster or slower — invisible
+    over 2.5 s     something real happened; seek
+
+`npm run watch` holds all of that: the anchor arithmetic including the
+asleep-phone case, every shape of YouTube link anybody might paste (nine of
+them, plus four that must be refused), the queue's advance being *idempotent in
+effect* so two devices ending a video in the same frame agree rather than fight,
+and the two thresholds staying far enough apart to hide a correction in.
+
+### Three things worth not rediscovering
+
+> **`YT.Player` replaces the element you give it.** Hand it a node React
+> rendered and the ref points at something detached, and React later tries to
+> remove a child that is no longer its child. A plain div is created
+> imperatively, appended into the element React owns, and handed over to be
+> consumed.
+
+> **A player built empty really asks YouTube for `/embed/` with no id**, which
+> really fails — error 2, "that link isn't a video" — and the message lands on
+> screen a beat before the video that was always going to replace it. It is
+> constructed with the anchor's video, at the anchor's position.
+
+> **oEmbed gives you a title with no API key.** A pasted link showed its own URL
+> as its name in the queue, which is unreadable. `youtube.com/oembed` is public,
+> free and unmetered, so a link now arrives called *Never Gonna Give You Up*
+> even on a build with no key at all. Search still needs
+> `VITE_YOUTUBE_API_KEY`; the asymmetry is deliberate — a missing key should
+> cost the convenience, not the feature.
+
+### And the shape of it
+
+Screen across the top, transport under it — one beam, the same beam the corner
+player uses, because a second visual language for "how far through this is"
+would be two answers to one question. Then two words rather than tabs: *talk*
+and *up next*. **The talk is the same conversation as the Stars**; a second chat
+that only existed while a video was on would be somewhere for things to get
+lost. Fold away leaves a small pane in the corner it came from, deliberately
+lifted clear of the place name — every corner here is spoken for and a tucked
+video is a guest.
+
+> **I destroyed some of Codex's uncommitted work and had to rebuild it.** A
+> regex meant to remove one dead helper from `ui/Talking` took `maskForLane`
+> with it — a refactor of my inline lane mask that was in the working tree and
+> not in any commit, so it could not be recovered. It is reimplemented to the
+> contract its call site still described, including the fade beginning *before*
+> the crossing rather than after it. **Do not use a `[\s\S]*?` regex to delete
+> code in this repository**; two of us are in it and only one of us has
+> committed.
+
 ## 1 Sep · Claude · the Stars has a rhythm now, and the drag is the hand
 
 Six things, all reported from using it on a phone. The two that mattered are

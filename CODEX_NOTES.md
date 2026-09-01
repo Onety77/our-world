@@ -732,3 +732,14 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Updated the Glasshouse documentation and Firestore crop validation. Verified
   the mobile and desktop room in-browser, including swipe travel, quick camera
   arrival and press/hold release; rules, TypeScript and production build pass.
+
+## 1 September 2026 - Codex - The last step out of Stars scrolling
+
+- Kept the new message spacing, momentum and touch mechanics intact, but made
+  the reading-lane mask continuous before and through each boundary crossing.
+  Individual messages no longer acquire a full fade band in a single frame.
+- Replaced the rounded, one-message-at-a-time mobile column anchor with an
+  interpolation between neighbouring message heights, and hid newly windowed
+  lines until their first measured transform is applied.
+- Verified the Stars at 390 x 844 with real pointer travel. Browser error and
+  overlay checks, TypeScript and the production build pass.

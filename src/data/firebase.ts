@@ -464,6 +464,15 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
    * and "who wrote first" and "are they still here" both fall apart when two
    * devices disagree about the time.
    */
+  /**
+   * The highest `seq` this device has seen on the shared screen.
+   *
+   * Kept so a write from here is always ahead of anything already there. Two
+   * people pressing pause within the same second otherwise write the same
+   * number, and a device with no way to order them cannot tell which move it is
+   * looking at — see `seq` on `Watching`.
+   */
+  let seenWatchSeq = 0
   let clockSkew = 0
 
   /** Presence arrives many times a second and must not thrash React. */
@@ -1335,6 +1344,80 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
             // same song.
             since: now(),
             by: me,
+          },
+        },
+        { merge: true },
+      )
+    },
+
+    /*
+      What the two of you are watching, beside what you are listening to.
+
+      One document rather than a collection, and the queue is a field on it. For
+      two people with a handful of things lined up that is one snapshot, one
+      write, and — the part that matters — one *atomic* ordering: adding a video
+      from Lagos while she skips one in Shanghai cannot interleave into a list
+      that is half of each. A subcollection would need its own rules, its own
+      ordering field and its own reconciliation, to hold six rows.
+    */
+    watchWatching(listener) {
+      return onSnapshot(doc(db, ...WORLD_DOC), (snap) => {
+        const d = ((snap.data() ?? {}).watching ?? {}) as Record<string, unknown>
+        const raw = Array.isArray(d.queue) ? d.queue : []
+        listener({
+          videoId: typeof d.videoId === 'string' && d.videoId !== '' ? d.videoId : null,
+          title: typeof d.title === 'string' ? d.title : '',
+          playing: d.playing === true,
+          at: Math.max(0, num(d.at, 0)),
+          since: num(d.since, 0),
+          by: userId(d.by),
+          seq: (() => {
+            const seq = Math.max(0, num(d.seq, 0))
+            if (seq > seenWatchSeq) seenWatchSeq = seq
+            return seq
+          })(),
+          /*
+            Rebuilt field by field rather than trusted.
+
+            This list is written by the other device and read straight into a
+            render on the first frame it arrives — an item missing a videoId, or
+            carrying a number where a string belongs, is a blank screen with no
+            explanation. Anything that cannot be made into a real row is dropped.
+          */
+          queue: raw.flatMap((item) => {
+            const row = (item ?? {}) as Record<string, unknown>
+            const videoId = typeof row.videoId === 'string' ? row.videoId : ''
+            if (videoId === '') return []
+            return [{
+              id: typeof row.id === 'string' && row.id !== '' ? row.id : videoId,
+              videoId,
+              title: typeof row.title === 'string' ? row.title : '',
+              seconds: Math.max(0, num(row.seconds, 0)),
+              by: userId(row.by),
+              at: num(row.at, 0),
+            }]
+          }),
+        })
+      })
+    },
+
+    async setWatching(next) {
+      const seq = Math.max(0, num(seenWatchSeq, 0)) + 1
+      seenWatchSeq = seq
+      await setDoc(
+        doc(db, ...WORLD_DOC),
+        {
+          watching: {
+            videoId: next.videoId,
+            title: next.title,
+            playing: next.playing,
+            at: next.at,
+            // The server's clock, for the same reason the music uses it — and
+            // it matters more here: a second apart is her laughing at nothing.
+            since: now(),
+            by: me,
+            seq,
+            queue: next.queue,
           },
         },
         { merge: true },
