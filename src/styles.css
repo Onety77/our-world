@@ -4421,6 +4421,77 @@ body:has(.talking) .leave-place {
 }
 
 /*
+  Presence in the Stars, without putting the names back.
+
+  Warm and Cool are already the two-person language of the world. Their lights
+  sit on one quiet thread: a present person glows, an absent one becomes a
+  hollow ember, and when either leaves the thread itself breaks. It occupies
+  less room than a word while still answering the question immediately.
+*/
+.stars-presence {
+  position: absolute;
+  z-index: 3;
+  top: max(1.72rem, calc(env(safe-area-inset-top) + 0.42rem));
+  right: max(1.5rem, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  width: 2.65rem;
+  height: 1.15rem;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.stars-presence-light {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 0.38rem;
+  height: 0.38rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  transition:
+    opacity 0.8s ease,
+    background 0.8s ease,
+    box-shadow 0.8s ease,
+    transform 0.8s cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+
+.stars-presence-light.warm { color: var(--warm); }
+.stars-presence-light.cool { color: var(--cool); }
+
+.stars-presence-light.here {
+  background: currentColor;
+  box-shadow: 0 0 0.45rem currentColor;
+  animation: stars-presence-breathe 3.8s ease-in-out infinite;
+}
+
+.stars-presence-light.away {
+  background: transparent;
+  opacity: 0.24;
+  transform: scale(0.76);
+}
+
+.stars-presence-thread {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, var(--warm), var(--cool));
+  opacity: 0.44;
+  transform: scaleX(1);
+  transition: opacity 0.7s ease, transform 0.8s ease;
+}
+
+.stars-presence:not(.together) .stars-presence-thread {
+  opacity: 0.14;
+  transform: scaleX(0.52);
+  background: linear-gradient(90deg, currentColor 0 35%, transparent 35% 65%, currentColor 65%);
+}
+
+@keyframes stars-presence-breathe {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
+}
+
+/*
   The column hangs from a line about two-thirds up. Older messages climb from
   there and the newest few sit below it, which is why this is not anchored to
   the bottom: the read head has to have room underneath it.
@@ -6826,11 +6897,23 @@ body:has(.talking) .leave-place {
   spent its whole life not drawing. It breathes when she is waiting.
 */
 .whisper-mark {
+  position: relative;
   flex: 0 0 auto;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: rgba(242, 239, 230, 0.3);
+}
+
+/* One finite ripple when a message actually lands; the ordinary slow breath
+   continues afterward for as long as it remains unread. */
+.whisper-fold.arriving .whisper-mark::after {
+  content: '';
+  position: absolute;
+  inset: -0.42rem;
+  border: 1px solid rgba(159, 182, 232, 0.68);
+  border-radius: 50%;
+  animation: whisper-arrived 1.45s cubic-bezier(0.2, 0.7, 0.2, 1) 2;
 }
 
 .whisper-fold.waiting .whisper-mark {
@@ -6851,6 +6934,12 @@ body:has(.talking) .leave-place {
   50% {
     opacity: 1;
   }
+}
+
+@keyframes whisper-arrived {
+  0% { opacity: 0; transform: scale(0.35); }
+  18% { opacity: 0.85; }
+  100% { opacity: 0; transform: scale(1.8); }
 }
 
 .whisper-fold-words {
@@ -7023,6 +7112,11 @@ body:has(.talking) .leave-place {
 
 @media (prefers-reduced-motion: reduce) {
   .whisper-fold.waiting .whisper-mark {
+    animation: none;
+  }
+
+  .whisper-fold.arriving .whisper-mark::after,
+  .stars-presence-light.here {
     animation: none;
   }
 }

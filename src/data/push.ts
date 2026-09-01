@@ -17,6 +17,7 @@ import { firebase } from './firebase'
 
 const DEVICE_KEY = 'garden:push-device:v1'
 const WORKER = '/firebase-messaging-sw.js'
+let stopForegroundMessages: (() => void) | null = null
 
 function deviceId(): string {
   try {
@@ -70,7 +71,8 @@ export async function registerPushDevice(me: UserId): Promise<void> {
     throw new PushUnavailable('The garden is missing its Web Push key.')
   }
 
-  const { deleteToken, getMessaging, getToken, isSupported } = await import('firebase/messaging')
+  const { deleteToken, getMessaging, getToken, isSupported, onMessage } =
+    await import('firebase/messaging')
   if (!(await isSupported())) {
     throw new PushUnavailable('This browser does not support Web Push here.')
   }
@@ -78,6 +80,15 @@ export async function registerPushDevice(me: UserId): Promise<void> {
   const registration = await navigator.serviceWorker.register(workerUrl(), { scope: '/' })
   await registration.update().catch(() => {})
   const messaging = getMessaging(firebase().app)
+  /*
+   * A data-only FCM delivery may reach the open page before its Firestore
+   * snapshot. Consume that transport event here and deliberately do nothing:
+   * the message snapshot is the single source of truth, and it supplies the
+   * tone, unread light and conversation exactly once. Registering this handler
+   * also keeps foreground delivery out of the background display path on
+   * browsers which distinguish the two by listener presence.
+   */
+  if (!stopForegroundMessages) stopForegroundMessages = onMessage(messaging, () => {})
   const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration })
   if (!token) throw new PushUnavailable('This phone did not give the garden a notification address.')
 
@@ -104,6 +115,8 @@ export async function registerPushDevice(me: UserId): Promise<void> {
  * stale address itself.
  */
 export async function unregisterPushDevice(me: UserId): Promise<void> {
+  stopForegroundMessages?.()
+  stopForegroundMessages = null
   const tasks: Promise<unknown>[] = [deleteDoc(deviceRef(me))]
 
   try {

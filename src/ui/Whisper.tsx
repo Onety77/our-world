@@ -127,6 +127,9 @@ export function Whisper() {
   const [draft, setDraft] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
   const panel = useRef<HTMLDivElement>(null)
+  const heard = useRef<string | null>(null)
+  const attentionTimer = useRef<number | null>(null)
+  const [arrival, setArrival] = useState(0)
 
   // Folding keeps the draft in this mounted component, so an outside tap is
   // convenient without risking words that have not been sent yet.
@@ -149,6 +152,31 @@ export function Whisper() {
     () => messages.filter((m) => m.by !== me && m.at > (lastReadAt?.[me] ?? 0)).length,
     [messages, me, lastReadAt],
   )
+
+  /*
+    The unread mark already breathes while something is waiting. Give the
+    instant of arrival one slightly clearer ripple as well, so a missed tone
+    still catches the edge of your eye without turning into a badge or toast.
+    The first loaded history is not an arrival.
+  */
+  useEffect(() => {
+    const newest = messages.at(-1)
+    if (!newest || heard.current === newest.id) return
+    const first = heard.current === null
+    heard.current = newest.id
+    if (first || newest.by === me) return
+
+    setArrival((value) => value + 1)
+    if (attentionTimer.current !== null) window.clearTimeout(attentionTimer.current)
+    attentionTimer.current = window.setTimeout(() => {
+      attentionTimer.current = null
+      setArrival(0)
+    }, 4200)
+  }, [messages, me])
+
+  useEffect(() => () => {
+    if (attentionTimer.current !== null) window.clearTimeout(attentionTimer.current)
+  }, [])
 
   useEffect(() => {
     if (open) field.current?.focus()
@@ -230,7 +258,7 @@ export function Whisper() {
     return (
       <button
         type="button"
-        className={`whisper-fold ${unread > 0 ? 'waiting' : ''}`}
+        className={`whisper-fold ${unread > 0 ? 'waiting' : ''}${arrival > 0 ? ' arriving' : ''}`}
         onClick={() => setOpen(true)}
         aria-label={
           unread > 0
@@ -238,7 +266,7 @@ export function Whisper() {
             : `Open messages${recent.at(-1)?.body ? `; latest: ${recent.at(-1)!.body}` : ''}`
         }
       >
-        <span className="whisper-mark" aria-hidden="true" />
+        <span key={arrival} className="whisper-mark" aria-hidden="true" />
         <span className="whisper-fold-words">
           {unread > 0
             ? `${unread} from ${them.name}`

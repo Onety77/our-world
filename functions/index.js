@@ -8,6 +8,7 @@
  */
 
 const { initializeApp } = require('firebase-admin/app')
+const { getDatabase } = require('firebase-admin/database')
 const { getFirestore } = require('firebase-admin/firestore')
 const { getMessaging } = require('firebase-admin/messaging')
 const { logger, setGlobalOptions } = require('firebase-functions')
@@ -31,6 +32,26 @@ function cleanBody(value) {
   return `${body.slice(0, 177)}…`
 }
 
+/** A visible garden refreshes this at least every twenty seconds. */
+async function recipientIsInGarden(recipient) {
+  try {
+    const snapshot = await getDatabase().ref(`presence/${recipient}`).get()
+    const presence = snapshot.val()
+    const lastSeen = Number(presence?.lastSeen)
+    return presence?.online === true
+      && Number.isFinite(lastSeen)
+      && Date.now() - lastSeen < 45_000
+  } catch (error) {
+    // Push is the safe failure mode: a temporary presence read failure must not
+    // silently lose a message meant for a closed phone.
+    logger.warn('Could not establish whether the recipient was in the garden.', {
+      recipient,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 exports.notifyNewMessage = onDocumentCreated('messages/{messageId}', async (event) => {
   const message = event.data?.data()
   if (!message || (message.by !== 'warm' && message.by !== 'cool')) return
@@ -38,6 +59,11 @@ exports.notifyNewMessage = onDocumentCreated('messages/{messageId}', async (even
   const sender = message.by
   const recipient = sender === 'warm' ? 'cool' : 'warm'
   const db = getFirestore()
+
+  // A visible copy already has the live Firestore message, authored tone and
+  // unread light. Do not send a system notification to any of this person's
+  // other registered devices while they are visibly in the garden.
+  if (await recipientIsInGarden(recipient)) return
 
   const [devices, profile] = await Promise.all([
     db.collection('pushDevices').doc(recipient).collection('devices').get(),

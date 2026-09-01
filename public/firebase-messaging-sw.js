@@ -21,13 +21,33 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging()
 
+/* This worker caches nothing, so an update has no old app shell to protect.
+ * Take over immediately; otherwise iOS may keep the previous notification
+ * behaviour alive until every installed-app window has been closed. */
+self.skipWaiting()
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
+
 /*
  * Data-only messages give this worker one display path on every platform.
  * Sending a Firebase `notification` payload as well would make some browsers
  * display it automatically and then this callback would create a duplicate.
  */
-messaging.onBackgroundMessage((payload) => {
+messaging.onBackgroundMessage(async (payload) => {
   const data = payload.data || {}
+
+  /*
+   * iOS can hand a push to the worker even while an installed PWA is visibly
+   * open. The page already receives the Firestore message and responds with
+   * its own tone and unread light, so system chrome here would be a duplicate.
+   * Check the actual windows at delivery time; this is more precise than a
+   * server-side heartbeat and remains a final guard if those two events race.
+   */
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  const visibleGarden = windows.some((client) =>
+    client.visibilityState === 'visible' || client.focused === true,
+  )
+  if (visibleGarden) return
+
   return self.registration.showNotification(data.title || 'The Garden Between Us', {
     body: data.body || 'Something is waiting in the Stars.',
     icon: '/icons/icon-192.png',

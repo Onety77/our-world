@@ -704,9 +704,8 @@ shared-file changes, measurements, and anything another agent should preserve.
   the server, reads only that person's devices, sends a compact data-only push,
   caps scaling at two instances, and never exposes the other person's tokens
   to client code.
-- Prevented duplicate alerts between the old live-page listener and Web Push,
-  while retaining the useful visible-page notification when somebody is in a
-  different place. Added the VAPID setup and one-time deploy instructions.
+- Prevented duplicate alerts between the old live-page listener and Web Push.
+  Added the VAPID setup and one-time deploy instructions.
 - Generated the updated rules. TypeScript, production Vite build, function
   syntax check and the rules generator pass.
 
@@ -756,3 +755,22 @@ shared-file changes, measurements, and anything another agent should preserve.
   native plain-text paste, focus restoration, placeholders and auto-growing.
 - TypeScript and the production build pass. Actually hiding the system strip
   remains possible only through a native iOS wrapper such as Capacitor.
+
+## 1 September 2026 - Codex - Quiet foreground messages and Stars presence
+
+- Made operating-system notifications exclusive to a closed or backgrounded
+  garden. A visible page now keeps the established authored message tone and
+  unread light without also raising an iOS notification banner.
+- Guarded that rule in the live listener, Firebase foreground receiver,
+  messaging service worker and Cloud Function. The server checks the existing
+  presence heartbeat; the worker checks actual visible windows at delivery, so
+  navigation and visibility races do not leak duplicate notifications.
+- Gave the mini-message light a finite two-ring arrival ripple followed by its
+  existing slow unread breath, including a reduced-motion treatment.
+- Added a wordless presence mark to the Stars: Warm and Cool sit as two small
+  lights on one thread. Online lights glow, an absent light becomes hollow and
+  the thread breaks, so either person leaving is visible without restoring the
+  old names or top-bar weight.
+- TypeScript, Cloud Function syntax and the production build pass. The updated
+  `notifyNewMessage` function was deployed successfully to `our-world-c9a07` as
+  active revision `notifynewmessage-00002-tec`.

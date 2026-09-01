@@ -373,6 +373,7 @@ export function Talking() {
   const replyTo = useTalking((s) => s.replyTo)
   const answer = useTalking((s) => s.answer)
   const profiles = useWorldSlice((s) => s.profiles)
+  const presence = useWorldSlice((s) => s.presence)
   const lastReadAt = useWorldSlice((s) => s.lastReadAt)
   const idle = useActivity((s) => s.idle)
 
@@ -1092,8 +1093,26 @@ export function Talking() {
 
   if (!here) return null
 
+  const warmHere = presence.warm?.online === true
+  const coolHere = presence.cool?.online === true
+  const presenceState = warmHere && coolHere ? 'together' : warmHere || coolHere ? 'one' : 'away'
+  const presenceWords = [
+    `${profiles.warm.name} is ${warmHere ? 'online' : 'away'}`,
+    `${profiles.cool.name} is ${coolHere ? 'online' : 'away'}`,
+  ].join('; ')
+
   return (
     <div className="talking" ref={surface}>
+      <div
+        className={`stars-presence ${presenceState}`}
+        role="status"
+        aria-live="polite"
+        aria-label={presenceWords}
+      >
+        <span className={`stars-presence-light warm ${warmHere ? 'here' : 'away'}`} aria-hidden="true" />
+        <span className="stars-presence-thread" aria-hidden="true" />
+        <span className={`stars-presence-light cool ${coolHere ? 'here' : 'away'}`} aria-hidden="true" />
+      </div>
       <div className="sky-column" ref={column}>
         {lines.map(({ m, age, stamped, answering }) => (
           <Said

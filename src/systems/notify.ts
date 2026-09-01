@@ -122,16 +122,19 @@ export const useNotify = create<NotifyState>((set, get) => ({
 }))
 
 /**
- * Do not let the live Firestore listener duplicate a notification the push
- * worker is already responsible for. In a visible non-Stars section, push is
- * delivered to the page without being displayed, so the local path still has
- * one useful job there.
+ * System notifications belong to an absent garden.
+ *
+ * While this page is visible, the live message listener already plays the
+ * authored tone and lights the corner mark. Showing operating-system chrome on
+ * top of the world as well is a duplicate whether you are in the Stars, the
+ * Tree or anywhere else. `inTheStars` is retained at the call boundary for
+ * compatibility with the local/offline seam, but visibility is the only rule.
  */
-export function shouldTell(inTheStars: boolean): boolean {
+export function shouldTell(_inTheStars: boolean): boolean {
   const state = useNotify.getState()
   if (!state.live() || typeof document === 'undefined') return false
   if (state.push === 'active' && document.visibilityState !== 'visible') return false
-  return document.visibilityState !== 'visible' || !inTheStars
+  return document.visibilityState !== 'visible'
 }
 
 /** Show the open-page fallback and take a tap directly to the Stars. */
