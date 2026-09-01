@@ -37,6 +37,7 @@ import { useListening } from '@/systems/listening'
 import { useTalking } from '@/systems/talking'
 import {
   advance,
+  beginnings,
   clock,
   correction,
   positionOf,
@@ -324,6 +325,92 @@ export function Together() {
     move({ videoId: null, title: '', playing: false, at: 0, queue: shared.queue })
   }
 
+  /*
+    ---------------------------------------------------------------------------
+    **Put the tucked pane wherever it is least in the way.**
+
+    A fixed corner is a guess about what you are looking at, and it is wrong
+    about half the time — it sat over the name of the place, then over the
+    flowers, then over whatever it was you went back to the garden to see. The
+    other answer on offer was snapping it to an edge alongside the music, which
+    solves it in one direction and not in the others.
+
+    So it is simply moved. Press it, drag it, let go, and it stays, the way a
+    photograph moves on a desk. Held as fractions of the free space so a
+    rotation cannot leave it off-screen, and clamped on the way in so a resize
+    cannot either.
+
+    A press that does not move is still a tap, and a tap still opens it. The
+    threshold below is the only thing separating the two, and it is generous
+    because a thumb on a small pane is never perfectly still.
+    ---------------------------------------------------------------------------
+  */
+  const spot = useWatching((s) => s.spot)
+  const paneBox = useRef({ w: 176, h: 99 })
+  const dragging = useRef<{ id: number; dx: number; dy: number; moved: boolean } | null>(null)
+
+  const onPaneDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (open) return
+    const box = event.currentTarget.getBoundingClientRect()
+    paneBox.current = { w: box.width, h: box.height }
+    dragging.current = {
+      id: event.pointerId,
+      dx: event.clientX - box.left,
+      dy: event.clientY - box.top,
+      moved: false,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const onPaneMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const held = dragging.current
+    if (!held || held.id !== event.pointerId) return
+    const box = event.currentTarget.getBoundingClientRect()
+    if (!held.moved) {
+      const far =
+        Math.abs(event.clientX - (box.left + held.dx)) +
+        Math.abs(event.clientY - (box.top + held.dy))
+      if (far < 6) return
+      held.moved = true
+    }
+    const freeX = Math.max(1, window.innerWidth - box.width)
+    const freeY = Math.max(1, window.innerHeight - box.height)
+    useWatching.getState().putSpot({
+      x: Math.max(0, Math.min(1, (event.clientX - held.dx) / freeX)),
+      y: Math.max(0, Math.min(1, (event.clientY - held.dy) / freeY)),
+    })
+  }
+
+  const onPaneUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const held = dragging.current
+    dragging.current = null
+    // A drag must not also be the tap that opens it.
+    if (held?.moved && held.id === event.pointerId) event.preventDefault()
+  }
+
+  /*
+    Left and top as *pixels*, worked out from the fractions at render.
+
+    A percentage would place the pane's own top-left at that share of the
+    viewport, which walks it off the bottom-right edge as it gets larger. The
+    fraction is of the *free* space, so 1 means "against the far edge", which is
+    what a hand that dragged it there meant.
+  */
+  const placed = useMemo(() => {
+    if (spot === null || open || typeof window === 'undefined') return undefined
+    const wide = Math.min(window.innerWidth * 0.42, 176)
+    const free = {
+      x: Math.max(0, window.innerWidth - wide),
+      y: Math.max(0, window.innerHeight - wide * 0.5625),
+    }
+    return {
+      left: `${Math.round(spot.x * free.x)}px`,
+      top: `${Math.round(spot.y * free.y)}px`,
+      right: 'auto' as const,
+      bottom: 'auto' as const,
+    }
+  }, [spot, open])
+
   // --- what is on --------------------------------------------------------
   const shown = shared.playing ? Math.max(where, 0) : shared.at
   const through = span > 0 ? Math.max(0, Math.min(1, shown / span)) : 0
@@ -347,7 +434,19 @@ export function Together() {
   if (!open && !live) return null
 
   return (
-    <div className={`together ${open ? 'full' : 'tucked'}${miniControls ? ' mini-awake' : ''}`}>
+    <div
+      /*
+        The root is the box while it is tucked — the screen inside is
+        `inset: 0` and fills it — so the drag, and the place it is remembered
+        in, belong here rather than on the picture.
+      */
+      className={`together ${open ? 'full' : 'tucked'}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}`}
+      style={open ? undefined : placed}
+      onPointerDown={onPaneDown}
+      onPointerMove={onPaneMove}
+      onPointerUp={onPaneUp}
+      onPointerCancel={onPaneUp}
+    >
       {open && (
         <>
           <div className="together-place" aria-hidden="true">
@@ -376,7 +475,14 @@ export function Together() {
       )}
 
       {/* The persistent YouTube host never leaves the document between views. */}
-      <div className={`together-screen${live ? '' : ' dark'}${trouble ? ' has-trouble' : ''}`}>
+      <div
+        className={`together-screen${live ? '' : ' dark'}${trouble ? ' has-trouble' : ''}${!open && spot !== null ? ' placed' : ''}`}
+        style={placed}
+        onPointerDown={onPaneDown}
+        onPointerMove={onPaneMove}
+        onPointerUp={onPaneUp}
+        onPointerCancel={onPaneUp}
+      >
         <div ref={stage} className="together-stage" />
         {!live && open && (
           <div className="together-nothing">
@@ -559,6 +665,17 @@ function Transport({
         }}
       >
         <span className="together-beam" style={{ transform: `scaleX(${through})` }} />
+        {/*
+          Where you are, as a thing you can take hold of.
+
+          A one-pixel beam says how far through you are and gives a thumb
+          nothing to aim at — you can drag it, but only by trusting that the
+          line is draggable, and you cannot see the point you are dragging. The
+          mark is both halves of that: it reads the position at a glance and it
+          is the handle. Left on `pointer-events: none` so it never eats the
+          gesture belonging to the line underneath it.
+        */}
+        <span className="together-hold" style={{ left: `${through * 100}%` }} aria-hidden="true" />
       </div>
 
       <div className="together-moves">
@@ -681,6 +798,13 @@ function Queue({
   const data = useData()
   const hunt = useWatching((s) => s.hunt)
   const setHunt = useWatching((s) => s.setHunt)
+  /*
+    Rolled once for this visit. `useState` with an initialiser rather than
+    `useMemo`: a memo may legitimately be thrown away and recomputed, and
+    suggestions that changed while you were reading them would be worse than
+    suggestions that never changed at all.
+  */
+  const [ideas] = useState(beginnings)
   const [found, setFound] = useState<Found[]>([])
   const [looking, setLooking] = useState(false)
   const [trouble, setTrouble] = useState('')
@@ -793,7 +917,7 @@ function Queue({
       {canSearch && hunt.trim() === '' && (
         <div className="together-prompts" aria-label="things to discover">
           <span>begin somewhere</span>
-          {['music films', 'something funny', 'short documentaries', 'racing onboard'].map((idea) => (
+          {ideas.map((idea) => (
             <button type="button" key={idea} onClick={() => setHunt(idea)}>{idea}</button>
           ))}
         </div>

@@ -29,6 +29,7 @@ import { Talking } from '@/ui/Talking'
 import { VoiceLights } from '@/ui/VoiceLights'
 import { Whisper } from '@/ui/Whisper'
 import { Together } from '@/ui/Together'
+import { useWatching } from '@/systems/watching'
 import { SaidMenu } from '@/ui/Said'
 import { Trouble } from '@/ui/Trouble'
 import { Arrival } from '@/ui/Arrival'
@@ -359,19 +360,36 @@ function Garden() {
   useEffect(() => {
     ambience.setPlace(entered ? (sectionId as Place) : 'garden')
   }, [entered, sectionId])
+  /*
+    ---------------------------------------------------------------------------
+    **The world goes quiet in front of the shared screen.**
+
+    Not turned down — gone, and the animation loop with it. You opened it to
+    watch something, and a meadow breathing underneath a film is not atmosphere,
+    it is a second thing playing. The corner player already stops itself when a
+    screen comes up; this is the other half, and it is the half nobody notices
+    is missing until they are sitting in it.
+
+    Both conditions land here rather than in `ui/Together` because `setMaster`
+    has exactly one owner and this is it. Two places writing the master gain is
+    how you get a world that is silent until the next time somebody switches
+    tabs.
+    ---------------------------------------------------------------------------
+  */
+  const watchingOpen = useWatching((s) => s.open)
   useEffect(() => {
-    const onVisibility = () => {
-      const hidden = document.hidden
+    const settle = () => {
       // The chosen song is a real <audio> element and may keep playing with
       // the screen off. The procedural weather is ours, and has no reason to
       // keep its AudioContext or animation loop alive where nobody can hear it.
-      ambience.setSuspended(hidden)
-      ambience.setMaster(hidden ? 0 : 0.85)
+      const quiet = document.hidden || watchingOpen
+      ambience.setSuspended(quiet)
+      ambience.setMaster(quiet ? 0 : 0.85)
     }
-    onVisibility()
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [])
+    settle()
+    document.addEventListener('visibilitychange', settle)
+    return () => document.removeEventListener('visibilitychange', settle)
+  }, [watchingOpen])
 
   /*
     Browsers won't start audio until the person has touched something, and the

@@ -40,6 +40,52 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · five things on the shared screen
+
+Codex did the design pass on the player; these are the five faults left in it.
+
+**Suggestions are three now, and they rotate.** Four chips wrapped to a second
+row on a phone and pushed the queue — the thing you opened the tab to look at —
+off the bottom of the panel. Three is a *layout* fact, so it is held in
+`npm run watch` rather than left to a stylesheet to be careful about. They are
+drawn from a pool of eighteen and picked once per visit: a fixed set becomes
+furniture within a week, and then the empty field is empty again, which is the
+whole reason the suggestions exist.
+
+**The progress line has a handle.** A one-pixel beam says how far through you
+are and gives a thumb nothing to aim at.
+
+**Seeking no longer shoves the corner off the screen.** The screen lives inside
+the corner, and `useTuckOnSwipe` was taking every sideways drag in it — most of
+all the one along the progress line, which is *the* horizontal gesture in a
+video player. Dragging forward put the film away. The gesture now stands down
+for `.together.full` entirely; the way out is the words in the top left, like
+everywhere else here.
+
+**The tucked pane goes where you put it.** Press, drag, let go, and it stays —
+kept as fractions of the free space so a rotation cannot leave it off-screen,
+and remembered per device like the volume faders. A press that does not move is
+still a tap that opens it; six pixels separates them.
+
+> The drag first went on `.together-screen` and did nothing, because Codex had
+> moved the positioning up to `.together.tucked` and made the screen
+> `inset: 0` inside it. The inline style was applied and the box did not move.
+> **The element that has the position is the element that gets dragged.**
+
+**And the world goes quiet in front of it.** Not turned down — gone, and the
+animation loop with it. You opened it to watch something, and a meadow
+breathing under a film is not atmosphere, it is a second thing playing. Both
+conditions live in `App`'s one ambience effect, because `setMaster` has exactly
+one owner and two writers is how you get a world that stays silent until the
+next time somebody switches tabs.
+
+> Verifying that needed a new number. `__gardenSound.rms` answers "is anything
+> coming out", which is the same zero whether the world was silenced on purpose,
+> the tab is hidden, or the AudioContext never unlocked — and in headless it
+> never unlocks, so the first check passed *vacuously*. `worldSoundTelemetry`
+> carries `master` now: the instruction rather than the result. 0 while
+> watching, 0.85 after folding away.
+
 ## 1 Sep · Claude · the Glasshouse is a wall of pictures again
 
 Reported: the photographs are blur unless you tap one, on phone and desktop

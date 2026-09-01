@@ -19,7 +19,9 @@
 import {
   DRIFT,
   LURCH,
+  BEGIN_WITH,
   advance,
+  beginnings,
   clock,
   correction,
   darkScreen,
@@ -143,6 +145,32 @@ console.log('\nthe queue\n')
 
   const dropped: Queued[] = [a, b].filter((q) => q.id !== a.id)
   ok('taking one out takes exactly one out', dropped.length === 1 && dropped[0].id === b.id)
+}
+
+console.log('\nsomewhere to begin\n')
+
+{
+  /*
+    Three, and never the same three twice.
+
+    The count is a *layout* fact — a fourth chip wrapped onto a second row on
+    a phone and pushed the queue off the bottom of the panel — so it is held
+    here rather than left to a stylesheet to be careful about.
+  */
+  const one = beginnings()
+  ok(`three of them — ${one.length}`, one.length === BEGIN_WITH && BEGIN_WITH === 3)
+  ok('all different from each other', new Set(one).size === one.length)
+  ok('and none of them empty', one.every((idea) => idea.trim().length > 2))
+
+  /*
+    They have to actually rotate. A fixed set becomes furniture within a week
+    and then the empty field is empty again, which is the whole reason the
+    suggestions exist. Twenty draws landing on the same three every time would
+    be a bug in the shuffle rather than luck.
+  */
+  const seen = new Set<string>()
+  for (let i = 0; i < 20; i++) seen.add(beginnings().join('|'))
+  ok(`and they change between sessions — ${seen.size} different sets in 20`, seen.size > 3)
 }
 
 console.log('\nsaying how long\n')

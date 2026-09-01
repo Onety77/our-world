@@ -100,6 +100,18 @@ export type WorldCue = 'root' | 'seal' | 'water' | 'glass' | 'ember' | 'paper'
 export const worldSoundTelemetry = {
   rms: 0,
   peak: 0,
+  /**
+   * Where the master gain has been put, 0..1.
+   *
+   * The analyser answers "is anything coming out", which is the same zero
+   * whether the world has been silenced on purpose, the tab is hidden, or the
+   * AudioContext never unlocked at all. This is the *instruction*, and it is
+   * the difference between "we asked for silence" and "nothing was ever
+   * playing" — a distinction that is invisible from the outside and was needed
+   * the first time somebody tried to check that the shared screen really does
+   * quieten the garden.
+   */
+  master: 0,
   last: '' as WorldCue | '',
   cues: 0,
 }
@@ -1167,6 +1179,7 @@ function aWeight(hz: number): number {
 
     setMaster(value) {
       masterLevel = Math.max(0, Math.min(1, value))
+      worldSoundTelemetry.master = masterLevel
       if (!ctx || !master || sleeping) return
       master.gain.setTargetAtTime(masterLevel, ctx.currentTime, 0.4)
     },

@@ -95,6 +95,42 @@ interface WatchingState {
   /** What the search box holds, kept across a tuck so a search survives one. */
   hunt: string
   setHunt(hunt: string): void
+
+  /**
+   * Where the tucked pane has been put, as a fraction of the free space.
+   *
+   * -------------------------------------------------------------------------
+   * **Fractions rather than pixels, so it survives a rotation.** A pane parked
+   * 240 px from the left of a portrait phone is off the edge of the same phone
+   * held sideways; the same pane at 0.7 of the way across is where you left it.
+   *
+   * Null until it has been moved, which is not the same as 0,0 — it means "put
+   * it where the corner puts things", and the corner should be free to change
+   * its mind about that without inheriting a position nobody chose.
+   *
+   * This device only, and remembered here rather than sent. Where a picture
+   * sits on your screen is a fact about your screen, exactly like the volume
+   * faders and the driving buttons.
+   * -------------------------------------------------------------------------
+   */
+  spot: { x: number; y: number } | null
+  putSpot(spot: { x: number; y: number } | null): void
+}
+
+const SPOT_KEY = 'garden:watching-spot:v1'
+
+function readSpot(): { x: number; y: number } | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const raw = JSON.parse(localStorage.getItem(SPOT_KEY) ?? 'null')
+    if (!raw || typeof raw !== 'object') return null
+    const x = Number(raw.x)
+    const y = Number(raw.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+    return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) }
+  } catch {
+    return null
+  }
 }
 
 export const useWatching = create<WatchingState>((set) => ({
@@ -109,6 +145,16 @@ export const useWatching = create<WatchingState>((set) => ({
   close: () => set({ open: false, live: false }),
   hunt: '',
   setHunt: (hunt) => set({ hunt }),
+  spot: readSpot(),
+  putSpot(spot) {
+    try {
+      if (spot) localStorage.setItem(SPOT_KEY, JSON.stringify(spot))
+      else localStorage.removeItem(SPOT_KEY)
+    } catch {
+      /* it still holds for this session */
+    }
+    set({ spot })
+  },
 }))
 
 /*
@@ -216,6 +262,76 @@ export function clock(seconds: number): string {
   const s = whole % 60
   const pad = (n: number) => String(n).padStart(2, '0')
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
+}
+
+// ---------------------------------------------------------------------------
+// Somewhere to begin
+// ---------------------------------------------------------------------------
+
+/**
+ * Things worth searching for when you have opened the screen and have no idea.
+ *
+ * ---------------------------------------------------------------------------
+ * The empty field is the hardest moment in the whole thing: two people, one
+ * evening, and the question "what do you want to watch" — which has defeated
+ * better systems than this one. A few concrete starting points are worth more
+ * than a cleverer search box.
+ *
+ * They are **phrases rather than categories** on purpose. "Music" is a filing
+ * cabinet; "songs from films" is an evening. Each one should sound like
+ * somebody suggesting something, because that is what it is standing in for.
+ * ---------------------------------------------------------------------------
+ */
+const BEGINNINGS = [
+  'music films',
+  'something funny',
+  'short documentaries',
+  'racing onboard',
+  'live sessions',
+  'the making of',
+  'street food',
+  'old adverts',
+  'wildlife close up',
+  'songs from films',
+  'places from above',
+  'stand up sets',
+  'how it is made',
+  'covers, better than the original',
+  'night drives',
+  'lost architecture',
+  'first performances',
+  'quiet cooking',
+]
+
+/** How many are offered. Three, and the number is a layout decision. */
+export const BEGIN_WITH = 3
+
+/**
+ * Three of them, picked once for this visit.
+ *
+ * ---------------------------------------------------------------------------
+ * **Three, because four wrapped.** On a phone the fourth chip dropped to a
+ * second row and pushed the queue — the thing you came to look at — down off
+ * the bottom of the panel. A suggestion that costs you sight of your own queue
+ * is not helping.
+ *
+ * **Different every session, because a fixed three stop being read.** The same
+ * four words in the same place every evening become furniture within a week,
+ * and then the empty field is back to being empty. Rotating them means the
+ * corner occasionally says something you had not thought of, which is the only
+ * reason it is there.
+ *
+ * Picked once and held, not re-rolled per render — chips that reshuffle under
+ * a thumb are unusable.
+ * ---------------------------------------------------------------------------
+ */
+export function beginnings(): string[] {
+  const pool = [...BEGINNINGS]
+  const picked: string[] = []
+  for (let i = 0; i < BEGIN_WITH && pool.length > 0; i++) {
+    picked.push(...pool.splice(Math.floor(Math.random() * pool.length), 1))
+  }
+  return picked
 }
 
 // ---------------------------------------------------------------------------

@@ -46,6 +46,20 @@ export function useTuckOnSwipe(
     let sideways: boolean | null = null
 
     const down = (event: PointerEvent) => {
+      /*
+        Not while the shared screen is up.
+
+        The screen lives inside the corner, so every sideways drag in it — most
+        of all the one along the progress line, which is *the* horizontal
+        gesture in a video player — reached this and shoved the whole corner off
+        the edge of the display. Seeking forward put the film away.
+
+        It is not a conflict worth arbitrating with thresholds either: the
+        screen is full-bleed and owns the surface while it is open. The way out
+        of it is the way out of everything else here, which is the word in the
+        top left.
+      */
+      if ((event.target as HTMLElement | null)?.closest('.together.full')) return
       id = event.pointerId
       fromX = event.clientX
       fromY = event.clientY

@@ -13782,3 +13782,89 @@ body.on-the-road .broke-what {
   .together-presence.online { animation: none; }
   .together-mini-actions { transition: none; }
 }
+
+/*
+  Where you are on the line, as something a thumb can take hold of.
+
+  The beam alone says how far through you are and gives a finger nothing to
+  aim at — draggable in principle, invisible in practice. This is both halves:
+  it reads the position at a glance and it is the handle. `pointer-events` off
+  so it never takes the gesture belonging to the line underneath it.
+*/
+.together-hold {
+  position: absolute;
+  top: 50%;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin: -0.31rem 0 0 -0.31rem;
+  border-radius: 50%;
+  background: #fff3dc;
+  box-shadow:
+    0 0 0 1px rgba(20, 12, 4, 0.35),
+    0 0 12px rgba(255, 206, 150, 0.85);
+  pointer-events: none;
+  transition: transform 140ms ease;
+}
+
+/* Bigger under a finger, so it is obvious which thing is being dragged. */
+.together-beamline:active .together-hold,
+.together-beamline:focus-visible .together-hold {
+  transform: scale(1.45);
+}
+
+/*
+  A pane that has been put somewhere stays there.
+
+  The inline `left`/`top` win over the corner's defaults, so this only has to
+  say that the transition must not run — a placed pane should follow the thumb
+  exactly, and easing toward the finger is the thing that makes a drag feel
+  like it is being negotiated rather than obeyed.
+*/
+/*
+  A pane that has been put somewhere stays there.
+
+  The inline left/top win over the corner's defaults, so this only has to say
+  the transition must not run — a placed pane should follow the thumb exactly,
+  and easing toward a finger is what makes a drag feel negotiated rather than
+  obeyed. `right`/`bottom` are released, or the box would be pinned by all four.
+*/
+.together.tucked.placed {
+  right: auto;
+  bottom: auto;
+  transition: none;
+}
+
+.together.tucked {
+  touch-action: none;
+  cursor: grab;
+}
+
+.together.tucked:active { cursor: grabbing; }
+
+.together.tucked .together-screen {
+  /* Sideways belongs to moving this; the corner's own shove is refused while
+     the screen is up — see `ui/cornerSwipe`. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.together.tucked .together-screen:active { cursor: grabbing; }
+
+/*
+  Three, and never a second row.
+
+  The fourth chip wrapped on a phone and pushed the queue — the thing you came
+  to look at — off the bottom of the panel. `nowrap` is belt and braces: if a
+  longer phrase ever arrives, it shortens rather than folding the row.
+*/
+.together-prompts {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.together-prompts button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
