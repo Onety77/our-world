@@ -127,6 +127,12 @@ const TABS = [
     reach: 'Shared the moment you change it. There is nothing to press.',
   },
   {
+    id: 'questions',
+    name: 'questions',
+    blurb: 'what the Tree is asking, and every opened question around it',
+    reach: 'Shared. Making one active changes the Tree for both of you without changing either answer.',
+  },
+  {
     id: 'music',
     name: 'music',
     blurb: 'what the two of you can listen to',
@@ -193,6 +199,7 @@ export function Admin() {
   const memories = useMemories((s) => s.all)
   const questions = useWorldSlice((s) => s.questions)
   const [adminQuestion, setAdminQuestion] = useState('')
+  const [activatingQuestion, setActivatingQuestion] = useState<string | null>(null)
   const voiceLimit = useVoiceLights((state) => state.limit)
   const [voiceLimitDraft, setVoiceLimitDraft] = useState(voiceLimit)
 
@@ -209,6 +216,17 @@ export function Admin() {
       data.plantAdminQuestion(adminQuestion),
     )
     if (added) setAdminQuestion('')
+  }
+
+  async function makeQuestionActive(roundId: string) {
+    setActivatingQuestion(roundId)
+    try {
+      await attempt('that question did not become active', () =>
+        data.setActiveQuestion(roundId),
+      )
+    } finally {
+      setActivatingQuestion(null)
+    }
   }
 
   function moveThem(dx: number, dz: number) {
@@ -438,9 +456,92 @@ export function Admin() {
 
       {tab === 'music' && <AddMusic />}
 
-      {tab === 'you' && (
+      {tab === 'questions' && (
+      <>
       <section>
-        <h2>the Tree's question pool</h2>
+        <h2>the question at the roots</h2>
+        <p className="admin-note">
+          An unfinished question never expires. If more than one opened round is
+          waiting, the Tree keeps the oldest one unless you deliberately choose
+          another here.
+        </p>
+        {!questions.loaded ? (
+          <p className="admin-note">reading the opened rounds...</p>
+        ) : questions.rounds.length === 0 ? (
+          <p className="admin-note">No question has opened yet.</p>
+        ) : (
+          <ol className="admin-question-line">
+            {questions.rounds.map((round, index) => {
+              const active = round.id === questions.activeRoundId
+              const complete = round.answered.warm && round.answered.cool
+              const activeIndex = questions.rounds.findIndex(
+                (entry) => entry.id === questions.activeRoundId,
+              )
+              const place = active
+                ? 'active now'
+                : index < activeIndex
+                  ? 'before active'
+                  : 'after active'
+              const mine = round.answered[me]
+              const theirs = round.answered[them]
+              const answerState = complete
+                ? 'both answered · in the archive'
+                : mine && theirs
+                  ? 'both answers are being joined'
+                  : mine
+                    ? `${profiles[them].name} has not answered yet`
+                    : theirs
+                      ? `${profiles[them].name} answered · sealed until you answer`
+                      : 'waiting for both of you'
+
+              return (
+                <li key={round.id} className={active ? 'active' : ''}>
+                  <div className="admin-question-meta">
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    <span>{place}</span>
+                    <time dateTime={new Date(round.openedAt).toISOString()}>
+                      {new Date(round.openedAt).toLocaleDateString()}
+                    </time>
+                  </div>
+                  <p>{round.prompt}</p>
+                  <div className="admin-question-foot">
+                    <span>{answerState}</span>
+                    {!complete ? (
+                      <button
+                        type="button"
+                        className={active ? 'on' : ''}
+                        disabled={me !== 'warm' || active || activatingQuestion !== null}
+                        onClick={() => void makeQuestionActive(round.id)}
+                      >
+                        {active
+                          ? 'active at the Tree'
+                          : activatingQuestion === round.id
+                            ? 'making active...'
+                            : 'make active'}
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        )}
+        {questions.rounds.filter(
+          (round) => !round.answered.warm || !round.answered.cool,
+        ).length > 1 ? (
+          <p className="admin-warn">
+            More than one unfinished round exists. That is the old bug made
+            visible; choose the one you want to finish first. No answer has been
+            removed.
+          </p>
+        ) : null}
+        {me !== 'warm' ? (
+          <p className="admin-note">Only the warm account can change which question is active.</p>
+        ) : null}
+      </section>
+
+      <section>
+        <h2>the Tree's private question pool</h2>
         <p className="admin-note">
           {questions.history.length} completed · {questions.queued} of your private prompts
           waiting · {questions.availableSeeds} saving-earned seeds unspent.
@@ -472,6 +573,7 @@ export function Admin() {
           <p className="admin-note">Only the warm account owns this hidden pool.</p>
         ) : null}
       </section>
+      </>
       )}
 
       {tab === 'world' && (

@@ -11,7 +11,7 @@ import { SEED } from '@/config'
 import { convert, money, zero } from './money'
 // where a thought's flower grows; the seed uses the same spiral real ones do
 import { thoughtSpot } from '@/sections/tree/layout'
-import type {
+import type { ScreenTalk,
   Contribution,
   Decor,
   Letter,
@@ -37,6 +37,7 @@ import type {
   VoiceLight,
   VoiceLightGarden,
 } from './types'
+import { activeQuestion, isQuestionWaiting } from './questionOrder'
 import { forgetPicture, forgetPictures, pictureFromStore, putPicture } from './pictures'
 import { forgetSong, putSong, songFromStore } from './songs'
 import {
@@ -131,6 +132,8 @@ function seedState(): WorldState {
     today: null,
     questions: {
       current: null,
+      rounds: [],
+      activeRoundId: null,
       history: [],
       availableSeeds: 0,
       queued: 0,
@@ -226,10 +229,11 @@ interface StoredQuestionRound extends Omit<QuestionRound, 'answers'> {
 interface StoredQuestions {
   rounds: StoredQuestionRound[]
   seeds: StoredQuestionSeed[]
+  activeRoundId: string | null
 }
 
 function loadQuestions(): StoredQuestions {
-  if (typeof localStorage === 'undefined') return { rounds: [], seeds: [] }
+  if (typeof localStorage === 'undefined') return { rounds: [], seeds: [], activeRoundId: null }
   try {
     const raw = JSON.parse(localStorage.getItem(QUESTIONS_KEY) ?? 'null') as
       | Partial<StoredQuestions>
@@ -237,9 +241,10 @@ function loadQuestions(): StoredQuestions {
     return {
       rounds: Array.isArray(raw?.rounds) ? raw.rounds : [],
       seeds: Array.isArray(raw?.seeds) ? raw.seeds : [],
+      activeRoundId: typeof raw?.activeRoundId === 'string' ? raw.activeRoundId : null,
     }
   } catch {
-    return { rounds: [], seeds: [] }
+    return { rounds: [], seeds: [], activeRoundId: null }
   }
 }
 
@@ -269,14 +274,23 @@ function questionView(
       }
       return { ...round, answers }
     })
-  const current = rounds.at(-1) ?? null
+  const current = activeQuestion(rounds, stored.activeRoundId)
+  const lastCompletedAt = rounds.reduce(
+    (latest, round) => Math.max(latest, round.completedAt ?? 0),
+    0,
+  )
 
   return {
     current,
+    rounds,
+    activeRoundId: current?.id ?? null,
     history: rounds.filter((round) => round.completedAt !== null),
     availableSeeds,
     queued: stored.seeds.filter((seed) => seed.by === me && seed.usedAt === null).length,
-    nextAt: current?.completedAt ? current.completedAt + QUESTION_BUILD : null,
+    nextAt:
+      current && !isQuestionWaiting(current) && lastCompletedAt > 0
+        ? lastCompletedAt + QUESTION_BUILD
+        : null,
     loaded: true,
   }
 }
@@ -335,8 +349,22 @@ function seedTracks(): Track[] {
 
 /** The screen, dark, with nothing lined up. */
 function nothingOn(): Watching {
-  return { videoId: null, title: '', playing: false, at: 0, since: Date.now(), by: 'warm', seq: 0, queue: [] }
+  return { videoId: null, title: '', playing: false, at: 0, since: Date.now(), by: 'warm', seq: 0, queue: [], session: '' }
 }
+
+/*
+  What was said in front of the screen is not saved anywhere.
+
+  Every other shared thing here survives a reload, because every other shared
+  thing is meant to. This one is not: it belongs to a sitting, and a sitting
+  ends when you close the tab. Holding it in a variable rather than in
+  `localStorage` is not an omission — it is the whole behaviour, and it means
+  there is no key that could go stale and nothing to remember to clear.
+*/
+let screenTalk: ScreenTalk = { session: '', said: [] }
+const screenTalkWatchers = new Set<(t: ScreenTalk) => void>()
+/** Enough for an evening; past this the oldest go, which is what a room does. */
+const SCREEN_TALK_KEEP = 200
 
 function loadWatching(): Watching {
   const dark = nothingOn()
@@ -346,7 +374,11 @@ function loadWatching(): Watching {
     if (!raw || typeof raw !== 'object') return dark
     // The queue is the one part a bad save could make a wrong *shape* rather
     // than merely a wrong value, and it is iterated on the very first frame.
-    return { ...dark, ...raw, queue: Array.isArray(raw.queue) ? raw.queue : [] }
+    return {
+      ...dark, ...raw,
+      queue: Array.isArray(raw.queue) ? raw.queue : [],
+      session: typeof raw.session === 'string' ? raw.session : '',
+    }
   } catch {
     return dark
   }
@@ -920,17 +952,20 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
     async ensureQuestion() {
       const now = Date.now()
-      const current = questions.rounds.toSorted((a, b) => a.openedAt - b.openedAt).at(-1)
+      const ordered = questions.rounds.toSorted((a, b) => a.openedAt - b.openedAt)
+      const current = ordered.at(-1)
+      const lastCompletedAt = ordered.reduce(
+        (latest, round) => Math.max(latest, round.completedAt ?? 0),
+        0,
+      )
 
       /*
         One question at a time, and the next one takes `QUESTION_BUILD` to grow
         from the moment you both finished the last. A late answer creates no
         backlog: the next question simply waits here.
       */
-      if (current) {
-        const both = current.answered.warm && current.answered.cool
-        if (!both || now < (current.completedAt ?? now) + QUESTION_BUILD) return
-      }
+      if (ordered.some((round) => isQuestionWaiting(round))) return
+      if (current && now < lastCompletedAt + QUESTION_BUILD) return
 
       const usedPrompts = new Set(questions.rounds.map((round) => round.prompt))
       const eligible = questions.seeds.filter(
@@ -960,6 +995,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         answers: {},
       }
       questions = {
+        ...questions,
         rounds: [...questions.rounds, round],
         seeds: questions.seeds.map((seed) =>
           seed.id === planted?.id ? { ...seed, usedAt: now } : seed,
@@ -1041,6 +1077,15 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
           },
         ],
       }
+      settleQuestions()
+    },
+
+    async setActiveQuestion(roundId) {
+      if (me !== 'warm') throw new Error('Only the control-room account can choose the active question.')
+      const round = questions.rounds.find((entry) => entry.id === roundId)
+      if (!round) throw new Error('That question is no longer in the opened rounds.')
+      if (!isQuestionWaiting(round)) throw new Error('Completed questions stay in the archive and cannot be made active.')
+      questions = { ...questions, activeRoundId: roundId }
       settleQuestions()
     },
 
@@ -1169,6 +1214,27 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       watching = { ...next, by: me, since: Date.now(), seq: watching.seq + 1 }
       saveWatching()
       for (const w of watchingWatchers) w(watching)
+    },
+
+    watchScreenTalk(listener) {
+      screenTalkWatchers.add(listener)
+      listener(screenTalk)
+      return () => {
+        screenTalkWatchers.delete(listener)
+      }
+    },
+
+    async sayOnScreen(session, line) {
+      // A line for a sitting that has already ended is simply dropped.
+      if (session === '' || session !== screenTalk.session) return
+      const said = [...screenTalk.said, line].slice(-SCREEN_TALK_KEEP)
+      screenTalk = { session, said }
+      for (const w of screenTalkWatchers) w(screenTalk)
+    },
+
+    async beginScreenTalk(session) {
+      screenTalk = { session, said: [] }
+      for (const w of screenTalkWatchers) w(screenTalk)
     },
 
     // ---- the Glasshouse ----------------------------------------------------
@@ -1515,7 +1581,9 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       }
       watching = nothingOn()
       for (const w of watchingWatchers) w(watching)
-      questions = { rounds: [], seeds: [] }
+      screenTalk = { session: '', said: [] }
+      for (const w of screenTalkWatchers) w(screenTalk)
+      questions = { rounds: [], seeds: [], activeRoundId: null }
       const fresh = seedState()
       commit({ ...fresh, questions: questionView(questions, fresh, me) }, { save: false })
     },

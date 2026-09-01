@@ -443,12 +443,17 @@ function Garden() {
         be sitting on a game's menu, and after that it does what you last told
         it to.
       */}
+      {/*
+        Not in the column below. It portals itself onto the body, because a
+        thing you can drag anywhere cannot be a child of something that slides
+        off the screen — see `paneHost` in `ui/Together`.
+      */}
+      <Together />
       <CornerTab show={byThumb} />
       <div
         ref={cornerNode}
-        className={`${corner}${tucked && byThumb ? ' tucked' : ''}`}
+        className={`${corner}${tucked && byThumb ? ' tucked' : ''}${watchingOpen ? ' watching' : ''}`}
       >
-        <Together />
         <Whisper />
         <Player />
       </div>

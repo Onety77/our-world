@@ -28,6 +28,8 @@
 
 import { readFileSync } from 'node:fs'
 import { QUESTION_BUILD, QUESTION_DAY } from '../src/data/questionPrompts'
+import { activeQuestion } from '../src/data/questionOrder'
+import type { QuestionRound } from '../src/data/types'
 
 let failed = 0
 function ok(what: string, good: boolean, saw = '') {
@@ -176,6 +178,41 @@ ok('no two openings a building period apart can share a bucket', collisions === 
 
 /*
   =========================================================================
+  Recovery from the old newest-document bug.
+
+  A later round may already exist in a live database. The older unfinished
+  question must win by default, and dev7731 must be able to choose another
+  unfinished one without ever making a completed archive entry active.
+  =========================================================================
+*/
+console.log(`\nAn unfinished question cannot be buried\n`)
+const round = (
+  id: string,
+  openedAt: number,
+  warm: boolean,
+  cool: boolean,
+): QuestionRound => ({
+  id,
+  prompt: id,
+  openedAt,
+  completedAt: warm && cool ? openedAt + 100 : null,
+  answered: { warm, cool },
+  answers: {},
+})
+const buried = round('the-important-one', 1, false, true)
+const stray = round('the-later-one', 2, false, false)
+const archived = round('already-finished', 3, true, true)
+const anomaly = [buried, stray, archived]
+
+ok('the oldest unfinished round wins instead of the newest document',
+  activeQuestion(anomaly, null)?.id === buried.id)
+ok('dev7731 can deliberately select another unfinished round',
+  activeQuestion(anomaly, stray.id)?.id === stray.id)
+ok('a stale pointer to a completed round falls back safely',
+  activeQuestion(anomaly, archived.id)?.id === buried.id)
+
+/*
+  =========================================================================
   And the other backend has to say the same thing.
 
   These rules exist twice — once for the mock and once for the real database —
@@ -188,11 +225,11 @@ for (const file of ['src/data/local.ts', 'src/data/firebase.ts']) {
   const source = readFileSync(file, 'utf8')
   const name = file.split('/').pop()
   ok(`${name} starts the wait from completedAt`,
-    source.includes('completedAt + QUESTION_BUILD'),
+    source.includes('round.completedAt ?? 0') && source.includes('lastCompletedAt + QUESTION_BUILD'),
     'it still measures from openedAt, so a late answer produces the next question instantly')
   ok(`${name} gates on it too`,
-    /completedAt \?\? \w+\) \+ QUESTION_BUILD/.test(source),
-    'ensureQuestion is not using the same clock as nextAt')
+    source.includes('lastCompletedAt + QUESTION_BUILD'),
+    'ensureQuestion is not using the latest completion clock')
   ok(`${name} buckets the round id by the building period`,
     source.includes('question-${Math.floor(') && source.includes('/ QUESTION_BUILD)}`'),
     'the id is still day-shaped, so the second question of a day is dropped silently')

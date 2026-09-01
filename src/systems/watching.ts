@@ -40,6 +40,7 @@ export function darkScreen(): Watching {
     by: 'warm',
     seq: 0,
     queue: [],
+    session: '',
   }
 }
 
@@ -344,6 +345,20 @@ let counter = 0
 export function queuedId(by: UserId): string {
   counter += 1
   return `${by}-${Date.now().toString(36)}-${counter.toString(36)}`
+}
+
+/**
+ * A name for one sitting in front of the screen.
+ *
+ * The clock and a counter, the same as `queuedId` and for the same reason:
+ * two devices may mint one in the same millisecond, and the only thing that
+ * would go wrong is a device deciding lines from the other sitting are its
+ * own. It never leaves this pair of people, so it does not need to be unique
+ * in the universe — only unique from the sitting before it.
+ */
+export function newSession(): string {
+  counter += 1
+  return `s-${Date.now().toString(36)}-${counter.toString(36)}`
 }
 
 export function queueItem(

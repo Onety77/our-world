@@ -29,13 +29,14 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
-import type { Message, Queued } from '@/data/types'
+import type { Queued, ScreenLine } from '@/data/types'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { useListening } from '@/systems/listening'
-import { useTalking } from '@/systems/talking'
 import {
+  newSession,
   advance,
   beginnings,
   clock,
@@ -72,6 +73,43 @@ const CHECK_MS = 900
  */
 const DRAG_ENOUGH = 12
 
+/**
+ * A node of its own, directly on the body, made once and never moved.
+ *
+ * ---------------------------------------------------------------------------
+ * The miniature used to render inside `.corner` — the column that holds the
+ * music and the last thing she said — because that is where the way in lives.
+ * That was wrong in four separate ways, and on a phone all four fire at once.
+ *
+ * The corner **tucks**: a shove to the right slides it away with
+ * `transform: translateX(100% + 2.5rem)` and `opacity: 0`. A child cannot
+ * opt out of either. `position: fixed` does not help — a transformed
+ * ancestor *becomes* the containing block, so the pane travels with it — and
+ * opacity applies to the whole subtree, so it fades to nothing on the way.
+ * The column is also `pointer-events: none` when tucked, and it is a
+ * stacking context at `z-index: 11`, which quietly caps the pane's own 24.
+ *
+ * The result was a video still playing, out of sight, unreachable, with no way
+ * to guess where it had gone. **On a desktop it never happened**, because the
+ * corner can only tuck on a coarse pointer — see `cornerCanBeTucked`. So it
+ * looked correct in every place it was easy to look at.
+ *
+ * A thing you can drag anywhere is not part of any column. It is its own node
+ * on the body, and the only reason this is a function rather than a constant
+ * is that the node has to survive React: the host is created once and reused,
+ * so the YouTube iframe inside it is never re-parented and never stops
+ * playing. See the note at the top of this file.
+ * ---------------------------------------------------------------------------
+ */
+let host: HTMLElement | null = null
+function paneHost(): HTMLElement {
+  if (host && host.isConnected) return host
+  host = document.createElement('div')
+  host.className = 'together-host'
+  document.body.appendChild(host)
+  return host
+}
+
 export function Together() {
   const data = useData()
   const me = data.me
@@ -86,7 +124,6 @@ export function Together() {
   const setTab = useWatching((s) => s.setTab)
   const tuck = useWatching((s) => s.tuck)
 
-  const messages = useTalking((s) => s.messages)
   const musicLevel = useVolume((s) => s.levels.music)
 
   const stage = useRef<HTMLDivElement>(null)
@@ -289,6 +326,7 @@ export function Together() {
     playing: boolean
     at: number
     queue: Queued[]
+    session?: string
   }) => {
     if (next.videoId !== null && next.videoId !== screenVideo.current) {
       applying.current = true
@@ -296,11 +334,31 @@ export function Together() {
       screenVideo.current = next.videoId
       window.setTimeout(() => { applying.current = false }, 80)
     }
-    void attempt('that didn’t reach her screen', () => data.setWatching(next))
+    void attempt('that didn’t reach her screen', () =>
+      data.setWatching({ ...next, session: next.session ?? shared.session }))
+  }
+
+  /*
+    A sitting begins, and with it an empty page.
+
+    Putting something on when nothing was on is the one moment that starts a
+    conversation — not opening the room, which you might do to look at the
+    queue, and not skipping to the next video, which is the same evening. So
+    the id is minted here and nowhere else, and the previous sitting's lines
+    go with the write that mints it. See `ScreenTalk` in `data/types`.
+  */
+  const beginSitting = () => {
+    const session = newSession()
+    void attempt('that didn’t reach her screen', () => data.beginScreenTalk(session))
+    return session
   }
 
   const put = (videoId: string, title: string, at = 0, playing = true) =>
-    move({ videoId, title, playing, at, queue: shared.queue })
+    move({
+      videoId, title, playing, at, queue: shared.queue,
+      // Nothing was on: this is a new evening, not a continuation of one.
+      session: shared.videoId === null ? beginSitting() : shared.session,
+    })
 
   async function onEnded() {
     const { next, rest } = advance(useWatching.getState().shared.queue)
@@ -332,7 +390,9 @@ export function Together() {
     setTrouble('')
     useWatching.getState().close()
     setMiniControls(false)
-    move({ videoId: null, title: '', playing: false, at: 0, queue: shared.queue })
+    // The screen goes dark and what was said in front of it goes with it.
+    void attempt('that didn’t reach her screen', () => data.beginScreenTalk(''))
+    move({ videoId: null, title: '', playing: false, at: 0, queue: shared.queue, session: '' })
   }
 
   /*
@@ -497,7 +557,7 @@ export function Together() {
   */
   if (!open && !live) return null
 
-  return (
+  return createPortal(
     <div
       /*
         The root is the box while it is tucked — the screen inside is
@@ -645,7 +705,7 @@ export function Together() {
           </div>
 
           {tab === 'talk' ? (
-            <Talk messages={messages} theirName={them.name} />
+            <Talk session={shared.session} theirName={them.name} />
           ) : (
             <Queue
               queue={shared.queue}
@@ -658,7 +718,8 @@ export function Together() {
           )}
         </aside>
       )}
-    </div>
+    </div>,
+    paneHost(),
   )
 }
 
@@ -788,44 +849,96 @@ function Transport({
   )
 }
 
-/** The conversation, which is the same conversation. */
-function Talk({ messages, theirName }: { messages: Message[]; theirName: string }) {
+/**
+ * The conversation in front of the screen — and it is not the Stars.
+ *
+ * ---------------------------------------------------------------------------
+ * It used to be. The same feed, the same messages, the same history: you would
+ * open a film and be looking at whatever the two of you had been talking about
+ * that afternoon, and then say "wait, go back" into it, forever, sitting
+ * between a letter and a question.
+ *
+ * They are not the same conversation. What is said here is *about the thing on
+ * the screen* — it is short, it is fast, it is half reaction, and it stops
+ * making sense the moment the screen is off. The Stars is the opposite: it is
+ * the two of you, it is kept, and it is read again.
+ *
+ * So this one lives and dies with the sitting. A new screen is a new page; the
+ * screen going dark takes it with it; nothing here is ever merged into the
+ * Stars. There is no history to scroll back through because there is nothing
+ * before tonight — which is the correct amount of history for a running
+ * commentary on a film.
+ * ---------------------------------------------------------------------------
+ */
+function Talk({ session, theirName }: { session: string; theirName: string }) {
   const data = useData()
   const me = data.me
   const [draft, setDraft] = useState('')
-  const said = useRef<HTMLDivElement>(null)
-  const recent = useMemo(() => messages.slice(-40), [messages])
+  const [said, setSaid] = useState<ScreenLine[]>([])
+  const feed = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const conversation = said.current
+    if (session === '') {
+      setSaid([])
+      return
+    }
+    return data.watchScreenTalk((talk) => {
+      // Lines from a sitting that has ended are not this conversation.
+      setSaid(talk.session === session ? talk.said : [])
+    })
+  }, [data, session])
+
+  useEffect(() => {
+    const conversation = feed.current
     if (conversation) conversation.scrollTop = conversation.scrollHeight
-  }, [recent.length])
+  }, [said.length])
 
   async function say() {
     const text = draft.trim()
-    if (text === '') return
-    const outgoing = {
+    if (text === '' || session === '') return
+    const line: ScreenLine = {
       id: `said-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+      by: me,
+      body: text,
       at: Date.now(),
     }
-    useTalking.getState().queue({ ...outgoing, by: me, body: text })
+    /*
+      Shown immediately, then sent.
+
+      The wire is the truth and it will arrive with its own copy — which
+      replaces this one rather than joining it, because they share an id. A
+      film does not wait for a round trip to Lagos before showing you what you
+      just typed.
+    */
+    setSaid((was) => [...was, line])
     setDraft('')
     ambience.said(true)
-    const sent = await attempt('that didn’t send', () =>
-      data.sendMessage(text, undefined, outgoing),
+    const sent = await attempt('that didn’t reach her screen', () =>
+      data.sayOnScreen(session, line),
     )
-    if (!sent) useTalking.getState().fail(outgoing.id)
+    if (!sent) setSaid((was) => was.filter((l) => l.id !== line.id))
   }
+
+  const shown = useMemo(() => {
+    // The optimistic copy and the one off the wire are the same line.
+    const byId = new Map<string, ScreenLine>()
+    for (const line of said) byId.set(line.id, line)
+    return [...byId.values()].sort((a, b) => a.at - b.at).slice(-60)
+  }, [said])
 
   return (
     <div className="together-talk">
-      <div ref={said} className="together-said">
-        {recent.length === 0 ? (
-          <p className="together-none">Nothing said yet. Say something while it plays.</p>
+      <div ref={feed} className="together-said">
+        {shown.length === 0 ? (
+          <p className="together-none">
+            {session === ''
+              ? 'Put something on, and this is where you talk about it.'
+              : 'Nothing said yet. This page is only for tonight.'}
+          </p>
         ) : (
-          recent.map((m) => (
-            <p key={m.id} className={`together-line ${m.by === me ? 'mine' : 'hers'}`}>
-              {m.body}
+          shown.map((line) => (
+            <p key={line.id} className={`together-line ${line.by === me ? 'mine' : 'hers'}`}>
+              {line.body}
             </p>
           ))
         )}
@@ -835,8 +948,8 @@ function Talk({ messages, theirName }: { messages: Message[]; theirName: string 
           className="ink together-field"
           value={draft}
           onChange={setDraft}
-          placeholder={`to ${theirName}`}
-          label={`say something to ${theirName}`}
+          placeholder={session === '' ? 'nothing on yet' : `to ${theirName}`}
+          label={`say something to ${theirName} about what is on`}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
@@ -847,7 +960,7 @@ function Talk({ messages, theirName }: { messages: Message[]; theirName: string 
         <button
           type="button"
           className="together-send"
-          disabled={draft.trim() === ''}
+          disabled={draft.trim() === '' || session === ''}
           onPointerDown={(event) => event.preventDefault()}
           onClick={() => void say()}
         >

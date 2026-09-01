@@ -538,6 +538,51 @@ export interface Watching {
   seq: number
   /** What is lined up next, oldest first. */
   queue: Queued[]
+  /**
+   * Which sitting this is — minted when a screen starts, and the only thing
+   * that decides which lines belong to it.
+   *
+   * What is said in front of a film is not what is said in the Stars. It is
+   * about the thing on the screen, it is only meaningful while that thing is
+   * on, and it would be strange to scroll past it a month later between two
+   * letters. So it lives and dies with the sitting, and this is the string
+   * that says which sitting a line belongs to. See `ScreenTalk`.
+   */
+  session: string
+}
+
+/**
+ * What was said in front of the screen, and only while it is on.
+ *
+ * ---------------------------------------------------------------------------
+ * One document, not a collection, and deliberately: this is the only thing in
+ * the garden that is *meant* to be thrown away. A collection would mean a
+ * document per line and a sweep to delete them, and a sweep that half-runs
+ * leaves a conversation lying around with no screen to belong to.
+ *
+ * Instead the whole chat is one field, and starting a screen replaces it. The
+ * `session` is the guard for the write that does not arrive: a device still
+ * holding lines from a sitting that has ended sees they do not match and shows
+ * nothing, so the worst a lost write can do is leave bytes nobody reads.
+ *
+ * Lines are appended atomically rather than rewritten, so two people typing
+ * in the same second cannot delete each other — which a read-modify-write of
+ * an array genuinely can, and would, on exactly the night it mattered.
+ * ---------------------------------------------------------------------------
+ */
+export interface ScreenTalk {
+  /** The sitting these lines belong to. Empty when there is nothing on. */
+  session: string
+  said: ScreenLine[]
+}
+
+/** One thing said while watching. Thinner than a Message: it is not kept. */
+export interface ScreenLine {
+  id: string
+  by: UserId
+  body: string
+  /** epoch ms, from the server clock where there is one. */
+  at: number
 }
 
 // ---------------------------------------------------------------------------
@@ -670,8 +715,12 @@ export interface QuestionRound {
 }
 
 export interface QuestionGarden {
-  /** The newest question. It remains at the roots until the next one opens. */
+  /** The explicitly chosen unfinished question, otherwise the oldest unfinished one. */
   current: QuestionRound | null
+  /** Every opened round, oldest first. Answer bodies still obey the seal. */
+  rounds: QuestionRound[]
+  /** The id currently selected by the Tree after applying the safe fallback. */
+  activeRoundId: string | null
   /** Every completed question, oldest first. */
   history: QuestionRound[]
   /** Unspent question privileges belonging to this person. */
@@ -877,6 +926,9 @@ export interface DataLayer {
 
   /** The hidden control-room way to add a prompt without spending a seed. */
   plantAdminQuestion(prompt: string): Promise<void>
+
+  /** Point the Tree back at an unfinished opened round without changing either answer. */
+  setActiveQuestion(roundId: string): Promise<void>
 
   addPollen(amount: number, reason: string): Promise<void>
 
@@ -1189,7 +1241,35 @@ export interface DataLayer {
     playing: boolean
     at: number
     queue: Queued[]
+    /** Carried through unchanged; `beginScreenTalk` is what mints a new one. */
+    session: string
   }): Promise<void>
+
+  /**
+   * What is being said in front of the screen, for one sitting.
+   *
+   * Lines from any other sitting are not delivered — the caller says which one
+   * it is watching and gets that one or nothing.
+   */
+  watchScreenTalk(listener: (talk: ScreenTalk) => void): () => void
+
+  /**
+   * Add one line to the current sitting. Never touches the playback anchor.
+   *
+   * This is the reason the chat is not a field on `Watching`: a message
+   * written through `setWatching` would carry whatever position this device
+   * last knew about, and typing during a scene she had just skipped would drag
+   * the film back to where you were. Two documents, two concerns.
+   */
+  sayOnScreen(session: string, line: ScreenLine): Promise<void>
+
+  /**
+   * Begin a sitting: a new id, and nothing said yet.
+   *
+   * Called when a screen starts and when one ends. Both are the same act —
+   * whatever was said belonged to a sitting that is now over.
+   */
+  beginScreenTalk(session: string): Promise<void>
 
   /**
    * Server time, corrected for this device's clock drift. Everything that has

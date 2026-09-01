@@ -9182,6 +9182,64 @@ body:has(.talking) .leave-place {
   color: #6f7f8c;
 }
 
+/* The opened question timeline in dev7731. It is intentionally a line rather
+   than a select: recovering the right round requires seeing what came before
+   and after it, and seeing which answer is already safely sealed. */
+.admin-question-line {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.8rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-question-line li {
+  padding: 0.7rem 0.75rem;
+  border: 1px solid #252b31;
+  border-left: 2px solid #3a434b;
+  background: #131619;
+}
+
+.admin-question-line li.active {
+  border-left-color: #7fd6a8;
+  background: #141b18;
+}
+
+.admin-question-meta,
+.admin-question-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.8rem;
+  color: #758089;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.admin-question-meta time {
+  margin-left: auto;
+}
+
+.admin-question-line li > p {
+  margin: 0.45rem 0 0.6rem;
+  color: #d8dde0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.admin-question-foot > span {
+  flex: 1 1 14rem;
+  color: #9aa3aa;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.admin-question-foot button {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+}
+
 /* The second level: which group of dials is open. Not sticky — one sticky bar
    is orientation, two is a shrinking window. */
 .admin-chips {
@@ -12990,6 +13048,17 @@ body.on-the-road .broke-what {
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
+  /*
+    It fills from the bottom, where the field is.
+
+    This did not show while the panel held the Stars, because the Stars always
+    had a year of history in it and the column was never short. A sitting in
+    front of a film starts at nothing every time — and the first thing either
+    of you says would sit alone at the top of a tall empty box, a screen's
+    height away from the line you typed it into. Speech belongs next to the
+    place you speak.
+  */
+  justify-content: flex-end;
   gap: 0.42rem;
   padding-right: 0.2rem;
 }
@@ -13007,7 +13076,8 @@ body.on-the-road .broke-what {
 .together-line.hers { align-self: flex-start; text-align: left; color: #c3d6ff; }
 
 .together-none {
-  margin: 0.3rem 0;
+  /* With the room bottom-filled, this sits by the field it is about. */
+  margin: auto 0 0.3rem;
   font-family: var(--sans);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
@@ -13713,13 +13783,30 @@ body.on-the-road .broke-what {
 .player-watch.on .player-watch-kicker,
 .player-watch.on .player-watch-mark { color: #ffd9a8; }
 
-/* The dedicated room owns focus as well as pixels; folded garden controls are
-   not left tabbable behind an opaque full-screen place. */
-.corner:has(.together.full) > .whisper,
-.corner:has(.together.full) > .player {
+/*
+  The dedicated room owns focus as well as pixels; folded garden controls are
+  not left tabbable behind an opaque full-screen place.
+
+  This asked `.corner:has(.together.full)` until the screen moved out of the
+  corner and onto the body of its own — see `paneHost` in `ui/Together` for
+  why it had to. Nothing in the corner can see the screen any more, so the
+  state says so directly instead of the stylesheet inferring it.
+*/
+.corner.watching > .whisper,
+.corner.watching > .player {
   visibility: hidden;
   pointer-events: none;
 }
+
+/*
+  Deliberately styleless.
+
+  It holds the shared screen and it must stay that way: a position, a
+  transform, a filter, an opacity or a z-index here would make it a containing
+  block or a stacking context, and re-create exactly the trap the screen was
+  moved out of the corner to escape.
+*/
+.together-host { }
 
 @media (max-width: 719px) {
   .together.full { --night-edge: max(1rem, env(safe-area-inset-left)); overflow: hidden; }

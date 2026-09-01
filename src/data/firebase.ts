@@ -30,6 +30,7 @@ import {
   type User,
 } from 'firebase/auth'
 import {
+  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -104,6 +105,7 @@ import {
   type RallyStreamInput,
   type VoiceLight,
 } from './types'
+import { activeQuestion, isQuestionWaiting } from './questionOrder'
 import { AMBIENCE_KEYS } from './types'
 import { newId } from './ids'
 import {
@@ -131,6 +133,17 @@ import {
  * cost a listener each.
  */
 const WORLD_DOC = ['world', 'ours'] as const
+/*
+  The film's conversation, in a document of its own.
+
+  Not a field on `world/ours` beside the anchor, and that is the whole point:
+  a line written into the same document as the playback position carries a
+  position with it, and typing during a scene she had just skipped would drag
+  the film back. Separate documents, separate concerns, no shared write.
+*/
+const SCREEN_TALK_DOC = ['world', 'screen'] as const
+/** Enough for an evening; past this the oldest go, which is what a room does. */
+const SCREEN_TALK_KEEP = 200
 const PROFILES = 'profiles'
 const LETTERS = 'letters'
 const CONTRIBUTIONS = 'contributions'
@@ -148,6 +161,7 @@ const MOVES = 'moves'
 const QUESTION_ROUNDS = 'questionRounds'
 const QUESTION_ANSWERS = 'answers'
 const QUESTION_SEEDS = 'questionSeeds'
+const QUESTION_CONTROL = 'questionControl'
 const VOICE_LIGHTS = 'voiceLights'
 const VOICE_LIGHT_CONFIG = 'voiceLightConfig'
 const RALLY_TUNING = 'rallyTuning'
@@ -260,6 +274,8 @@ function emptyWorld(): WorldState {
     today: null,
     questions: {
       current: null,
+      rounds: [],
+      activeRoundId: null,
       history: [],
       availableSeeds: 0,
       queued: 0,
@@ -524,6 +540,8 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
   let questionSeeds: PrivateQuestionSeed[] = []
   let questionRoundsLoaded = false
   let questionSeedsLoaded = false
+  let activeQuestionId: string | null = null
+  let questionControlLoaded = false
   let questionRevision = 0
 
   async function refreshQuestions() {
@@ -559,18 +577,27 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         .filter((seed) => seed.contributionId)
         .map((seed) => seed.contributionId as string),
     )
-    const current = hydrated.at(-1) ?? null
+    const current = activeQuestion(hydrated, activeQuestionId)
+    const lastCompletedAt = hydrated.reduce(
+      (latest, round) => Math.max(latest, round.completedAt ?? 0),
+      0,
+    )
     commit({
       ...state,
       questions: {
         current,
+        rounds: hydrated,
+        activeRoundId: current?.id ?? null,
         history: hydrated.filter((round) => round.completedAt !== null),
         availableSeeds: state.contributions.filter(
           (entry) => entry.by === me && entry.inPotCurrency.minor > 0 && !spent.has(entry.id),
         ).length,
         queued: questionSeeds.filter((seed) => seed.usedAt === null).length,
-        nextAt: current?.completedAt ? current.completedAt + QUESTION_BUILD : null,
-        loaded: questionRoundsLoaded && questionSeedsLoaded,
+        nextAt:
+          current && !isQuestionWaiting(current) && lastCompletedAt > 0
+            ? lastCompletedAt + QUESTION_BUILD
+            : null,
+        loaded: questionRoundsLoaded && questionSeedsLoaded && questionControlLoaded,
       },
     })
   }
@@ -581,6 +608,27 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       const offset = snap.val()
       if (typeof offset === 'number' && Number.isFinite(offset)) clockSkew = offset
     }),
+  )
+
+  // One admin-owned pointer. It never contains a prompt or an answer; it only
+  // says which already-open unfinished round the Tree should show.
+  unsubscribes.push(
+    onSnapshot(
+      doc(db, QUESTION_CONTROL, 'ours'),
+      (snap) => {
+        const value = snap.data()?.activeRoundId
+        activeQuestionId = typeof value === 'string' && value !== '' ? value : null
+        questionControlLoaded = true
+        void refreshQuestions()
+      },
+      () => {
+        // During the short window between deploying the app and publishing its
+        // new rules, keep the safe oldest-unfinished fallback usable.
+        activeQuestionId = null
+        questionControlLoaded = true
+        void refreshQuestions()
+      },
+    ),
   )
 
   // ---- the world doc -------------------------------------------------------
@@ -1054,25 +1102,29 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
 
     async ensureQuestion() {
       const at = now()
-      const latest = await getDocs(
-        query(collection(db, QUESTION_ROUNDS), orderBy('openedAt', 'desc'), fsLimit(1)),
+      const opened = await getDocs(
+        query(collection(db, QUESTION_ROUNDS), orderBy('openedAt', 'asc')),
       )
-      const latestDoc = latest.docs[0]
-      const current = latestDoc
-        ? toQuestionRound(
-            latestDoc.id,
-            latestDoc.data() as Record<string, unknown>,
-          )
-        : null
+      const rounds = opened.docs
+        .map((entry) =>
+          toQuestionRound(entry.id, entry.data() as Record<string, unknown>),
+        )
+        .filter((round): round is QuestionRound => round !== null)
+      const current = rounds.at(-1) ?? null
+      const lastCompletedAt = rounds.reduce(
+        (latest, round) => Math.max(latest, round.completedAt ?? 0),
+        0,
+      )
       /*
         One at a time, and the next takes `QUESTION_BUILD` to grow from the moment
         the two of you finished the last one — not from when it opened. See the
         note beside the constant.
       */
-      if (current) {
-        const both = current.answered.warm && current.answered.cool
-        if (!both || at < (current.completedAt ?? at) + QUESTION_BUILD) return
-      }
+      // Any unfinished round blocks a new one, not merely the newest round.
+      // This is the invariant that prevents a patiently waiting question from
+      // ever being buried by a later document again.
+      if (rounds.some(isQuestionWaiting)) return
+      if (current && at < lastCompletedAt + QUESTION_BUILD) return
 
       // Only this person's private pool is queryable. Her planted prompt never
       // reaches this device before it becomes a source-less shared round.
@@ -1197,6 +1249,14 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         plantedAt,
         availableAfter: plantedAt + QUESTION_DAY,
       })
+    },
+
+    async setActiveQuestion(roundId) {
+      if (me !== 'warm') throw new Error('Only the control-room account can choose the active question.')
+      const round = questionRounds.find((entry) => entry.id === roundId)
+      if (!round) throw new Error('That question is no longer in the opened rounds.')
+      if (!isQuestionWaiting(round)) throw new Error('Completed questions stay in the archive and cannot be made active.')
+      await setDoc(doc(db, QUESTION_CONTROL, 'ours'), { activeRoundId: roundId })
     },
 
     async addPollen(amount) {
@@ -1365,6 +1425,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         const d = ((snap.data() ?? {}).watching ?? {}) as Record<string, unknown>
         const raw = Array.isArray(d.queue) ? d.queue : []
         listener({
+          session: typeof d.session === 'string' ? d.session : '',
           videoId: typeof d.videoId === 'string' && d.videoId !== '' ? d.videoId : null,
           title: typeof d.title === 'string' ? d.title : '',
           playing: d.playing === true,
@@ -1418,10 +1479,59 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
             by: me,
             seq,
             queue: next.queue,
+            session: next.session,
           },
         },
         { merge: true },
       )
+    },
+
+    watchScreenTalk(listener) {
+      return onSnapshot(doc(db, ...SCREEN_TALK_DOC), (snap) => {
+        const d = (snap.data() ?? {}) as Record<string, unknown>
+        const raw = Array.isArray(d.said) ? d.said : []
+        listener({
+          session: typeof d.session === 'string' ? d.session : '',
+          said: raw
+            .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+            .map((x) => ({
+              id: typeof x.id === 'string' ? x.id : '',
+              by: userId(x.by),
+              body: typeof x.body === 'string' ? x.body : '',
+              at: num(x.at, 0),
+            }))
+            .filter((line) => line.id !== '' && line.body !== '')
+            .slice(-SCREEN_TALK_KEEP),
+        })
+      })
+    },
+
+    /*
+      `arrayUnion` rather than reading the list and writing it back.
+
+      Two people in front of the same film type at the same time constantly,
+      and a read-modify-write of an array loses whichever line lost the race —
+      silently, and on exactly the night it would matter. An append is atomic
+      on the server and both lines land.
+
+      The cap is not applied here for the same reason: trimming needs the whole
+      list, which needs a read, which reintroduces the race. Two hundred lines
+      is a document of a few tens of kilobytes and the next sitting empties it,
+      so the list is trimmed where it is read instead.
+    */
+    async sayOnScreen(session, line) {
+      if (session === '') return
+      await setDoc(
+        doc(db, ...SCREEN_TALK_DOC),
+        { session, said: arrayUnion({ ...line, at: Date.now() }) },
+        { merge: true },
+      )
+    },
+
+    async beginScreenTalk(session) {
+      // Replacing rather than merging: whatever was said belonged to a sitting
+      // that is over, and `merge` would keep it.
+      await setDoc(doc(db, ...SCREEN_TALK_DOC), { session, said: [] })
     },
 
     // ---- the Glasshouse ----------------------------------------------------

@@ -799,3 +799,22 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Verified the empty, unavailable, full desktop, full mobile, folded miniature,
   miniature actions and close states in-browser. Watch checks, TypeScript and
   the production build pass.
+
+## 1 September 2026 - Codex - Question recovery and dev7731 control
+
+- Found why an answered-but-unfinished Tree question could disappear: the live
+  selector treated the newest Firestore document as active even when an older
+  round was still waiting for one person.
+- Made the oldest unfinished round the safe default and stopped question
+  creation whenever *any* unfinished round exists. The next twelve-hour growth
+  window now starts from the latest actual completion across recovered rounds.
+- Added a Questions tab to dev7731 with the complete opened-round timeline,
+  answer-status indicators, before/active/after context and a `make active`
+  control for any unfinished round. Completed answers remain immutable and the
+  other person's answer remains sealed until both have answered.
+- Added the shared `questionControl/ours` pointer and strict warm-only Firestore
+  rules. Existing data is not migrated, copied or deleted; the missing live
+  question is recovered from its original document and answer subcollection.
+- Added regression coverage for buried rounds, explicit activation and stale
+  completed pointers. Question checks, generated rules, TypeScript and the
+  production build pass.

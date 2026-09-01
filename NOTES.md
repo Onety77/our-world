@@ -40,6 +40,65 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · the film that rode off the screen with the music
+
+Reported: the miniature is gone on the phone after coming back to the garden —
+music still playing, and **visible on desktop, where it also drags correctly**.
+
+That last clause is the whole diagnosis. The screen was rendered inside
+`.corner`, the column holding the music and the last thing she said, because
+that is where the way in lives. The corner **tucks**: a shove to the right
+gives it `transform: translateX(100% + 2.5rem)` and `opacity: 0`. A child
+cannot opt out of either — `position: fixed` makes it worse, not better,
+because a transformed ancestor *becomes* the containing block, so the pane
+travels with the column; and opacity applies to the whole subtree, so it fades
+out on the way. The column is `pointer-events: none` when tucked, and it is a
+stacking context at `z-index: 11`, quietly capping the pane's own 24.
+
+Four ways to disappear, all firing at once, and **none of them can happen on a
+desktop** — the corner only tucks on a coarse pointer (`cornerCanBeTucked`).
+So it looked right in the place it was easiest to look at. The reliability work
+on the corner shove the day before is very likely what made it start happening.
+
+A thing you can drag anywhere is not part of any column. It renders into a node
+of its own on the body now, made once and reused so the iframe is never
+re-parented and never stops playing — see `paneHost` in `ui/Together`. The
+stylesheet's `.corner:has(.together.full)` went with it: nothing in the corner
+can see the screen any more, so `App` says `.corner.watching` outright rather
+than the stylesheet inferring it.
+
+Measured, on a phone-sized viewport: the corner tucks away, and the film stays
+at opacity 1, untranslated, on screen, and reachable — through a reload.
+
+### The film's chat is not the Stars
+
+Asked for, and right: what is said in front of a film is not what is said in
+the Stars. It is about the thing on the screen, it is half reaction, and it
+stops meaning anything when the screen goes off. Opening a film and finding
+this afternoon's conversation in it — then saying *"wait, go back"* into it,
+forever, between a letter and a question — was wrong in both directions.
+
+So a sitting: minted when a screen starts from nothing, carried on the shared
+record, and the only thing that decides which lines belong to it. A new screen
+is a new page. Ending one takes the conversation with it. Nothing is ever
+merged into the Stars.
+
+**It is not a field on `Watching`, deliberately.** A line written through
+`setWatching` carries whatever playback position this device last knew about
+— so typing during a scene she had just skipped would drag the film back to
+where you were. Two documents, two concerns, no shared write.
+
+Lines are appended with `arrayUnion` rather than read-modify-written. Two
+people in front of the same film type at the same time constantly, and
+rewriting an array loses whichever line lost the race — silently, and on
+exactly the night it would matter.
+
+And one thing only a screenshot showed: with the page starting empty every
+sitting, the first line sat stranded at the top of a tall box, a screen away
+from the field it was typed into. The room fills from the bottom now. That
+never surfaced while the panel held the Stars, because the Stars is never
+short.
+
 ## 1 Sep · Claude · the miniature that ended the film
 
 Reported: touched the small screen once, it disappeared, and it would not come

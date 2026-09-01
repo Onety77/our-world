@@ -76,6 +76,11 @@ service cloud.firestore {
     // ---- the world ------------------------------------------------------
     // Small and singular: the pot's currency and goal, the pollen, the moment
     // you were first here together. Either of you may set a goal.
+    //
+    // `world/screen` lives here too and is deliberately no different: it is
+    // one evening's talk in front of a film, replaced whenever a screen starts
+    // and emptied when one ends. Nothing in it is meant to outlive the sitting,
+    // so there is nothing here to protect that this door does not already.
     match /world/{id} {
       allow read: if isOneOfUs();
       allow write: if isOneOfUs();
@@ -626,6 +631,30 @@ service cloud.firestore {
       that came out of either private seed pool becomes simply something the
       Tree is asking.
     */
+    // The control room may point the Tree back at an already-open unfinished
+    // round. It stores only an id: prompts and sealed answers remain in their
+    // original documents and are never copied or rewritten by this control.
+    match /questionControl/{id} {
+      allow read: if isOneOfUs() && id == 'ours';
+      allow create, update: if isOneOfUs()
+        && me() == 'warm'
+        && id == 'ours'
+        && request.resource.data.activeRoundId is string
+        && request.resource.data.activeRoundId.size() > 0
+        && request.resource.data.activeRoundId.size() <= 200
+        && request.resource.data.keys().hasOnly(['activeRoundId'])
+        && exists(
+          /databases/$(database)/documents/questionRounds/$(request.resource.data.activeRoundId)
+        )
+        && !(
+          get(/databases/$(database)/documents/questionRounds/$(request.resource.data.activeRoundId))
+            .data.answeredWarm == true
+          && get(/databases/$(database)/documents/questionRounds/$(request.resource.data.activeRoundId))
+            .data.answeredCool == true
+        );
+      allow delete: if false;
+    }
+
     match /questionRounds/{roundId} {
       allow read: if isOneOfUs();
 
