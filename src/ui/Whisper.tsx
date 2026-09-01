@@ -46,6 +46,7 @@ import type { Message, UserId } from '@/data/types'
 import { useSections } from '@/systems/sections'
 import { SECTIONS, sectionIndexById } from '@/sections/registry'
 import { useDismissOutside } from './useDismissOutside'
+import { Ink } from './Ink'
 
 /** How many of the most recent are worth showing in a corner. */
 const RECENT = 4
@@ -124,7 +125,7 @@ export function Whisper() {
 
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
   const [draft, setDraft] = useState('')
-  const field = useRef<HTMLTextAreaElement>(null)
+  const field = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
 
   // Folding keeps the draft in this mounted component, so an outside tap is
@@ -252,17 +253,21 @@ export function Whisper() {
 
   return (
     <div ref={panel} className="whisper open">
-      <div
+      {/*
+        The world, out of focus, for as long as this is open.
+
+        Rendered here rather than by whatever is behind it, because this is the
+        only thing that knows the corner is open — and it is a sibling *before*
+        the panel so the panel paints on top of it and stays sharp. See
+        `.whisper-hush`; it is a sheet rather than a filter on this element
+        because there is no box here to filter through.
+      */}
+      <div className="whisper-hush on" aria-hidden="true" />
+      <button
+        type="button"
         className="whisper-recent"
-        role="link"
-        tabIndex={0}
         aria-label="open the full conversation in the Stars"
         onClick={openStars}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' && event.key !== ' ') return
-          event.preventDefault()
-          openStars()
-        }}
       >
         {recent.length === 0 ? (
           <p className="whisper-none">
@@ -274,36 +279,46 @@ export function Whisper() {
             <Line key={m.id} message={m} me={me} theirName={them.name} />
           ))
         )}
-      </div>
+      </button>
 
-      <form
-        className="whisper-write"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void say()
-        }}
-      >
-        <textarea
-          ref={field}
+      {/*
+        Not a `<form>`, and not a `<textarea>`.
+
+        A form with a field and a submit button in it is the clearest possible
+        instruction to iOS to put its form-navigation bar over the keyboard —
+        previous, next and Done, above a chat message. There is nothing here for
+        those arrows to walk between; it was never a form in any sense except
+        the markup. Return sends, the button sends, and neither needed one.
+
+        See `ui/Ink` for the field itself and the whole of that investigation.
+      */}
+      <div className="whisper-write">
+        <Ink
+          innerRef={field}
           className="ink whisper-field"
           value={draft}
-          onChange={(e) => write(e.target.value)}
+          onChange={write}
+          placeholder={`to ${them.name}`}
+          label={`say something to ${them.name}`}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               void say()
             }
           }}
-          rows={1}
-          placeholder={`to ${them.name}`}
-          aria-label={`say something to ${them.name}`}
-          enterKeyHint="send"
-          autoComplete="off"
         />
-        <button type="submit" className="whisper-send" disabled={draft.trim() === ''}>
+        <button
+          type="button"
+          className="whisper-send"
+          disabled={draft.trim() === ''}
+          // The field must not lose the cursor on the way to the button, or the
+          // keyboard slides away between finishing a sentence and sending it.
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={() => void say()}
+        >
           send
         </button>
-      </form>
+      </div>
 
       <button type="button" className="whisper-fold-away" onClick={() => setOpen(false)}>
         fold away

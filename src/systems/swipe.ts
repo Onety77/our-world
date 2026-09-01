@@ -61,8 +61,27 @@ export function attachSwipe(el: HTMLElement): SwipeHandle {
     // garden carousel only exists outside, where the places are being chosen.
     if (useSections.getState().entered) return
     if (pointerId !== null) return
-    // Let anything interactive above the canvas have the gesture.
-    if ((e.target as HTMLElement)?.closest('button, input, textarea, select, a')) {
+    /*
+      Let anything interactive above the canvas have the gesture.
+
+      **The corner is listed by name, and it has to be.** The tag list catches
+      controls; it does not catch a panel *made of* controls, and the open
+      whisper is exactly that — a block of lines you can tap to travel to the
+      Stars, with a field under it. Its recent-lines block is a `div` with a
+      link role, so the tag list let the world take the pointer instead: a
+      thumb that moved the six pixels this needs to call a gesture horizontal
+      turned a tap on her last message into a swipe of the whole garden, and
+      the tap never happened. It worked with a mouse, which is why it looked
+      like it worked, and failed on the only device either of you uses.
+
+      The player is here for the same reason and would have had the same bug
+      the first time somebody dragged along its progress line.
+    */
+    if (
+      (e.target as HTMLElement)?.closest(
+        'button, input, textarea, select, a, .whisper, .player, [data-keeps-gesture]',
+      )
+    ) {
       return
     }
     pointerId = e.pointerId

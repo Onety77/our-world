@@ -30,6 +30,7 @@ import { gaze } from '@/systems/pointerLook'
 import { useTakenOver } from '@/systems/attention'
 import { heartedBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
 import { useSaidGestures } from './Said'
+import { Ink } from './Ink'
 import { shouldTell, tell } from '@/systems/notify'
 import { useDismissOutside } from './useDismissOutside'
 import { onActivity, useActivity, wakeWorld } from '@/systems/activity'
@@ -42,53 +43,117 @@ const BELOW = 4
 const AIR = 24
 
 /**
- * How far above the newest message each message hangs, measured.
+ * How far a line takes to disappear as it reaches the edge of the lane, in px.
+ *
+ * About one line of text, on purpose: less and it is a hard crop, more and a
+ * whole paragraph is half-lit and none of it is properly readable. At this
+ * width it reads as the words passing behind the controls.
+ */
+const LINE_FADE = 26
+
+/**
+ * The fastest a flick may leave the sky moving, in pixels a second, and how
+ * quickly that dies away.
+ *
+ * The cap is about two screens a second — fast enough that a hard flick
+ * genuinely covers ground, slow enough that the words never become a blur you
+ * have to wait out. The decay is gentle: the complaint about the old scrolling
+ * was that it arrived before you had finished asking, and a glide that stops
+ * dead has the same problem at the other end.
+ */
+const MAX_GLIDE = 2600
+const GLIDE_DECAY = 3.1
+
+/**
+ * How much smaller a line is drawn, given how far above the read head it is.
+ *
+ * One function because two places need the same answer *in the same frame* —
+ * the spacing and the drawing. They used to disagree, and everything below is
+ * about why that mattered.
+ */
+function shrinkOf(above: number): number {
+  return Math.max(0.42, 1 - Math.max(0, above) * 0.055)
+}
+
+/**
+ * Every line's position, rebuilt each frame from what is actually drawn.
  *
  * ---------------------------------------------------------------------------
- * **This was a constant, and a constant cannot be right.** Every line was
- * pushed up by `age * 74`, which is about the height of one line of serif and
- * a timestamp — true on a laptop, where almost everything she says fits on one
- * line, and false on a phone, where the column is 78% of 390px and the same
- * sentence takes three. The result was two people's messages printed through
- * each other on the primary surface, and it never showed up because every
- * screenshot of the Stars had been taken at 1280 wide.
+ * **The spacing was measured once and the drawing was scaled every frame, and
+ * those two facts never met.** The ladder put line centres `(h₁ + h₂)/2 + air`
+ * apart using the heights the browser had laid out; the frame loop then drew
+ * each line at `scale(shrink)` about its own centre. So the gap you could
+ * actually see was `air + (h₁(1−s₁) + h₂(1−s₂))/2` — a number that grows with
+ * the height of its neighbours and with how far back they are. Measured down
+ * one real phone-width conversation, the gaps came out:
  *
- * So the spacing is measured from the laid-out lines instead — centre to
- * centre, so the per-frame `scale()` (which is about each element's own
- * middle) cannot move anything. `offsetHeight` is layout and ignores the
- * transforms, so this can be read while the sky is moving.
+ *     10 · 12 · 22 · 24 · 25 · 29 · 35 · 45 · 45 · 48 · 52 · 80 px
+ *
+ * — which is not a rhythm, it is noise, and it is what "the whole thing just
+ * doesn't have order" means. A tall message got a big hole beside it and two
+ * short ones ended up almost touching.
+ *
+ * It was also *stale*: the measurement was taken on one layout and reused
+ * across others, so the numbers were not even consistently wrong.
+ *
+ * So the ladder is built here, per frame, from the heights the lines really
+ * have and the scales they are really about to be drawn at — and it stacks
+ * **edge to edge** rather than centre to centre. The gap between any two lines
+ * is then exactly what this function put there, at every scale, always.
+ *
+ * `air` is scaled with the lines it sits between rather than held constant:
+ * a fixed 18px between two lines drawn at 45% would be a bigger hole than the
+ * text is tall. Proportional air is what makes a receding column read as one
+ * thing seen from further away instead of a list that has been squashed.
  * ---------------------------------------------------------------------------
  */
 interface Ladder {
+  /** The smallest age present; `up[0]` belongs to it. */
   first: number
+  /** How far above the anchor each line's *drawn top* sits, in pixels. */
   up: number[]
 }
 
-function ladder(root: HTMLElement): Ladder {
-  const measured = Array.from(root.children, (kid) => ({
-    age: Number((kid as HTMLElement).dataset.age ?? '0'),
-    height: (kid as HTMLElement).offsetHeight,
-  })).sort((a, b) => a.age - b.age)
+const FALLBACK_RUNG = AIR + 44
 
-  if (measured.length === 0) return { first: 0, up: [] }
-  const up = new Array<number>(measured.length)
+/**
+ * Stacked by drawn edges, which makes the arithmetic trivial and exact.
+ *
+ * Every line is absolutely positioned at the same anchor and moved by its own
+ * transform, so what `up` holds is simply "how far above the anchor this line's
+ * top is". Line *i* has to end one `air` above line *i−1* begins, so its top is
+ * its own drawn height further up again — and that is the whole rule:
+ *
+ *     up[i] = up[i − 1] + air + drawn height of i
+ *
+ * The gap between any two neighbours is then `air` by construction, whatever
+ * they are made of and however far back they have receded. Nothing to tune, and
+ * nothing that can drift apart from the drawing, because the drawing reads the
+ * same two numbers.
+ */
+function buildLadder(ages: number[], heights: number[], head: number, air: number): Ladder {
+  const count = ages.length
+  if (count === 0) return { first: 0, up: [] }
+  const up = new Array<number>(count)
   up[0] = 0
-  const air = window.innerWidth <= 544 ? 18 : AIR
-  for (let i = 1; i < measured.length; i++) {
-    up[i] = up[i - 1] + (measured[i - 1].height + measured[i].height) / 2 + air
+  for (let i = 1; i < count; i++) {
+    const scale = shrinkOf(ages[i] - head)
+    // Air recedes with the line above it, so a column seen from further away
+    // is the same column, not a squashed one.
+    up[i] = up[i - 1] + air * Math.max(0.6, scale) + heights[i] * scale
   }
-  return { first: measured[0].age, up }
+  return { first: ages[0], up }
 }
 
 /** The ladder read at a fractional age, because the walk eases between rungs. */
 function rung(ladder: Ladder, age: number): number {
   const { first, up } = ladder
   const local = age - first
-  if (up.length === 0) return local * (AIR + 44)
+  if (up.length === 0) return local * FALLBACK_RUNG
   const last = up.length - 1
-  if (local <= 0) return up[0] + local * (up.length > 1 ? up[1] - up[0] : AIR + 44)
+  if (local <= 0) return up[0] + local * (up.length > 1 ? up[1] - up[0] : FALLBACK_RUNG)
   if (local >= last) {
-    return up[last] + (local - last) * (last > 0 ? up[last] - up[last - 1] : AIR + 44)
+    return up[last] + (local - last) * (last > 0 ? up[last] - up[last - 1] : FALLBACK_RUNG)
   }
   const low = Math.floor(local)
   return up[low] + (up[low + 1] - up[low]) * (local - low)
@@ -349,6 +414,37 @@ export function Talking() {
     wakeWorld()
   }
 
+  /*
+    How many pixels one message is worth, right where the reading is.
+
+    ---------------------------------------------------------------------------
+    **This is the whole reason the scrolling felt wrong.** Dragging used to
+    convert the finger straight into *messages* — `dy × 0.027`, so 37 px of
+    thumb was always one message, whether that message was the word "k" at
+    twenty pixels tall or a paragraph at a hundred and seventy. So the sky moved
+    at a completely different speed depending on what happened to be under your
+    hand, and on a normal run of short lines it moved about twice as fast as the
+    finger did. That is what "going past your fingers" is: the content is not
+    attached to the hand at all, it is being *driven* by it at a made-up gain.
+    Making the easing quicker cannot fix that; it makes it worse, because the
+    thing arriving faster is still the wrong distance.
+
+    So the drag is measured in pixels and divided by what a message is actually
+    worth in pixels here. Move the thumb one centimetre and the sky moves one
+    centimetre — always, at every point in the conversation, through paragraphs
+    and one-word answers alike. There is nothing to tune and nothing to get used
+    to, which is what "adaptive" really means.
+
+    Read off the same ladder that draws the column, at the read head, so it
+    already accounts for how much things have shrunk back there.
+    ---------------------------------------------------------------------------
+  */
+  const pixelsPerMessage = useRef(64)
+  const dragBy = (pixels: number) => moveWalk(pixels / Math.max(18, pixelsPerMessage.current))
+
+  /** Pixels a second still to be travelled after the finger has left. */
+  const glide = useRef(0)
+
   useEffect(() => {
     if (!here) return
     const root = surface.current
@@ -357,26 +453,80 @@ export function Talking() {
     const onWheel = (e: WheelEvent) => {
       // Down through the wheel is back through time, the way a scrollback goes.
       e.preventDefault()
-      moveWalk(e.deltaY * 0.009)
+      glide.current = 0
+      dragBy(e.deltaY)
     }
 
     let dragging = false
     let lastY = 0
+    let lastAt = 0
+    /*
+      A short history rather than the last frame alone.
+
+      One frame's delta is mostly noise — a finger resting still for a moment at
+      the end of a flick would otherwise throw the whole gesture away, and a
+      single jittery sample can launch a glide nobody asked for. Averaging the
+      last few tens of milliseconds is what makes a release feel like it
+      continues the movement your hand was making.
+    */
+    const recent: { at: number; y: number }[] = []
+
     const down = (e: PointerEvent) => {
       if ((e.target as HTMLElement)?.closest('button, input, textarea, a')) return
       dragging = true
       lastY = e.clientY
+      lastAt = performance.now()
+      recent.length = 0
+      recent.push({ at: lastAt, y: e.clientY })
+      // Catching a moving sky stops it, the way catching a spinning globe does.
+      glide.current = 0
     }
     const move = (e: PointerEvent) => {
       if (!dragging) return
       const dy = e.clientY - lastY
       lastY = e.clientY
-      // Dragging down pulls the older messages toward you, the way dragging a
-      // sheet of paper moves the paper.
-      moveWalk(dy * 0.027)
+      lastAt = performance.now()
+      recent.push({ at: lastAt, y: e.clientY })
+      while (recent.length > 2 && lastAt - recent[0].at > 110) recent.shift()
+      /*
+        Dragging down pulls the older messages toward you, the way dragging a
+        sheet of paper moves the paper — and `walk.at` is moved with `walk.to`
+        rather than left to ease toward it. While a finger is down there is
+        nothing to ease *to*: the hand knows where the sky should be, and any
+        lag between the two is the sky sliding under the thumb.
+      */
+      dragBy(dy)
+      walk.at = walk.to
     }
     const up = () => {
+      if (!dragging) return
       dragging = false
+      /*
+        And then it keeps going, and stops the way a heavy thing stops.
+
+        Velocity from the last ninety milliseconds, decayed exponentially in the
+        frame loop. Not a snap to the nearest message: this is a sky, and a
+        conversation you are reading back through should come to rest wherever
+        you left it rather than clicking into a slot.
+      */
+      /*
+        Over a real stretch of time, or not at all.
+
+        Dividing by however long the last two events happened to be apart is how
+        a flick gets invented out of nothing: browsers coalesce moves, and two
+        samples eight milliseconds and ten pixels apart read as more than a
+        thousand pixels a second from a hand that was barely moving. So the
+        oldest sample at least this far back is the one used, and if the gesture
+        has no such sample — a slow drag, or a tap — it simply stops where it
+        was put, which is the honest answer.
+      */
+      const oldest = recent.find((sample) => lastAt - sample.at >= 30)
+      if (!oldest) return
+      const span = (lastAt - oldest.at) / 1000
+      const speed = (lastY - oldest.y) / span
+      glide.current = Math.max(-MAX_GLIDE, Math.min(MAX_GLIDE, speed))
+      if (Math.abs(glide.current) < 60) glide.current = 0
+      wakeWorld()
     }
 
     root.addEventListener('wheel', onWheel, { passive: false })
@@ -406,16 +556,31 @@ export function Talking() {
     let raf = 0
     let laneTop = -Infinity
     let laneBottom = Infinity
-    let heights: number[] = []
     let columnTop = 0
-    // Measured once a layout, not once a frame: reading `offsetHeight` sixty
-    // times a second for every line is a forced reflow per line per frame.
-    let up: Ladder = { first: 0, up: [] }
+    let air = AIR
+    /*
+      Everything in age order, because that is the order the ladder stacks in
+      and the DOM's order is whatever React happened to render. These used to
+      disagree — `heights[i]` was read in document order against a ladder built
+      in age order — so a message could be clipped against another one's height.
+
+      Measured once a layout, not once a frame: reading `offsetHeight` sixty
+      times a second for every line is a forced reflow per line per frame. The
+      *scales* change every frame; the heights do not, because a transform
+      never affects layout.
+    */
+    let lines: HTMLElement[] = []
+    let ages: number[] = []
+    let heights: number[] = []
     let start = () => {}
     const remeasure = () => {
       if (column.current) {
-        up = ladder(column.current)
-        heights = Array.from(column.current.children, (kid) => (kid as HTMLElement).offsetHeight)
+        lines = (Array.from(column.current.children) as HTMLElement[]).sort(
+          (a, b) => Number(a.dataset.age ?? '0') - Number(b.dataset.age ?? '0'),
+        )
+        ages = lines.map((el) => Number(el.dataset.age ?? '0'))
+        heights = lines.map((el) => el.offsetHeight)
+        air = window.innerWidth <= 544 ? 18 : AIR
       }
 
       /*
@@ -460,11 +625,22 @@ export function Talking() {
           writing control; older lines use every real pixel above it.
         */
         if (column.current) {
-          const newest = Array.from(column.current.children).find(
-            (kid) => Number((kid as HTMLElement).dataset.age) === Math.round(walk.at),
-          ) as HTMLElement | undefined
-          const headHeight = newest?.offsetHeight ?? 54
-          const wanted = laneBottom - headHeight - 28
+          /*
+            The head's height, but never more than the lane can hold.
+
+            A very long message used to push the whole column down by its own
+            full height, which is how the sky ended up with a hole in it: the
+            column dropped far enough that everything above the newest line was
+            shoved off the top, and the newest line itself was then too tall to
+            pass the old all-or-nothing lane test, so it vanished too. Clamping
+            here keeps the read head where a read head belongs — just above the
+            writing — and lets the mask show as much of a long message as there
+            is room for. See the note on `maskFor`.
+          */
+          const at = ages.indexOf(Math.round(walk.at))
+          const headHeight = at >= 0 ? heights[at] : 54
+          const room = Math.max(120, laneBottom - laneTop - 96)
+          const wanted = laneBottom - Math.min(headHeight, room) - 28
           column.current.style.top = `${Math.max(laneTop + 18, wanted)}px`
         }
       } else {
@@ -509,15 +685,64 @@ export function Talking() {
         start()
         return
       }
+      // Kept before `lastFrame` moves, because the glide below needs the gap
+      // between this frame and the last one, not zero.
+      const step = Math.min(0.05, Math.max(0.001, (now - lastFrame) / 1000))
       lastFrame = now
       const root = column.current
       if (!root) return
 
+      // Rebuilt every frame from the scales that are about to be drawn, so the
+      // gap between two lines is the same gap at every point in the walk.
+      const up = buildLadder(ages, heights, walk.at, air)
       const head = rung(up, walk.at)
-      const lines = root.children
+
+      /*
+        What a message is worth in pixels, here — *measured*, not estimated.
+
+        The obvious answer is the distance between two rungs, and it is wrong,
+        because walking also changes the ladder: every line comes forward a
+        little as it approaches the head, so the rungs themselves spread out
+        underneath the movement and quietly cancel part of it. Taking the rung
+        spacing as the answer moved the sky about two thirds as far as the
+        finger — better than the fixed gain it replaced, and still not the hand.
+
+        So it is differenced properly: build the ladder half a step either side
+        of where the walk is, ask how far one piece of content actually travels
+        between the two, and divide by the step. Two extra passes over a dozen
+        numbers, once a frame, for a drag that is exactly the hand.
+      */
+      const seen = walk.at + 3
+      const back = buildLadder(ages, heights, walk.at - 0.5, air)
+      const forth = buildLadder(ages, heights, walk.at + 0.5, air)
+      pixelsPerMessage.current = Math.max(
+        18,
+        Math.abs(
+          (rung(forth, walk.at + 0.5) - rung(forth, seen)) -
+            (rung(back, walk.at - 0.5) - rung(back, seen)),
+        ),
+      )
+
+      /*
+        The glide, if a finger let go of it moving.
+
+        Exponential decay rather than a fixed deceleration, because a flick
+        should carry a long way and then ease off rather than travel at speed
+        and stop dead. It is cut the moment the walk reaches either end — the
+        sky does not bounce, it simply arrives.
+      */
+      if (glide.current !== 0) {
+        dragBy(glide.current * step)
+        glide.current *= Math.exp(-GLIDE_DECAY * step)
+        walk.at = walk.to
+        const furthest = Math.max(0, ages.length > 0 ? walk.count - 1 : 0)
+        if (Math.abs(glide.current) < 24 || walk.to <= 0 || walk.to >= furthest) {
+          glide.current = 0
+        }
+      }
       for (let i = 0; i < lines.length; i++) {
-        const el = lines[i] as HTMLElement
-        const own = Number(el.dataset.age ?? '0')
+        const el = lines[i]
+        const own = ages[i]
         const age = own - walk.at
         /*
           Which side of the column it sits on.
@@ -538,8 +763,16 @@ export function Talking() {
         // Above the head is the past, below it is the newest few. The distance
         // is the measured one, so a three-line message takes three lines of
         // sky and the one above it starts where it ends.
-        const lift = -(rung(up, own) - head)
-        const shrink = Math.max(0.42, 1 - Math.max(0, age) * 0.055)
+        const shrink = shrinkOf(age)
+        /*
+          The ladder places drawn *tops*; a transform moves an element's box and
+          scales it about its own middle. So the box has to be pushed up by the
+          half-height the scaling took off the top, or every line would sit
+          lower than its rung by a distance that grows with its own height —
+          which is precisely how a paragraph used to open a hole beside itself.
+        */
+        const height = heights[i] ?? 0
+        const lift = -(rung(up, own) - head) - (height - height * shrink) / 2
         let fade =
           age < -0.9
             ? // Below the read head is the future you have scrolled away from.
@@ -549,23 +782,54 @@ export function Talking() {
             : Math.max(0, 1 - Math.max(0, age - 4.5) / 4)
 
         /*
-          Fade at the reading lane, not at the viewport.
+          ----------------------------------------------------------------
+          **Clipped at the lane by the line, not by the message.**
 
-          The old column happily kept drawing through the music, the back
-          control, the voice-light beacon and the composer. Hiding overflow is
-          impossible here because the column itself has no height—its children
-          are absolutely positioned—so the honest boundary belongs in the
-          same frame calculation that places those children. A full line is
-          considered, not merely its centre, which keeps even a three-line
-          message out of the controls.
+          The old rule faded a whole message by how much of its *full box* had
+          reached the controls, so a message taller than the lane could never
+          be more than partly faded and, past a certain height, was simply
+          never shown at all. That is the hole at the bottom of the sky: the
+          longest thing either of you had said was the one thing you could not
+          read, and a blank half-screen sat where it should have been.
+
+          A message is not an atom. It is lines, and a line that fits should be
+          on screen whether or not its neighbours in the same paragraph do. So
+          the boundary is a mask in the element's own coordinates: everything
+          inside the lane is drawn at full strength, and the part that has
+          reached the edge fades over about one line of text and is gone. Text
+          slides *under* the controls instead of blinking out beside them.
+
+          The mask is only attached when a cut is actually needed — a mask on
+          every line all the time is a compositing layer per line for nothing.
+          ----------------------------------------------------------------
         */
-        if (Number.isFinite(laneTop) && Number.isFinite(laneBottom)) {
-          const height = heights[i] ?? 0
-          const centre = columnTop + lift + gaze.pitch * 90 + height / 2
-          const half = height * shrink / 2
-          const intoTop = Math.max(0, Math.min(1, (centre - half - laneTop) / 30))
-          const intoBottom = Math.max(0, Math.min(1, (laneBottom - centre - half) / 30))
-          fade *= Math.min(intoTop, intoBottom)
+        const drawn = height * shrink
+        let masked = false
+        if (Number.isFinite(laneTop) && Number.isFinite(laneBottom) && drawn > 0) {
+          //  already cancels the scaling inset, so the drawn top is
+          // simply where the ladder put it.
+          const top = columnTop + lift + gaze.pitch * 90 + (height - drawn) / 2
+          const overTop = laneTop - top
+          const overBottom = top + drawn - laneBottom
+          if (overTop > 0 || overBottom > 0) {
+            if (overTop >= drawn || overBottom >= drawn) {
+              fade = 0
+            } else {
+              // As a fraction of the element's own height: the mask lives in
+              // untransformed space, and the scale cancels on both sides.
+              const from = Math.max(0, overTop / drawn) * 100
+              const to = 100 - Math.max(0, overBottom / drawn) * 100
+              const band = Math.min(28, (LINE_FADE / drawn) * 100)
+              el.style.webkitMaskImage = el.style.maskImage =
+                `linear-gradient(to bottom, transparent ${from}%,` +
+                ` #000 ${Math.min(100, from + band)}%,` +
+                ` #000 ${Math.max(0, to - band)}%, transparent ${to}%)`
+              masked = true
+            }
+          }
+        }
+        if (!masked && el.style.maskImage !== '') {
+          el.style.webkitMaskImage = el.style.maskImage = ''
         }
 
         el.style.transform =
@@ -617,7 +881,7 @@ export function Talking() {
 
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')
-  const field = useRef<HTMLTextAreaElement>(null)
+  const field = useRef<HTMLDivElement>(null)
   const composer = useRef<HTMLDivElement>(null)
 
   // The draft lives above the conditional render, so folding the composer
@@ -826,23 +1090,21 @@ export function Talking() {
             already is at the end of a sentence.
           */}
           <div className="saying-row">
-            <textarea
-              ref={field}
+            {/*
+              Not a `<textarea>`, and that is the whole of the iOS fix.
+
+              Return belongs to the message; the visible light is the only send
+              action. See `ui/Ink` for why an editable element rather than a
+              form control — in short, WebKit puts its form-navigation bar over
+              the keyboard for any focused form control, and there is no way to
+              refuse it while being one.
+            */}
+            <Ink
+              innerRef={field}
               className="saying-field ink"
               value={draft}
-              onChange={(e) => write(e.target.value)}
-              rows={1}
-              aria-label={`say something to ${them.name}`}
-              /* Return belongs to the message now; the visible light is the
-                  only send action. Plain text semantics also keep mobile
-                  keyboards out of form-navigation and autofill modes. */
-              inputMode="text"
-              enterKeyHint="enter"
-              autoComplete="off"
-              autoCapitalize="sentences"
-              autoCorrect="on"
-              spellCheck
-              data-form-type="other"
+              onChange={write}
+              label={`say something to ${them.name}`}
             />
             <button
               type="button"

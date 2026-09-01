@@ -40,6 +40,110 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · the Stars has a rhythm now, and the drag is the hand
+
+Six things, all reported from using it on a phone. The two that mattered are
+the first two, and they turned out to be the same bug wearing two coats.
+
+### The column had no order
+
+Measured down one real phone-width conversation, the gaps between messages were
+
+    10 · 12 · 22 · 24 · 25 · 29 · 35 · 45 · 45 · 48 · 52 · 80 px
+
+which is not a rhythm. **The ladder spaced line *centres* using the heights the
+browser laid out, and the frame loop then drew every line scaled about its own
+centre.** So the gap you could see was `air + (h₁(1−s₁) + h₂(1−s₂))/2` — a
+number that grows with the height of whatever is next to it. A paragraph opened
+a hole beside itself; two short lines nearly touched. The measurement was also
+stale, so it was not even consistently wrong.
+
+It stacks by **drawn edges** now, rebuilt every frame from the same heights and
+scales the drawing uses:
+
+    up[i] = up[i−1] + air + drawn height of i
+
+The gap is `air` by construction, at every scale, always. Same conversation:
+
+    10 · 10 · 10 · 11 · 11 · 11 · 12 · 13 · 13 · 14 · 16 · 17 px
+
+— air scaled with the line it sits above, so a receding column stays the same
+column rather than a squashed one.
+
+> One thing to know if you touch this: the lines are absolutely positioned at a
+> shared anchor, so a transform places their **tops**, not their centres. The
+> ladder therefore has to subtract `(h − h·s)/2` from every lift. Getting that
+> wrong is what made my first attempt look *worse* than what it replaced.
+
+### A long message was hidden entirely rather than clipped
+
+The lane test faded a whole message by how much of its **full box** had reached
+the controls, so anything taller than the lane could never be shown at all —
+which is the hole at the bottom of the sky. The longest thing either of you had
+written was the one thing you were not allowed to read.
+
+A message is not an atom. There is a per-line `mask-image` now, in the
+element's own coordinates, fading over about one line of text: what fits is at
+full strength and the rest slides under the controls. Verified with a 411px
+message on an 844px phone — fully readable, and the line above it clipping
+cleanly at the player.
+
+### The scrolling was not attached to the hand
+
+`dy × 0.027` — so 37 px of thumb was always one message, whether that message
+was "k" at twenty pixels or a paragraph at a hundred and seventy. On a normal
+run of short lines the sky moved about **1.7× the finger**. That is what "going
+past your fingers" is, and no amount of easing fixes it.
+
+Drag is in pixels now, divided by what a message is really worth here. The
+obvious way to get that number — the distance between two rungs — is wrong,
+because walking also changes the ladder underneath the movement; it measured
+**0.63×**. Differencing the ladder properly (build it half a step either side,
+ask how far one piece of content actually travels) gives **1.03×**. Measured:
+120 px of finger, 124 px of sky.
+
+Momentum on release, exponential decay, no snapping. The velocity is taken over
+at least 30 ms — browsers coalesce moves, and two samples 8 ms apart read as
+1200 px/s from a hand that was barely moving.
+
+### The corner
+
+- **The tap that did nothing in the garden.** `.whisper-recent` was a `div`
+  with a link role, and `systems/swipe` only stands aside for
+  `button, input, textarea, select, a` — so the world took the pointer and six
+  pixels of thumb turned a tap on her last message into a swipe of the garden.
+  It worked with a mouse, which is why it looked like it worked. The corner and
+  the player are named in that guard now, and the block is a real `<button>`.
+- **The rectangle.** Two of them, in fact: `.whisper-recent:hover` drew a
+  tinted, outlined, rounded box, and every browser paints its own tap highlight
+  over what it thinks you pressed. Both gone; `-webkit-tap-highlight-color` is
+  off globally rather than only on the road.
+- **The blur.** `.whisper-hush`, a fixed sheet behind the panel. Worth knowing:
+  a positioned child paints above every non-positioned sibling whatever the DOM
+  order says, so the first version blurred the conversation it was meant to be
+  standing behind. And with the world soft, the grey rounded beds under each
+  line stopped being legibility and started being chat bubbles — so they come
+  off while it is open.
+
+### The iOS accessory bar
+
+Investigated rather than guessed. The usual explanations were all ruled out by
+measuring the live document: there is no `<form>`, there was exactly **one**
+form control in the entire page, and autofill was already off. The bar is shown
+because the focused element **is a form control** — that is the whole condition,
+and the arrows are simply inert when there is nowhere to walk to.
+
+So `ui/Ink`: a `contenteditable="plaintext-only"` element, used by both
+composers. Same keyboard, same typing, same styling, and no accessory bar,
+because WebKit has no form to offer to navigate. The document now reports
+**zero** `input`/`textarea`/`select` elements while you are writing. The
+Whisper's `<form>` went with it — a field and a submit button in a form is the
+clearest possible instruction to iOS to show that bar.
+
+`npm run locks` fails on `she sees it too, shut` — **that is not from this
+work**; it fails identically at HEAD, checked in a throwaway worktree. Every
+other check passes.
+
 ## 1 Sep · Claude · a held drift keeps its speed, and the music belongs to the race
 
 Two things, both reported from actually playing it.

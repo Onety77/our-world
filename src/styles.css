@@ -293,6 +293,23 @@ body {
   overflow: hidden;
 }
 
+/*
+  No tap rectangle, anywhere.
+
+  Mobile browsers paint a translucent block over whatever they decide you have
+  pressed — a hard-edged rounded rectangle, in a blue nobody in this palette
+  chose, on a world whose entire art direction is that there are no rectangles.
+  It is barely noticeable and it is the browser drawing a box on a design that
+  refuses boxes, which is precisely the sort of thing you cannot un-see once
+  you have seen it around a line of text you were about to type into.
+
+  This was already switched off on the road, where it was noticed first. It is
+  the same wrong everywhere else.
+*/
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 canvas {
   display: block;
   touch-action: none; /* the camera owns the drag */
@@ -4590,8 +4607,64 @@ body:has(.talking) .leave-place {
   max-height: 34vh;
 }
 
-.saying-field::placeholder {
+/*
+  ---------------------------------------------------------------------------
+  **Both composers are editable elements now, not form controls** — see
+  `ui/Ink` for why (iOS puts its form-navigation bar over the keyboard for any
+  focused form control, and there is no way to refuse it while being one).
+
+  A `<textarea>` brings a few behaviours for free that a `div` does not, and
+  all of them have to be put back or the field is subtly broken:
+
+    the caret     an empty editable box can collapse to nothing and take the
+                  cursor with it, so it holds one line's height
+    wrapping      a textarea wraps and keeps whitespace; a div collapses runs
+                  of spaces and will happily run one long word off the edge
+    growing       `field-sizing: content` is a form-control property. An
+                  editable element is already content-sized, which is the same
+                  behaviour arrived at from the other direction
+    scrolling     it still has to stop growing somewhere and scroll instead
+
+  The placeholder is drawn rather than declared, because `::placeholder` only
+  exists on form controls. It reads from `data-placeholder` and shows only
+  while the field is genuinely empty.
+  ---------------------------------------------------------------------------
+*/
+.saying-field,
+.whisper-field {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-modify: read-write-plaintext-only;
+  cursor: text;
+  overflow-y: auto;
+}
+
+.saying-field {
+  min-height: 1.7em;
+}
+
+.whisper-field {
+  min-height: 1.3em;
+  max-height: 22vh;
+}
+
+.saying-field[data-empty='yes']::before,
+.whisper-field[data-empty='yes']::before {
+  content: attr(data-placeholder);
   color: var(--ink-faint);
+  pointer-events: none;
+}
+
+/*
+  Nothing to say and nothing said about it.
+
+  The Stars' field has no placeholder on purpose — see the note beside it in
+  `ui/Talking` — and an empty `attr()` still creates a box that pushes the
+  caret, so the rule is switched off entirely when there is no text for it.
+*/
+.saying-field:not([data-placeholder])::before,
+.whisper-field:not([data-placeholder])::before {
+  content: none;
 }
 
 /*
@@ -6656,6 +6729,66 @@ body:has(.talking) .leave-place {
    being useful does not suspend the design law.
    -------------------------------------------------------------------------- */
 
+/*
+  ---------------------------------------------------------------------------
+  **What is behind the corner goes soft while it is open.**
+
+  Opening this is never idle: you opened it to read something or to answer, and
+  for those few seconds the meadow, the cave or the road behind it is not what
+  you are looking at. Leaving it in full focus makes the corner fight it — this
+  is text with no panel under it, by law, so its only defence against a sunlit
+  hillside was a heavier and heavier shadow, and past a point that stops being
+  legibility and starts being a dark smudge in the shape of a paragraph.
+
+  A blur is the honest version of the same intent. The words come forward
+  because everything else steps back, which is what actually happens when you
+  look at something.
+
+  It is a fixed sheet rather than a `backdrop-filter` on the panel itself: the
+  panel has no background and no box, so there is no shape to filter *through*.
+  This is the whole world going quiet behind a piece of text, and it fades in
+  and out over a third of a second so the switch is felt rather than seen.
+  ---------------------------------------------------------------------------
+*/
+.whisper-hush {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  backdrop-filter: blur(13px) saturate(0.86) brightness(0.76);
+  -webkit-backdrop-filter: blur(13px) saturate(0.86) brightness(0.76);
+  transition: opacity 0.34s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+.whisper-hush.on {
+  opacity: 1;
+}
+
+/*
+  And the words back on top of it.
+
+  A positioned child paints above every non-positioned sibling whatever the
+  document order says, so the sheet went over the conversation it was supposed
+  to be standing behind — the whole corner came out blurred, which is a very
+  clear way to be told how painting order works. Lifting the panel's own parts
+  into the same positioned layer, one above the sheet, is the whole fix.
+*/
+.whisper.open > .whisper-recent,
+.whisper.open > .whisper-write,
+.whisper.open > .whisper-answering,
+.whisper.open > .whisper-fold-away {
+  position: relative;
+  z-index: 1;
+}
+
+/* Nothing moves when somebody has asked for nothing to move. */
+@media (prefers-reduced-motion: reduce) {
+  .whisper-hush {
+    transition-duration: 0.01ms;
+  }
+}
+
 .whisper,
 .whisper-fold {
   width: 100%;
@@ -6747,21 +6880,51 @@ body:has(.talking) .leave-place {
   gap: 0.5rem;
 }
 
+/*
+  A button, and it must not look like one.
+
+  It became a `<button>` so that the world's swipe would stop stealing taps on
+  it — see the note in `systems/swipe`. That brings the browser's own idea of a
+  button with it, and every part of that idea is a thing this design does not
+  have: a background, a border, a centred label, a system font.
+*/
 .whisper-recent {
   display: flex;
   flex-direction: column;
   gap: 0.42rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  text-align: inherit;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
-  border-radius: 0.22rem;
-  transition: opacity 160ms ease, background 160ms ease;
+  transition: opacity 160ms ease;
 }
 
+/*
+  Pressed, it brightens. It does not grow a box.
+
+  This used to answer a hover with a rounded rectangle: a tinted fill, a
+  one-pixel outline and a corner radius, around the only block of text in the
+  corner. On a phone that box is what you see the instant you touch the
+  messages — which is both the wrong feedback and a direct breach of the rule
+  at the top of this file. The line already has a colour and a shadow; the
+  honest way for text with no panel to say "this is live" is to be a little
+  more there, which is what the rest of the garden does.
+*/
 .whisper-recent:hover,
-.whisper-recent:focus-visible {
-  opacity: 0.92;
-  background: rgba(195, 214, 255, 0.045);
-  outline: 1px solid rgba(195, 214, 255, 0.16);
-  outline-offset: 0.28rem;
+.whisper-recent:focus-visible,
+.whisper-recent:active {
+  opacity: 1;
+  outline: none;
+}
+
+.whisper-recent:focus-visible .whisper-said,
+.whisper-recent:hover .whisper-said {
+  color: var(--ink);
 }
 
 .whisper-said {
@@ -6831,13 +6994,13 @@ body:has(.talking) .leave-place {
   color: var(--ink);
 }
 
-.whisper-field::placeholder {
-  color: rgba(242, 239, 230, 0.55);
-}
-
 .whisper-field:focus {
   outline: none;
   border-bottom-color: rgba(242, 239, 230, 0.8);
+}
+
+.whisper-field[data-empty='yes']::before {
+  color: rgba(242, 239, 230, 0.55);
 }
 
 .whisper-send,
@@ -12388,4 +12551,34 @@ body.on-the-road .broke-what {
   .tree-growing {
     font-size: 0.55rem;
   }
+}
+
+/*
+  ---------------------------------------------------------------------------
+  **The beds come off once the world behind is blurred.**
+
+  Each line in the corner sits on a translucent rounded rectangle, and that was
+  a fair answer to a hard problem: this is text with no panel, by law, and it
+  had to stay readable over a sunlit hillside. The bed was the only thing
+  standing between the words and the meadow.
+
+  It is not the only thing any more. Opening the corner now takes the whole
+  world out of focus and a quarter of the way down in brightness — see
+  `.whisper-hush` — and the words are legible against that on their own. What
+  is left of the bed is a stack of grey rounded rectangles behind a
+  conversation, which is the exact shape the top of this file says the garden
+  does not draw, and which reads as chat bubbles: the one thing this corner has
+  always refused to be.
+
+  So while it is open, the words lie on the world again and the shadow they
+  already carry does the rest. The folded strip keeps its bed: nothing is
+  blurred behind that, and it has to survive the same hillside.
+  ---------------------------------------------------------------------------
+*/
+.whisper.open .whisper-ink,
+.whisper.open .whisper-who,
+.whisper.open .said-hearts {
+  background: none;
+  padding-top: 0;
+  padding-bottom: 0;
 }
