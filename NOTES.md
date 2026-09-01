@@ -40,6 +40,64 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 1 Sep · Claude · the miniature that ended the film
+
+Reported: touched the small screen once, it disappeared, and it would not come
+back after a reload — though the music was still playing and the corner was not
+tucked.
+
+**Nothing was broken. The session had been ended.** The miniature carried a
+`× close` beside its `open`, and that button empties the shared record for
+*both* people — so the pane correctly stopped existing, and correctly stayed
+gone through a reload, because `videoId` really was null. The music still
+audible was the corner player, which is a different thing entirely. Every part
+of the report was accurate and the diagnosis was one layer further down than it
+looked.
+
+Two taps on a two-hundred-pixel overlay, no confirmation, no undo, and it
+reaches across to her device. **That control is gone.** Ending a screen lives in
+the full view next to the thing it ends, where it is called *end screen* and you
+can see what you are closing. The miniature offers *open*, and nothing else.
+
+### Three real bugs found on the way
+
+> **A drag delivered a click.** `preventDefault` on a pointerup does not stop
+> the click that follows it, so moving the pane out of the way also opened it.
+> The click is swallowed on the way up the tree now, the way `cornerSwipe`
+> already did it.
+
+> **The pane landed about twenty pixels from where it was dropped**, and after a
+> cold load it ignored the stored position entirely. Both were the same
+> mistake: the placement was a `useMemo` sizing the free space from a `ref`
+> holding a guess, and the element does not exist until something is playing —
+> so on a fresh load the effect ran against nothing and `[spot, open]` never
+> changed again to make it re-run. It is a layout effect reading the live box
+> now, keyed on `live` as well, with a `ResizeObserver` and a rotation
+> listener. Measured: dropped and landed **0 px out**, and identical across a
+> reload. Whatever is in storage is clamped into the viewport before it is
+> applied, so no stored position can ever hide it.
+
+> **The corner's shove ate its own safety net.** The listener that swallows the
+> click after a sideways shove was removed on a `setTimeout(…, 0)` — which
+> fires *before* the click, not after. So a shove that started on the play
+> button also pressed it. Three hundred and fifty milliseconds now, and
+> measured: the glyph is unchanged across a shove that starts on it.
+
+### And the shove is reliable now
+
+Three things were wrong with it and all three read as "sometimes it just does
+not work":
+
+- the axis was decided on a plain `dx > dy`, so a diagonal — which is what a
+  thumb reaching across a phone actually draws — was a coin toss. It needs a
+  clear lead now
+- only distance counted, so a quick short flick did nothing at all
+- the handle was placed from where the finger *ended*, and a sideways throw
+  drifts vertically by nature. It uses where the finger landed, which is the
+  deliberate half of the gesture
+
+A vertical drag still leaves the corner alone; that is checked too.
+
 ## 1 Sep · Claude · five things on the shared screen
 
 Codex did the design pass on the player; these are the five faults left in it.

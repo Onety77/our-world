@@ -28,7 +28,7 @@
  * ---------------------------------------------------------------------------
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useData, useWorldSlice } from '@/data/provider'
 import type { Message, Queued } from '@/data/types'
 import { ambience } from '@/systems/ambience'
@@ -61,6 +61,16 @@ import { gainOf, useVolume } from '@/systems/volume'
 
 /** How often the two screens are compared. See `DRIFT` for why not per frame. */
 const CHECK_MS = 900
+
+/**
+ * How far a finger must travel before it is moving the pane rather than tapping.
+ *
+ * Six pixels was too eager: a thumb on a small overlay is never still, and a
+ * plain tap was routinely registering as a drag — which nudged the pane, saved
+ * the nudge, and made every touch move it slightly. Twelve is still well under
+ * a deliberate shove and comfortably over a hand that meant to stay put.
+ */
+const DRAG_ENOUGH = 12
 
 export function Together() {
   const data = useData()
@@ -346,15 +356,17 @@ export function Together() {
     ---------------------------------------------------------------------------
   */
   const spot = useWatching((s) => s.spot)
-  const paneBox = useRef({ w: 176, h: 99 })
+  /** The element that actually carries the position while it is tucked. */
+  const paneRef = useRef<HTMLDivElement>(null)
   const dragging = useRef<{ id: number; dx: number; dy: number; moved: boolean } | null>(null)
 
   const onPaneDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (open) return
     const box = event.currentTarget.getBoundingClientRect()
-    paneBox.current = { w: box.width, h: box.height }
     dragging.current = {
       id: event.pointerId,
+      // Where inside the pane the finger landed. Constant for the gesture, so
+      // the pane keeps the same point under the thumb the whole way.
       dx: event.clientX - box.left,
       dy: event.clientY - box.top,
       moved: false,
@@ -370,46 +382,98 @@ export function Together() {
       const far =
         Math.abs(event.clientX - (box.left + held.dx)) +
         Math.abs(event.clientY - (box.top + held.dy))
-      if (far < 6) return
+      if (far < DRAG_ENOUGH) return
       held.moved = true
     }
-    const freeX = Math.max(1, window.innerWidth - box.width)
-    const freeY = Math.max(1, window.innerHeight - box.height)
+    const free = {
+      x: Math.max(1, window.innerWidth - box.width),
+      y: Math.max(1, window.innerHeight - box.height),
+    }
     useWatching.getState().putSpot({
-      x: Math.max(0, Math.min(1, (event.clientX - held.dx) / freeX)),
-      y: Math.max(0, Math.min(1, (event.clientY - held.dy) / freeY)),
+      x: Math.max(0, Math.min(1, (event.clientX - held.dx) / free.x)),
+      y: Math.max(0, Math.min(1, (event.clientY - held.dy) / free.y)),
     })
   }
 
   const onPaneUp = (event: React.PointerEvent<HTMLDivElement>) => {
     const held = dragging.current
     dragging.current = null
-    // A drag must not also be the tap that opens it.
-    if (held?.moved && held.id === event.pointerId) event.preventDefault()
+    if (!held?.moved || held.id !== event.pointerId) return
+    /*
+      Swallow the click this drag is about to become.
+
+      `preventDefault` on a pointerup does not stop the click that follows it —
+      the browser fires one on whatever the finger went down on regardless, and
+      on this pane that is the control that opens the screen. So the click is
+      caught on the way up the tree, once, exactly as the corner's own shove
+      does it. Without this, moving the pane out of the way also opened it.
+    */
+    const el = event.currentTarget
+    const swallow = (click: Event) => {
+      click.stopPropagation()
+      click.preventDefault()
+    }
+    el.addEventListener('click', swallow, { capture: true, once: true })
+    // If the finger went down on nothing clickable no click ever arrives, and
+    // the listener would sit there waiting to eat the next honest tap.
+    window.setTimeout(() => el.removeEventListener('click', swallow, true), 350)
   }
 
   /*
-    Left and top as *pixels*, worked out from the fractions at render.
+    Written straight onto the element, from the box it really has.
 
-    A percentage would place the pane's own top-left at that share of the
-    viewport, which walks it off the bottom-right edge as it gets larger. The
-    fraction is of the *free* space, so 1 means "against the far edge", which is
-    what a hand that dragged it there meant.
+    `useMemo` could not do this correctly and was quietly wrong by about twenty
+    pixels: it sized the free space from a `ref` holding either a guess or
+    whatever the box measured the last time a finger went down, so the place a
+    pane landed was not the place it had been dropped. A memo also cannot
+    notice a rotation, so a position worked out in portrait stayed applied in
+    landscape.
+
+    Reading the live box in a layout effect fixes both, and adds the thing that
+    matters most: it **cannot leave the pane somewhere you are unable to reach
+    it.** Whatever is in storage, and whatever the screen has since become, the
+    result is clamped into the viewport before it is applied.
   */
-  const placed = useMemo(() => {
-    if (spot === null || open || typeof window === 'undefined') return undefined
-    const wide = Math.min(window.innerWidth * 0.42, 176)
-    const free = {
-      x: Math.max(0, window.innerWidth - wide),
-      y: Math.max(0, window.innerHeight - wide * 0.5625),
+  useLayoutEffect(() => {
+    const el = paneRef.current
+    if (!el) return
+    const settle = () => {
+      if (open || spot === null) {
+        el.style.removeProperty('left')
+        el.style.removeProperty('top')
+        return
+      }
+      const box = el.getBoundingClientRect()
+      const free = {
+        x: Math.max(0, window.innerWidth - box.width),
+        y: Math.max(0, window.innerHeight - box.height),
+      }
+      el.style.left = `${Math.round(Math.max(0, Math.min(1, spot.x)) * free.x)}px`
+      el.style.top = `${Math.round(Math.max(0, Math.min(1, spot.y)) * free.y)}px`
     }
-    return {
-      left: `${Math.round(spot.x * free.x)}px`,
-      top: `${Math.round(spot.y * free.y)}px`,
-      right: 'auto' as const,
-      bottom: 'auto' as const,
+    settle()
+    window.addEventListener('resize', settle)
+    window.addEventListener('orientationchange', settle)
+    /*
+      And whenever the pane itself changes shape.
+
+      This is not belt and braces — it is the fix for a real failure. The
+      element only exists once something is playing, so on a cold load the
+      effect ran first with nothing to write to, and `[spot, open]` did not
+      change when the video arrived, so it never ran again: the pane came back
+      in the corner's default place rather than where it had been left.
+      `live` is in the dependencies now for that reason, and the observer
+      covers the same shape of mistake for anything that resizes it later.
+    */
+    const watch = new ResizeObserver(settle)
+    watch.observe(el)
+    return () => {
+      watch.disconnect()
+      window.removeEventListener('resize', settle)
+      window.removeEventListener('orientationchange', settle)
     }
-  }, [spot, open])
+  }, [spot, open, live])
+
 
   // --- what is on --------------------------------------------------------
   const shown = shared.playing ? Math.max(where, 0) : shared.at
@@ -440,8 +504,8 @@ export function Together() {
         `inset: 0` and fills it — so the drag, and the place it is remembered
         in, belong here rather than on the picture.
       */
+      ref={paneRef}
       className={`together ${open ? 'full' : 'tucked'}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}`}
-      style={open ? undefined : placed}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
@@ -477,7 +541,6 @@ export function Together() {
       {/* The persistent YouTube host never leaves the document between views. */}
       <div
         className={`together-screen${live ? '' : ' dark'}${trouble ? ' has-trouble' : ''}${!open && spot !== null ? ' placed' : ''}`}
-        style={placed}
         onPointerDown={onPaneDown}
         onPointerMove={onPaneMove}
         onPointerUp={onPaneUp}
@@ -510,9 +573,25 @@ export function Together() {
               >
                 <span aria-hidden="true">↗</span> open
               </button>
-              <button type="button" onClick={endSession}>
-                <span aria-hidden="true">×</span> close
-              </button>
+              {/*
+                There is no way to end the session from here, deliberately.
+
+                ---------------------------------------------------------
+                This had a `× close` beside the open, and it ended the screen
+                **for both of you** — one tap, on a control the size of a
+                thumbnail, sitting under a first tap that had only just
+                revealed it. It was reported exactly as it behaves: touched it
+                once, it disappeared, and it did not come back on a refresh,
+                because what had actually happened was that the shared record
+                had been emptied.
+
+                Nothing that reaches across to her device belongs on a
+                two-hundred-pixel overlay with no confirmation and no undo.
+                Ending it lives in the full screen, next to the thing it ends,
+                where it is called *end screen* and you can see what you are
+                closing. From here the only move is to go and look.
+                ---------------------------------------------------------
+              */}
             </div>
           </>
         )}
