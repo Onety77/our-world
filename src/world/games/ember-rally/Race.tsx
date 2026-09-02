@@ -47,6 +47,8 @@ import { CarStudio, STUDIO } from './Studio'
 import { basisAt, buildTrail, buildTunnel, roadPoint } from './geometry'
 import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
+import { buildHarmattan, HarmattanWorld } from './Harmattan'
+import { dust, district } from './dust'
 import { deep } from './depth'
 import { storm } from './weather'
 import { enclosureOf, tunnel } from './tunnel'
@@ -114,6 +116,7 @@ import {
   type RollingSample,
 } from './wire'
 import {
+  HARMATTAN,
   emptyRoad,
   galeStrengthAt,
   roadAt,
@@ -439,9 +442,11 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
   const chunks = useMemo(
     () => track.stage === 'moonbreak'
       ? buildMoonbreak(track)
-      : track.stage === 'stormcrown'
-        ? buildStormcrown(track)
-        : buildTunnel(track),
+      : track.stage === 'harmattan'
+        ? buildHarmattan(track)
+        : track.stage === 'stormcrown'
+          ? buildStormcrown(track)
+          : buildTunnel(track),
     [track],
   )
   useEffect(() => () => chunks.forEach((chunk) => chunk.geometry.dispose()), [chunks])
@@ -579,14 +584,26 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
         args={[
           track.stage === 'moonbreak'
             ? '#172131'
-            : track.stage === 'stormcrown'
-              ? '#172126'
-              : '#050403',
+            : track.stage === 'harmattan'
+              /*
+                Not a background — the haze.
+
+                Every other road's clear colour is what you see where there is
+                nothing, and on all three of them that is a dark, so the far
+                end of a straight reads as unlit. Here the thing taking the
+                distance away is *bright*, and a dark behind a bright sky would
+                put a black rim round every hill on the plain.
+              */
+              ? '#c69466'
+              : track.stage === 'stormcrown'
+                ? '#172126'
+                : '#050403',
         ]}
       />
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {track.stage === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
+      {track.stage === 'harmattan' ? <HarmattanWorld track={track} /> : null}
       {/*
         The Rootway has no world component of its own — the tunnel, the lamps
         and the fires are all built inline above — so its soundscape mounts
@@ -787,6 +804,13 @@ interface FrameArgs {
 const stormRoad = emptyRoad()
 /** The same, for the Rootway's look at how big the rock around it is. */
 const rootRoad = emptyRoad()
+/** Scratch for the Harmattan's look-ahead, so a frame allocates nothing. */
+const dustRoad = emptyRoad()
+/** The plain in full sun, and the same plain from inside the town's shade. */
+const HAZE_OPEN = new Color('#b98a5e')
+const HAZE_SHADE = new Color('#6b4a33')
+/** What the distance goes to, which is the haze and not a darkness. */
+const HAZE_FOG = new Color('#c69466')
 /**
  * One frame of the race, as the music hears it.
  *
@@ -1126,6 +1150,58 @@ class Driving {
       a step in the geometry, but stepping the *sound* would make every seam
       between two bands audible as a click in the reverb.
     */
+    /*
+      The Harmattan's ground and air, off the road under the car.
+
+      Read *ahead* of the car, like the Stormcrown's weather is, and for the
+      same reason: what the soundscape should be doing is what is about to
+      happen, not what already has. Twelve metres is about a third of a second
+      at speed — enough that walking into a drift is heard as you arrive rather
+      than after, and short enough that it is still the same piece of road.
+
+      `rumble` is the exception and is taken straight off the car with no
+      easing at all, because it is already a physical quantity that the tyre
+      model computes every step, and smoothing it here would be smoothing it
+      twice.
+    */
+    /*
+      The Harmattan's light, which is a sun rather than a car.
+
+      Set once a frame rather than once at open, because the town is dark: two
+      storeys of earth either side of six metres of street is genuinely shaded
+      at midday, and the daylight term easing down as you go through the gate
+      is what makes the walls feel like walls. It is the same moment the wind
+      stops, which is not a coincidence — both are the same earth doing the
+      same job, and having them arrive together is most of why the town is the
+      best thirty seconds on the road.
+    */
+    if (this.track.stage === 'harmattan') {
+      const u = args.lights.uniforms
+      const shade = district(this.car.s, HARMATTAN.gateAt, HARMATTAN.gateOut, 14)
+      const ease = 1 - Math.exp(-3 * args.delta)
+      u.uDaylight.value += ((1 - shade * 0.55) - u.uDaylight.value) * ease
+      u.uAmbient.value.lerp(shade > 0.5 ? HAZE_SHADE : HAZE_OPEN, ease)
+      u.uFogColor.value.lerp(HAZE_FOG, ease)
+      /*
+        A hundred metres of visibility, and it is the whole feeling of the
+        place. Slightly further inside the walls, because what is taking the
+        distance away out there is dust in the air and there is less air
+        between you and a wall a metre away than between you and the plain.
+      */
+      u.uFogNear.value += ((shade > 0.5 ? 26 : 16) - u.uFogNear.value) * ease
+      u.uFogFar.value += ((shade > 0.5 ? 150 : 108) - u.uFogFar.value) * ease
+    }
+
+    if (this.track.stage === 'harmattan') {
+      const road = roadAt(this.track, this.car.s + 12, dustRoad)
+      const ease = 1 - Math.exp(-3.4 * args.delta)
+      dust.s = this.car.s
+      dust.speed = Math.hypot(this.car.vs, this.car.vn)
+      dust.exposed += (road.gale - dust.exposed) * ease
+      dust.sand += (road.sand - dust.sand) * ease
+      dust.rumble = this.car.rumble
+    }
+
     if (this.track.stage === 'rootway') {
       const road = roadAtRoute(this.track, this.car.s + 12, this.car.shortcut, rootRoad)
       const want = enclosureOf(road.ceiling, road.width + vergeWidth(road.room))

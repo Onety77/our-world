@@ -88,6 +88,7 @@ const BEDS: Record<StageId, string | null> = {
   rootway: bedFor('rootway'),
   moonbreak: bedFor('moonbreak'),
   stormcrown: bedFor('stormcrown'),
+  harmattan: bedFor('harmattan'),
 }
 
 // ---------------------------------------------------------------------------

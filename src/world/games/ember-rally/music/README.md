@@ -5,12 +5,13 @@ One file per road. Drop them here, named exactly:
     rootway.m4a
     moonbreak.m4a
     stormcrown.m4a
+    harmattan.m4a
 
 That is the whole installation step — `../roadMusic.ts` picks them up by name at
 build time. A road with no file here is silent, which is a valid state and not
 an error: the rest of the racing sound carries the road on its own.
 
-**Only these three names are read.** Anything else in this folder is ignored, so
+**Only these names are read.** Anything else in this folder is ignored, so
 `rootway-take3.m4a` is a file you can leave lying about while you decide.
 
 ## When it plays

@@ -40,6 +40,106 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · the Harmattan
+
+A fourth road: the Sahel with the dust wind blowing. Laterite, baobabs, termite
+spires, a walled town you drive *through*, indigo dye pits, and an escarpment.
+
+**One decision before any of it.** Not "Africa" — a continent is not a place,
+and acacia-and-sunset would have been somebody's idea of one rather than
+anywhere. The Sahel in harmattan season, which is the country this is being
+built in, and specificity is the only thing that makes it read as real.
+
+### What it has that the other three cannot
+
+**It is daylight, and the engine had none.** Everything in Ember Rally is lit by
+the car — two headlamp cones, a warm pool, a window of lanterns, and a black
+world past them. That is written down as one of the four decisions the racer
+follows from, and it is correct for a cave and two nights. Lit that way, every
+baobab and wall on this road came out a black silhouette against a bright sky,
+with headlight beams laid across ground you can already see.
+
+So the shared light block gained a daylight term: one number, nought on the
+three night roads, cross-fading the whole model to a sun and a strong sky fill.
+Strong on purpose — in haze most of the light arriving has been scattered, so
+contrast is *low* and value is high, and a hard sun with a weak fill reads as a
+clear desert noon instead. The volumetric beams fade with it, because a visible
+cone of headlight at midday is the single clearest tell that a scene is a night
+scene with a bright sky pasted behind it.
+
+**What hides the world is brightness.** The Rootway blinds you with dark, the
+Stormcrown with cloud. Here it is luminous ochre with no horizon in it, and a
+sun you can look straight at, because dust takes the corona off.
+
+**Two new surface mechanics, and both are visible.**
+
+`Band.sand` — drifts take a third of the grip, add rolling drag, and
+*tramline*: they run in ridges and a wheel in a ridge is steered by it. And
+where they lie is **dealt from the seed**, which deliberately breaks the
+Moonbreak's rule that a seed may move scenery but never the racing line. Right
+for the road you learn second, wrong for the one you finish on: the road is
+learnable and the sand on it is not.
+
+`Band.ruts` — the washboard a dry road wears into. Measured first as a pure
+grip term and it cost **exactly nothing**: two runs down the Red Mile came out
+at 10.11s each, dead level to the hundredth, because a car at top speed is
+limited by drag and not by traction and had already stopped accelerating. It
+also absorbs energy now, which is what a washboard really does — so the Red
+Mile has a genuinely lower top speed than it looks, and it is the first
+difficulty in this game that lives on a **straight**.
+
+### Measured, not asserted
+
+The Stormcrown was written as the finale and measured, later, as the easiest
+road: nineteen corners in four and a half kilometres, never narrower than nine
+metres, fifty-six per cent near-straight. So `npm run harmattan` builds all
+four roads and compares:
+
+```
+Harmattan   3256m  31 corners  27 braking  tightest r16  narrowest 5.9m   8% straight
+Rootway     2296m  15 corners  15 braking  tightest r24  narrowest 6.7m  14% straight
+Moonbreak   3658m  23 corners  17 braking  tightest r22  narrowest 7.2m  36% straight
+Stormcrown  5304m  41 corners  34 braking  tightest r18  narrowest 6.4m  10% straight
+```
+
+Two checks had to be *rewritten rather than passed*, and both were the test
+being wrong. "More braking corners than any of them" is asking this road to be
+longer than the Stormcrown, which is not the same as harder — density and the
+longest gap without a brake are the real questions. And "a higher share of
+corners needing a brake" is unwinnable: the Rootway is 100%, because it is a
+cave with a road in it. What replaced it says what this road actually claims —
+**there is nowhere on it to relax**, because every long straight has a bad
+surface on it.
+
+### Three things the harness caught that reading could not
+
+> **A hole in the road.** The last hairpin was r16 on eight metres, off-camber,
+> in half a gale, in sand. Four hard things at once; the crude driver beached
+> on the verge at 2933m and sat at a tenth of a metre a second for the rest of
+> the run. Nothing threw and the road was "completable". A corner you can get
+> *stuck* on is not difficult, it is broken. It keeps the radius and gets the
+> room back — nine and a half metres, the way a real hairpin is built.
+
+> **Three banners standing in front of nothing.** They were hand-written
+> offsets. Deriving them from the *bands* was the obvious fix and still wrong:
+> the bands are not the road, `makeTrack` smooths the curvature over eleven
+> metres, and a short sharp band comes out gentle. They are derived from the
+> sampled and smoothed road now — the Moonbreak's rule one level further down.
+
+> **The road disappeared.** In the wadi, laterite under deep drift landed
+> within a few hundredths of the plain beside it, and there was no way to see
+> where the driveable ground ended. Fixed twice over: the plain is greyer, and
+> the road has a **berm** — the windrow of spoil a grader leaves, raised so it
+> catches sun on one side and shadow on the other. Sand blows *off* a raised
+> edge rather than gathering on it, so that line survives any drift. It is also
+> just true of every graded road on earth.
+
+### Still to come
+
+The music slot (`music/harmattan.m4a`) is wired and empty. Rendered and looked
+at at six points along the road; the town and the Cathedrals are the two that
+came out best.
+
 ## 2 Sep · Claude · eight small ones
 
 ### The dead button was a near miss

@@ -46,6 +46,7 @@ const ROADS: readonly { id: string; name: string }[] = [
   { id: 'rootway', name: 'The Rootway' },
   { id: 'moonbreak', name: 'The Moonbreak' },
   { id: 'stormcrown', name: 'The Stormcrown' },
+  { id: 'harmattan', name: 'The Harmattan' },
 ]
 
 /** Every door this screen can shut, in the order they are worth reading. */

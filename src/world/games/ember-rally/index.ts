@@ -40,6 +40,7 @@ export default {
         { id: 'rootway', name: 'The Rootway', note: 'fire and stone · close, changing, lantern-lit' },
         { id: 'moonbreak', name: 'The Moonbreak', note: 'water and open sky · fast and exposed' },
         { id: 'stormcrown', name: 'The Stormcrown', note: 'rain and high stone · weather at the limit' },
+        { id: 'harmattan', name: 'The Harmattan', note: 'dust and red earth · the wind you can see' },
       ],
     },
   },
@@ -80,7 +81,7 @@ export default {
       direction. Still both people, still a real race, and it no longer insists
       on a symmetry the game no longer has.
     */
-    return (['rootway', 'moonbreak', 'stormcrown'] as const).some((stage) => {
+    return (['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as const).some((stage) => {
       if (solo) return on(mine, stage, 'chase')
       const raced = (a: RallyMove[], b: RallyMove[]) =>
         on(a, stage, 'qualifying') && on(b, stage, 'chase')

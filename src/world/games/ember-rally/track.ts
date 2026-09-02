@@ -101,6 +101,59 @@ export interface Band {
    * -------------------------------------------------------------------------
    */
   camber: number
+  /**
+   * 0..1 — how deep the drifted sand lies across the road here.
+   *
+   * -------------------------------------------------------------------------
+   * **Not the same thing as `Track.loose`.** That is what the road is *made
+   * of*, one number for the whole place, and it exists so a tyre on sand marks
+   * the ground by rolling. This is what has blown *onto* it since yesterday,
+   * it changes along the road, and it is in the physics.
+   *
+   * Two effects, and they are the two things sand actually does to a car:
+   *
+   *   **It takes grip away**, more than water does, because the surface itself
+   *   moves. Where the drifts are deepest the road is asking for a slower
+   *   corner than its radius says.
+   *
+   *   **It tramlines.** Sand does not lie flat: the harmattan builds it into
+   *   ridges running across the road, and a wheel that drops into one is
+   *   steered by it. So this also becomes a sideways pull, in the direction
+   *   the wind has been pushing the sand — which is *not* the direction the
+   *   gale is pushing the car, because a drift is built by weeks of wind and
+   *   the gust you are in right now is only today's.
+   *
+   * The band is the *base* depth. Where the drifts actually lie is dealt from
+   * the seed — see `driftSand` — which deliberately breaks the Moonbreak's
+   * rule that a seed may move scenery but never the racing line. That rule is
+   * right for the road you learn second and wrong for the one you finish on:
+   * here the road is learnable and the sand on it is not, and reading the
+   * ground in front of you is the whole skill this place asks for.
+   * -------------------------------------------------------------------------
+   */
+  sand: number
+  /**
+   * 0..1 — corrugation. The washboard ripples a dry road wears into.
+   *
+   * -------------------------------------------------------------------------
+   * **What a laterite road actually does under traffic**, and the reason a
+   * pickup on one sounds like a drum. Ripples form perpendicular to the
+   * direction of travel, a hand's breadth apart, and they are not scenery:
+   * they bounce the wheels, and a wheel in the air is a wheel with no grip.
+   *
+   * It is in the physics as a load oscillation rather than as a texture, which
+   * gives it the property that makes it worth having: **it gets worse the
+   * faster you go.** Slowly, the tyres follow the ripples. Quickly, they skip
+   * across the tops and the contact patch spends part of every cycle carrying
+   * nothing at all.
+   *
+   * That is a difficulty no other road here has. The Rootway punishes you at
+   * corners, the Moonbreak on a bridge, the Stormcrown in the weather — all of
+   * them in *places*. This punishes holding the throttle flat on a straight,
+   * which is the one thing in this game that has never cost anything.
+   * -------------------------------------------------------------------------
+   */
+  ruts: number
 }
 
 export interface Lantern {
@@ -204,6 +257,10 @@ export interface Track {
   gale: Float32Array
   /** Radians of authored wrong-way tilt. See `Band.camber`. */
   camber: Float32Array
+  /** How deep the drifted sand lies here, 0..1. See `Band.sand`. */
+  sand: Float32Array
+  /** How corrugated the surface is here, 0..1. See `Band.ruts`. */
+  ruts: Float32Array
   grade: Float32Array
   /** Roll of the road surface into the corner, radians. */
   bank: Float32Array
@@ -273,6 +330,8 @@ const band = (b: Partial<Band> & { length: number }): Band => ({
   sway: 0,
   gale: 0,
   camber: 0,
+  sand: 0,
+  ruts: 0,
   room: 0.25,
   wet: 0.1,
   ...b,
@@ -1051,6 +1110,68 @@ export function galeAt(road: RoadAt, s: number, elapsed: number, speed: number):
   const across = Math.sin(road.heading - GALE_FROM)
   const bite = 0.55 + 0.45 * Math.min(1, speed / 28)
   return GALE_FORCE * strength * across * bite
+}
+
+/**
+ * Which way the drifts run.
+ *
+ * A compass bearing, like `GALE_FROM`, and deliberately *not* the same one.
+ * A drift is built by six weeks of wind and the gust you are in right now is
+ * today's; if the two agreed, the sand would only ever push you the same way
+ * the air is already pushing you, and the whole point of having both is that
+ * on some corners they fight.
+ */
+export const SAND_FROM = -0.9
+
+/** How hard a full drift steers a car that drops a wheel into it, m/s². */
+const SAND_PULL = 3.1
+
+/**
+ * The sideways shove of drifted sand — tramlining.
+ *
+ * -----------------------------------------------------------------------------
+ * Sand does not lie flat. The wind builds it into ridges running across the
+ * road, and a wheel that drops into one is steered by the ridge rather than by
+ * the driver. That is what makes deep sand frightening rather than merely slow:
+ * the car goes somewhere without being asked.
+ *
+ * It scales with speed rather than being constant, because at walking pace a
+ * wheel climbs out of a ridge and at speed it skips along it — and it is
+ * strongest where the road runs *across* the drifts, which is why it uses the
+ * road's own heading. Halfway round a corner the ridges change from something
+ * you are crossing to something you are following, and the pull dies away and
+ * comes back the other side.
+ * -----------------------------------------------------------------------------
+ */
+export function sandPullAt(road: RoadAt, speed: number): number {
+  if (road.sand <= 0) return 0
+  const across = Math.sin(road.heading - SAND_FROM)
+  const bite = 0.3 + 0.7 * Math.min(1, speed / 24)
+  // Squared, so a light dusting does almost nothing and a real drift is felt.
+  return SAND_PULL * road.sand * road.sand * across * bite
+}
+
+/**
+ * How much of the tyre's load the corrugation is taking away.
+ *
+ * -----------------------------------------------------------------------------
+ * Returns 0..1, and it is a *skip fraction*: how much of each ripple cycle the
+ * contact patch spends carrying nothing. Below about twelve metres a second the
+ * tyres follow the ripples and it is nothing but noise; above that they begin
+ * to fly the tops, and by thirty-four it is as bad as it gets.
+ *
+ * Modelled as the effect rather than as the bounce. The ripples on a road like
+ * this are a hand's breadth apart, so at speed the wheel is oscillating at
+ * something like a hundred hertz — far faster than the hundred-and-twenty-hertz
+ * step this simulation runs at, and a suspension model at that frequency would
+ * be numerically silly and would not feel like anything anyway. What a driver
+ * actually experiences is *the car going light*, and that is a grip term.
+ * -----------------------------------------------------------------------------
+ */
+export function rutSkipAt(road: RoadAt, speed: number): number {
+  if (road.ruts <= 0) return 0
+  const going = Math.max(0, Math.min(1, (speed - 12) / 22))
+  return road.ruts * going
 }
 
 export function sunkAt(track: Track, s: number): number {
@@ -1841,8 +1962,428 @@ function layStormcrown() {
   }
 }
 
+const HARM = layHarmattan()
+
+export const HARMATTAN = HARM.marks
+
+/**
+ * The Harmattan, laid out section by section.
+ *
+ * =============================================================================
+ * **The road you finish the game on, and the hardest one.** The Stormcrown was
+ * written down as the last road and measured, afterwards, as the easiest: never
+ * narrower than nine metres, seven brakes in four and a half kilometres, more
+ * than half of it within a whisker of straight. This is the answer to that.
+ *
+ * It is the Sahel in harmattan — the dry wind that comes down off the Sahara
+ * between December and February and fills the whole sky with dust. Not a
+ * generic hot country: a specific one, with laterite under the tyres, baobabs
+ * standing in the haze, termite spires crowding the verge, a walled town you
+ * drive *through*, indigo dye pits, and an escarpment at the end of it.
+ *
+ * **The light is the thing you notice first, and it is the opposite of the
+ * other three.** The Rootway blinds you with dark and the Stormcrown with
+ * cloud. Harmattan blinds you with *light*: a bleached orange sky with no
+ * horizon in it, no blue anywhere, and a sun you can look straight at because
+ * there is a hundred kilometres of dust in the way. You can see about as far
+ * as the Stormcrown's cloud lets you, and it is nothing like it.
+ *
+ * Four things make it hard, and only one of them is a corner:
+ *
+ *   **The road is not flat, it is corrugated.** `Band.ruts` — the washboard a
+ *   dry road wears into under traffic. It bounces the wheels, and the faster
+ *   you go the more time the tyres spend off the ground. It is the first
+ *   difficulty in this game that lives on a *straight*, and the Red Mile is
+ *   eight hundred metres of open road that punishes you for using it.
+ *
+ *   **The sand moves.** `Band.sand` takes grip and tramlines the car, and
+ *   where the drifts lie is dealt from the seed rather than authored. Every
+ *   other road here holds the Moonbreak's rule that a seed may move scenery
+ *   but never the racing line. This one breaks it deliberately: the road is
+ *   learnable, the sand on it is not, and looking at the ground in front of
+ *   you is the skill this place asks for.
+ *
+ *   **The wind is constant, not gusty.** The Stormcrown's gale arrives and
+ *   leaves — that is a storm. A harmattan blows for six weeks. So exposure
+ *   here is about *walls*: full on the plain and the scarp, nothing at all
+ *   inside the town, and the moment it stops is as loud as the moment it
+ *   starts.
+ *
+ *   **It is narrow.** Six metres and two hundred through the Kofar gate,
+ *   against the Stormcrown's nine everywhere. There is one line through the
+ *   town and it is the width of the car and a hand either side.
+ * =============================================================================
+ */
+/**
+ * Two banners before every corner, found on the road the game actually drives.
+ *
+ * -----------------------------------------------------------------------------
+ * These were a hand-written list of offsets from the section marks, and three
+ * of them ended up standing in front of nothing — which is worse than having no
+ * banners at all, because a marker that sometimes means nothing cannot be
+ * trusted on the occasions it means something.
+ *
+ * The obvious fix was to read the *bands* as they were laid, and it was wrong
+ * in a way worth writing down: the bands are not the road. `makeTrack` samples
+ * them and then smooths the curvature over eleven metres, and a short sharp
+ * band comes out of that as a gentle one. Two of the three bad banners were
+ * standing in front of corners that existed in the table and not in the world.
+ *
+ * So this does what the game does — samples, smooths with the same window, and
+ * then looks for corners the same way the harness does — and places the
+ * markers against that. It is the Moonbreak's rule taken one level further
+ * down: measure it off the road, not off the notes about the road.
+ * -----------------------------------------------------------------------------
+ */
+function bannersFor(bands: Band[]): number[] {
+  const total = bands.reduce((sum, b) => sum + b.length, 0)
+  const count = Math.floor(total / STEP) + 1
+  const raw = new Float32Array(count)
+  let cursor = 0
+  let at = 0
+  for (const b of bands) {
+    const until = Math.min(count, Math.round((at + b.length) / STEP))
+    for (; cursor < until; cursor++) raw[cursor] = b.curv
+    at += b.length
+  }
+  const curv = smooth(raw, 11)
+
+  /*
+    A corner is a run of real curvature, and the banner goes before the *start*
+    of it rather than before its middle — you brake for where a corner begins.
+    The threshold is the harness's own: anything the car can hold flat out is
+    not something to warn anybody about.
+  */
+  const flat = 1 / 96
+  const found: number[] = []
+  let from = -1
+  for (let i = 0; i < count; i++) {
+    const turning = Math.abs(curv[i]) > flat
+    if (turning && from < 0) from = i
+    else if (!turning && from >= 0) {
+      if (i - from > 14) found.push(from * STEP)
+      from = -1
+    }
+  }
+  return found.flatMap((s) => [s - 30, s - 14]).filter((s) => s > 8)
+}
+
+function layHarmattan() {
+  const bands: Band[] = []
+  let at = 0
+  /** Dry, open, and windy unless a section says otherwise. */
+  const dry = (shape: Partial<Band> & { length: number }) => {
+    bands.push(band({ width: 4.4, ceiling: 34, room: 0.9, wet: 0, gale: 0.7, ...shape }))
+    at += shape.length
+    return at
+  }
+  const here = () => at
+
+  /*
+    ==========================================================================
+    THE RED MILE — open laterite, flat out, and the road fighting you for it.
+
+    It opens fast and wide on purpose. Every other road in this game starts by
+    closing in on you; this one hands you the whole plain, a sky with nothing
+    in it, and a straight you can see almost none of. Then it takes the
+    straight back with `ruts`.
+
+    Corrugation is the whole argument of this section. The car will do a
+    hundred and thirty here and the road does not want it to: the ripples get
+    into the tyres above about eighty and the front goes light exactly when
+    you need it to bite for the Baobab Bend. It is not a wall and it is not a
+    corner — it is a straight that costs something, which is new.
+    ==========================================================================
+  */
+  const redMileFrom = here()
+  dry({ length: 74, width: 5.2, room: 1, curv: 0, ruts: 0.15, sand: 0.08, gale: 0.5 })
+  dry({ length: 96, width: 5.0, room: 1, curv: 0.004, ruts: 0.42, sand: 0.1 })
+  dry({ length: 88, width: 4.9, room: 1, curv: -0.006, ruts: 0.58, sand: 0.14 })
+  dry({ length: 104, width: 4.8, room: 1, curv: 0.003, ruts: 0.72, sand: 0.12, gale: 0.85 })
+  // The first real corner, and it arrives out of the haze with a baobab in it.
+  const baobabBend = here()
+  dry({ length: 62, width: 4.5, room: 0.8, curv: -0.031, ruts: 0.3, sand: 0.26 })
+  dry({ length: 40, width: 4.6, room: 0.9, curv: -0.006, ruts: 0.5 })
+  dry({ length: 82, width: 4.7, room: 1, curv: 0.0175, ruts: 0.66, sand: 0.16, gale: 0.9 })
+  dry({ length: 54, width: 4.5, room: 0.9, curv: 0.004, ruts: 0.74, sand: 0.2 })
+  // Two quick ones with the road still shaking under you.
+  dry({ length: 46, width: 4.3, room: 0.75, curv: -0.036, ruts: 0.34, sand: 0.3, camber: -0.09 })
+  dry({ length: 34, width: 4.4, room: 0.8, curv: 0.008, ruts: 0.4 })
+  dry({ length: 52, width: 4.3, room: 0.75, curv: 0.038, ruts: 0.28, sand: 0.24 })
+  dry({ length: 68, width: 4.6, room: 0.95, curv: -0.005, ruts: 0.62, sand: 0.18, gale: 0.95 })
+  const redMileTo = here()
+
+  /*
+    ==========================================================================
+    THE TERMITE CATHEDRALS — the Rootway's claustrophobia, in daylight.
+
+    Mounds four and five metres high, close enough to the verge that the road
+    is a corridor through them, and they are the only thing on this road that
+    will stop a car dead. The wind drops to almost nothing because they are
+    breaking it, the ground goes soft so the corrugation stops, and what is
+    left is nine corners in six hundred metres with no straight worth the name.
+
+    This is where the road stops being fast and starts being difficult, and
+    the transition is the point: you arrive at it carrying everything the Red
+    Mile gave you.
+    ==========================================================================
+  */
+  const cathedralsFrom = here()
+  dry({ length: 40, width: 4.0, room: 0.5, curv: -0.012, ruts: 0.2, sand: 0.22, gale: 0.3 })
+  dry({ length: 54, width: 3.8, room: 0.36, curv: -0.042, sand: 0.18, gale: 0.14 })
+  dry({ length: 26, width: 3.9, room: 0.4, curv: 0.01, gale: 0.1 })
+  dry({ length: 58, width: 3.7, room: 0.34, curv: 0.046, sand: 0.2, gale: 0.1 })
+  dry({ length: 24, width: 3.9, room: 0.42, curv: -0.008, gale: 0.12 })
+  dry({ length: 50, width: 3.6, room: 0.32, curv: -0.049, sand: 0.24, gale: 0.08, camber: -0.11 })
+  dry({ length: 30, width: 3.9, room: 0.44, curv: 0.006, gale: 0.14 })
+  dry({ length: 62, width: 3.8, room: 0.36, curv: 0.033, sand: 0.16, gale: 0.1 })
+  dry({ length: 28, width: 4.0, room: 0.46, curv: -0.01, gale: 0.16 })
+  dry({ length: 56, width: 3.7, room: 0.34, curv: -0.044, sand: 0.22, gale: 0.1 })
+  dry({ length: 34, width: 4.0, room: 0.5, curv: 0.012, ruts: 0.16, gale: 0.24 })
+  dry({ length: 64, width: 4.1, room: 0.6, curv: 0.028, ruts: 0.22, sand: 0.2, gale: 0.36 })
+  dry({ length: 38, width: 4.2, room: 0.7, curv: -0.007, ruts: 0.3, gale: 0.5 })
+  const cathedralsTo = here()
+
+  /*
+    ==========================================================================
+    THE DRY RIVER — down into the wadi, where the sand is.
+
+    A seasonal riverbed with no water in it for eight months of the year, and
+    the road goes along the bottom of it because that is where the flat ground
+    is. Sand knee-deep in the drifts. The banks are eight metres of cut earth
+    either side, so the wind stops entirely and the *banking* is the bed's own
+    — which is real camber, and it leans the wrong way wherever the river last
+    changed its mind about which side to cut.
+
+    The seeded drifts do most of their damage here. Two runs down this on two
+    different days are not the same piece of road, and there is no learning
+    around it: you can only look at the sand and believe it.
+    ==========================================================================
+  */
+  const riverFrom = here()
+  dry({ length: 46, width: 4.3, room: 0.62, curv: 0.008, grade: -0.05, sand: 0.32, gale: 0.3, ceiling: 26 })
+  dry({ length: 54, width: 4.1, room: 0.4, curv: -0.026, grade: -0.075, sand: 0.5, gale: 0.06, ceiling: 22 })
+  const riverBed = here()
+  dry({ length: 62, width: 4.4, room: 0.3, curv: 0.02, grade: -0.02, sand: 0.72, gale: 0, ceiling: 20 })
+  dry({ length: 48, width: 4.2, room: 0.28, curv: 0.041, grade: 0, sand: 0.8, gale: 0, camber: -0.14, ceiling: 20 })
+  dry({ length: 40, width: 4.5, room: 0.34, curv: -0.009, grade: 0, sand: 0.62, gale: 0, ceiling: 20 })
+  dry({ length: 58, width: 4.1, room: 0.26, curv: -0.045, grade: 0, sand: 0.85, gale: 0, camber: 0.16, ceiling: 20 })
+  dry({ length: 44, width: 4.4, room: 0.32, curv: 0.007, grade: 0.01, sand: 0.66, gale: 0, ceiling: 20 })
+  dry({ length: 66, width: 4.2, room: 0.28, curv: 0.034, grade: 0.015, sand: 0.78, gale: 0, ceiling: 20 })
+  const riverOut = here()
+  // Out of the bed the way a road leaves a river: steep, loose, and blind.
+  dry({ length: 52, width: 3.9, room: 0.3, curv: -0.03, grade: 0.085, sand: 0.7, gale: 0.12, ceiling: 24 })
+  dry({ length: 44, width: 3.8, room: 0.36, curv: -0.012, grade: 0.095, sand: 0.48, gale: 0.3, ceiling: 28 })
+  dry({ length: 38, width: 4.0, room: 0.5, curv: 0.014, grade: 0.05, sand: 0.3, gale: 0.5 })
+  const riverTo = here()
+
+  /*
+    ==========================================================================
+    KOFAR DUTSE — the gate, and the town behind it.
+
+    Earth walls: buttressed, battered, with the torons — the wooden beams that
+    hold the scaffolding when it is re-plastered — sticking straight out of
+    them at head height. You drive at a gap in that wall which is six metres
+    across, and then the town is one street wide with the walls close enough
+    on both sides to be a tunnel with the roof off.
+
+    **It is the only silence on the road.** The gale is nought from the gate to
+    the far wall, the sand is nought because the street is swept and packed
+    hard, and the corrugation is nought because nothing gets up enough speed in
+    here to make it. Everything that has been making noise for two kilometres
+    stops at once. Then you come out the other side and it all comes back.
+
+    The corners are the tightest on any road in this game, and they are tight
+    the way a real street is: not banked, not smoothed, just a wall where the
+    road stops going straight.
+    ==========================================================================
+  */
+  const gateAt = here()
+  dry({ length: 34, width: 3.2, room: 0.14, curv: 0, sand: 0.06, gale: 0, ceiling: 15 })
+  const townFrom = here()
+  dry({ length: 30, width: 3.0, room: 0.08, curv: -0.02, gale: 0, ceiling: 14 })
+  dry({ length: 42, width: 3.1, room: 0.1, curv: -0.052, gale: 0, ceiling: 14 })
+  dry({ length: 26, width: 3.5, room: 0.14, curv: 0.006, gale: 0, ceiling: 15 })
+  dry({ length: 46, width: 2.95, room: 0.08, curv: 0.058, gale: 0, ceiling: 13 })
+  dry({ length: 30, width: 3.4, room: 0.12, curv: -0.004, gale: 0, ceiling: 14 })
+  dry({ length: 40, width: 3.05, room: 0.1, curv: -0.055, gale: 0, ceiling: 14 })
+  dry({ length: 34, width: 3.6, room: 0.18, curv: 0.012, gale: 0, ceiling: 16 })
+  dry({ length: 48, width: 3.4, room: 0.12, curv: 0.047, gale: 0, ceiling: 15 })
+  const townTo = here()
+  dry({ length: 36, width: 3.8, room: 0.3, curv: -0.008, sand: 0.08, gale: 0.2, ceiling: 20 })
+  const gateOut = here()
+
+  /*
+    ==========================================================================
+    THE DYE PITS — the only wet on the road, and it is not water.
+
+    Circular pits sunk into the ground either side of a causeway barely wider
+    than the town street, full to the brim with indigo. Cloth on frames
+    overhead. The ground between them is permanently soaked and permanently
+    slick, which is the one place on this whole dry road where `wet` means
+    anything — and coming to it straight out of two kilometres of dust is
+    exactly the joke the road is making.
+
+    Off-camber both ways, because a causeway between two pits drains toward
+    the pits.
+    ==========================================================================
+  */
+  const pitsFrom = here()
+  dry({ length: 44, width: 3.7, room: 0.28, curv: 0.016, wet: 0.55, gale: 0.24, ceiling: 22 })
+  dry({ length: 52, width: 3.6, room: 0.24, curv: -0.038, wet: 0.78, gale: 0.2, camber: 0.19, ceiling: 22 })
+  dry({ length: 30, width: 3.8, room: 0.3, curv: 0.008, wet: 0.7, gale: 0.26, ceiling: 22 })
+  dry({ length: 48, width: 3.6, room: 0.24, curv: 0.043, wet: 0.85, gale: 0.22, camber: -0.2, ceiling: 22 })
+  dry({ length: 34, width: 3.9, room: 0.34, curv: -0.01, wet: 0.66, gale: 0.34, ceiling: 24 })
+  dry({ length: 56, width: 3.8, room: 0.36, curv: -0.03, wet: 0.5, sand: 0.1, gale: 0.46, ceiling: 26 })
+  dry({ length: 42, width: 4.0, room: 0.5, curv: 0.01, wet: 0.28, sand: 0.16, gale: 0.6 })
+  const pitsTo = here()
+
+  /*
+    ==========================================================================
+    THE SCARP — the escarpment, and the wind gets you back.
+
+    Fifty-five metres of climb up the face of a cliff, on a shelf cut into it,
+    with nothing between you and the plain you have just crossed. Full harmattan
+    — this is the most exposed road in the game, and the sand is *blowing over
+    the edge* rather than lying on it, so it arrives in gusts across the road
+    rather than sitting in drifts.
+
+    The corrugation comes back on the shelves because the shelf is graded
+    laterite like the Red Mile, so the last kilometre is the first kilometre's
+    problem again, uphill, on a cliff, in the wind.
+
+    Three hairpins, each tighter than the last, and the third one is the
+    tightest corner in Ember Rally.
+    ==========================================================================
+  */
+  const scarpFrom = here()
+  dry({ length: 66, width: 4.2, room: 0.7, curv: -0.014, grade: 0.085, ruts: 0.36, sand: 0.2, gale: 0.8 })
+  dry({ length: 48, width: 4.0, room: 0.6, curv: 0.026, grade: 0.105, ruts: 0.28, sand: 0.24, gale: 0.9 })
+  const hairpinOne = here()
+  dry({ length: 44, width: 4.3, room: 0.66, curv: 0.05, grade: 0.03, sand: 0.34, gale: 0.6, camber: -0.12 })
+  dry({ length: 54, width: 4.1, room: 0.62, curv: -0.01, grade: 0.115, ruts: 0.44, sand: 0.18, gale: 1 })
+  dry({ length: 70, width: 4.0, room: 0.56, curv: -0.021, grade: 0.12, ruts: 0.52, sand: 0.22, gale: 1 })
+  const hairpinTwo = here()
+  dry({ length: 42, width: 4.2, room: 0.64, curv: -0.055, grade: 0.025, sand: 0.4, gale: 0.55, camber: 0.15 })
+  dry({ length: 58, width: 4.0, room: 0.58, curv: 0.012, grade: 0.115, ruts: 0.48, sand: 0.2, gale: 1 })
+  dry({ length: 46, width: 3.9, room: 0.52, curv: 0.02, grade: 0.125, ruts: 0.56, sand: 0.26, gale: 1 })
+  const hairpinThree = here()
+  /*
+    The tightest corner on any road in the game — and *only* that.
+
+    It was r16 on eight metres of road, off-camber, in half a gale, in
+    half-depth sand. Four hard things at once, at the very end of the hardest
+    road, and the harness caught what that actually means: a car that gets it
+    wrong beaches on the verge and cannot get out. Measured, the crude driver
+    sat at 2933m doing a tenth of a metre a second for the rest of the run.
+    That is not a difficult corner, it is a hole in the road.
+
+    So it keeps the radius, which is the thing worth having, and gives back
+    the room: nine and a half metres, the way a real hairpin is built wide
+    because a hairpin *has* to be. The wind drops here too, which is honest —
+    a hairpin cut into a scarp is a notch, and a notch is sheltered. What is
+    left is one corner asking one enormous question, instead of four small
+    ones asking it together.
+  */
+  dry({ length: 40, width: 4.75, room: 0.7, curv: 0.062, grade: 0.02, sand: 0.26, gale: 0.2, camber: -0.12 })
+  dry({ length: 52, width: 4.0, room: 0.56, curv: -0.008, grade: 0.1, ruts: 0.5, sand: 0.24, gale: 1 })
+  const scarpTo = here()
+
+  /*
+    THE BRASSFIRE — the top, and the road lets go.
+
+    A caster's furnace on the lip of the scarp with the whole plain behind it
+    in the haze. Wide, flat, and the wind falls away behind the rim, because a
+    finish you have to fight for is a finish somebody loses on a mistake rather
+    than wins on a lap.
+  */
+  const homeFrom = here()
+  dry({ length: 74, width: 4.6, room: 0.8, curv: -0.016, grade: 0.02, ruts: 0.24, sand: 0.14, gale: 0.6 })
+  dry({ length: 88, width: 5.0, room: 0.95, curv: 0.006, grade: 0, ruts: 0.12, sand: 0.08, gale: 0.3 })
+  dry({ length: 96, width: 5.4, room: 1, curv: 0, grade: 0, ruts: 0, sand: 0.04, gale: 0.15 })
+  const homeTo = here()
+
+  return {
+    bands,
+    marks: {
+      redMile: { from: redMileFrom, to: redMileTo },
+      baobabBend,
+      cathedrals: { from: cathedralsFrom, to: cathedralsTo },
+      river: { from: riverFrom, to: riverTo },
+      riverBed: { from: riverBed, to: riverOut },
+      gateAt,
+      town: { from: townFrom, to: townTo },
+      gateOut,
+      pits: { from: pitsFrom, to: pitsTo },
+      scarp: { from: scarpFrom, to: scarpTo },
+      hairpins: [hairpinOne, hairpinTwo, hairpinThree],
+      home: { from: homeFrom, to: homeTo },
+      /**
+       * Where the indigo banners stand.
+       *
+       * Two before every corner the road thought was worth naming — derived
+       * from `corners`, which was collected while the bands were being laid,
+       * so a corner can never end up unmarked and a banner can never end up
+       * marking a straight. Thirty metres and fourteen: far enough out to be
+       * a warning, close enough that the second one is your braking board.
+       */
+      banners: bannersFor(bands),
+    },
+  }
+}
+
 function stormcrownBands(): Band[] {
   return STORM.bands
+}
+
+/**
+ * Where the sand actually lies today.
+ *
+ * -----------------------------------------------------------------------------
+ * **The one place a seed is allowed to move the racing line.** The Moonbreak
+ * established the opposite rule and was right to: a road you are meant to learn
+ * cannot have its corners dealt to you, or there is nothing to learn. Every
+ * road here has held that rule since.
+ *
+ * This breaks it on purpose, and only for the last road. The corners of the
+ * Harmattan are as fixed as anyone's — the wadi is where the wadi is, the gate
+ * does not move — but what has *blown across them* since yesterday is not, and
+ * a harmattan road genuinely is a different road every morning. It is the one
+ * thing this place has that the other three cannot: they can all be memorised
+ * completely, and this one has a layer on top that has to be read.
+ *
+ * The drifts are scaled by the base depth rather than added to it, so the rule
+ * is "sand gathers where sand already is". The swept street inside the walls
+ * has a base of nought and therefore stays swept whatever the seed says, which
+ * is the behaviour you want: a town does not fill with sand overnight, and the
+ * quiet section has to stay the quiet section.
+ * -----------------------------------------------------------------------------
+ */
+function driftSand(base: Float32Array, stage: StageId, seed: number): Float32Array {
+  if (stage !== 'harmattan') return base
+  const out = Float32Array.from(base)
+  const rng = random(seed ^ 0x5ad1e5)
+  const metres = base.length * STEP
+  // About one drift every forty metres of road, which is what a morning after
+  // a hard night of wind actually looks like.
+  const many = Math.round(metres / 40)
+  for (let d = 0; d < many; d++) {
+    const at = rng() * metres
+    // Long shallow tongues and short deep ridges, and more of the former.
+    const reach = 5 + rng() * rng() * 26
+    const deep = 0.18 + rng() * 0.5
+    const from = Math.max(0, Math.floor((at - reach) / STEP))
+    const to = Math.min(out.length - 1, Math.ceil((at + reach) / STEP))
+    for (let i = from; i <= to; i++) {
+      // A raised cosine, so a drift has a shape rather than an edge — the edge
+      // it does get comes from the narrow smoothing back in `makeTrack`.
+      const across = Math.abs(i * STEP - at) / reach
+      if (across >= 1) continue
+      const shape = 0.5 + 0.5 * Math.cos(across * Math.PI)
+      out[i] = Math.min(1, out[i] + deep * shape * base[i])
+    }
+  }
+  return out
 }
 
 export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
@@ -1850,6 +2391,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     ? moonbreakBands()
     : stage === 'stormcrown'
       ? stormcrownBands()
+    : stage === 'harmattan'
+      ? HARM.bands
       : rootwayBands(seed)
   const total = bands.reduce((sum, b) => sum + b.length, 0)
   const count = Math.floor(total / STEP) + 1
@@ -1862,6 +2405,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
   const rawSway = new Float32Array(count)
   const rawGale = new Float32Array(count)
   const rawCamber = new Float32Array(count)
+  const rawSand = new Float32Array(count)
+  const rawRuts = new Float32Array(count)
   const rawGrade = new Float32Array(count)
 
   let cursor = 0
@@ -1877,6 +2422,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       rawSway[cursor] = b.sway
       rawGale[cursor] = b.gale
       rawCamber[cursor] = b.camber
+      rawSand[cursor] = b.sand
+      rawRuts[cursor] = b.ruts
       rawGrade[cursor] = b.grade
     }
     at += b.length
@@ -1890,6 +2437,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     rawSway[cursor] = 0
     rawGale[cursor] = 0
     rawCamber[cursor] = 0
+    rawSand[cursor] = 0
+    rawRuts[cursor] = 0
     rawGrade[cursor] = 0
   }
 
@@ -1915,6 +2464,20 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
   // As wide as the grade's, and for exactly the same reason: a step in the tilt
   // of the road is a step in a force, and the car would jolt at the seam.
   const camber = smooth(rawCamber, 15, 2)
+  /*
+    Sand is smoothed *narrowly*, and that is the point of it.
+
+    Everything else here is widened so the car never meets a step in a force —
+    a bridge that starts swinging between one metre and the next reads as a
+    shunt. A drift is the opposite: it has an edge, you can see the edge, and
+    hitting it is supposed to be an event. Seven samples is about three and a
+    half metres of transition, which is a car length — enough that the front
+    axle is in it before the rear, and no more than that.
+  */
+  const sand = smooth(driftSand(rawSand, stage, seed), 7)
+  // As wide as the grade's: corrugation that switched on in one metre would be
+  // a bang rather than a road surface changing under you.
+  const ruts = smooth(rawRuts, 15, 2)
   const grade = smooth(rawGrade, 8)
 
   const x = new Float32Array(count)
@@ -1993,6 +2556,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     sway,
     gale,
     camber,
+    sand,
+    ruts,
     grade,
     bank,
     line,
@@ -2039,11 +2604,15 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
     loose:
       stage === 'moonbreak' ? 0.12
       : stage === 'stormcrown' ? 0.4
+      // Laterite and blown sand. Nothing here is bound to anything, so the car
+      // writes on it just by rolling, and the marks are the deepest in the game.
+      : stage === 'harmattan' ? 1
       : 0.85,
   }
 
   if (stage === 'moonbreak') dressMoonbreak(track, random(seed ^ 0x6d2b79))
   else if (stage === 'stormcrown') dressStormcrown(track, random(seed ^ 0x7a36c1))
+  else if (stage === 'harmattan') dressHarmattan(track, random(seed ^ 0x2fd10b))
   else dressTrack(track, random(seed ^ 0x9c31d7))
   return track
 }
@@ -2052,6 +2621,115 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
  * The Stormcrown's light is a driving language. Cold rods keep time through
  * rain; amber cairns count down braking distance. Nothing sits on the stone.
  */
+/**
+ * What stands beside the Harmattan.
+ *
+ * -----------------------------------------------------------------------------
+ * **Almost no lanterns, because it is the middle of the day.** The other three
+ * roads are lit by the car and marked by lights hung in the dark; a light on a
+ * pole at noon in the Sahel is not a landmark, it is a lamp post. So the corner
+ * markers here are *indigo banners* — cloth on tall poles, drawn in
+ * `Harmattan.tsx` — which do the lanterns' job better than lights would in
+ * this weather: they read as dark verticals through haze that swallows
+ * everything else, and because they are cloth in a steady wind they show you
+ * which way the gale is pushing before you feel it.
+ *
+ * The only real flames on the road are the ones a real flame would be: lamps
+ * in the wall niches inside the town, where the street is deep enough between
+ * two storeys of earth to be dark at midday, and the brassfire at the top.
+ *
+ * The puddles are the dye pits, and they are the joke this road is making: the
+ * only standing liquid in two and a half kilometres of drought, and it is not
+ * water, it is indigo.
+ * -----------------------------------------------------------------------------
+ */
+function dressHarmattan(track: Track, rng: () => number) {
+  const count = track.x.length
+  const at = (s: number) => Math.max(0, Math.min(count - 1, Math.round(s / STEP)))
+
+  // Brass finials on the banner poles: small, and the only thing on this road
+  // that behaves like a light, because polished brass in a low sun does.
+  for (const s of HARMATTAN.banners) {
+    const i = at(s)
+    const side = -Math.sign(track.curv[i] || (rng() < 0.5 ? 1 : -1))
+    track.lanterns.push({
+      s,
+      n: side * (track.width[i] + 1.5 + rng() * 0.5),
+      y: 3.1 + rng() * 0.4,
+      size: 0.3 + rng() * 0.1,
+      warm: 1,
+    })
+  }
+
+  /*
+    Lamps in the wall niches, and they are the reason the town is worth
+    driving through rather than past. Between the gate and the far wall the
+    street is two storeys of earth either side of six metres of road; at noon
+    that is the darkest place on the road, and coming into it out of the glare
+    means seeing nothing at all for about a second.
+  */
+  for (let s = HARMATTAN.town.from + 6; s < HARMATTAN.town.to; s += 11 + rng() * 5) {
+    const i = at(s)
+    const side = rng() < 0.5 ? -1 : 1
+    track.lanterns.push({
+      s,
+      n: side * (track.width[i] + 0.5),
+      y: 2.2 + rng() * 0.5,
+      size: 0.5 + rng() * 0.18,
+      warm: 1,
+      fire: rng() < 0.14,
+    })
+  }
+
+  // The brassfire, on the lip of the scarp.
+  track.lanterns.push({
+    s: HARMATTAN.home.to - 34,
+    n: -3.4,
+    y: 1.1,
+    size: 1.5,
+    warm: 1,
+    fire: true,
+  })
+
+  /*
+    The dye pits. Sunk either side of the causeway and nowhere else on the
+    road — a pit in the middle of the Red Mile would just be a hole.
+  */
+  for (let s = HARMATTAN.pits.from + 8; s < HARMATTAN.pits.to - 20; s += 7 + rng() * 4) {
+    const i = at(s)
+    const side = rng() < 0.5 ? -1 : 1
+    track.puddles.push({
+      s,
+      n: side * (track.width[i] + 1.5 + rng() * 1.6),
+      radius: 1.1 + rng() * 0.7,
+    })
+  }
+
+  /*
+    Laterite. The plain is littered with it — ironstone that the rain washed
+    the soil out from under — and it is what the verge is made of everywhere
+    the road is not sand. Kept off the driveable stone; the road is hard
+    enough without a rock in the middle of it.
+  */
+  let since = 0
+  for (let i = 8; i < count - 8; i++) {
+    since += STEP
+    if (since < 5 + rng() * 9) continue
+    since = 0
+    const s = i * STEP
+    // Nothing inside the walls: a street is swept, and a boulder in it would
+    // read as rubble rather than as a town.
+    if (s > HARMATTAN.gateAt - 12 && s < HARMATTAN.gateOut + 8) continue
+    const side = rng() < 0.5 ? -1 : 1
+    track.boulders.push({
+      s,
+      n: side * (track.width[i] + 1.1 + rng() * 3.4),
+      size: 0.3 + rng() * rng() * 1.5,
+      seed: rng() * 1000,
+    })
+  }
+}
+
 function dressStormcrown(track: Track, rng: () => number) {
   const count = track.x.length
   let since = 0
@@ -2655,12 +3333,17 @@ export interface RoadAt {
   line: number
   /** World metres represented by one metre of shared race progress. */
   metric: number
+  /** Depth of drifted sand, 0..1. See `Band.sand`. */
+  sand: number
+  /** Corrugation, 0..1. See `Band.ruts`. */
+  ruts: number
 }
 
 export function emptyRoad(): RoadAt {
   return {
     x: 0, y: 0, z: 0, heading: 0, curv: 0, width: 4.6,
-    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, sway: 0, gale: 0, camber: 0, line: 0, metric: 1,
+    ceiling: 5.6, room: 0.3, wet: 0, bank: 0, grade: 0, sway: 0, gale: 0, camber: 0,
+    sand: 0, ruts: 0, line: 0, metric: 1,
   }
 }
 
@@ -2687,6 +3370,8 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
   r.sway = lerpAt(track.sway, i, j, mix)
   r.gale = lerpAt(track.gale, i, j, mix)
   r.camber = lerpAt(track.camber, i, j, mix)
+  r.sand = lerpAt(track.sand, i, j, mix)
+  r.ruts = lerpAt(track.ruts, i, j, mix)
   r.bank = lerpAt(track.bank, i, j, mix)
   r.grade = lerpAt(track.grade, i, j, mix)
   r.line = lerpAt(track.line, i, j, mix)

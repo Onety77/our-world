@@ -53,7 +53,7 @@ import {
 
 type View = 'courses' | 'menu' | 'road' | 'replay'
 type RaceKind = 'qualifying' | 'chase'
-const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown']
+const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown', 'harmattan']
 
 /** Old saved rounds may still name a road that no longer exists. */
 function availableStage(value: unknown): StageId {
@@ -135,6 +135,23 @@ const COURSES: Record<StageId, {
     cleanWord: 'across the Moonbreak',
     enter: 'take the high road',
   },
+  harmattan: {
+    name: 'The Harmattan',
+    place: 'dust and red earth',
+    short: 'Laterite, sand and the dry wind. The hardest road, and the only one in daylight.',
+    soloTitle: 'Something is running ahead of you in the dust',
+    soloCopy: 'You cannot see far and neither can it. The indigo banners come in pairs — the second one is your brake. And watch the ground: where the road goes pale the sand is deep, and it will take the car somewhere you did not ask for.',
+    spirit: 'the dust-spirit',
+    returnTo: 'return to the brassfire',
+    setTitle: 'Leave a line {she} cannot see',
+    setCopy: 'Learn the plain, the mounds, the river and the town, and leave your tyre marks in the laterite. {Their} first crossing stays in the dust until yours is beside it — and the wind will have moved the sand by the time {she} drives it anyway.',
+    sealedTitle: 'The dust keeps it.',
+    chaseHome: 'home through the dust',
+    resultKicker: 'two lines through one wind',
+    finishPlace: 'the brassfire',
+    cleanWord: 'across the Harmattan',
+    enter: 'into the wind',
+  },
   stormcrown: {
     name: 'The Stormcrown',
     place: 'rain and high stone',
@@ -177,6 +194,21 @@ const SCENES: Record<StageId, ReactNode> = {
       <i className="course-arch one" />
       <i className="course-arch two" />
       <i className="course-water" />
+      <i className="course-road" />
+    </>
+  ),
+  /*
+    A low sun in a sky with no blue in it, a baobab, and the road going into
+    the haze. The sun is the tell: it is the only one of these cards with a
+    *day* on it, and that is the whole difference between this road and the
+    other three.
+  */
+  harmattan: (
+    <>
+      <i className="course-sun" />
+      <i className="course-haze" />
+      <i className="course-baobab" />
+      <i className="course-dune" />
       <i className="course-road" />
     </>
   ),

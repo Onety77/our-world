@@ -73,6 +73,36 @@ export function createLights(): RallyLights {
       uTime: { value: 0 },
       uAmbient: { value: new Color('#4a5b72') },
       /*
+        =====================================================================
+        **Daylight, which this engine did not have.**
+
+        Everything in Ember Rally is lit by the car. Two headlamp cones, a warm
+        pool that travels with it, a sliding window of lanterns, and a black
+        world beyond them — that is the whole grammar, it is written down as
+        one of the four decisions the racer follows from, and it is *correct*
+        for a cave and two nights.
+
+        It does not survive noon. The Harmattan is the first road here with the
+        sun on it, and lit this way every baobab, mound and wall on it came out
+        as a black silhouette against a bright sky: the ground was unlit
+        because nothing was lighting it, and the headlamps were laying visible
+        beams across a road you can already see.
+
+        So: one number, nought on the three night roads, which cross-fades the
+        whole model over to a sun and a sky. Kept in the shared block rather
+        than in a second material, because the road, the props, the car, the
+        dust and the tyre marks all have to agree about what "lit" means — and
+        the moment there are two lighting models, one of them is wrong.
+        =====================================================================
+      */
+      uDaylight: { value: 0 },
+      /** Where the sun is. Low and ahead, which is where a harmattan sun is. */
+      uSunDir: { value: new Vector3(0.34, 0.2, -0.92).normalize() },
+      /** Its colour: dimmed and yellowed by a hundred kilometres of dust. */
+      uSunColor: { value: new Color('#f0d9a8') },
+      /** And the sky's own fill, which in this weather is nearly as strong. */
+      uSkyColor: { value: new Color('#c08b5c') },
+      /*
         Cold mineral in the walls — the same green as the fungus lanterns, so
         the tunnel has exactly two colours of light in it: your fire, and
         whatever grows down here.
@@ -133,6 +163,10 @@ const LIGHT_HEAD = /* glsl */ `
 
   uniform float uTime;
   uniform vec3 uAmbient;
+  uniform float uDaylight;
+  uniform vec3 uSunDir;
+  uniform vec3 uSunColor;
+  uniform vec3 uSkyColor;
   uniform vec3 uVeinColor;
   uniform vec3 uFogColor;
   uniform float uFogNear;
@@ -258,10 +292,37 @@ const LIGHT_BODY = /* glsl */ `
     float up = normal.y * 0.5 + 0.5;
     vec3 col = albedo * uAmbient * (0.3 + 0.7 * up);
 
+    /*
+      The lamps, and how much of them is left once the sun is up.
+
+      Not switched off — turned down to about a tenth. A car on a dusty road at
+      midday does have its lights on, and you can just see them on the ground
+      in front of it; what you must not see is a *beam*, because a visible cone
+      of light in full daylight is the single thing that would give this away
+      as a night road with a bright sky pasted behind it.
+    */
+    float lamps = mix(1.0, 0.035, uDaylight);
     vec3 beams = headlampAt(uHeadLeft, world, normal, view, gloss) +
                  headlampAt(uHeadRight, world, normal, view, gloss);
-    col += albedo * beams * uHeadPower;
-    col += albedo * spotAt(world, normal, view, gloss) * uSpotPower;
+    col += albedo * beams * uHeadPower * lamps;
+    col += albedo * spotAt(world, normal, view, gloss) * uSpotPower * lamps;
+
+    /*
+      And the sun, if there is one.
+
+      A hard lambert term plus a hemisphere fill, and the fill is unusually
+      strong on purpose: in a dust haze most of the light arriving at the
+      ground has been scattered on the way, so shadows are soft and nothing is
+      ever properly dark. That is exactly what makes a harmattan photograph
+      look like a harmattan — the contrast is *low* and the value is high, and
+      a sun with a weak fill would give crisp black shadows and read as a clear
+      desert noon instead.
+    */
+    if (uDaylight > 0.0) {
+      float facing = max(0.0, dot(normal, uSunDir));
+      vec3 day = albedo * (uSunColor * (0.30 + 0.70 * facing) + uSkyColor * (0.34 + 0.30 * up));
+      col = mix(col, col * 0.25 + day, uDaylight);
+    }
 
     /*
       The car as a lamp in a dark room.
@@ -904,6 +965,7 @@ const BEAM_FRAG = /* glsl */ `
 
   uniform float uTime;
   uniform float uPower;
+  uniform float uDaylight;
   uniform vec3 uTint;
 
   void main() {
@@ -914,7 +976,7 @@ const BEAM_FRAG = /* glsl */ `
     float motes = 0.82 + 0.18 * sin(vWorld.x * 3.1 + vWorld.z * 2.7 + uTime * 1.6);
     float a = body * uPower * 0.075 * motes;
     if (a < 0.004) discard;
-    gl_FragColor = vec4(uTint, a);
+    gl_FragColor = vec4(uTint, a) * (1.0 - uDaylight * 0.94);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -934,6 +996,16 @@ export function useBeamMaterial(lights: RallyLights, tint = '#ffcf96'): ShaderMa
           uTime: lights.uniforms.uTime,
           uPower: { value: 1 },
           uTint: { value: new Color(tint) },
+          /*
+            A beam is a volume of lit dust, and you only see it when the air
+            around it is darker than the beam. In daylight there is no such
+            air: a visible cone of headlight at noon is the single clearest
+            tell that a scene is a night scene with a bright sky behind it.
+
+            Shared with the light block rather than set separately, so the cone
+            and the pool it casts can never disagree about whether it is day.
+          */
+          uDaylight: lights.uniforms.uDaylight,
         },
       }),
     [lights, tint],

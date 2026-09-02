@@ -73,6 +73,8 @@ import {
   END_WALL,
   roadAt,
   galeAt,
+  rutSkipAt,
+  sandPullAt,
   roadAtRoute,
   swayRollAt,
   vergeWidth,
@@ -461,6 +463,15 @@ export interface CarState {
   hitStone: boolean
   /** Off the stone and into the loose stuff. */
   rough: boolean
+  /**
+   * 0..1 — how much the corrugation is shaking the car right now.
+   *
+   * Written every step whether the road has ruts or not, so the camera, the
+   * sound and the tyre marks can all read one number instead of three of them
+   * separately working out what `Band.ruts` and the speed imply. Nought on
+   * every road but the Harmattan.
+   */
+  rumble: number
   /** 0, 1 or 2 — the tier of a drift that was just released. */
   released: number
   /** Longitudinal acceleration, m/s². Kept for load transfer and the camera. */
@@ -550,6 +561,7 @@ export function createCar(track: Track): CarState {
     touching: false,
     hitStone: false,
     rough: false,
+    rumble: 0,
     released: 0,
     accel: 0,
     lateral: 0,
@@ -771,8 +783,49 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   // --- surface -------------------------------------------------------------
   const half = road.width
   car.rough = Math.abs(car.n) > half
-  const surfaceGrip = car.rough ? TUNE.vergeGrip : 1 - road.wet * 0.14
-  const rollingDrag = car.rough ? 0.09 : 0.0135
+  /*
+    What the ground is doing to the tyres, before anything the driver does.
+
+    ==========================================================================
+    Three things, and only the first of them is old.
+
+    **Water** takes a little grip and always has.
+
+    **Sand** takes a great deal more, because a wet road is still a road and a
+    sanded one is a surface that moves out from under the tyre. A third of the
+    grip at full depth, which sounds enormous and is roughly what a car
+    actually loses driving into a drift.
+
+    **Corrugation** takes grip by taking *load* — see `rutSkipAt`. A tyre
+    skipping across the tops of the ripples is carrying nothing for part of
+    every cycle, and it cannot generate force while it is in the air. This is
+    the only one of the three that gets worse the faster you go, which is what
+    makes it a difficulty on a straight rather than in a corner.
+
+    The rolling drag rises with sand too, which is the other half of what sand
+    does: it is *slow*, quite apart from being slippery, and a road where the
+    drifts only made you slide would be a road you attacked rather than read.
+
+    **And it rises with the corrugation, which is the whole reason that
+    mechanic works at all.** Measured before this line existed: two identical
+    runs down the Red Mile, one corrugated and one glass, came out at 10.11s
+    each — dead level, to the hundredth. Taking grip away does nothing to a car
+    going in a straight line, because a car at its top speed is limited by
+    *drag* and not by traction, and it had already stopped accelerating.
+
+    Which is also what really happens on a washboard road: the energy goes into
+    the suspension and comes back as heat and noise. So the corrugation lowers
+    the top speed of every straight it is on — the Red Mile is genuinely a
+    slower road than it looks — and takes grip on top of that for the corner at
+    the end of it.
+    ==========================================================================
+  */
+  const skipping = rutSkipAt(road, v)
+  car.rumble = skipping
+  const surfaceGrip = car.rough
+    ? TUNE.vergeGrip
+    : (1 - road.wet * 0.14) * (1 - road.sand * 0.34) * (1 - skipping * 0.3)
+  const rollingDrag = (car.rough ? 0.09 : 0.0135) + road.sand * 0.055 + skipping * 0.075
   const mu = TUNE.grip * surfaceGrip
 
   // --- steering ------------------------------------------------------------
@@ -1838,9 +1891,16 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   */
   const swaying = swayRollAt(road.sway, car.s, car.elapsed)
   const tilt = swaying + road.camber
+  /*
+    ...and the sand, which is the fourth thing on this list and the only one
+    that is a property of what the road is *covered in* rather than of how it
+    is laid or what the sky is doing. See `sandPullAt`: drifts run in ridges
+    and a wheel in a ridge is steered by it.
+  */
   const sideways =
     (tilt === 0 ? 0 : -TUNE.gravity * Math.sin(tilt)) +
-    galeAt(road, car.s, car.elapsed, v)
+    galeAt(road, car.s, car.elapsed, v) +
+    sandPullAt(road, v)
   if (sideways !== 0) {
     car.vn += sideways * Math.cos(car.psi) * dt
     car.vs -= sideways * Math.sin(car.psi) * dt

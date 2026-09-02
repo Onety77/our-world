@@ -2948,6 +2948,84 @@ canvas {
   isolation: isolate;
 }
 
+/* --------------------------------------------------------------------------
+   The Harmattan's card
+
+   The only one of the four with a day on it, and that is the whole point: at a
+   glance across the picker, three cards are night and one is not. No blue
+   anywhere, no horizon line, and a sun you can look at — the same three rules
+   the road itself is built on, done in four gradients.
+   -------------------------------------------------------------------------- */
+
+.rally-course.harmattan .rally-course-scene {
+  /*
+    The ground and the sky are the same value, and there is no line drawn
+    between them anywhere. That is what a harmattan actually is — the horizon
+    is the first thing the dust takes.
+  */
+  background:
+    linear-gradient(#bd8555 0%, #c69466 40%, #b57a49 56%, #8a5730 78%, #6d4224 100%);
+}
+
+.rally-course.harmattan .course-sun {
+  position: absolute;
+  z-index: 1;
+  top: 26%;
+  left: 58%;
+  width: clamp(2.2rem, 5.5vw, 3.6rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  /* Flat, dim, and with no corona at all. A harmattan sun is the one you can
+     photograph by eye, and a bloom on it would be wrong twice. */
+  background: #efe0bd;
+  opacity: 0.85;
+}
+
+/* The haze: a wash that eats the bottom of everything standing on the plain. */
+.rally-course.harmattan .course-haze {
+  position: absolute;
+  z-index: 3;
+  inset: 34% 0 0;
+  background: linear-gradient(rgba(198, 148, 102, 0) 0%, rgba(198, 148, 102, 0.62) 62%, rgba(181, 122, 73, 0.8) 100%);
+}
+
+/* A baobab, which is the only silhouette nobody mistakes for anything else. */
+.rally-course.harmattan .course-baobab {
+  position: absolute;
+  z-index: 2;
+  bottom: 26%;
+  left: 17%;
+  width: clamp(1.6rem, 4vw, 2.6rem);
+  height: 34%;
+  background: #6a4a30;
+  clip-path: polygon(
+    38% 100%, 30% 46%, 6% 40%, 26% 34%, 14% 20%, 34% 30%,
+    42% 8%, 50% 30%, 70% 18%, 58% 33%, 82% 30%, 62% 44%, 62% 100%
+  );
+}
+
+/* A drift crossing the road, pale, which is what the sand looks like on it. */
+.rally-course.harmattan .course-dune {
+  position: absolute;
+  z-index: 5;
+  bottom: 6%;
+  left: -10%;
+  width: 120%;
+  height: 16%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 100%, rgba(220, 184, 127, 0.72), transparent 66%);
+}
+
+.rally-course.harmattan .course-road {
+  z-index: 4;
+  width: 86%;
+  height: 52%;
+  clip-path: polygon(44% 0, 56% 0, 88% 62%, 100% 100%, 0 100%, 14% 60%);
+  background:
+    linear-gradient(90deg, transparent 49.2%, rgba(220, 184, 127, 0.34) 50%, transparent 50.8%),
+    linear-gradient(#a9663d, #82461f);
+}
+
 .rally-course.rootway .rally-course-scene {
   border-radius: 48% 48% 0 0 / 34% 34% 0 0;
   background:
