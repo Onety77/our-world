@@ -64,7 +64,17 @@ export function Places() {
       // fire for a tap aimed at something covering the world.
       if (takenOverNow()) return
       const target = event.target as HTMLElement | null
-      if (target?.closest('button, input, textarea, select, a')) return
+      /*
+        Anything laid over the world owns its own taps.
+
+        The form controls are the obvious half. `.together` is the other: the
+        tucked film pane is a free-floating thing you pick up and move, and it
+        is not made of buttons — so a finger put on it to drag it landed here
+        as "you tapped the world" and walked you into whichever place you were
+        standing in front of. Moving a video out of your way is not a decision
+        to go somewhere.
+      */
+      if (target?.closest('button, input, textarea, select, a, .together')) return
       enter()
     }
     window.addEventListener('pointerup', onTap)

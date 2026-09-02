@@ -15,6 +15,7 @@
  */
 
 import { create } from 'zustand'
+import { HEART } from '@/data/types'
 import type { Message, UserId } from '@/data/types'
 
 interface TalkingState {
@@ -108,6 +109,33 @@ export function messageById(messages: Message[], id: string | null): Message | n
 /** Whether you have put a heart on it. */
 export function heartedBy(message: Message, who: UserId): boolean {
   return typeof message.hearts?.[who] === 'number'
+}
+
+/**
+ * The heart, and what else you can leave.
+ *
+ * -----------------------------------------------------------------------------
+ * Six, chosen rather than generated, and in this order: the two that carry most
+ * of the traffic first, then the rest. A picker would be the obvious thing and
+ * it is the wrong one — an emoji keyboard is a thousand ways to say something
+ * slightly different, and the point of a reaction is that it is *instant*, one
+ * tap, no deciding. Two people talking every day want a small vocabulary they
+ * both know by heart, not a search field.
+ *
+ * The heart is first among them and stays the default: it is what a double tap
+ * has always left, and it is what every message reacted to before there was a
+ * choice already carries.
+ * -----------------------------------------------------------------------------
+ */
+export { HEART }
+
+export const MARKS = ['♥', '😂', '💀', '👍', '💃', '🫤'] as const
+
+/** What `who` left on this message, or null if they left nothing. */
+export function markBy(message: Message, who: UserId): string | null {
+  if (!heartedBy(message, who)) return null
+  const mark = message.marks?.[who]
+  return typeof mark === 'string' && mark !== '' ? mark : HEART
 }
 
 /**

@@ -631,7 +631,33 @@ export interface Message {
    * different event from hearting it while you were both awake.
    */
   hearts?: Partial<Record<UserId, number>>
+  /**
+   * Which mark, when it is not a heart.
+   *
+   * -------------------------------------------------------------------------
+   * Kept apart from `hearts` rather than folded into it, and that is the
+   * whole migration: `hearts` still means *this person reacted, at this
+   * time*, so every message ever hearted keeps working and keeps reading as a
+   * heart. This only ever says **which** glyph, for the ones that are not.
+   *
+   * One mark each. There are exactly two people here forever, so a reaction
+   * is one small answer from each of them — not a tally, and not a row of
+   * six alternatives sitting under every line. The heart stays the default
+   * because it is what a double tap means everywhere else.
+   * -------------------------------------------------------------------------
+   */
+  marks?: Partial<Record<UserId, string>>
 }
+
+/**
+ * The reaction that leaves no mark behind.
+ *
+ * Stored as an absence rather than as a glyph, so a message hearted before
+ * there was any choice and one hearted today are the same shape on the wire.
+ * Lives here rather than with the UI because both providers need it to know
+ * what *not* to write.
+ */
+export const HEART = '♥'
 
 /**
  * Identity chosen by a composer before a message reaches the data layer.
@@ -1010,7 +1036,13 @@ export interface DataLayer {
    * Yours only — the seam has no way to express "heart this on her behalf" and
    * the rules would refuse it if it did.
    */
-  heartMessage(id: string, on: boolean): Promise<void>
+  /**
+   * Leave a mark on a message, or take yours back.
+   *
+   * `mark` is the glyph; left out it is a heart, which is what a double tap
+   * leaves and what every message reacted to before there was a choice has.
+   */
+  heartMessage(id: string, on: boolean, mark?: string): Promise<void>
 
   /**
    * Mark the conversation read up to now.

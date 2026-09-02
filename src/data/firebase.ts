@@ -110,7 +110,7 @@ import {
   isQuestionWaiting,
   questionExpiresAt,
 } from './questionOrder'
-import { AMBIENCE_KEYS } from './types'
+import { AMBIENCE_KEYS, HEART } from './types'
 import { newId } from './ids'
 import {
   RALLY_STREAM_INTERVAL,
@@ -1822,9 +1822,12 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       or the same one — in the same second cannot overwrite each other. The
       rules only ever let you write your own key; see firestore.rules.
     */
-    async heartMessage(id, on) {
+    async heartMessage(id, on, mark) {
       await updateDoc(doc(db, MESSAGES, id), {
         [`hearts.${me}`]: on ? now() : deleteField(),
+        // A heart leaves no mark, so a message reacted to before there was a
+        // choice and one hearted today are the same shape on the wire.
+        [`marks.${me}`]: on && mark && mark !== HEART ? mark : deleteField(),
       })
     },
 

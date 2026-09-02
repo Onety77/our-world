@@ -7197,6 +7197,31 @@ body:has(.talking) .leave-place {
   opacity: 1;
 }
 
+/*
+  The words are a thing you touch, not a thing you select.
+
+  ---------------------------------------------------------------------------
+  Every gesture in the Stars lands on the message itself — double tap to
+  react, press and hold for the menu, drag left to reply — and iOS answers all
+  three of them with its own text selection first. Double-tapping a line of
+  text selects it, which is where the **long grey bar across the message**
+  came from: it was never ours, it was the selection highlight, and it arrived
+  every single time you liked something. Press and hold raised the callout
+  instead of the menu, for the same reason.
+
+  So the message opts out. Copying a line is not something this conversation
+  has ever offered — there are two people in it and they are both already
+  looking at it — and the gestures that *are* offered stop fighting the
+  platform for the same touch.
+  ---------------------------------------------------------------------------
+*/
+.said {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* --- hearts, which are state --- */
 
 .said-hearts {
@@ -7209,7 +7234,8 @@ body:has(.talking) .leave-place {
 }
 
 .said .said-hearts {
-  display: block;
+  /* Flex, so `justify-content` below is not a no-op on a block. */
+  display: flex;
   justify-content: center;
   margin: 0.2rem 0 0;
 }
@@ -7228,14 +7254,32 @@ body:has(.talking) .leave-place {
   text-shadow: 0 0 10px rgba(150, 180, 250, 0.55);
 }
 
+/*
+  Anything that is not a heart keeps its own colours.
+
+  The tint says *who* left it, which is worth spending on a glyph the two of
+  you both use — and worth nothing on one that arrives with its own colours
+  already. A tinted emoji only ever looks broken. The lift stays, because it
+  still has to sit on a sky.
+*/
+.said-hearts i.glyph {
+  color: inherit;
+  font-size: 0.92em;
+  text-shadow: 0 1px 3px rgba(4, 6, 12, 0.85);
+}
+
 /* --- the menu a right-click opens --- */
 
 /*
   The one place in this garden with a list of choices in a box, and it is not
-  one: no fill, no border, no rounded rectangle. Two words on the dark with the
+  one: no fill, no border, no rounded rectangle. Words on the dark with the
   garden's heaviest lift under them, which is exactly what every other floating
-  thing here is made of. It is small because it has two items in it and will
-  never have more — there are two things you can do to something somebody said.
+  thing here is made of.
+
+  Two things you can do to something somebody said: answer it, or leave a mark
+  on it. The marks are a row rather than six more lines, because they are one
+  answer with six faces — a list would turn picking one into a decision, which
+  is the opposite of what a reaction is for.
 */
 .said-menu {
   position: fixed;
@@ -7271,6 +7315,55 @@ body:has(.talking) .leave-place {
 .said-menu button.is-selected {
   color: var(--warm);
   outline: none;
+}
+
+/* --- the six marks, on one line --- */
+
+.said-marks {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-top: 0.1rem;
+}
+
+.said-marks button {
+  /*
+    Forty-four pixels of target under a glyph drawn at nineteen.
+
+    These are the smallest things in the world you are asked to hit, they are
+    six abreast, and they are hit with a thumb on a phone — so the padding is
+    doing the whole job of making them reachable while the mark itself stays
+    the size it wants to be.
+  */
+  display: grid;
+  place-items: center;
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  padding: 0;
+  font-size: 1.18rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  /* Colour belongs to the emoji, and the heart is the one that needs ours. */
+  color: var(--ink);
+  opacity: 0.82;
+  border-radius: 50%;
+  transition: opacity 0.16s ease, background-color 0.16s ease, scale 0.16s ease;
+}
+
+.said-marks button:hover,
+.said-marks button:focus-visible {
+  opacity: 1;
+  scale: 1.12;
+  color: var(--ink);
+  outline: none;
+}
+
+/* The one you left, so taking it back is obviously the same tap. */
+.said-marks button.on {
+  opacity: 1;
+  background: rgba(255, 168, 105, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 140, 0.34);
 }
 
 .said-delivery {
@@ -7509,6 +7602,41 @@ body:has(.talking) .leave-place {
 .standing.is-done:hover .standing-game,
 .standing.is-done:focus-visible .standing-game {
   color: var(--ink-dim);
+}
+
+/*
+  A thumb is not a mouse pointer — the same rule as `.put-back` above.
+
+  This one was 24px tall and it is the *only* way off the standings screen:
+  miss it and the screen simply does not respond, which reads as a dead
+  button rather than as a near miss. The look does not change; the extra is
+  padding, which is invisible and catchable.
+*/
+@media (pointer: coarse) {
+  .challenges-back { padding-block: 0.85rem; }
+  .to-waiting { padding-block: 0.7rem; }
+}
+
+/*
+  When the next one opens — the same whisper as everything else on this screen.
+
+  Quieter than the standings above it, because it is not news: it is the
+  answer to a question you only have once the day is spent. The number itself
+  is lifted, because the number is the whole reason the line is there.
+*/
+.challenges-next {
+  margin: 0.55rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+}
+
+.challenges-next strong {
+  font-weight: 400;
+  color: #ffd09a;
 }
 
 .challenges-back {
@@ -9830,7 +9958,20 @@ body:has(.rally-running) .player {
     bottom: max(0.35rem, env(safe-area-inset-bottom));
     width: 100vw;
     max-height: none;
-    justify-content: flex-start;
+    /*
+      Out from under the music.
+
+      This same breakpoint moves the music and the conversation to the *top*
+      of a phone, and this box starts at 7.7rem — which is *inside* that
+      panel. "Choose your game" was measured overlapping it by seven pixels
+      while nearly three hundred pixels of this very box sat empty below the
+      games. So: a floor that clears the panel whatever the heading does, and
+      the rest of the slack spent centring the column in the room it has,
+      rather than stacking it against the ceiling and leaving a third of the
+      screen blank.
+    */
+    padding-top: 2.4rem;
+    justify-content: center;
     padding-inline: 0.55rem;
   }
 
@@ -12017,8 +12158,23 @@ body.on-the-road .broke-what {
   background: rgba(8, 12, 11, 0.55);
 }
 
-/* The hearts belong to the line they are on, so they sit on it too. */
-.said-hearts {
+/*
+  The hearts belong to the line they are on, so they sit on it too.
+
+  ---------------------------------------------------------------------------
+  **Scoped to the corner, and it has to be.** This surface exists for one
+  reason: a whisper is read over whatever the world is doing, and a heart on
+  a noon meadow needs something behind it. In the Stars there is nothing to
+  read it against but night, and there the hearts are a *block* — centred
+  under the message — so this background stretched the full width of the line
+  and drew **a long dark bar across every message either of you reacted to.**
+
+  It was reported as a line that appears when you like something, and that is
+  exactly what it was: not a selection, not a divider, just this surface on an
+  element that is only inline in one of the two places it is drawn.
+  ---------------------------------------------------------------------------
+*/
+.whisper .said-hearts {
   padding: 0.06em 0.32em 0.1em;
   border-radius: 0.4em;
   background: rgba(8, 12, 11, 0.5);
@@ -13818,6 +13974,102 @@ body.on-the-road .broke-what {
 .corner.watching > .player {
   visibility: hidden;
   pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Somewhere to put the film down
+
+   Appears only while the miniature is being carried, at the bottom of the
+   screen where a thumb already is. Dark and quiet until the pane is over it,
+   then warm — the whole vocabulary of "this is armed" without a red rectangle,
+   which nothing else in this garden has.
+   -------------------------------------------------------------------------- */
+
+.together-ground {
+  position: fixed;
+  z-index: 23;
+  left: 50%;
+  bottom: max(2.2rem, calc(env(safe-area-inset-bottom) + 1.8rem));
+  translate: -50% 0;
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1.4rem;
+  /* It is a destination, never a button: the drag is the only way in. */
+  pointer-events: none;
+  text-align: center;
+  animation: drift-in 0.22s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.together-ground i {
+  display: block;
+  width: 4.6rem;
+  height: 4.6rem;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 231, 198, 0.34);
+  background: rgba(8, 6, 10, 0.52);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: scale 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+/*
+  The mark inside it. A line, not a cross — a cross reads as "dismiss this
+  panel", and what happens here is larger than that: the screen ends for both
+  of you. A single stroke is the mark for closing something down.
+*/
+.together-ground i::before {
+  content: '';
+  display: block;
+  width: 1.4rem;
+  height: 1px;
+  margin: 2.3rem auto 0;
+  translate: 0 -0.5px;
+  background: rgba(255, 231, 198, 0.62);
+  transition: background-color 0.18s ease;
+}
+
+.together-ground span {
+  font-family: var(--sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-shadow: var(--lift);
+  transition: color 0.18s ease;
+}
+
+.together-ground.over i {
+  scale: 1.16;
+  border-style: solid;
+  border-color: rgba(255, 168, 105, 0.72);
+  background: rgba(74, 26, 12, 0.66);
+}
+
+.together-ground.over i::before { background: #ffd09a; }
+.together-ground.over span { color: #ffd09a; }
+
+/*
+  The thing in your hand goes translucent over the target.
+
+  It has to: the pane follows the finger and the target is *under* the finger,
+  so at the moment you most need to see what you are about to do, the pane is
+  sitting on top of it — measured, it covered the ring completely and left a
+  sliver of warm edge showing above. Fading what you are carrying is how every
+  phone solves this, and it reads immediately as "this is about to go".
+
+  Opacity rather than a scale, deliberately: the drag is worked out from this
+  element's own box, and shrinking it mid-gesture would move the ground under
+  the finger while the finger is still on its way there.
+*/
+.together.tucked.over-ground {
+  opacity: 0.42;
+  transition: opacity 0.16s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .together-ground { animation-duration: 0.01ms; }
+  .together-ground i { transition: none; }
 }
 
 /*

@@ -51,7 +51,7 @@ import {
   voiceClipFromStore,
 } from './voiceClips'
 import { newId } from './ids'
-import { AMBIENCE_KEYS, GROWN_DAYS, USER_IDS } from './types'
+import { AMBIENCE_KEYS, GROWN_DAYS, HEART, USER_IDS } from './types'
 import { localDateKey } from '@/systems/time'
 import {
   QUESTION_BUILD,
@@ -1378,13 +1378,17 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       commit({ ...state, lastReadAt: { ...state.lastReadAt, [me]: Date.now() } })
     },
 
-    async heartMessage(id, on) {
+    async heartMessage(id, on, mark) {
       messages = messages.map((m) => {
         if (m.id !== id) return m
         const hearts = { ...(m.hearts ?? {}) }
+        const marks = { ...(m.marks ?? {}) }
         if (on) hearts[me] = Date.now()
         else delete hearts[me]
-        return { ...m, hearts }
+        // A heart leaves no mark — see the note on `marks` in data/types.
+        if (on && mark && mark !== HEART) marks[me] = mark
+        else delete marks[me]
+        return { ...m, hearts, marks }
       })
       saveMessages()
       tellMessageWatchers()

@@ -21,6 +21,7 @@
     "wire": "npx --yes tsx scripts/wire-check.ts",
     "rally-stream": "npx --yes tsx scripts/rally-stream-check.ts",
     "hollow": "node scripts/hollow-check.mjs",
+    "day": "npx --yes tsx scripts/day-check.ts",
     "chase": "node scripts/chase-check.mjs",
     "locks": "node scripts/locks-check.mjs",
     "lift": "npx --yes tsx scripts/lift-check.ts",

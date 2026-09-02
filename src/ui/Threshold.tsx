@@ -28,7 +28,7 @@ import { theRoom } from '@/systems/waiting'
 import { useStandings, type Standing } from '@/world/games/useRound'
 import { gameKey, roadKey, useDoorman } from '@/systems/locks'
 import { useQuestions } from '@/systems/questions'
-import { until } from '@/systems/time'
+import { inWords, untilNextDay, until } from '@/systems/time'
 import { ambience } from '@/systems/ambience'
 import { useChoiceSwipe } from './useChoiceSwipe'
 import { useMenuKeys } from './useMenuKeys'
@@ -381,6 +381,43 @@ function LiveWayIn({
  * about her that the rules have not actually told us. See `useStanding`.
  * ---------------------------------------------------------------------------
  */
+/**
+ * When the next one opens.
+ *
+ * -----------------------------------------------------------------------------
+ * A daily round is keyed by the local date, so what you are actually waiting
+ * for is midnight where *you* are standing — not twenty-four hours from when
+ * you played, which is what "once a day" sounds like it means and is the thing
+ * people guess wrong. Saying the remaining time out loud is the difference
+ * between a rule you have to remember and a fact you can see.
+ *
+ * It only appears once there is nothing left to do today. Before that it is
+ * answering a question nobody has yet, and this screen is short enough that
+ * every line on it has to earn the space.
+ * -----------------------------------------------------------------------------
+ */
+function NextRound({ zone }: { zone: string }) {
+  const [left, setLeft] = useState(() => untilNextDay(zone))
+
+  useEffect(() => {
+    setLeft(untilNextDay(zone))
+    /*
+      Every half minute, and recomputed from the clock rather than counted
+      down from the last value. A phone that was asleep for six hours would
+      otherwise wake up still showing six hours, and a countdown that lies
+      about the one number it exists to show is worse than no countdown.
+    */
+    const tick = window.setInterval(() => setLeft(untilNextDay(zone)), 30_000)
+    return () => window.clearInterval(tick)
+  }, [zone])
+
+  return (
+    <p className="challenges-next">
+      new words in <strong>{inWords(left)}</strong>
+    </p>
+  )
+}
+
 function Waiting({
   name,
   standing,
@@ -432,10 +469,20 @@ function Waiting({
  * the game; it is only wrong as the *whole* sentence.
  * -----------------------------------------------------------------------------
  */
-function words({ turn, done }: Standing, them: string): string {
+function words({ turn, done, theirsDone }: Standing, them: string): string {
   if (done) {
-    // Deliberately not "you both are" — her being here is not her being
-    // finished, and nothing on this screen may claim more than it knows.
+    /*
+      Both of you finished: the whole sentence is "done".
+
+      It used to say "done · ${them} has been" here, because all the screen
+      could tell about her was that she had turned up — so a game you had both
+      played to the end still read as though something of hers were pending.
+      `theirsDone` is the game's own answer about her board, so the line can
+      finally stop at the word that is true.
+    */
+    if (theirsDone) return 'done'
+    // Still not "you both are" — her being here is not her being finished,
+    // and nothing on this screen may claim more than it knows.
     return turn === 'both' ? `done · ${them} has been` : `done · waiting for ${them}`
   }
   if (turn === 'nothing') return 'nothing opened today'
@@ -448,12 +495,15 @@ function Challenges({
   games,
   turns,
   them,
+  zone,
   onPlay,
   onBack,
 }: {
   games: readonly { id: string; name: string }[]
   turns: Record<string, Standing>
   them: string
+  /** Whose midnight the next round waits for: yours, not the server's. */
+  zone: string
   onPlay(id: string): void
   onBack(): void
 }) {
@@ -487,6 +537,16 @@ function Challenges({
           </span>
         ))}
       </div>
+      {/*
+        Only when the day is actually spent — every game either finished or
+        sitting with her. While there is a move of yours to make, "come back
+        tomorrow" is the wrong thing to be reading.
+      */}
+      {games.length > 0 &&
+        games.every((game) => {
+          const standing = turns[game.id] ?? NOTHING
+          return standing.done || standing.turn === 'hers'
+        }) && <NextRound zone={zone} />}
       <button type="button" className="challenges-back" onClick={onBack}>
         back to the games
       </button>
@@ -519,7 +579,7 @@ function summary(turns: Record<string, Standing>, them: string): string {
 }
 
 /** The standing of a game whose round nobody has opened. */
-const NOTHING: Standing = { turn: 'nothing', done: false }
+const NOTHING: Standing = { turn: 'nothing', done: false, theirsDone: false }
 
 function TheHollow() {
   const play = usePlaying((s) => s.open)
@@ -838,6 +898,7 @@ function TheHollow() {
           games={listed}
           turns={turns}
           them={them.name}
+          zone={profiles[me].timeZone}
           onPlay={(id) => {
             /*
               A challenge with something in it opens the round, not a menu.

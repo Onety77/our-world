@@ -16,13 +16,20 @@
  * to draw, nothing to lay out, nothing to hide on small screens, and no
  * decision about which of two hundred lines gets the buttons.
  *
- *   right-click        a small menu: answer it, or a heart
+ *   right-click        a small menu: answer it, or one of six marks
  *   double-click       a heart, straight away
  *   double-tap         the same, for a screen with no mouse on it
+ *   press and hold     the menu, for a screen with no right button on it
  *   swipe it left      answer it — the touch gesture for reply, everywhere
  *
- * The two touch gestures are the ones a phone has instead of a right button,
- * and they are the two everybody already knows. Nothing here has to be
+ * The touch gestures are the ones a phone has instead of a right button, and
+ * they are the ones everybody already knows.
+ *
+ * **Press and hold is ours, not the platform's.** iOS does not fire
+ * `contextmenu` on a long press — it raises its own selection callout — so
+ * on a phone the menu here was simply unreachable, and holding a message
+ * selected it instead. The recogniser below is the fix, and `.said` opts out
+ * of native selection so the two stop competing for the same touch. Nothing here has to be
  * discovered by reading a label, because there is no label.
  *
  * **What stays visible is state, not controls.** A heart that has been put on
@@ -31,10 +38,10 @@
  * ---------------------------------------------------------------------------
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { useData } from '@/data/provider'
-import { heartedBy, useTalking } from '@/systems/talking'
+import { HEART, MARKS, heartedBy, markBy, useTalking } from '@/systems/talking'
 import type { Message } from '@/data/types'
 import { useMenuKeys } from './useMenuKeys'
 
@@ -45,6 +52,17 @@ const NEAR = 22
 const SWIPE = 46
 /** And how straight that has to be, so a drag through the sky is not a reply. */
 const STRAIGHT = 38
+/**
+ * How long a finger has to stay still before it means "give me the menu".
+ *
+ * Long enough not to fire during the first moments of a swipe or a scroll,
+ * short enough that it does not feel like waiting. This is roughly what every
+ * phone uses for the same gesture, and matching it is the point — a hold that
+ * takes noticeably longer than the ones you are used to reads as broken.
+ */
+const HOLD_MS = 420
+/** A finger that travels further than this was going somewhere, not holding. */
+const STILL = 12
 
 interface MenuState {
   /** Which message, and where the pointer was. */
@@ -75,6 +93,21 @@ export function useSaidGestures(message: Message) {
 
   const lastTap = useRef(0)
   const from = useRef<{ x: number; y: number; id: number } | null>(null)
+  /** The pending press-and-hold, cancelled by anything that is not a hold. */
+  const holding = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Set when a hold fired, so the release that follows is not read as a tap. */
+  const held = useRef(false)
+
+  const dropHold = () => {
+    if (holding.current !== null) {
+      clearTimeout(holding.current)
+      holding.current = null
+    }
+  }
+
+  // A message can be unmounted mid-press — the Stars recycles them as the sky
+  // moves — and a timer that outlives its message opens a menu onto nothing.
+  useEffect(() => dropHold, [])
 
   const heart = () => {
     void data.heartMessage(message.id, !heartedBy(message, data.me))
@@ -94,6 +127,23 @@ export function useSaidGestures(message: Message) {
 
     onPointerDown(event: React.PointerEvent) {
       from.current = { x: event.clientX, y: event.clientY, id: event.pointerId }
+      held.current = false
+      dropHold()
+      /*
+        Only a finger. A mouse already has a right button, and starting a
+        timer under every click would open the menu on anyone who paused
+        mid-drag with the button down.
+      */
+      if (event.pointerType === 'mouse') return
+      const { clientX: x, clientY: y } = event
+      holding.current = setTimeout(() => {
+        holding.current = null
+        held.current = true
+        // The press is over as far as the other gestures are concerned: a
+        // release from here must not also count as the first of a double tap.
+        from.current = null
+        open(message.id, x, y)
+      }, HOLD_MS)
     },
 
     onPointerMove(event: React.PointerEvent) {
@@ -101,6 +151,8 @@ export function useSaidGestures(message: Message) {
       if (!start || start.id !== event.pointerId) return
       const dx = event.clientX - start.x
       const dy = event.clientY - start.y
+      // A finger that is travelling is not a finger that is holding.
+      if (Math.abs(dx) > STILL || Math.abs(dy) > STILL) dropHold()
       // Leftward only, and only while it is still a horizontal gesture. A
       // downward drag in the Stars is walking back through the conversation
       // and must not drag the line along with it.
@@ -120,8 +172,17 @@ export function useSaidGestures(message: Message) {
     },
 
     onPointerUp(event: React.PointerEvent) {
+      dropHold()
       const start = from.current
       from.current = null
+      // The menu is already open; letting go of it is not a tap on anything.
+      if (held.current) {
+        held.current = false
+        const el = event.currentTarget as HTMLElement
+        el.style.translate = ''
+        el.removeAttribute('data-answering')
+        return
+      }
       const el = event.currentTarget as HTMLElement
       el.style.translate = ''
       el.removeAttribute('data-answering')
@@ -148,6 +209,8 @@ export function useSaidGestures(message: Message) {
     },
 
     onPointerCancel(event: React.PointerEvent) {
+      dropHold()
+      held.current = false
       from.current = null
       const el = event.currentTarget as HTMLElement
       el.style.translate = ''
@@ -170,7 +233,9 @@ export function SaidMenu() {
   const messages = useTalking((s) => s.messages)
   const answer = useTalking((s) => s.answer)
   const startWriting = useTalking((s) => s.startWriting)
-  const keys = useMenuKeys(at ? 2 : 0, true, Boolean(at))
+  // One arrow stop: the row of marks is reached by tab, not by walking six
+  // glyphs with the down key.
+  const keys = useMenuKeys(at ? 1 : 0, true, Boolean(at))
 
   /*
     Anything at all closes it: a click, a key, a scroll, the sky moving.
@@ -209,14 +274,50 @@ export function SaidMenu() {
     }
   }, [at, close])
 
+  const box = useRef<HTMLDivElement>(null)
+
+  /*
+    Put where the finger was, then measured and pulled back into the window.
+
+    The clamp used to be two constants — 170 and 96 — chosen for a menu with
+    two words in it. A row of six marks is nearly three hundred pixels wide,
+    and on a message near the right edge of a phone the last two fell off the
+    screen entirely. Numbers that describe a layout stop being true the moment
+    the layout changes, so this reads the box it actually has.
+  */
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el || !at) return
+    const settle = () => {
+      const b = el.getBoundingClientRect()
+      const edge = 10
+      el.style.left = `${Math.max(edge, Math.min(at.x + 12, window.innerWidth - b.width - edge))}px`
+      el.style.top = `${Math.max(edge, Math.min(at.y + 34, window.innerHeight - b.height - edge))}px`
+    }
+    settle()
+    window.addEventListener('resize', settle)
+    window.addEventListener('orientationchange', settle)
+    return () => {
+      window.removeEventListener('resize', settle)
+      window.removeEventListener('orientationchange', settle)
+    }
+  }, [at])
+
   if (!at) return null
   const message = messages.find((m) => m.id === at.id)
   if (!message) return null
 
-  const yours = heartedBy(message, data.me)
+  const mine = markBy(message, data.me)
+
+  /** Leaving the mark you already left takes it back — the same tap, both ways. */
+  const leave = (mark: string) => {
+    void data.heartMessage(message.id, mine !== mark, mark)
+    close()
+  }
 
   return (
     <div
+      ref={box}
       className="said-menu"
       style={{
         /*
@@ -227,11 +328,11 @@ export function SaidMenu() {
           and the only thing on the screen. Clear of the line by a little more
           than its own leading and it opens onto empty sky.
 
-          Both axes are clamped to the window, because a right-click near an
-          edge would otherwise put half of it outside.
+          These are the first guess only; the layout effect above measures the
+          box and pulls it back inside the window, on both axes.
         */
-        left: Math.min(at.x + 12, window.innerWidth - 170),
-        top: Math.min(at.y + 34, window.innerHeight - 96),
+        left: at.x + 12,
+        top: at.y + 34,
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
@@ -248,18 +349,33 @@ export function SaidMenu() {
       >
         answer this
       </button>
-      <button
-        ref={keys.ref(1)}
-        type="button"
-        className={keys.selected === 1 ? 'is-selected' : undefined}
-        onFocus={() => keys.choose(1)}
-        onClick={() => {
-          void data.heartMessage(message.id, !yours)
-          close()
-        }}
-      >
-        {yours ? 'take the heart back' : 'a heart'}
-      </button>
+      {/*
+        Six marks on one row, and the one you left is lit.
+
+        A row rather than six menu items, because these are not six different
+        commands — they are one answer with six faces, and reading them as a
+        list would make choosing one feel like a decision. Tapping the mark you
+        already left takes it back, which is the same rule the heart has always
+        had and means there is never a separate "remove" to look for.
+      */}
+      <div className="said-marks" role="group" aria-label="leave a mark">
+        {MARKS.map((mark) => (
+          <button
+            key={mark}
+            type="button"
+            className={mine === mark ? 'on' : undefined}
+            aria-pressed={mine === mark}
+            aria-label={
+              mine === mark
+                ? `take back ${mark === HEART ? 'the heart' : mark}`
+                : `leave ${mark === HEART ? 'a heart' : mark}`
+            }
+            onClick={() => leave(mark)}
+          >
+            {mark}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

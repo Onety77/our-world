@@ -170,6 +170,20 @@ export interface Standing {
   turn: Turn
   /** Your side of it is over. Says nothing about hers. */
   done: boolean
+  /**
+   * And hers.
+   *
+   * Asked by running the game's own `isDone` with the two sides swapped,
+   * which works because every game here is symmetric — both of you play the
+   * same board, with the same rules, to the same end. It is the game's
+   * answer either way, not a guess made out here.
+   *
+   * Without this the list could never say the plain thing. "done · she has
+   * been" is what you get when your side is over and all the screen knows
+   * about hers is that she turned up — so a game you had both finished hours
+   * ago still read as though it were half open.
+   */
+  theirsDone: boolean
 }
 
 /** Pure, so it is testable. */
@@ -181,12 +195,19 @@ export function standingOf(
   const turn = turnOf(round, me)
   // Nothing opened, or you have not played: there is nothing to be done with.
   if (!round || !isDone || turn === 'nothing' || turn === 'yours') {
-    return { turn, done: false }
+    return { turn, done: false, theirsDone: false }
   }
   const them = me === 'warm' ? 'cool' : 'warm'
   const pick = (who: UserId) =>
     round.moves.filter((m) => m.by === who).map((m) => m.data) as never[]
-  return { turn, done: Boolean(isDone({ mine: pick(me), theirs: pick(them) })) }
+  const mine = pick(me)
+  const theirs = pick(them)
+  return {
+    turn,
+    done: Boolean(isDone({ mine, theirs })),
+    // The same question, asked from her side of the board.
+    theirsDone: Boolean(isDone({ mine: theirs, theirs: mine })),
+  }
 }
 
 /**

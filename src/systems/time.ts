@@ -144,6 +144,55 @@ export function until(at: number, now: number = Date.now()): string {
   return `in  hours`
 }
 
+/**
+ * How long until a new day opens where this person is standing.
+ *
+ * -----------------------------------------------------------------------------
+ * A daily round is keyed by `localDateKey`, so "when can we play again" is
+ * exactly "when does that string change" — and the honest way to answer that is
+ * to ask the same function rather than to do calendar arithmetic beside it.
+ *
+ * Stepped rather than computed, because the computed version is where the bugs
+ * live: midnight in an arbitrary IANA zone is not a fixed offset from UTC, the
+ * offset moves twice a year, and on the night it moves the day is 23 or 25
+ * hours long. Walking forward by hour, then minute, then second is about a
+ * hundred and fifty comparisons — nothing, once a minute — and it is right on
+ * those two nights without knowing anything about them.
+ *
+ * Returns milliseconds, and never more than a day and a bit.
+ * -----------------------------------------------------------------------------
+ */
+export function untilNextDay(timeZone: string, at = Date.now()): number {
+  const today = localDateKey(timeZone, at)
+  let when = at
+  for (const step of [3_600_000, 60_000, 1000]) {
+    // Back up one step, then close in with a finer one.
+    if (step !== 3_600_000) when -= step * 60
+    let guard = 0
+    while (localDateKey(timeZone, when) === today && guard < 90) {
+      when += step
+      guard += 1
+    }
+  }
+  return Math.max(0, when - at)
+}
+
+/**
+ * That span, said the way a person would say it.
+ *
+ * Hours and minutes while there are hours, minutes alone under one, and a
+ * phrase rather than "0m" at the very end — a countdown that reads zero for
+ * fifty-nine seconds looks stopped.
+ */
+export function inWords(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m`
+  return 'any moment'
+}
+
 export function localDateKey(timeZone: string, at = Date.now()): string {
   try {
     return new Intl.DateTimeFormat('en-CA', {

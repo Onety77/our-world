@@ -40,6 +40,119 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · eight small ones
+
+### The dead button was a near miss
+
+*back to the games* did nothing. It was not dead — it was **24px tall**, and it
+is the only way off the standings screen, so every miss read as a broken
+control. This repo already worked this out once, for `.put-back`, and wrote
+down why: *"at 31px tall they were under every published minimum."* This was
+smaller than the one that got fixed. Padding on a coarse pointer; the look is
+unchanged.
+
+### A tap on the film was a tap on the world
+
+Touching the miniature to move it also walked you into whichever place you were
+standing in front of. `ui/Places` enters a place on any `pointerup` whose
+target is not a form control — a fair rule when everything over the world was
+made of buttons. The pane is not; it is a thing you pick up. It is named in
+that guard now. **Anything laid over the world owns its own taps.**
+
+### Somewhere to put it down
+
+Ending a screen lived in exactly one place: open the whole thing, find *end
+screen*. Right home for it, wrong that it was the only one. The ground opens
+under the miniature while you carry it, at the bottom where a thumb already is.
+
+Deliberate choices, given this ends the screen for **both** of you with no undo:
+it is a journey rather than a tap (the miniature had a close button once, two
+taps from resting, and it ended sessions by accident); it says *drag here to
+end* and then *let go to end it*, so the last thing you read is the thing about
+to happen; and it is a **sibling** of the pane, not a child — a target inside
+that box would be trapped in its stacking context, which is the trap the pane
+itself was moved out of the corner to escape a day ago.
+
+One thing only a screenshot showed: the pane follows your finger and the target
+is *under* your finger, so at the moment you most need to see it, the pane is
+sitting on top of it. What you are carrying goes translucent over the target
+now. Opacity and not a scale — the drag is measured from that element's box,
+and shrinking it mid-gesture moves the ground while the finger is on its way.
+
+### The long line was ours
+
+Reported as a line that appears when you like a message. It was not iOS and it
+was not a selection: `.said-hearts` carries a dark rounded surface, which
+exists so a heart in the **corner** can be read over a noon meadow. In the
+Stars the hearts are a *block*, centred under the message — so that surface
+stretched the full width of the line and drew a bar across every message either
+of you had reacted to. Scoped to the corner, where the reason for it lives.
+
+### Press and hold, and six things to leave
+
+Holding a message did nothing on a phone, because **iOS does not fire
+`contextmenu` on a long press** — it raises its own selection callout. So the
+menu was unreachable there, and holding a line selected it instead. There is a
+recogniser now, and `.said` opts out of native selection so the two stop
+competing for the same touch. Copying a line was never offered here; there are
+two people in this conversation and they are both already looking at it.
+
+Six marks — ♥ 😂 💀 👍 💃 🫤 — as one row, not six menu items: they are one
+answer with six faces, and a list would turn picking one into a decision, which
+is the opposite of what a reaction is for. **The heart stays the default** and
+a double tap still leaves one with no menu in the way.
+
+Stored as `marks` beside `hearts` rather than inside it, so `hearts` still
+means *this person reacted, at this time* and every message ever hearted keeps
+working and keeps reading as a heart. A heart writes no mark at all, so an old
+one and a new one are the same shape on the wire.
+
+Also measured and fixed: the menu clamped itself with two constants — 170 and
+96 — chosen for a menu with two words in it. Six marks is 258px wide, and the
+last two fell off the right of the screen. It reads its own box now.
+
+### "done" means done
+
+It said *done · Tife has been* after you had both finished. The list only knew
+whether **your** side was over — `isDone` is documented as *"says nothing
+about hers"* — so the nicest line it had was that she had turned up. The games
+are symmetric, so the same `isDone` answers about her board when you hand it
+the two sides the other way round. When you are both finished the whole
+sentence is now one word.
+
+### How long until the next one
+
+A daily round is keyed by the local date, so what you are waiting for is
+midnight **where you are standing** — not twenty-four hours from when you
+played, which is what "once a day" sounds like and is the thing people guess
+wrong. It appears only once the day is spent.
+
+Stepped forward through `localDateKey` rather than computed, because the
+computed version is where the bugs are: midnight in an arbitrary zone is not a
+fixed offset from UTC, and twice a year the day is 23 or 25 hours long. Both of
+those nights are in `npm run day`, and the first version of that test had the
+*wrong date* in it — the short day is the 29th, not the 28th.
+
+### And the Hollow got out from under the music
+
+Measured: "Choose your game" was overlapping the music panel by seven pixels,
+while nearly three hundred pixels of the same box sat empty below the games. On
+a phone that breakpoint moves the corner to the top; the Hollow starts at
+7.7rem, which is *inside* it. A floor that clears the panel, and the rest of
+the slack spent centring the column in the room it has.
+
+The first attempt put both rules on `.hollow-selector` and only half of it
+took — `.hollow-selector:not(.hollow-way-threshold)` further down is more
+specific and was already setting `justify-content: flex-start`. Media queries
+do not add specificity. It is in the rule that owns the layout now.
+
+### Housekeeping
+
+`npm run pronouns` was failing **before any of this** — four error strings in
+`ui/Together` written from one side. Tokenised. `npm run places` failing in
+the earlier sweep was contention between concurrent headless runs, not the
+check; it passes alone.
+
 ## 1 Sep · Claude · the film that rode off the screen with the music
 
 Reported: the miniature is gone on the phone after coming back to the garden —

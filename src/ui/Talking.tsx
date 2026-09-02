@@ -28,7 +28,7 @@ import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { gaze } from '@/systems/pointerLook'
 import { useTakenOver } from '@/systems/attention'
-import { heartedBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
+import { HEART, markBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
 import { useSaidGestures } from './Said'
 import { Ink } from './Ink'
 import { shouldTell, tell } from '@/systems/notify'
@@ -301,8 +301,8 @@ function Said({
   onOpenReply(id: string): void
 }) {
   const gestures = useSaidGestures(message)
-  const yours = heartedBy(message, me)
-  const hers = heartedBy(message, me === 'warm' ? 'cool' : 'warm')
+  const yours = markBy(message, me)
+  const hers = markBy(message, me === 'warm' ? 'cool' : 'warm')
 
   return (
     <p
@@ -343,9 +343,15 @@ function Said({
       {/* State, not controls. A heart that is on is a fact about the message
           now, in the colour of whoever left it. */}
       {(yours || hers) && (
-        <span className="said-hearts" aria-label="hearted">
-          {yours && <i className="mine" aria-hidden="true">♥</i>}
-          {hers && <i className="hers" aria-hidden="true">♥</i>}
+        <span className="said-hearts" aria-label="reacted to">
+          {/*
+            The colour is only worth spending on the heart. It says *who* left
+            it, which is the whole job when both of you leave the same glyph —
+            and an emoji tinted by a colour that is not its own just looks
+            broken. So a heart is coloured and everything else is itself.
+          */}
+          {yours && <i className={`mine${yours === HEART ? '' : ' glyph'}`} aria-hidden="true">{yours}</i>}
+          {hers && <i className={`hers${hers === HEART ? '' : ' glyph'}`} aria-hidden="true">{hers}</i>}
         </span>
       )}
 

@@ -31,6 +31,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
+import { useSay } from '@/systems/useSay'
 import type { Queued, ScreenLine } from '@/data/types'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
@@ -137,6 +138,7 @@ export function Together() {
   /** Where the picture is, for the beam. Not state — it moves twice a second. */
   const [where, setWhere] = useState(0)
   const [span, setSpan] = useState(0)
+  const say = useSay()
   const [miniControls, setMiniControls] = useState(false)
 
   // --- the feed -------------------------------------------------------------
@@ -334,7 +336,7 @@ export function Together() {
       screenVideo.current = next.videoId
       window.setTimeout(() => { applying.current = false }, 80)
     }
-    void attempt('that didn’t reach her screen', () =>
+    void attempt(say('that didn’t reach {her} screen'), () =>
       data.setWatching({ ...next, session: next.session ?? shared.session }))
   }
 
@@ -349,7 +351,7 @@ export function Together() {
   */
   const beginSitting = () => {
     const session = newSession()
-    void attempt('that didn’t reach her screen', () => data.beginScreenTalk(session))
+    void attempt(say('that didn’t reach {her} screen'), () => data.beginScreenTalk(session))
     return session
   }
 
@@ -391,7 +393,7 @@ export function Together() {
     useWatching.getState().close()
     setMiniControls(false)
     // The screen goes dark and what was said in front of it goes with it.
-    void attempt('that didn’t reach her screen', () => data.beginScreenTalk(''))
+    void attempt(say('that didn’t reach {her} screen'), () => data.beginScreenTalk(''))
     move({ videoId: null, title: '', playing: false, at: 0, queue: shared.queue, session: '' })
   }
 
@@ -419,6 +421,41 @@ export function Together() {
   /** The element that actually carries the position while it is tucked. */
   const paneRef = useRef<HTMLDivElement>(null)
   const dragging = useRef<{ id: number; dx: number; dy: number; moved: boolean } | null>(null)
+  /*
+    ---------------------------------------------------------------------------
+    **Somewhere to put it down for good.**
+
+    Ending a screen lived in one place: open the whole thing, find *end
+    screen*. That is the right home for it — it is a shared act and you should
+    be able to see what you are closing — but it was also the *only* way, and
+    a small video you can pick up and move should be closeable by putting it
+    down somewhere, which is what every phone has taught everybody to expect.
+
+    So the ground opens while you are carrying it. The target only exists
+    during a drag, it says what it does in words rather than as a bare cross,
+    and it takes a deliberate journey to the bottom of the screen — you cannot
+    fall into it, which matters because this ends the screen for **both** of
+    you and there is no undo. That is also why it is not a tap: the miniature
+    had a close button once, two taps from resting, and it ended sessions by
+    accident. A gesture with a destination cannot be made by mistake.
+    ---------------------------------------------------------------------------
+  */
+  const [carrying, setCarrying] = useState(false)
+  const [overGround, setOverGround] = useState(false)
+  const ground = useRef<HTMLDivElement>(null)
+  /** True while the pointer is inside the target, read on the way up. */
+  const willEnd = useRef(false)
+
+  /** Generous, because the pane is under the thumb and the target is not. */
+  const inTheGround = (x: number, y: number) => {
+    const box = ground.current?.getBoundingClientRect()
+    if (!box) return false
+    const reach = 26
+    return (
+      x >= box.left - reach && x <= box.right + reach &&
+      y >= box.top - reach && y <= box.bottom + reach
+    )
+  }
 
   const onPaneDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (open) return
@@ -444,7 +481,12 @@ export function Together() {
         Math.abs(event.clientY - (box.top + held.dy))
       if (far < DRAG_ENOUGH) return
       held.moved = true
+      // Only once it is genuinely a carry, so a tap never opens the ground.
+      setCarrying(true)
     }
+    const over = inTheGround(event.clientX, event.clientY)
+    willEnd.current = over
+    setOverGround(over)
     const free = {
       x: Math.max(1, window.innerWidth - box.width),
       y: Math.max(1, window.innerHeight - box.height),
@@ -458,7 +500,23 @@ export function Together() {
   const onPaneUp = (event: React.PointerEvent<HTMLDivElement>) => {
     const held = dragging.current
     dragging.current = null
+    const dropped = willEnd.current
+    willEnd.current = false
+    setCarrying(false)
+    setOverGround(false)
     if (!held?.moved || held.id !== event.pointerId) return
+    if (dropped) {
+      /*
+        Put down in the ground: the screen ends.
+
+        The position is forgotten with it, so the next screen opens where the
+        corner puts things rather than in the spot you dragged this one to in
+        order to get rid of it.
+      */
+      useWatching.getState().putSpot(null)
+      endSession()
+      return
+    }
     /*
       Swallow the click this drag is about to become.
 
@@ -558,6 +616,7 @@ export function Together() {
   if (!open && !live) return null
 
   return createPortal(
+    <>
     <div
       /*
         The root is the box while it is tucked — the screen inside is
@@ -565,7 +624,7 @@ export function Together() {
         in, belong here rather than on the picture.
       */
       ref={paneRef}
-      className={`together ${open ? 'full' : 'tucked'}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}`}
+      className={`together ${open ? 'full' : 'tucked'}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
@@ -718,7 +777,32 @@ export function Together() {
           )}
         </aside>
       )}
-    </div>,
+    </div>
+      {/*
+        The ground, only while you are carrying it — and a *sibling* of the
+        pane, not a child of it.
+
+        The pane is a small fixed box with a stacking context of its own; a
+        target living inside it would be trapped in that context and clipped
+        to a corner of the screen, which is exactly the trap the pane itself
+        was moved out of `.corner` to escape. See `paneHost` above.
+
+        Words, not a bare cross. This ends the screen for both of you and
+        there is no undo, so it names what it will do while you can still
+        change your mind, and changes tense the moment you are over it — the
+        last thing you read before letting go is the thing about to happen.
+      */}
+      {!open && carrying && (
+        <div
+          ref={ground}
+          className={`together-ground${overGround ? ' over' : ''}`}
+          aria-hidden="true"
+        >
+          <i />
+          <span>{overGround ? 'let go to end it' : 'drag here to end'}</span>
+        </div>
+      )}
+    </>,
     paneHost(),
   )
 }
@@ -873,6 +957,8 @@ function Transport({
 function Talk({ session, theirName }: { session: string; theirName: string }) {
   const data = useData()
   const me = data.me
+  /** `say` is taken here — this one turns {her} into her name. */
+  const inWords = useSay()
   const [draft, setDraft] = useState('')
   const [said, setSaid] = useState<ScreenLine[]>([])
   const feed = useRef<HTMLDivElement>(null)
@@ -913,7 +999,7 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
     setSaid((was) => [...was, line])
     setDraft('')
     ambience.said(true)
-    const sent = await attempt('that didn’t reach her screen', () =>
+    const sent = await attempt(inWords('that didn’t reach {her} screen'), () =>
       data.sayOnScreen(session, line),
     )
     if (!sent) setSaid((was) => was.filter((l) => l.id !== line.id))
