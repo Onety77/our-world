@@ -40,6 +40,73 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · the car was falling over
+
+Reported from a phone with screenshots: the car lifts one side alarmingly high
+when drifting, worst on the Harmattan, and — once looked for — on the Rootway
+too, just less. The new road did not cause it; it made an old fault loud enough
+to notice.
+
+Measured before touching anything:
+
+```
+rootway     body 12.3°   road 11.5°   together 22.0°
+harmattan   body 12.4°   road 22.3°   together 32.9°
+```
+
+**What the player sees is the sum of two things that were each bounded and
+never bounded together.**
+
+**The road.** `bank = clamp(-curv · 5.2) + camber` — the clamp was applied to
+the corner's own roll and the authored camber added *outside* it. So a corner
+that was both tight and deliberately off-camber could be drawn at twenty-two
+degrees. The Stormcrown has camber too and had the same latent fault; nobody
+had stacked one on a tight enough corner to see it. Twelve degrees is the whole
+allowance now, camber included — steeper than any road anybody builds. **The
+physics is untouched**: `camber` is still resolved down in full, because how
+treacherous a corner *is* was never the problem.
+
+**The body.** The target was clamped and then handed to a spring-damper — which
+by definition overshoots, so the clamp bounded the *aim* and not the *result*.
+Measured 12.4° against a stated limit of 10.6°, and the note in `rig.ts`
+already said ten was "more than a real rally car". The aim is smaller now and
+the result is clamped after the spring has had its say, with the velocity
+killed at the limit so it does not sit there buzzing.
+
+```
+rootway     body  6.9°   road 11.8°   together 17.7°
+moonbreak   body  6.9°   road 12.0°   together 18.9°
+stormcrown  body  6.9°   road 12.0°   together 18.9°
+harmattan   body  6.9°   road 12.0°   together 18.9°
+```
+
+`TUNE.leanLimit` is the new dial — a hard ceiling in degrees, separate from
+`bodyLean`, because the two answer different questions: how *eagerly* it
+leans, and how far it is ever allowed to get. Turning lean up now reaches the
+ceiling sooner rather than going past it.
+
+And `npm run rally` measures the sum on all four roads, driven by the spirit
+rather than reasoned about. It was reported from a phone before it was ever
+measured here, which is exactly why it now is.
+
+### And nothing on the race screen
+
+Asked for plainly: no media, no messages, nothing until the road closes. There
+was a rule for this already and it had two holes.
+
+**The whisper was excepted**, on the theory that a conversation you had
+deliberately opened should survive a race. It should not — a road at a hundred
+and thirty is not a place to read a message.
+
+**And the shared film screen was not on the list**, not by decision but because
+it used to be a child of `.corner` and was covered by hiding the corner. It is
+its own node on the body now, so it needed naming. That is the exact cost of
+moving something out of a container: every rule that reached it *through* the
+container silently stops, and nothing says so.
+
+Checked with a film playing and the corner up: all five go to opacity nought
+the moment the road appears.
+
 ## 2 Sep · Claude · and it was in the wrong place
 
 Second report on the same feature, and the placement was the bigger miss:

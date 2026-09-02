@@ -10154,8 +10154,33 @@ body.in-glasshouse .surface {
   that racing exists.
   ---------------------------------------------------------------------------
 */
+/*
+  Everything, and the list had two holes in it.
+
+  ---------------------------------------------------------------------------
+  **The whisper was excepted**, on the theory that a conversation you had
+  deliberately opened should survive. It should not: a road at a hundred and
+  thirty is not a place to read a message, and leaving the panel up meant the
+  one thing guaranteed to be on screen during a race was the thing most likely
+  to take your eyes off it. If it is important it will still be there in two
+  minutes.
+
+  **And the shared film screen was not on the list at all** — not because
+  anybody decided that, but because it used to be a child of `.corner` and
+  was covered by hiding the corner. It is its own node on the body now (see
+  `paneHost` in `ui/Together`), so it needs naming, and this is the exact
+  cost of moving a thing out of a container: every rule that reached it
+  through the container silently stopped.
+
+  `.corner-tab` too — the handle the corner leaves behind when it is tucked
+  is small and quiet and still a thing on the screen.
+  ---------------------------------------------------------------------------
+*/
 body:has(.rally-running) .people,
-body:has(.rally-running) .corner:not(:has(.whisper.open)),
+body:has(.rally-running) .corner,
+body:has(.rally-running) .corner-tab,
+body:has(.rally-running) .together,
+body:has(.rally-running) .together-ground,
 body:has(.rally-running) .player {
   opacity: 0;
   pointer-events: none;

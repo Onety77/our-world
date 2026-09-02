@@ -431,6 +431,79 @@ function realRoad() {
 }
 
 /** The long mountain actually earns that name, in distance and driven time. */
+/**
+ * How far the car is ever drawn lying over, on every road.
+ *
+ * -----------------------------------------------------------------------------
+ * **This was reported from a phone before it was ever measured here**, which is
+ * the whole reason it now is. Screenshots of the Harmattan showed the car up on
+ * one side at an angle no car reaches without leaving the ground, and it turned
+ * out to be true on the Rootway as well — less, so nobody had said anything.
+ *
+ * What the player sees is the *sum* of two things that were bounded separately
+ * and never together:
+ *
+ *   **the road**, whose drawn bank is the corner's own roll plus whatever
+ *   camber the course author wrote. The clamp was applied to the first of
+ *   those and the second added outside it, so a tight off-camber corner could
+ *   be drawn at twenty-two degrees.
+ *
+ *   **the body**, a spring — and a spring overshoots, so clamping the value it
+ *   is aiming at bounds the aim and not the result. Measured at 12.4° against
+ *   a limit of 10.6°.
+ *
+ * Twenty-two and twelve is nearly thirty-five degrees of car. So the sum is
+ * what is checked, on all four roads, driven by the spirit rather than by an
+ * arithmetic guess about the worst case.
+ * -----------------------------------------------------------------------------
+ */
+function howFarItLiesOver(): string {
+  const out: string[] = []
+  let worst = 0
+  for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as const) {
+    const track = makeTrack(1, stage)
+    const car = createCar(track)
+    const drive = spiritDriver(track, 0x4c21)
+    let body = 0
+    let road = 0
+    let both = 0
+    let at = 0
+    for (let i = 0; i < 90_000 && car.s < track.finishAt; i++) {
+      advanceCar(track, car, drive(car), 1 / 120)
+      const bank = roadAt(track, car.s).bank
+      body = Math.max(body, Math.abs(car.roll))
+      road = Math.max(road, Math.abs(bank))
+      const sum = Math.abs(bank + car.roll)
+      if (sum > both) { both = sum; at = car.s }
+    }
+    worst = Math.max(worst, both)
+    const deg = (r: number) => `${((r * 180) / Math.PI).toFixed(1)}°`
+    out.push(
+      `  ${stage.padEnd(11)}body ${deg(body).padStart(6)}   road ${deg(road).padStart(6)}` +
+        `   together ${deg(both).padStart(6)}  at ${Math.round(at)}m`,
+    )
+  }
+  /*
+    Twenty-one degrees, and it is a ceiling rather than a target.
+
+    A rally car on gravel rolls three to five; the body here is allowed seven,
+    because this one is drawn rather than simulated and a car that never leans
+    reads as weightless. The road may add twelve, which is steeper than any
+    road anybody builds. Together that is a car leaning hard in a banked
+    hairpin, which is the thing it is supposed to look like — and a long way
+    from the thirty-three it was.
+  */
+  const limit = 0.37
+  out.push('')
+  out.push(
+    `  worst anywhere ${((worst * 180) / Math.PI).toFixed(1)}° — ` +
+      (worst <= limit
+        ? 'inside the ceiling'
+        : `OVER the ${((limit * 180) / Math.PI).toFixed(0)}° ceiling`),
+  )
+  return out.join(String.fromCharCode(10))
+}
+
 function theStormcrown(): string {
   const track = makeTrack(1, 'stormcrown')
   const moonbreak = makeTrack(1, 'moonbreak')
@@ -1322,6 +1395,7 @@ const sections: [string, () => string][] = [
   ['The road, and the fork it no longer has', theSplit],
   ['The Drowned Mile', theDrownedMile],
   ['The Stormcrown', theStormcrown],
+  ['How far the car lies over', howFarItLiesOver],
   ['The meters survive a restart', metersSurviveRestart],
 ]
 

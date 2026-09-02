@@ -2506,7 +2506,29 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       tip toward the outside at the same moment the car is pulled that way. See
       the note beside `Band.camber`.
     */
-    bank[i] = Math.max(-0.2, Math.min(0.2, -curv[i] * 5.2)) + camber[i]
+    /*
+      Clamped *after* the camber, not before it.
+
+      ==========================================================================
+      **This is where the car's tilt went wrong.** The limit used to be applied
+      to the curvature term alone and then the authored camber was added on
+      the outside of it, so a corner that was both tight and deliberately
+      off-camber could be drawn banked at twenty-two degrees. Measured on the
+      Harmattan: 22.3° of road under 12.4° of body roll, for a car lying over
+      at nearly thirty-three degrees in a corner — which is what it looks like,
+      and it looks like a bug.
+
+      Twelve degrees is the whole allowance now, camber included. That is
+      already steeper than any road anybody builds: a banked motorway curve is
+      about six, and the steepest bank on a NASCAR oval is thirty-one and is
+      not a road you would drive a rally car sideways on.
+
+      The physics is unchanged — `camber` is still resolved down in full by
+      `physics`, because how treacherous a corner *is* was never the problem.
+      This is only what it is drawn at.
+      ==========================================================================
+    */
+    bank[i] = Math.max(-0.21, Math.min(0.21, -curv[i] * 5.2 + camber[i]))
 
     hx += Math.sin(ang) * STEP
     hz += Math.cos(ang) * STEP

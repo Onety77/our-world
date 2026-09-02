@@ -116,6 +116,21 @@ export interface RallyTuning {
 
   // the body
   bodyLean: number
+  /**
+   * The most the shell may ever lie over, in radians, whatever else happens.
+   *
+   * Separate from `bodyLean` because the two answer different questions.
+   * `bodyLean` is *how eagerly* it leans — the size of the aim, and the thing
+   * that makes the car read as having mass. This is *how far it is ever
+   * allowed to get*, applied after the spring has overshot, which is the part
+   * that stopped the car looking like it was falling over in every corner.
+   *
+   * Nought point one two is about seven degrees. A rally car on gravel rolls
+   * three to five; a soft road car might find seven. It is a hard ceiling, so
+   * turning `bodyLean` up makes the car reach this sooner rather than go
+   * past it.
+   */
+  leanLimit: number
   bodyFloat: number
 }
 
@@ -183,6 +198,7 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
   cameraShake: 1,
 
   bodyLean: 1,
+  leanLimit: 0.12,
   bodyFloat: 1,
 })
 
@@ -1122,6 +1138,18 @@ export const DIALS: readonly Dial[] = [
     max: 3,
     step: 0.01,
     show: times,
+  },
+  {
+    key: 'leanLimit',
+    group: 'feel',
+    name: 'Furthest the body leans',
+    note: 'A hard ceiling on how far the shell may lie over, after the springs have had their say. The road it is lying on adds its own bank on top of this — that is capped separately, in track.ts. Turning "body lean" up makes the car reach this sooner rather than go past it.',
+    low: 'stays level',
+    high: 'falls over',
+    min: 0.02,
+    max: 0.3,
+    step: 0.005,
+    show: (v) => `${((v * 180) / Math.PI).toFixed(1)}°`,
   },
   {
     key: 'bodyFloat',

@@ -1795,8 +1795,30 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   // Clamped first and scaled after, so `TUNE.bodyLean` opens the whole range
   // rather than running straight into a limit that no longer suits it.
   const lean = TUNE.bodyLean
+  /*
+    How far the shell is allowed to lie over, and it is a hard limit.
+
+    ==========================================================================
+    Two things were wrong here and they compounded.
+
+    **The target was too big.** A tenth of a radian and a bit is ten and a half
+    degrees, and the note in `rig.ts` beside the wheel cambers already said
+    that was "more than a real rally car" — a rally car on gravel rolls three
+    to five, and a road car with soft springs might reach seven.
+
+    **And the spring overshot it.** `wantRoll` was clamped and then handed to
+    a spring-damper, which by definition goes past its target on the way — so
+    the clamp bounded the *aim* and not the *result*, and the measured worst
+    was 12.4°, well outside a limit that looked like it was doing the job.
+
+    So the aim is smaller, and the result is clamped after the spring has had
+    its say. `TUNE.bodyLean` scales the aim and `TUNE.leanLimit` is the
+    ceiling, which is the dial to open if this should wallow more.
+    ==========================================================================
+  */
+  const rollCap = Math.max(0.01, TUNE.leanLimit)
   const wantRoll =
-    Math.max(-0.185, Math.min(0.185, (-car.cornering / TUNE.gravity) * 0.14)) * lean
+    Math.max(-rollCap, Math.min(rollCap, (-car.cornering / TUNE.gravity) * 0.1)) * lean
   const wantPitch =
     Math.max(-0.13, Math.min(0.1, (-car.accel / TUNE.gravity) * 0.11)) * lean
   const wantHeave =
@@ -1805,6 +1827,17 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
 
   car.rollVel += (DERIVED.bodyRoll.k * (wantRoll - car.roll) - DERIVED.bodyRoll.c * car.rollVel) * dt
   car.roll += car.rollVel * dt
+  /*
+    And the spring is not allowed past the limit either.
+
+    A damped spring overshoots — that is what makes it feel like a body on
+    springs rather than a value being interpolated — but the overshoot has to
+    happen *inside* the ceiling, or the ceiling is a suggestion. Killing the
+    velocity at the same time is what stops it sitting against the limit
+    buzzing, which is what a bare clamp on the position alone would do.
+  */
+  if (car.roll > rollCap) { car.roll = rollCap; if (car.rollVel > 0) car.rollVel = 0 }
+  else if (car.roll < -rollCap) { car.roll = -rollCap; if (car.rollVel < 0) car.rollVel = 0 }
   car.pitchVel += (DERIVED.bodyPitch.k * (wantPitch - car.pitch) - DERIVED.bodyPitch.c * car.pitchVel) * dt
   car.pitch += car.pitchVel * dt
   car.heaveVel += (DERIVED.bodyHeave.k * (wantHeave - car.heave) - DERIVED.bodyHeave.c * car.heaveVel) * dt
