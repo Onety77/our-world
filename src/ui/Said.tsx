@@ -136,6 +136,15 @@ export function useSaidGestures(message: Message) {
       */
       if (event.pointerType === 'mouse') return
       /*
+        This surface has its own tap, swipe and hold language. Cancelling the
+        touch default at its beginning prevents iOS from starting selection or
+        the copy loupe while leaving the textarea elsewhere completely normal.
+        Clearing an old range also removes a selection left behind by WebKit
+        before this build reached the device.
+      */
+      event.preventDefault()
+      window.getSelection()?.removeAllRanges()
+      /*
         The *message's* box, not the finger's position.
 
         The bar is placed above whatever it is given, and given a fingertip it

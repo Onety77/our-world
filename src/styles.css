@@ -4487,11 +4487,24 @@ canvas {
   z-index: 6;
 }
 
-.talking textarea,
-.talking .said-body,
-.talking .said-answering {
+.talking textarea {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/*
+  A held message opens our reaction bar. The old selector above explicitly
+  made the body and its quote selectable, and because it was more specific
+  than the later `.said` rule WebKit quite correctly opened text selection
+  first. Apply the ownership to the exact descendants a finger can land on;
+  the textarea remains ordinary editable text.
+*/
+.talking .said,
+.talking .said * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
 }
 
 body:has(.talking) .leave-place {

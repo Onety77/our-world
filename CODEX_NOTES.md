@@ -835,3 +835,20 @@ shared-file changes, measurements, and anything another agent should preserve.
 - Added real local-backend walks for 23-hour survival, 24-hour replacement and
   a one-answer question still active after 72 hours. Questions and TypeScript
   checks pass.
+
+## 2 September 2026 - Codex - Stars scrolling, without the hidden steps
+
+- Replaced the changing message-height estimate with a bounded inverse of the
+  actual visual ladder, so a pixel of finger travel produces a pixel of text
+  travel through both one-line replies and long paragraphs.
+- Removed the every-two-message animator teardown. A larger overlapping window
+  now shifts only near its edge, newly mounted lines join the existing clock,
+  and only that small window is built instead of remapping the full history.
+- Moved inertial advancement ahead of layout so each frame uses one read head,
+  stopped stale flick velocity after a held release, normalized wheel units and
+  made the newest/reply jumps cancel any motion already in flight.
+- Fixed the CSS specificity error that re-enabled selection inside `.said`, and
+  explicitly claimed touch defaults when a message begins its own hold gesture.
+  The editable composer remains selectable and otherwise unchanged.
+- A 10,000-case variable-height motion probe stayed within 0.104 px; computed
+  browser styles, TypeScript, the production build and whitespace checks pass.

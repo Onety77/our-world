@@ -37,9 +37,17 @@ import { shouldTell, tell } from '@/systems/notify'
 import { useDismissOutside } from './useDismissOutside'
 import { onActivity, useActivity, wakeWorld } from '@/systems/activity'
 
-/** How many messages stay laid out around the one being read. */
-const ABOVE = 12
-const BELOW = 4
+/**
+ * How many messages stay laid out around the one being read.
+ *
+ * This is deliberately wider than the visible sky. The previous 12/4 window
+ * moved every two messages, so React replaced its edge and the measurement
+ * loop restarted in the middle of nearly every flick. Keeping an overlapping
+ * runway makes window changes rare and, more importantly, invisible.
+ */
+const ABOVE = 28
+const BELOW = 12
+const WINDOW_GUARD = 6
 
 /** Sky between the bottom of one line and the top of the next, in pixels. */
 const AIR = 24
@@ -159,6 +167,59 @@ function rung(ladder: Ladder, age: number): number {
   }
   const low = Math.floor(local)
   return up[low] + (up[low + 1] - up[low]) * (local - low)
+}
+
+/**
+ * Move the read head by an exact number of screen pixels.
+ *
+ * The old gesture divided pixels by a changing estimate of "one message".
+ * That estimate necessarily jumped when a short line gave way to a paragraph,
+ * which made the conversation subtly slip under a finger. Here the ladder is
+ * the source of truth: hold the content point currently under the read head,
+ * find the new head that moves that point by `pixels`, and return it. The
+ * search is local, monotonic and bounded. Large wheel deltas are split into
+ * the same small physical steps a pointer stream would have delivered.
+ */
+function headAfterPixelMove(
+  ages: number[],
+  heights: number[],
+  air: number,
+  head: number,
+  pixels: number,
+  furthest: number,
+): number {
+  if (ages.length === 0 || Math.abs(pixels) < 0.01 || furthest <= 0) return head
+
+  let next = head
+  let remaining = pixels
+  // Twenty-four pixels cannot cross more than two of even the shortest rungs.
+  // Staying local also avoids treating the changing perspective far away from
+  // the read head as though it were a scroll measurement under the finger.
+  for (let part = 0; part < 96 && Math.abs(remaining) >= 0.01; part++) {
+    const wanted = Math.max(-24, Math.min(24, remaining))
+    const reference = next
+    const movedAt = (candidate: number) => {
+      const ladder = buildLadder(ages, heights, candidate, air)
+      return rung(ladder, candidate) - rung(ladder, reference)
+    }
+
+    let low = Math.max(0, reference - 2)
+    let high = Math.min(furthest, reference + 2)
+    if (wanted <= movedAt(low)) next = low
+    else if (wanted >= movedAt(high)) next = high
+    else {
+      for (let i = 0; i < 12; i++) {
+        const middle = (low + high) / 2
+        if (movedAt(middle) < wanted) low = middle
+        else high = middle
+      }
+      next = (low + high) / 2
+    }
+
+    if (next <= 0 || next >= furthest) break
+    remaining -= wanted
+  }
+  return next
 }
 
 /** A line's mask, and whether anything of it is left to draw. */
@@ -422,15 +483,43 @@ export function Talking() {
   }, [here, data, messages.length])
 
   const [viewAge, setViewAgeState] = useState(0)
+  /** Exact read head, independent of the wider DOM window around it. */
   const viewAgeRef = useRef(0)
+  /** Centre of that DOM window; it only moves near an edge, never per line. */
+  const windowAgeRef = useRef(0)
   const [awayFromNewest, setAwayFromNewest] = useState(false)
   const awayRef = useRef(false)
+  /** Pixels a second still to be travelled after the finger has left. */
+  const glide = useRef(0)
 
   const showAge = (age: number) => {
     const furthest = Math.max(0, messages.length - 1)
     const next = Math.max(0, Math.min(furthest, age))
     viewAgeRef.current = next
-    setViewAgeState(next)
+    const anchor = Math.round(next)
+    windowAgeRef.current = anchor
+    setViewAgeState(anchor)
+  }
+
+  const keepAgeRendered = (age: number) => {
+    const furthest = Math.max(0, messages.length - 1)
+    const next = Math.max(0, Math.min(furthest, age))
+    viewAgeRef.current = next
+
+    const anchor = windowAgeRef.current
+    const low = Math.max(0, Math.floor(anchor) - BELOW)
+    const high = Math.min(furthest, Math.ceil(anchor) + ABOVE)
+    // No guard is needed at a real end: there is nothing beyond it to mount.
+    // Elsewhere, shift while six already-positioned lines still overlap the
+    // incoming window, so React's bookkeeping never becomes a visible event.
+    const safeLow = low === 0 ? 0 : low + WINDOW_GUARD
+    const safeHigh = high === furthest ? furthest : high - WINDOW_GUARD
+    if (next >= safeLow && next <= safeHigh) return
+
+    const nextAnchor = Math.round(next)
+    if (nextAnchor === anchor) return
+    windowAgeRef.current = nextAnchor
+    setViewAgeState(nextAnchor)
   }
 
   const showAway = (away: boolean) => {
@@ -440,6 +529,7 @@ export function Talking() {
   }
 
   const goNewest = () => {
+    glide.current = 0
     toNewest()
     showAge(0)
     showAway(false)
@@ -507,45 +597,30 @@ export function Talking() {
   const surface = useRef<HTMLDivElement>(null)
   const column = useRef<HTMLDivElement>(null)
 
-  const moveWalk = (amount: number) => {
+  const scrollMetrics = useRef<{ ages: number[]; heights: number[]; air: number }>({
+    ages: [],
+    heights: [],
+    air: AIR,
+  })
+
+  const moveWalkByPixels = (pixels: number) => {
     const furthest = Math.max(0, messages.length - 1)
-    walk.to = Math.max(0, Math.min(furthest, walk.to + amount))
-    if (Math.abs(walk.to - viewAgeRef.current) >= 2) showAge(Math.round(walk.to))
+    const metrics = scrollMetrics.current
+    walk.to = headAfterPixelMove(
+      metrics.ages,
+      metrics.heights,
+      metrics.air,
+      walk.to,
+      pixels,
+      furthest,
+    )
+    keepAgeRendered(walk.to)
     showAway(walk.to > 1.1)
     wakeWorld()
   }
 
-  /*
-    How many pixels one message is worth, right where the reading is.
-
-    ---------------------------------------------------------------------------
-    **This is the whole reason the scrolling felt wrong.** Dragging used to
-    convert the finger straight into *messages* — `dy × 0.027`, so 37 px of
-    thumb was always one message, whether that message was the word "k" at
-    twenty pixels tall or a paragraph at a hundred and seventy. So the sky moved
-    at a completely different speed depending on what happened to be under your
-    hand, and on a normal run of short lines it moved about twice as fast as the
-    finger did. That is what "going past your fingers" is: the content is not
-    attached to the hand at all, it is being *driven* by it at a made-up gain.
-    Making the easing quicker cannot fix that; it makes it worse, because the
-    thing arriving faster is still the wrong distance.
-
-    So the drag is measured in pixels and divided by what a message is actually
-    worth in pixels here. Move the thumb one centimetre and the sky moves one
-    centimetre — always, at every point in the conversation, through paragraphs
-    and one-word answers alike. There is nothing to tune and nothing to get used
-    to, which is what "adaptive" really means.
-
-    Read off the same ladder that draws the column, at the read head, so it
-    already accounts for how much things have shrunk back there.
-    ---------------------------------------------------------------------------
-  */
-  const pixelsPerMessage = useRef(64)
-  const dragBy = (pixels: number) => moveWalk(pixels / Math.max(18, pixelsPerMessage.current))
-
-  /** Pixels a second still to be travelled after the finger has left. */
-  const glide = useRef(0)
-
+  /* Pointer and wheel movement stay in pixels all the way into the ladder.
+     There is no message-height multiplier to change beneath the gesture. */
   useEffect(() => {
     if (!here) return
     const root = surface.current
@@ -555,10 +630,19 @@ export function Talking() {
       // Down through the wheel is back through time, the way a scrollback goes.
       e.preventDefault()
       glide.current = 0
-      dragBy(e.deltaY)
+      const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 16
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? root.clientHeight
+          : 1
+      moveWalkByPixels(e.deltaY * unit)
+      // A trackpad is already an exact, inertial stream. Easing another motion
+      // behind it makes the page feel detached from the fingers producing it.
+      walk.at = walk.to
     }
 
     let dragging = false
+    let pointerId: number | null = null
     let lastY = 0
     let lastAt = 0
     /*
@@ -574,7 +658,9 @@ export function Talking() {
 
     const down = (e: PointerEvent) => {
       if ((e.target as HTMLElement)?.closest('button, input, textarea, a')) return
+      if (pointerId !== null) return
       dragging = true
+      pointerId = e.pointerId
       lastY = e.clientY
       lastAt = performance.now()
       recent.length = 0
@@ -583,7 +669,7 @@ export function Talking() {
       glide.current = 0
     }
     const move = (e: PointerEvent) => {
-      if (!dragging) return
+      if (!dragging || e.pointerId !== pointerId) return
       const dy = e.clientY - lastY
       lastY = e.clientY
       lastAt = performance.now()
@@ -596,12 +682,13 @@ export function Talking() {
         nothing to ease *to*: the hand knows where the sky should be, and any
         lag between the two is the sky sliding under the thumb.
       */
-      dragBy(dy)
+      moveWalkByPixels(dy)
       walk.at = walk.to
     }
-    const up = () => {
-      if (!dragging) return
+    const up = (e: PointerEvent) => {
+      if (!dragging || e.pointerId !== pointerId) return
       dragging = false
+      pointerId = null
       /*
         And then it keeps going, and stops the way a heavy thing stops.
 
@@ -621,6 +708,13 @@ export function Talking() {
         has no such sample — a slow drag, or a tap — it simply stops where it
         was put, which is the honest answer.
       */
+      // Pausing at the end means "stop here", not "repeat the speed I had a
+      // moment ago". Without this, lifting after reading under a held finger
+      // could launch an old flick that had already visibly ended.
+      if (performance.now() - lastAt > 80) {
+        glide.current = 0
+        return
+      }
       const oldest = recent.find((sample) => lastAt - sample.at >= 30)
       if (!oldest) return
       const span = (lastAt - oldest.at) / 1000
@@ -684,6 +778,7 @@ export function Talking() {
         ages = lines.map((el) => Number(el.dataset.age ?? '0'))
         heights = lines.map((el) => el.offsetHeight)
         air = window.innerWidth <= 544 ? 18 : AIR
+        scrollMetrics.current = { ages, heights, air }
       }
 
       /*
@@ -755,9 +850,24 @@ export function Talking() {
     // A rotated phone, a font that arrived late, or a quote that wrapped
     // differently all change the rungs; the observer catches all three.
     const watch = new ResizeObserver(remeasure)
+    const observedLines = new Set<Element>()
+    const syncObservedLines = () => {
+      const current = new Set<Element>(column.current?.children ?? [])
+      for (const line of observedLines) {
+        if (!current.has(line)) {
+          watch.unobserve(line)
+          observedLines.delete(line)
+        }
+      }
+      for (const line of current) {
+        if (observedLines.has(line)) continue
+        observedLines.add(line)
+        watch.observe(line)
+      }
+    }
     if (column.current) {
       watch.observe(column.current)
-      for (const kid of column.current.children) watch.observe(kid)
+      syncObservedLines()
     }
     for (const control of document.querySelectorAll<HTMLElement>(
       '.leave-place, .player, .start-saying, .saying',
@@ -768,6 +878,16 @@ export function Talking() {
     for (const control of document.querySelectorAll<HTMLElement>('.corner, .player')) {
       classes.observe(control, { attributes: true, attributeFilter: ['class'] })
     }
+    /*
+      Windowing no longer restarts this effect. When its overlapping edge does
+      eventually move, measure the arriving children into this same clock so
+      there is no blank frame and no interruption to the gesture.
+    */
+    const content = new MutationObserver(() => {
+      syncObservedLines()
+      remeasure()
+    })
+    if (column.current) content.observe(column.current, { childList: true })
 
     let lastFrame = 0
     let settledFrames = 0
@@ -792,6 +912,19 @@ export function Talking() {
       lastFrame = now
       const root = column.current
       if (!root) return
+
+      /* Advance momentum before deriving layout. Previously the ladder was
+         built from the prior head and then `walk.at` changed underneath it,
+         giving every glide frame a small but visible one-frame judder. */
+      if (glide.current !== 0) {
+        moveWalkByPixels(glide.current * step)
+        glide.current *= Math.exp(-GLIDE_DECAY * step)
+        walk.at = walk.to
+        const furthest = Math.max(0, ages.length > 0 ? walk.count - 1 : 0)
+        if (Math.abs(glide.current) < 24 || walk.to <= 0 || walk.to >= furthest) {
+          glide.current = 0
+        }
+      }
 
       /*
         Keep the read head beside the composer without choosing a new anchor
@@ -818,49 +951,6 @@ export function Talking() {
       const up = buildLadder(ages, heights, walk.at, air)
       const head = rung(up, walk.at)
 
-      /*
-        What a message is worth in pixels, here — *measured*, not estimated.
-
-        The obvious answer is the distance between two rungs, and it is wrong,
-        because walking also changes the ladder: every line comes forward a
-        little as it approaches the head, so the rungs themselves spread out
-        underneath the movement and quietly cancel part of it. Taking the rung
-        spacing as the answer moved the sky about two thirds as far as the
-        finger — better than the fixed gain it replaced, and still not the hand.
-
-        So it is differenced properly: build the ladder half a step either side
-        of where the walk is, ask how far one piece of content actually travels
-        between the two, and divide by the step. Two extra passes over a dozen
-        numbers, once a frame, for a drag that is exactly the hand.
-      */
-      const seen = walk.at + 3
-      const back = buildLadder(ages, heights, walk.at - 0.5, air)
-      const forth = buildLadder(ages, heights, walk.at + 0.5, air)
-      pixelsPerMessage.current = Math.max(
-        18,
-        Math.abs(
-          (rung(forth, walk.at + 0.5) - rung(forth, seen)) -
-            (rung(back, walk.at - 0.5) - rung(back, seen)),
-        ),
-      )
-
-      /*
-        The glide, if a finger let go of it moving.
-
-        Exponential decay rather than a fixed deceleration, because a flick
-        should carry a long way and then ease off rather than travel at speed
-        and stop dead. It is cut the moment the walk reaches either end — the
-        sky does not bounce, it simply arrives.
-      */
-      if (glide.current !== 0) {
-        dragBy(glide.current * step)
-        glide.current *= Math.exp(-GLIDE_DECAY * step)
-        walk.at = walk.to
-        const furthest = Math.max(0, ages.length > 0 ? walk.count - 1 : 0)
-        if (Math.abs(glide.current) < 24 || walk.to <= 0 || walk.to >= furthest) {
-          glide.current = 0
-        }
-      }
       /*
         Where the newest message ends, so the writing light can sit under it.
 
@@ -1046,6 +1136,7 @@ export function Talking() {
       stopListening()
       watch.disconnect()
       classes.disconnect()
+      content.disconnect()
       window.removeEventListener('resize', fitViewport)
       viewport?.removeEventListener('resize', fitViewport)
       viewport?.removeEventListener('scroll', fitViewport)
@@ -1059,7 +1150,7 @@ export function Talking() {
       the light was mounted, correct, and left at the opacity it starts at —
       in the DOM, passing its test, and invisible on the screen.
     */
-  }, [here, messages, composing, idle, viewAge, writing])
+  }, [here, messages, composing, idle, writing])
 
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')
@@ -1165,21 +1256,34 @@ export function Talking() {
     field.current?.focus()
   }
 
+  const messagesById = useMemo(
+    () => new Map(messages.map((message) => [message.id, message])),
+    [messages],
+  )
+
   const lines = useMemo(() => {
     const newest = messages.length - 1
     const low = Math.max(0, Math.floor(viewAge) - BELOW)
     const high = Math.min(messages.length - 1, Math.ceil(viewAge) + ABOVE)
-    return messages
-      .map((m, i) => ({
+    const firstIndex = Math.max(0, newest - high)
+    const afterLastIndex = Math.min(messages.length, newest - low + 1)
+    // Build only the overlapping DOM runway. The old map-then-filter walked
+    // the entire history—and searched it again for every reply—whenever the
+    // window moved, putting main-thread work directly inside a fast flick.
+    const visible = []
+    for (let i = firstIndex; i < afterLastIndex; i++) {
+      const m = messages[i]
+      visible.push({
         m,
         age: newest - i,
         stamped: marksTime(m.at, i > 0 ? messages[i - 1].at : null),
         // Resolved against the same list it is drawn from, so a quote can
         // never show words that are not in this conversation.
-        answering: messageById(messages, m.replyTo ?? null),
-      }))
-      .filter(({ age }) => age >= low && age <= high)
-  }, [messages, viewAge])
+        answering: m.replyTo ? (messagesById.get(m.replyTo) ?? null) : null,
+      })
+    }
+    return visible
+  }, [messages, messagesById, viewAge])
 
   /*
     The one she left most recently, if it is newer than anything you have been
@@ -1209,6 +1313,7 @@ export function Talking() {
   const openReply = (id: string) => {
     const index = messages.findIndex((message) => message.id === id)
     if (index < 0) return
+    glide.current = 0
     const age = messages.length - 1 - index
     const distance = age - walk.at
     walk.to = age
