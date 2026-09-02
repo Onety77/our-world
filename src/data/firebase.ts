@@ -110,8 +110,9 @@ import {
   isQuestionWaiting,
   questionExpiresAt,
 } from './questionOrder'
-import { AMBIENCE_KEYS, HEART } from './types'
+import { AMBIENCE_KEYS } from './types'
 import { presenceBody, readPresence } from './presence'
+import { markPatch, readMessage } from './messages'
 import { newId } from './ids'
 import {
   RALLY_STREAM_INTERVAL,
@@ -1731,28 +1732,16 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         (snap) => {
           const messages = snap.docs
             .map((d) => {
-              const raw = d.data() as Record<string, unknown>
-              const body = str(raw.body, '')
-              if (body === '') return null
-              const raws = raw.hearts as Record<string, unknown> | undefined
               /*
-                Absent rather than present-and-undefined.
+                Read by `data/messages`, beside the thing that writes it.
 
-                `{ replyTo: undefined }` is not the same shape as `{}` to
-                TypeScript's optional properties, and a `satisfies Message`
-                on the first one fails — which is the type system pointing at
-                something real: a message with an explicit undefined reply is
-                a message that has been asked about its reply and answered
-                "none", and that is not what a message with no reply is.
+                This used to be spelled out here and did not know about
+                `marks`, so every emoji was written correctly, came back
+                correctly, and was dropped on the way in — leaving only
+                `hearts`, which draws as a heart. Reported as "whatever emoji
+                i tap, its only the heart that appears".
               */
-              const hearts: Message['hearts'] = {}
-              if (typeof raws?.warm === 'number') hearts.warm = raws.warm
-              if (typeof raws?.cool === 'number') hearts.cool = raws.cool
-
-              const message: Message = { id: d.id, by: userId(raw.by), body, at: num(raw.at, 0) }
-              if (typeof raw.replyTo === 'string') message.replyTo = raw.replyTo
-              if (hearts.warm !== undefined || hearts.cool !== undefined) message.hearts = hearts
-              return message
+              return readMessage(d.id, d.data())
             })
             .filter((m): m is Message => m !== null)
             .reverse()
@@ -1792,12 +1781,9 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       rules only ever let you write your own key; see firestore.rules.
     */
     async heartMessage(id, on, mark) {
-      await updateDoc(doc(db, MESSAGES, id), {
-        [`hearts.${me}`]: on ? now() : deleteField(),
-        // A heart leaves no mark, so a message reacted to before there was a
-        // choice and one hearted today are the same shape on the wire.
-        [`marks.${me}`]: on && mark && mark !== HEART ? mark : deleteField(),
-      })
+      // The dotted paths come from `markPatch`, which is also what the
+      // `affectedKeys` list in firestore.rules has to agree with.
+      await updateDoc(doc(db, MESSAGES, id), markPatch(me, on, mark, now(), deleteField()))
     },
 
     async markMessagesRead() {

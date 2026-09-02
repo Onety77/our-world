@@ -1,5 +1,5 @@
 /**
- * Everything presence sends, it can read back.
+ * Everything that crosses a seam, sent and read back.
  *
  * -----------------------------------------------------------------------------
  * This exists because the same bug has now happened twice, in both directions,
@@ -25,7 +25,7 @@
  * So: round-trip every field, and walk the list rather than writing it out
  * again here — a list written twice is the thing that got us into this.
  *
- *   npm run presence
+ *   npm run seams
  * -----------------------------------------------------------------------------
  */
 
@@ -36,6 +36,8 @@ import {
   presenceBody,
   readPresence,
 } from '../src/data/presence'
+import { TRAVELS as MESSAGE_FIELDS, markPatch, readMessage } from '../src/data/messages'
+import { HEART } from '../src/data/types'
 import type { Presence } from '../src/data/types'
 
 let failed = 0
@@ -136,6 +138,87 @@ console.log('\nand the awkward ones\n')
     readPresence('warm', { online: true, lastSeen: NOW, typing: 0 }, NOW).typing === undefined)
   ok('and neither is a string',
     readPresence('warm', { online: true, lastSeen: NOW, typing: 'yes' }, NOW).typing === undefined)
+}
+
+console.log('')
+console.log('a message, there and back')
+console.log('')
+
+{
+  /*
+    The fourth instance of this bug, and why this file grew a second half.
+    `marks` was written to Firestore, allowed by the rules, and then dropped
+    by a reader that spelled its fields out by hand — so every emoji came back
+    as a heart. Nothing threw; the mock keeps whole objects and cannot have
+    the fault, so nothing a browser can run would have seen it.
+  */
+  const raw = {
+    by: 'cool',
+    body: 'wat word ends in rt',
+    at: 1_700_000_000_000,
+    replyTo: 'said-abc',
+    hearts: { warm: 1_700_000_000_100, cool: 1_700_000_000_200 },
+    marks: { warm: '😂', cool: '💀' },
+  }
+  const back = readMessage('m1', raw)
+  ok('a message reads back at all', back !== null)
+  if (back) {
+    for (const field of MESSAGE_FIELDS) {
+      const sent = (raw as Record<string, unknown>)[field]
+      const read = (back as unknown as Record<string, unknown>)[field]
+      ok(
+        field + ' survives the round trip',
+        JSON.stringify(sent) === JSON.stringify(read),
+        'sent ' + JSON.stringify(sent) + ', read back ' + JSON.stringify(read),
+      )
+    }
+    ok('and the mark that came back is the one that was sent, not a heart',
+      back.marks?.warm === '😂', JSON.stringify(back.marks))
+  }
+
+  ok('a message with no body is not a message', readMessage('m2', { by: 'warm', at: 1 }) === null)
+  ok('and neither is nothing at all', readMessage('m3', null) === null)
+
+  const bare = readMessage('m4', { by: 'warm', body: 'hi', at: 1 })
+  ok('no hearts reads back as absent, not empty', bare?.hearts === undefined)
+  ok('and no marks likewise', bare?.marks === undefined)
+  ok('a blank mark is not a mark',
+    readMessage('m5', { by: 'warm', body: 'hi', at: 1, marks: { warm: '' } })?.marks === undefined)
+}
+
+console.log('')
+console.log('leaving one, and taking it back')
+console.log('')
+
+{
+  const GONE = '<deleted>'
+  const laugh = markPatch('warm', true, '😂', 500, GONE)
+  ok('a mark writes the glyph', laugh['marks.warm'] === '😂', JSON.stringify(laugh))
+  ok('and stamps the heart map, which is what "reacted" means',
+    laugh['hearts.warm'] === 500, JSON.stringify(laugh))
+
+  /*
+    A heart writes no mark. That is what keeps a message reacted to before
+    there was any choice of glyph the same shape on the wire as one hearted
+    today, and is why `markBy` needs no special case for the old ones.
+  */
+  const heart = markPatch('warm', true, HEART, 500, GONE)
+  ok('a heart leaves no mark behind', heart['marks.warm'] === GONE, JSON.stringify(heart))
+
+  const undo = markPatch('warm', false, '😂', 500, GONE)
+  ok('taking it back clears both', undo['hearts.warm'] === GONE && undo['marks.warm'] === GONE,
+    JSON.stringify(undo))
+
+  ok('and it only ever touches your own keys',
+    Object.keys(laugh).every((k) => k.endsWith('.warm')), Object.keys(laugh).join(' '))
+  /*
+    These two prefixes are also what `firestore.rules` names in its
+    `affectedKeys` list. They were added here and not there once already, and
+    every emoji tap was refused until somebody tried it on a phone.
+  */
+  ok('under exactly the two maps the rules allow',
+    Object.keys(laugh).every((k) => k.startsWith('hearts.') || k.startsWith('marks.')),
+    Object.keys(laugh).join(' '))
 }
 
 console.log(failed === 0 ? '\nall good\n' : `\n${failed} failed\n`)

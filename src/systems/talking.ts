@@ -131,6 +131,74 @@ export { HEART }
 
 export const MARKS = ['♥', '😂', '💀', '👍', '💃', '🫤'] as const
 
+/**
+ * The newest thing she has reacted to that you have not been shown.
+ *
+ * =============================================================================
+ * **A reaction on an old message is invisible.** The Stars is a sky you walk
+ * back through, so a heart she puts on something from Tuesday lands on a line
+ * that is four hundred metres above your head. She has answered you and there
+ * is no way for you to know.
+ *
+ * Which matters more here than it would in an ordinary chat, because reacting
+ * is *most* of what happens to an old message — you do not reply to something
+ * from Tuesday, you put a face on it.
+ *
+ * So the newest one she has left is found, compared against the last one you
+ * were shown, and offered as somewhere to go. `hearts` already carries the time
+ * each reaction was left, so **no new field crosses the wire for this** — which,
+ * after four bugs in two days caused by exactly that, is most of why it is
+ * built this way round.
+ *
+ * "Have I seen it" is a fact about *you looking*, not about the world, so it is
+ * kept on the device that did the looking. That is also why it needs no rules,
+ * no validation and no reader — see `data/messages` for what those cost.
+ * =============================================================================
+ */
+export interface UnseenMark {
+  id: string
+  mark: string
+  at: number
+}
+
+export function newestMarkFrom(
+  messages: Message[],
+  them: UserId,
+  seenUpTo: number,
+): UnseenMark | null {
+  let best: UnseenMark | null = null
+  for (const message of messages) {
+    const at = message.hearts?.[them]
+    if (typeof at !== 'number' || at <= seenUpTo) continue
+    /*
+      Her own messages count too. She reacts to things she said herself — a
+      laugh at her own line half a day later is a real thing people do, and it
+      is as much worth walking back to as one she left on yours.
+    */
+    if (best === null || at > best.at) {
+      best = { id: message.id, mark: markBy(message, them) ?? HEART, at }
+    }
+  }
+  return best
+}
+
+/** Where this device got to. Local, because it is about your eyes. */
+const SEEN_KEY = 'garden:marks-seen:v1'
+
+export function marksSeenUpTo(): number {
+  if (typeof localStorage === 'undefined') return 0
+  const raw = Number(localStorage.getItem(SEEN_KEY))
+  return Number.isFinite(raw) && raw > 0 ? raw : 0
+}
+
+export function rememberMarksSeen(at: number): void {
+  try {
+    localStorage.setItem(SEEN_KEY, String(at))
+  } catch {
+    /* it still holds for this session */
+  }
+}
+
 /** What `who` left on this message, or null if they left nothing. */
 export function markBy(message: Message, who: UserId): string | null {
   if (!heartedBy(message, who)) return null

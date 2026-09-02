@@ -4804,51 +4804,53 @@ body:has(.talking) .leave-place {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.34rem;
   /* Her side. Mine are right-aligned; see `.said.mine`. */
   justify-content: flex-start;
-  /*
-    ==========================================================================
-    **In the serif, because it is a message that has not arrived yet.**
-
-    It was set in the sans, small, uppercase and widely tracked — which is this
-    garden's voice for *machinery*: the clocks, the counts, the labels on
-    controls. Correct for a status line and wrong for this, and reported as
-    "I can't find it anywhere", which is the politest possible way of being
-    told something is invisible.
-
-    Everything else about it already says *her next message*: it stands where
-    that message will land, on her side, in her colour, under a light that has
-    not finished forming. Setting it in the face her messages are actually
-    written in finishes the thought — and makes it legible at a glance on a
-    phone in daylight, which the six-tenths-of-a-rem version was not.
-
-    Held a little back from the full brightness of a real message, because it
-    is not one yet.
-    ==========================================================================
-  */
-  font-family: var(--serif);
-  font-size: 0.98rem;
-  letter-spacing: 0;
-  text-transform: none;
-  color: rgba(169, 192, 255, 0.9);
-  text-shadow: var(--lift);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
+/* The words, for anything reading the page aloud. Three lights say nothing. */
+.sky-writing-said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* The light itself, in her colour, because a message here *is* a light. */
 .sky-writing i {
-  /* The same size as the lights the messages themselves hang from. */
-  width: 0.52rem;
-  height: 0.52rem;
+  /*
+    The same lights the messages hang from, and not yet as bright as one.
+
+    A message's light is full strength and stays lit for good. These are on
+    their way, so they sit under it and breathe — the middle of the range
+    rather than the top of it, which is the difference between *arriving* and
+    *arrived*.
+  */
+  width: 0.44rem;
+  height: 0.44rem;
   flex: 0 0 auto;
   border-radius: 50%;
   background: #a9c0ff;
-  box-shadow: 0 0 1rem rgba(150, 180, 250, 0.9), 0 0 2.6rem rgba(120, 160, 245, 0.5);
-  animation: forming 2.6s ease-in-out infinite;
+  box-shadow: 0 0 0.7rem rgba(150, 180, 250, 0.75), 0 0 1.8rem rgba(120, 160, 245, 0.4);
+  animation: forming 1.9s ease-in-out infinite;
 }
+
+/*
+  Staggered, and that is the whole reason it reads as somebody typing.
+
+  Three lights breathing together is a pulse — a thing with a heartbeat, which
+  is what the presence lights in the corner already are. Offset by a third of
+  the cycle each, the brightness travels along the row, and a thing travelling
+  left to right in the direction her words will be written is *coming*.
+*/
+.sky-writing i:nth-child(2) { animation-delay: 0.63s; }
+.sky-writing i:nth-child(3) { animation-delay: 1.26s; }
 
 @media (prefers-reduced-motion: reduce) {
   .sky-writing i { animation: none; }
@@ -7524,19 +7526,38 @@ body:has(.talking) .leave-place {
 
 .said-hearts {
   display: inline-flex;
-  gap: 0.14em;
+  gap: 0.18em;
   margin-left: 0.45em;
-  font-size: 0.72em;
+  /* Was 0.72em, which on a phone is about eight pixels of emoji. */
+  font-size: 0.95em;
   line-height: 1;
   vertical-align: baseline;
 }
 
+/*
+  Under the message, at the end it starts from — not floating in the middle.
+
+  ---------------------------------------------------------------------------
+  It was centred, which on a right-aligned message of yours put the mark
+  somewhere out in the middle of the sky with nothing under it, attached to
+  nothing. A reaction belongs to a line and should hang off it, so it takes
+  the same side the message does: hers begin at the left, yours end at the
+  right, and the mark sits under the end each one starts from.
+
+  And it was small — 0.72 of an already small line, which on a phone is about
+  eight pixels of emoji. It is the whole content of the gesture; drawn that
+  timidly it reads as an artefact rather than as somebody answering you.
+  ---------------------------------------------------------------------------
+*/
 .said .said-hearts {
-  /* Flex, so `justify-content` below is not a no-op on a block. */
   display: flex;
-  justify-content: center;
-  margin: 0.2rem 0 0;
+  margin: 0.28rem 0 0;
+  font-size: 1.05em;
+  gap: 0.2em;
 }
+
+.said.hers .said-hearts { justify-content: flex-start; }
+.said.mine .said-hearts { justify-content: flex-end; }
 
 .said-hearts i {
   font-style: normal;
@@ -7562,7 +7583,10 @@ body:has(.talking) .leave-place {
 */
 .said-hearts i.glyph {
   color: inherit;
-  font-size: 0.92em;
+  /* Emoji are drawn small for their point size; this brings them level with
+     the heart beside them rather than leaving them looking like a footnote. */
+  font-size: 1.15em;
+  line-height: 1;
   text-shadow: 0 1px 3px rgba(4, 6, 12, 0.85);
 }
 
@@ -7745,6 +7769,78 @@ body:has(.talking) .leave-place {
 
 .said-delivery.failed {
   color: rgba(255, 164, 124, 0.78);
+}
+
+/*
+  She reacted to something, and it is a long way up.
+
+  ---------------------------------------------------------------------------
+  Sits above the "back to the newest" button and is built the same way, because
+  the two are the same kind of thing: the only two controls in this place that
+  point *somewhere else in the sky*. Same size, same glass, same corner — so
+  finding one teaches you the other.
+
+  It wears the mark she actually left rather than a generic badge, which is the
+  whole difference between "you have something" and "she laughed". One is an
+  errand and the other is the reason you built this.
+
+  A soft ring travels out of it, once, slowly. Not to demand attention —
+  nothing here does — but because a thing that simply appeared in a corner of a
+  dark sky can be sat next to for an hour without being noticed.
+  ---------------------------------------------------------------------------
+*/
+.talking-mark {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(9.1rem, calc(env(safe-area-inset-bottom) + 8.55rem));
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid rgba(255, 213, 162, 0.28);
+  border-radius: 50%;
+  background: rgba(24, 14, 8, 0.62);
+  box-shadow: 0 0.8rem 2.2rem rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  pointer-events: auto;
+  animation: drift-in 0.5s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.talking-mark span {
+  font-size: 1.2rem;
+  line-height: 1;
+  /*
+    An emoji brings its own colours; the heart does not, and inherits — which
+    on this dark glass came out very nearly black. Warm, like every other mark
+    of hers the garden draws.
+  */
+  color: #ff9d6b;
+  text-shadow: 0 0 10px rgba(255, 130, 70, 0.55);
+}
+
+/* The ring, once every few seconds, going out and fading. */
+.talking-mark::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 213, 162, 0.5);
+  animation: mark-ring 3.4s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes mark-ring {
+  0%        { transform: scale(1);    opacity: 0.6; }
+  55%, 100% { transform: scale(1.55); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talking-mark { animation-duration: 0.01ms; }
+  .talking-mark::after { animation: none; opacity: 0.35; }
 }
 
 .talking-newest {

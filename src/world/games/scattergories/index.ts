@@ -56,11 +56,11 @@ export default {
   id: 'scattergories',
   name: 'Scattergories',
   blurb:
-    'One letter, twelve categories, three minutes. Whatever you both wrote scores nothing.',
+    'One letter, twelve categories, five minutes. Whatever you both wrote scores nothing.',
   /*
     Two people, at the same time, or not at all.
 
-    This was `async`, with a "roll for {them}" that wrote your three minutes
+    This was `async`, with a "roll for {them}" that wrote your five minutes
     now and let her write hers whenever she next came down. It worked, and it
     was the wrong game.
 
@@ -77,7 +77,7 @@ export default {
   */
   mode: 'live',
   cadence: 'daily',
-  duration: 'two rounds, three minutes each',
+  duration: 'two rounds, five minutes each',
   order: 2,
 
   live: {

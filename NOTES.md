@@ -40,6 +40,99 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · the fourth one, and a place to put the seam
+
+> *"whatever emoji i tap to do the reaction with, its only the heart that
+> appears"*
+
+`watchMessages` built a `Message` field by field and did not know about
+`marks`. So every emoji was written correctly, allowed by the rules,
+round-tripped through Firestore, and dropped on the way in — leaving only
+`hearts`, which `markBy` renders as a heart.
+
+**That is the fourth time in two days**: `racing` written down and never
+sent, `typing` sent and never read, `marks` written and refused by the
+rules, and now `marks` allowed and never read. All four worked perfectly
+against the mock, which keeps whole objects and has no rules in it, and all
+four were found by somebody on a phone.
+
+So messages got the same treatment presence did: `data/messages` holds the
+reader and the write-patch side by side with no Firebase in them, and
+`npm run seams` — renamed, because it is not only about presence now —
+round-trips **every** field through both, walking an exported list rather than
+one retyped in the test. A field written and not read, or read and never
+written, is a failing check.
+
+It also asserts the patch only ever touches keys under `hearts.` and
+`marks.`, which are the two strings `firestore.rules` names in its
+`affectedKeys` list — the other half of the same bug.
+
+### And the marks themselves
+
+**Centred, so they floated.** On a right-aligned message of yours the row sat
+out in the middle of the sky attached to nothing. They hang off the same end
+the message starts from now — hers at the left, yours at the right.
+
+**And tiny.** 0.72 of an already small line, about eight pixels of emoji on a
+phone. It is the entire content of the gesture and it was drawn like a
+footnote.
+
+### She reacted to something a long way up
+
+A reaction on an old line is invisible in a sky you walk back through: it lands
+hundreds of metres over your head and nothing at the bottom says so. Which
+matters more here than in an ordinary chat, because reacting is *most* of what
+happens to an old message — you do not reply to something from Tuesday, you put
+a face on it.
+
+There is one control for it, above "back to the newest" and built the same way,
+because they are the only two things in this place that point somewhere else in
+the sky. It wears **the mark she actually left** rather than a badge — the
+difference between "you have something" and "she laughed" — and pressing it
+walks you to the line.
+
+Then it is gone. Not a count and not a queue: if she leaves three while you are
+asleep, the newest is the one worth walking to and the others are on the way
+past. A number in a circle would make this an inbox.
+
+**No new field crosses the wire for it.** `hearts` already carries when each
+reaction was left, and "have I seen it" is a fact about your eyes rather than
+about the world, so it lives on the device. After four bugs in two days caused
+by adding fields to seams, that is most of why it is built this way round.
+
+### Scattergories
+
+Three minutes to five. Twelve categories against one letter is a lot of
+thinking, and the glass ran out with half the sheet blank often enough that the
+round was about writing fast rather than about finding answers. Five is long
+enough to get stuck on one, give up, and come back — which is where the good
+ones are.
+
+## 2 Sep · Claude · three lights instead of a name
+
+I argued against three dots on the grounds that they are somebody else's house
+style. That was right about the *dots* and wrong about the **Stars**, and the
+person looking at it every day said so.
+
+The name was in there because the corner and the film chat both say it in
+words, and consistency seemed like the point. It is not: those two are *made*
+of words — a fold showing the last thing said, a room with a transcript in it —
+and a row of dots in either would read as something broken. This place is made
+of lights. A message arrives here as one and stays lit; "Tife is writing" in
+the middle of that is a caption on a photograph.
+
+So the Stars gets three of the same lights, breathing in sequence, and no text
+at all. **Not bouncing** — nothing in this garden bounces, things breathe and
+drift — and the stagger is what carries it: three lights pulsing together is a
+heartbeat, which is what the presence lights already are, while a third of a
+cycle apart the brightness travels along the row in the direction her words
+will be written. It is the shape everyone already knows, built out of the one
+material this sky has.
+
+The words stay in the corner and the film chat, where the surroundings are
+words, and stay in the Stars for anything reading the page aloud, where three
+lights are worth nothing.
+
 ## 2 Sep · Claude · behind the keyboard, and refused by the rules
 
 Two reports, and the first one turned the previous entry's guess into a fact.

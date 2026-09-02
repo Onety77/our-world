@@ -3,7 +3,7 @@
  *
  * ---------------------------------------------------------------------------
  * **The real game, and the whole real game.** One letter, twelve categories,
- * three minutes, and two of those to a match. Matching answers cancel, unique
+ * five minutes, and two of those to a match. Matching answers cancel, unique
  * ones score, and repeating the letter across a multi-word answer pays extra.
  * What is different is not the rules — it is that the two people playing are
  * seven timezones apart, so a round has to survive one of them being asleep.
@@ -189,9 +189,9 @@ function useGlass(storeKey: string, live: boolean) {
 
     **Once a second, not once a frame.** The first cut set state every frame,
     which re-rendered the twelve inputs, the notches and the whole sheet sixty
-    times a second for three minutes — the exact thing the technical law is
+    times a second for five minutes — the exact thing the technical law is
     about, on the one screen in this game where somebody is typing. It buys
-    nothing: the sand moves the height of the glass over three minutes, so a
+    nothing: the sand moves the height of the glass over five minutes, so a
     frame of it is a fifth of a pixel, and the only other reader is a clock
     that shows whole seconds. The frame loop stays, because it is what makes
     the arithmetic honest across a stall; only the *publishing* is throttled.
@@ -432,9 +432,9 @@ function Writing({
 
     "Roll together" used to mean nothing more than two people opening the same
     match: each of you then met your own `turn the glass` screen and started
-    your own three minutes whenever you happened to press. Nobody lost time by
+    your own five minutes whenever you happened to press. Nobody lost time by
     it — the glass is per-device and you each got your full three — but the
-    mode's whole promise is the same three minutes, and it was not keeping it.
+    mode's whole promise is the same five minutes, and it was not keeping it.
 
     It mattered more than a broken promise, because `useGlass` gives up its
     pause for this. In an asynchronous round a phone call stops the clock; in a
@@ -454,7 +454,7 @@ function Writing({
     Leaving the room the moment both of you were ready meant the countdown —
     the one part of this that tells you it is about to start — was on screen
     for no frames at all. You went from "waiting" to a sheet of twelve blank
-    categories with three minutes already running.
+    categories with five minutes already running.
   */
   const waitingForHer = lobbyKey !== null && !lobby.go
 
@@ -495,7 +495,7 @@ function Writing({
   }, [])
 
   // Saved on every keystroke. A refresh mid-round must not cost the sheet —
-  // it is three minutes of somebody's evening.
+  // it is five minutes of somebody's evening.
   useEffect(() => {
     try {
       localStorage.setItem(storeKey, JSON.stringify(answers))
@@ -578,7 +578,7 @@ function Writing({
               Everything begins with <b>{deal.letter}</b>.
             </p>
             <p className="game-sub">
-              twelve of them, three minutes, and the glass only starts when you say
+              twelve of them, five minutes, and the glass only starts when you say
             </p>
           </div>
         </div>
@@ -725,7 +725,7 @@ function Waiting({
         <p className="game-sub">round {round + 1} of {ROUNDS}</p>
         <h1 className="scatter-title">Yours is under the cover.</h1>
         <p className="game-ask">
-          {them}&rsquo;s three minutes are {say('{hers}')} to turn. Neither list
+          {them}&rsquo;s five minutes are {say('{hers}')} to turn. Neither list
           opens until both are in.
         </p>
       </div>

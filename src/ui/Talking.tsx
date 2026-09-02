@@ -30,7 +30,7 @@ import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { gaze } from '@/systems/pointerLook'
 import { useTakenOver } from '@/systems/attention'
-import { HEART, markBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
+import { newestMarkFrom, marksSeenUpTo, rememberMarksSeen, HEART, markBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
 import { useSaidGestures } from './Said'
 import { Ink } from './Ink'
 import { shouldTell, tell } from '@/systems/notify'
@@ -385,6 +385,16 @@ export function Talking() {
     because an empty document has no indicator in it either.
   */
   const writing = useTheyAreTyping()
+
+  /*
+    Something she has reacted to that you have not been shown.
+
+    Kept as a piece of state rather than derived on every render because
+    dismissing it has to *stick* while the messages keep arriving: the moment
+    you have walked to it, it is seen, and a fresh derivation from the message
+    list would put it straight back.
+  */
+  const [seenMarks, setSeenMarks] = useState(marksSeenUpTo)
   const startWriting = useTalking((s) => s.startWriting)
   const stopWriting = useTalking((s) => s.stopWriting)
   const replyTo = useTalking((s) => s.replyTo)
@@ -1171,6 +1181,31 @@ export function Talking() {
       .filter(({ age }) => age >= low && age <= high)
   }, [messages, viewAge])
 
+  /*
+    The one she left most recently, if it is newer than anything you have been
+    shown. Recomputed from the messages, so it disappears by itself when she
+    takes a reaction back.
+  */
+  const unseen = useMemo(
+    () => newestMarkFrom(messages, me === 'warm' ? 'cool' : 'warm', seenMarks),
+    [messages, me, seenMarks],
+  )
+
+  const goToMark = () => {
+    if (!unseen) return
+    /*
+      Marked seen on the way, not on arrival.
+
+      The alternative is to wait until the message is actually on screen, and
+      it is worse in the case that matters: the walk takes a second and a half,
+      and a reaction that arrives during it would be swallowed by the same
+      dismissal. Pressing it is the act of having seen it.
+    */
+    rememberMarksSeen(unseen.at)
+    setSeenMarks(unseen.at)
+    openReply(unseen.id)
+  }
+
   const openReply = (id: string) => {
     const index = messages.findIndex((message) => message.id === id)
     if (index < 0) return
@@ -1258,11 +1293,63 @@ export function Talking() {
       */}
       {writing && (
         <div className="sky-writing-lane">
+          {/*
+            Three lights, and no words.
+
+            ==================================================================
+            The name was in it because the corner and the film chat both say
+            it in words and it seemed consistent. It is not: those two are
+            *made* of words — a fold that shows the last thing said, a room
+            with a transcript in it — and a row of dots in either would read as
+            something broken. This place is made of lights. A message here
+            arrives as one and stays lit; saying "Tife is writing" in the
+            middle of that is a caption on a photograph.
+
+            So: three of the same lights, breathing in sequence. Not bouncing —
+            nothing in this garden bounces, things breathe and drift — and the
+            stagger is what makes it read as *coming* rather than as three
+            things that happen to be pulsing. It is the shape everyone already
+            knows, built out of the one material this sky has.
+
+            The words stay for anything reading the page aloud, where three
+            lights are worth nothing.
+            ==================================================================
+          */}
           <p ref={writingRow} className="sky-writing" role="status">
             <i aria-hidden="true" />
-            {writingLine(them.name)}
+            <i aria-hidden="true" />
+            <i aria-hidden="true" />
+            <span className="sky-writing-said">{writingLine(them.name)}</span>
           </p>
         </div>
+      )}
+
+      {/*
+        She has reacted to something you have not seen.
+
+        =====================================================================
+        A reaction on an old line is invisible in a sky you walk back through —
+        it lands hundreds of metres above your head and nothing at the bottom
+        says so. This is the only thing in the Stars that *points somewhere*:
+        it wears the mark she actually left, and pressing it walks you to the
+        line she left it on.
+
+        Then it is gone. It is not a count and it does not queue: there is one
+        of these or there is none, and if she leaves three while you are asleep
+        the newest is the one worth taking you to — the other two are on the
+        way past. A badge with a number on it would be a inbox, and this place
+        does not have one of those.
+        =====================================================================
+      */}
+      {unseen && (
+        <button
+          type="button"
+          className="talking-mark"
+          onClick={goToMark}
+          aria-label={`${them.name} reacted to a message. Go to it.`}
+        >
+          <span aria-hidden="true">{unseen.mark}</span>
+        </button>
       )}
 
       {awayFromNewest && (

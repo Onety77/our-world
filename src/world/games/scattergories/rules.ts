@@ -28,8 +28,16 @@ export const PER_SHEET = 12
  * leaves you wanting the third rather than finishing it out of duty.
  */
 export const ROUNDS = 2
-/** Three minutes, in milliseconds. */
-export const GLASS_MS = 3 * 60 * 1000
+/**
+ * Five minutes, in milliseconds.
+ *
+ * Three was the first guess and it was short: twelve categories against one
+ * letter is a lot of thinking, and the glass ran out with half the sheet blank
+ * often enough that the round stopped being about *finding* answers and
+ * started being about writing fast. Five is long enough to get stuck on one,
+ * give up on it, and come back — which is where the good answers are.
+ */
+export const GLASS_MS = 5 * 60 * 1000
 
 /** A small, stable generator. Same numbers on both devices, forever. */
 function stream(seed: number): () => number {
