@@ -4793,6 +4793,46 @@ body:has(.talking) .leave-place {
   border — it is the line of light the words are written along, the same beam
   the two lights are made of. It brightens as the field takes focus.
 */
+/*
+  The line you write on, and now the whole invitation.
+
+  It used to be the underscore beneath the words "say something". The words are
+  gone — see the note in `ui/Talking` — and this is what is left: a hairline
+  with nothing on it, which says *somewhere to write* without a sentence about
+  writing in the quietest place in the garden.
+
+  Given real height so it is a target rather than a pixel. The line is one
+  pixel; the thing your thumb is aiming at is forty.
+*/
+.start-saying-line {
+  display: block;
+  width: 5.5rem;
+  height: 2.4rem;
+  position: relative;
+}
+
+.start-saying-line::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(242, 239, 230, 0.5),
+    transparent
+  );
+  transition: background 0.3s ease;
+}
+
+/* It warms when you reach for it, the way everything here does. */
+.start-saying:hover .start-saying-line::after,
+.start-saying:focus-visible .start-saying-line::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 217, 168, 0.8), transparent);
+}
+
 .start-saying-name::after,
 .saying::after {
   content: '';
@@ -7434,16 +7474,80 @@ body:has(.talking) .leave-place {
   position: fixed;
   z-index: 40;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.12rem;
-  padding: 0.35rem 0;
-  text-shadow:
-    0 1px 2px rgba(4, 6, 12, 0.95),
-    0 0 8px rgba(4, 6, 12, 0.92),
-    0 0 26px rgba(4, 6, 12, 0.88),
-    0 0 52px rgba(4, 6, 12, 0.7);
-  animation: drift-in 0.24s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  padding: 0.22rem 0.3rem;
+  /*
+    A surface, and this is the one place in the garden that has to argue for
+    one twice.
+
+    The rule here is no panels, no cards, no borders — and the music player
+    already broke it for a reason written down beside it: *a text shadow is not
+    enough when the thing behind the text is also text.* That is exactly this.
+    A row of six emoji floating in the Stars lands on top of two or three
+    messages, and what you get is glyphs interleaved with words with nothing
+    saying which belongs to which. It was reported as "in between the
+    messages", which is precisely what it looked like.
+
+    So: the same warm dark glass the corner uses. It is not decoration, it is
+    the thing that makes six small marks legible over a field of text.
+  */
+  background: rgba(10, 13, 22, 0.82);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  border: 1px solid rgba(242, 239, 230, 0.12);
+  border-radius: 999px;
+  box-shadow:
+    0 0.7rem 2rem rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.3);
+  animation: mark-bar-in 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+
+/*
+  It comes up *from* the message, quickly.
+
+  A quarter-second drift is right for something arriving in the sky and wrong
+  for a control you summoned with your thumb and are waiting on. This is short
+  and slightly overshoots, which is what makes a menu feel like it was already
+  there rather than like it is still loading.
+*/
+@keyframes mark-bar-in {
+  from { opacity: 0; transform: translateY(0.5rem) scale(0.9); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The hairline between the marks and the reply. */
+.said-menu-split {
+  width: 1px;
+  height: 1.5rem;
+  margin: 0 0.22rem;
+  background: rgba(242, 239, 230, 0.16);
+}
+
+/* Reply, as the glyph it is everywhere else. */
+.said-answer {
+  display: grid;
+  place-items: center;
+  min-width: 2.3rem;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-dim);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+
+.said-answer:hover,
+.said-answer:focus-visible,
+.said-answer.is-selected {
+  color: #ffd9a8;
+  background: rgba(255, 168, 105, 0.14);
+  outline: none;
 }
 
 .said-menu button {
@@ -7471,31 +7575,36 @@ body:has(.talking) .leave-place {
 .said-marks {
   display: flex;
   align-items: center;
-  gap: 0.1rem;
-  margin-top: 0.1rem;
+  /* No gap. The targets are already touching, which is what makes the row
+     read as one control rather than as six loose buttons in a line. */
+  gap: 0;
 }
 
 .said-marks button {
   /*
-    Forty-four pixels of target under a glyph drawn at nineteen.
+    Six abreast on a phone, so they are as wide as six of them can be and
+    still fit inside a bar with margins either side — and taller than they are
+    wide, which is where the touch target comes from. Adjacent targets do not
+    need forty-four pixels each way; a row that is forty tall and unbroken is
+    what every chat app ships and is comfortably hittable with a thumb.
 
-    These are the smallest things in the world you are asked to hit, they are
-    six abreast, and they are hit with a thumb on a phone — so the padding is
-    doing the whole job of making them reachable while the mark itself stays
-    the size it wants to be.
+    They were 2.6rem square with a gap, which made the bar three hundred
+    pixels wide and spread the marks so far apart that they stopped reading as
+    a set of choices.
   */
   display: grid;
   place-items: center;
-  min-width: 2.6rem;
-  min-height: 2.6rem;
+  min-width: 2.3rem;
+  min-height: 2.5rem;
   padding: 0;
-  font-size: 1.18rem;
+  border: 0;
+  background: none;
+  font-size: 1.22rem;
   line-height: 1;
   letter-spacing: 0;
   text-transform: none;
-  /* Colour belongs to the emoji, and the heart is the one that needs ours. */
   color: var(--ink);
-  opacity: 0.82;
+  opacity: 0.9;
   border-radius: 50%;
   transition: opacity 0.16s ease, background-color 0.16s ease, scale 0.16s ease;
 }
@@ -7503,7 +7612,7 @@ body:has(.talking) .leave-place {
 .said-marks button:hover,
 .said-marks button:focus-visible {
   opacity: 1;
-  scale: 1.12;
+  scale: 1.14;
   color: var(--ink);
   outline: none;
 }
@@ -10581,9 +10690,13 @@ body:has(.rally-running) .player {
     font-size: clamp(1.22rem, 6vw, 1.48rem);
   }
 
-  body:has(.talking) .start-saying-name::after {
+  body:has(.talking) .start-saying-name::after,
+  body:has(.talking) .start-saying-line {
     width: 6.2rem;
     margin-inline: 0;
+  }
+
+  body:has(.talking) .start-saying-line::after {
     background: linear-gradient(90deg, rgba(242, 239, 230, 0.54), transparent);
   }
 

@@ -1232,7 +1232,12 @@ export function Talking() {
           </div>
         </div>
       ) : (
-        <button type="button" className={`start-saying${writing ? ' writing' : ''}`} onClick={startWriting}>
+        <button
+          type="button"
+          className={`start-saying${writing ? ' writing' : ''}`}
+          aria-label={`say something to ${them.name}`}
+          onClick={startWriting}
+        >
           {/*
             Only when there is something to say.
 
@@ -1259,7 +1264,21 @@ export function Talking() {
               {unread} from {them.name}, since you were last here
             </span>
           ) : null}
-          <span className="start-saying-name">say something</span>
+          {/*
+            No standing invitation.
+
+            "say something" sat under the newest message at all times, in the
+            emptiest and quietest place in the garden, telling two people who
+            open this place to talk to each other that they could talk to each
+            other. It was the last piece of furniture left down here and it was
+            doing the same job the hint above it had already been cut for.
+
+            What is left is the line it was written on — one hairline, which is
+            what you tap, and which reads as somewhere to write rather than as
+            a sentence about writing. The label lives on the button instead, so
+            anything reading this aloud still says what it is.
+          */}
+          <span className="start-saying-line" aria-hidden="true" />
         </button>
       )}
     </div>

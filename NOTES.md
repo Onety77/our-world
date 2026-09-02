@@ -40,6 +40,83 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · the typing indicator did nothing
+
+Reported after a real deploy: tried it twice, nothing happened. It was my bug
+and a good one.
+
+**The reader never parsed `typing`.** The write was right, the rules were
+right, and it was driven end to end in a browser and passed — because the
+*mock* merges a presence patch wholesale, and the real reader rebuilds a
+`Presence` field by field and dropped it on the floor.
+
+Which is the second time this exact thing has happened here, in the opposite
+direction. There is a note in `flush` about `racing`: declared, documented,
+validated in the rules, and never actually sent. Live rounds "worked" against
+the mock and would have done nothing the first time they were tried for real.
+
+**The two bugs are the same bug.** The mock and the wire are two
+implementations of one interface, and a browser test only ever exercises the
+mock — which cannot have this failure mode and so cannot catch it either.
+
+So both halves moved into `data/presence`, as ordinary functions with no
+Firebase in them, and `npm run presence` round-trips every field through
+both. The field list is *exported and walked* rather than retyped in the test,
+because a list written twice is what caused this. Adding a field to
+`Presence` and forgetting one end of the wire is now a failing check instead
+of something you find out about on a phone in another country.
+
+## 2 Sep · Claude · the Stars, with the furniture gone
+
+"say something" sat under the newest message at all times, in the emptiest and
+quietest place in the garden, telling two people who came here to talk to each
+other that they could talk to each other. It was the last piece of furniture
+down there, and it was doing the job the hint above it had already been cut
+for.
+
+What is left is the line it was written on: one hairline, forty pixels of
+target under one pixel of light, which reads as *somewhere to write* rather
+than as a sentence about writing. It warms when you reach for it. The label
+moved onto the button, so anything reading the page aloud still says what it
+is.
+
+## 2 Sep · Claude · the reaction bar, looked at
+
+The six marks worked and looked terrible, and the report was exactly right:
+*"you made it actually in the right sense and visually great? no, not even
+close."* It was shipped on a passing test rather than on a screenshot, which is
+the whole lesson.
+
+What a photograph of it on a real phone showed:
+
+- it opened **on top of the message you had just pressed**, so emoji were
+  interleaved with words with nothing saying which belonged to which
+- it had no surface at all, floating in the sky over three other messages
+- the marks were 2.6rem apart and the bar three hundred pixels wide, so they
+  stopped reading as one set of choices
+- **"ANSWER THIS"** was a line of text laid across a message
+- and the reply item was pre-lit, because `useMenuKeys` starts its ring on
+  the first item — right for a keyboard, and on a phone it drew a warm ring
+  around the one thing on the bar you are least likely to want
+
+### What it is now
+
+One row: six marks touching, a hairline, and **↩**. The return arrow says reply
+everywhere on earth and takes a fifth of the room the words did.
+
+**It has a surface**, and that is the second time this garden has had to argue
+for one. The rule is no panels, no cards, no borders — and the music player
+broke it first, for a reason written down beside it: *a text shadow is not
+enough when the thing behind the text is also text.* This is precisely that
+case, and the same warm dark glass fixes it.
+
+**It is placed against the message, not the fingertip.** Given a fingertip it
+opened above the fingertip, which is *inside* the message — so it sat across
+the top line of the thing it belonged to. It takes the message's own top edge
+and centre now, and clears it by twelve pixels.
+
+277×49 where it was 258×82, and every one of the fourteen checks still passes.
+
 ## 2 Sep · Claude · she is writing
 
 A typing indicator, and it turned out to be nearly free: presence already goes

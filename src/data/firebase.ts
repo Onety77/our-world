@@ -111,6 +111,7 @@ import {
   questionExpiresAt,
 } from './questionOrder'
 import { AMBIENCE_KEYS, HEART } from './types'
+import { presenceBody, readPresence } from './presence'
 import { newId } from './ids'
 import {
   RALLY_STREAM_INTERVAL,
@@ -221,7 +222,6 @@ const PRESENCE_INTERVAL = 160
 const RACE_INTERVAL = 60
 
 /** After this long without a word, treat them as gone even if onDisconnect didn't fire. */
-const PRESENCE_STALE = 45_000
 
 // ---------------------------------------------------------------------------
 // Errors that are worth reading
@@ -810,31 +810,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
   for (const id of USER_IDS) {
     unsubscribes.push(
       onValue(ref(rtdb, presencePath(id)), (snap) => {
-        const d = (snap.val() ?? null) as Record<string, unknown> | null
-        if (d === null) {
-          commitPresence({
-            ...state,
-            presence: { ...state.presence, [id]: offlinePresence(id) },
-          })
-          return
-        }
-        const lastSeen = num(d.lastSeen, 0)
-        const them: Presence = {
-          id,
-          // Both conditions: onDisconnect usually clears this, but a phone
-          // that dies outright leaves the last position behind forever.
-          online: d.online === true && now() - lastSeen < PRESENCE_STALE,
-          placeId: str(d.placeId, 'clearing'),
-          position: vec3(d.position),
-          heading: num(d.heading, 0),
-          lastSeen,
-        }
-        // Absent rather than present-and-empty, so `if (them.racing)` reads the
-        // same here as it does against the mock. See the note in `flush`.
-        if (typeof d.racing === 'string' && d.racing !== '') them.racing = d.racing
-        if (typeof d.driving === 'string' && d.driving !== '') them.driving = d.driving
-        if (typeof d.looking === 'string' && d.looking !== '') them.looking = d.looking
-
+        const them = readPresence(id, snap.val() ?? null, now())
         commitPresence({
           ...state,
           presence: { ...state.presence, [id]: them },
@@ -888,31 +864,13 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       object entirely rather than written as null. `null` would be a value that
       passes `.validate` on a string field and then reads back as "".
     */
-    const racing = pending.racing ?? here.racing
-    const looking = pending.looking ?? here.looking
-    const driving = pending.driving ?? here.driving
     /*
-      And whether I am writing something.
-
-      Nought means "not", and is left out of the body entirely rather than
-      written as a zero — the same rule the three strings above follow, and for
-      the same reason: an absent child reads back as absent, where a zero would
-      have to be specially recognised as meaning nothing by everything that
-      ever looks at it.
+      Built by `presenceBody`, which lives in `data/presence` beside the
+      reader — because the two of them have to agree about the field list and
+      have twice failed to. See the note at the top of that file.
     */
-    const typing = pending.typing ?? here.typing
+    const body = presenceBody(here, pending, rtdbTimestamp())
 
-    const body = {
-      online: true,
-      placeId: pending.placeId ?? here.placeId,
-      position: pending.position ?? here.position,
-      heading: pending.heading ?? here.heading,
-      ...(racing ? { racing } : {}),
-      ...(looking ? { looking } : {}),
-      ...(driving ? { driving } : {}),
-      ...(typing ? { typing } : {}),
-      lastSeen: rtdbTimestamp(),
-    }
     // Fire and forget. A dropped presence write is not worth a retry — another
     // one is a sixth of a second away.
     void rtdbSet(mine, body).catch(() => {})

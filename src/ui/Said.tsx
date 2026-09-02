@@ -135,7 +135,21 @@ export function useSaidGestures(message: Message) {
         mid-drag with the button down.
       */
       if (event.pointerType === 'mouse') return
-      const { clientX: x, clientY: y } = event
+      /*
+        The *message's* box, not the finger's position.
+
+        The bar is placed above whatever it is given, and given a fingertip it
+        opened above the fingertip — which is inside the message, so it sat
+        across the top line of the thing you had just pressed. Reported as "in
+        between the messages", and it was: it was on one.
+
+        Handed the message's own top edge and centre, it clears the message
+        completely and reads as belonging to it. Read at press time rather than
+        when the hold fires, because `currentTarget` is gone by then.
+      */
+      const box = (event.currentTarget as HTMLElement).getBoundingClientRect()
+      const x = box.left + box.width / 2
+      const y = box.top
       holding.current = setTimeout(() => {
         holding.current = null
         held.current = true
@@ -291,8 +305,34 @@ export function SaidMenu() {
     const settle = () => {
       const b = el.getBoundingClientRect()
       const edge = 10
-      el.style.left = `${Math.max(edge, Math.min(at.x + 12, window.innerWidth - b.width - edge))}px`
-      el.style.top = `${Math.max(edge, Math.min(at.y + 34, window.innerHeight - b.height - edge))}px`
+      /*
+        Above the finger, and centred on it.
+
+        It used to open down and to the right of where you pressed, which put
+        it directly under your own thumb and directly on top of the message you
+        had just pressed — so the thing you summoned was hidden by the hand
+        that summoned it, and what you *could* see was interleaved with the
+        words behind it.
+
+        Every phone puts a reaction bar above the thing it belongs to for this
+        reason. Centred horizontally because it is a bar rather than a menu
+        hanging off a corner, and it should read as belonging to the message
+        underneath it rather than pointing away from it.
+      */
+      const wantX = at.x - b.width / 2
+      // Twelve pixels of air above the message's top edge — close enough to
+      // belong to it, clear enough that neither is sitting on the other.
+      const above = at.y - b.height - 12
+      // No room above — near the top of the sky — so it goes below instead,
+      // which is still clear of the thumb.
+      // No room above — the message is near the top of the sky — so it drops
+      // below it instead. `at.y` is the message's top, so this has to clear
+      // the message's height as well, which the bar does not know; a fixed
+      // drop that clears two lines of the serif is close enough and is only
+      // ever used within a few dozen pixels of the ceiling.
+      const y = above < edge ? at.y + 84 : above
+      el.style.left = `${Math.max(edge, Math.min(wantX, window.innerWidth - b.width - edge))}px`
+      el.style.top = `${Math.max(edge, Math.min(y, window.innerHeight - b.height - edge))}px`
     }
     settle()
     window.addEventListener('resize', settle)
@@ -336,27 +376,17 @@ export function SaidMenu() {
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <button
-        ref={keys.ref(0)}
-        type="button"
-        className={keys.selected === 0 ? 'is-selected' : undefined}
-        onFocus={() => keys.choose(0)}
-        onClick={() => {
-          answer(message.id)
-          startWriting()
-          close()
-        }}
-      >
-        answer this
-      </button>
       {/*
-        Six marks on one row, and the one you left is lit.
+        The marks come first, and reply is a glyph on the end.
 
-        A row rather than six menu items, because these are not six different
-        commands — they are one answer with six faces, and reading them as a
-        list would make choosing one feel like a decision. Tapping the mark you
-        already left takes it back, which is the same rule the heart has always
-        had and means there is never a separate "remove" to look for.
+        Ordered by what you actually reach for: nine times out of ten this
+        menu is opened to put a face on something, and the tenth is a reply.
+        It used to be a *column* with the words "answer this" above the row —
+        which put a line of text across whatever message you had just pressed,
+        and made a two-item stack out of something that is one gesture.
+
+        The return arrow says reply everywhere on earth and takes a fifth of
+        the room the words did.
       */}
       <div className="said-marks" role="group" aria-label="leave a mark">
         {MARKS.map((mark) => (
@@ -376,6 +406,28 @@ export function SaidMenu() {
           </button>
         ))}
       </div>
+      <i className="said-menu-split" aria-hidden="true" />
+      <button
+        ref={keys.ref(0)}
+        type="button"
+        /*
+          No pre-lit state. `useMenuKeys` starts its ring on the first item,
+          which is right for a keyboard and wrong on a phone: it drew a warm
+          ring round *reply* the instant the bar opened, pointing at the one
+          thing on it you are least likely to want. Real focus still shows,
+          through `:focus-visible`, which is the only time it means anything.
+        */
+        className="said-answer"
+        onFocus={() => keys.choose(0)}
+        aria-label="answer this"
+        onClick={() => {
+          answer(message.id)
+          startWriting()
+          close()
+        }}
+      >
+        <span aria-hidden="true">↩</span>
+      </button>
     </div>
   )
 }
