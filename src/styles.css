@@ -4758,7 +4758,32 @@ body:has(.talking) .leave-place {
   loop places it in viewport terms from the ladder's foot.
 */
 .sky-writing-lane {
-  position: fixed;
+  /*
+    Absolute, inside `.talking` — not fixed to the viewport.
+
+    =========================================================================
+    **This is an iOS bug that no desktop browser can show you.** It was
+    `position: fixed`, which sounded harmless: the loop measures the column
+    with `getBoundingClientRect` and translates by that, and both are
+    "viewport coordinates".
+
+    They are not the same viewport. On iOS a rect is relative to the *visual*
+    viewport and a fixed element is placed against the *layout* one, and the
+    two come apart by `visualViewport.offsetTop` — which is a few tens of
+    pixels while the URL bar is sliding and several hundred with the keyboard
+    up. `.talking` already corrects for exactly this, with
+    `top: var(--talking-top)`; the lane did not, so it was measured in one
+    space and drawn in another and walked off the bottom of the screen.
+
+    Reported as "I can't find it anywhere", and every check passed, because
+    `visualViewport.offsetTop` is always nought in a headless browser.
+
+    Absolute inside `.talking` puts the measurement and the drawing back in
+    one coordinate space, which is the only version of this that cannot come
+    apart again.
+    =========================================================================
+  */
+  position: absolute;
   left: 50%;
   top: 0;
   width: min(30rem, 74vw);
@@ -4779,28 +4804,49 @@ body:has(.talking) .leave-place {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.44rem;
+  gap: 0.5rem;
   /* Her side. Mine are right-aligned; see `.said.mine`. */
   justify-content: flex-start;
-  font-family: var(--sans);
-  font-size: 0.62rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(169, 192, 255, 0.82);
+  /*
+    ==========================================================================
+    **In the serif, because it is a message that has not arrived yet.**
+
+    It was set in the sans, small, uppercase and widely tracked — which is this
+    garden's voice for *machinery*: the clocks, the counts, the labels on
+    controls. Correct for a status line and wrong for this, and reported as
+    "I can't find it anywhere", which is the politest possible way of being
+    told something is invisible.
+
+    Everything else about it already says *her next message*: it stands where
+    that message will land, on her side, in her colour, under a light that has
+    not finished forming. Setting it in the face her messages are actually
+    written in finishes the thought — and makes it legible at a glance on a
+    phone in daylight, which the six-tenths-of-a-rem version was not.
+
+    Held a little back from the full brightness of a real message, because it
+    is not one yet.
+    ==========================================================================
+  */
+  font-family: var(--serif);
+  font-size: 0.98rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(169, 192, 255, 0.9);
   text-shadow: var(--lift);
   pointer-events: none;
-  /* The frame loop owns the transform, so nothing here may animate one. */
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
 /* The light itself, in her colour, because a message here *is* a light. */
 .sky-writing i {
-  width: 0.4rem;
-  height: 0.4rem;
+  /* The same size as the lights the messages themselves hang from. */
+  width: 0.52rem;
+  height: 0.52rem;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: #a9c0ff;
-  box-shadow: 0 0 0.8rem rgba(150, 180, 250, 0.8), 0 0 2rem rgba(120, 160, 245, 0.45);
+  box-shadow: 0 0 1rem rgba(150, 180, 250, 0.9), 0 0 2.6rem rgba(120, 160, 245, 0.5);
   animation: forming 2.6s ease-in-out infinite;
 }
 

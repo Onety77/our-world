@@ -962,8 +962,45 @@ export function Talking() {
       if (foot) {
         if (footOfSky === null) foot.style.opacity = '0'
         else {
-          foot.style.transform =
-            `translate3d(${gaze.yaw * -150}px, ${columnTop + footOfSky + 14}px, 0)`
+          /*
+            Relative to `.talking`, because that is what the lane is inside.
+
+            `columnTop` is a viewport rect and the lane is now absolute within
+            the surface, so the surface's own top has to come off — otherwise
+            the offset is counted twice and the light lands a screen too low.
+            Both numbers are read the same way in the same frame, so they
+            cannot be measured against different viewports.
+          */
+          const surfaceBox = surface.current?.getBoundingClientRect()
+          const surfaceTop = surfaceBox?.top ?? 0
+          let y = columnTop - surfaceTop + footOfSky + 14
+          /*
+            ======================================================================
+            **And it never goes behind the composer.**
+
+            This is the case that actually matters and the one that was broken:
+            with the keyboard up. The surface is sized to the *visual* viewport,
+            so raising a keyboard shortens `.talking` by half the screen; the
+            sky hangs from 72% of that, and the newest message's foot lands
+            underneath the composer that the keyboard belongs to. The light was
+            drawn faithfully at fourteen pixels below the last message and the
+            last message was behind the writing panel.
+
+            Which is the worst possible time for it to be missing. Keyboard up
+            means you are answering her, and *"she is writing too"* is never
+            more worth knowing than in the second before you both send.
+
+            So the composer is a ceiling. Where there is no room under the
+            message, the light sits just above the panel instead — still the
+            lowest thing in the sky, still on her side, and visible.
+            ======================================================================
+          */
+          const lid = composing ? composer.current?.getBoundingClientRect().top : undefined
+          const tall = foot.offsetHeight || 18
+          if (lid !== undefined) y = Math.min(y, lid - surfaceTop - tall - 10)
+          // And never off the bottom of the surface, whatever the sky is doing.
+          if (surfaceBox) y = Math.min(y, surfaceBox.height - tall - 8)
+          foot.style.transform = `translate3d(${gaze.yaw * -150}px, ${y}px, 0)`
           foot.style.opacity = '1'
         }
       }

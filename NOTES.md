@@ -40,6 +40,94 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · behind the keyboard, and refused by the rules
+
+Two reports, and the first one turned the previous entry's guess into a fact.
+
+### The light was behind the composer
+
+> *"the only time it wasnt showing is when the keybard is up on mobile"*
+
+Which is the case that matters and the one nothing could see. `.talking` is
+sized to the **visual** viewport, so raising a keyboard halves it; the sky
+hangs from 72% of that; and the newest message's foot lands underneath the
+writing panel. The light was being placed perfectly — fourteen pixels below the
+last message — and the last message was behind the composer.
+
+Keyboard up is exactly when it is least affordable to be missing. It means you
+are answering her, and *"she is writing too"* is never more worth knowing than
+in the second before you both send.
+
+The composer is a ceiling now: where there is no room under the message, the
+light sits just above the panel instead. Still the lowest thing in the sky,
+still on her side. There is a check that shrinks the surface the way a keyboard
+does and asserts the two boxes do not overlap, because headless Chrome has no
+keyboard to raise.
+
+### And the reactions were refused by Firestore
+
+*"it didnt sent nothing was saved"* — and it was the rules, exactly as
+suspected. Messages are immutable apart from one field:
+
+```
+allow update: if ... .affectedKeys().hasOnly(['hearts'])
+```
+
+`marks` was added to the client and not to that list, so every one of the six
+emoji was refused outright for touching a key that was not `hearts`. It worked
+perfectly against the mock, which has no rules in it at all.
+
+Now `hasOnly(['hearts', 'marks'])`, with the same per-key guard the hearts
+have, so neither of you can change which mark the other one left.
+
+**That is the third time in two days** that a field has been added at one end
+of a seam and not the other: `racing` was written down and never sent,
+`typing` was sent and never read, and now `marks` was written and never
+allowed. Every one of them worked against the mock and did nothing at all
+against the real backend, and every one was found by somebody on a phone.
+
+`npm run presence` covers two of those three by round-tripping the field list.
+The rules are the leg with no harness — nothing here can exercise Firestore's
+own evaluator — so the honest mitigation is smaller: any new field on a
+document either of you may *update* needs its key adding to an `affectedKeys`
+list, and that is now said out loud in the rule itself.
+
+## 2 Sep · Claude · and then nobody could find it
+
+Third report on the typing light: after moving it into the sky it could not be
+found at all. **Not reproduced** — it renders at full opacity, under the newest
+message, in portrait, landscape and on a large phone, and every check passes.
+So this is two changes made on suspicion rather than one made on evidence, and
+that is worth writing down as such.
+
+**One real latent bug, fixed whether or not it is this one.** The lane was
+`position: fixed` and the loop placed it from a `getBoundingClientRect`.
+Those are two different viewports on iOS — a rect is measured against the
+*visual* one and a fixed element is placed against the *layout* one, and they
+come apart by `visualViewport.offsetTop`, which is tens of pixels while the
+URL bar slides and hundreds with the keyboard up. `.talking` already corrects
+for this with `top: var(--talking-top)`; the lane did not. It is absolute
+inside `.talking` now, so the measuring and the drawing happen in one space
+and cannot come apart again. `offsetTop` is always nought in a headless
+browser, which is why nothing caught it.
+
+I tried to write a check that reproduces it by forcing `--talking-top`, and
+**it does not** — pushing the surface down moves the messages with it, which is
+not what iOS does. It was deleted rather than kept as a green test that proves
+nothing.
+
+**And the likelier explanation: it was too quiet.** It was set in the sans,
+small, uppercase, widely tracked — this garden's voice for *machinery*: clocks,
+counts, labels on controls. Right for a status line, wrong for this. Everything
+else about it already says *her next message*: it stands where that message
+will land, on her side, in her colour, under a light that has not finished
+forming. It is in the serif her messages are written in now, at a size you can
+read at a glance on a phone in daylight.
+
+One thing the harness caught on me: I added an ellipsis, and `npm run typing`
+failed on a check I had written myself a few hours earlier saying the garden
+does not use them. It was right and I removed it.
+
 ## 2 Sep · Claude · the car was falling over
 
 Reported from a phone with screenshots: the car lifts one side alarmingly high

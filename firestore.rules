@@ -264,21 +264,35 @@ service cloud.firestore {
         && request.resource.data.at is number;
 
       /*
-        A message is never edited. A *heart* on one is not editing it.
+        A message is never edited. A *mark* on one is not editing it.
 
-        The only field either of you may ever change on somebody else's words
-        is your own key under `hearts` — the body, the author and the time are
-        written once and are then the record. `affectedKeys` is what makes that
-        enforceable rather than a convention: a write that touches anything
-        besides `hearts.<me>` is refused here, not in the client.
+        The only fields either of you may ever change on somebody else's words
+        are your own keys under `hearts` and `marks` — the body, the author
+        and the time are written once and are then the record. `affectedKeys`
+        is what makes that enforceable rather than a convention: a write that
+        touches anything else is refused here, not in the client.
 
-        Taking a heart back is a delete of that same key, which arrives as the
-        same affected key, so it needs no separate rule.
+        Taking a mark back is a delete of the same keys, which arrive as the
+        same affected keys, so it needs no separate rule.
+
+        ---------------------------------------------------------------------
+        **`marks` was added to the client and not to this list**, and the
+        whole feature stopped working the moment it met a real database: six
+        emoji went out, Firestore refused every write for touching a key that
+        was not `hearts`, and the app said "nothing was saved". It worked
+        perfectly against the mock, which has no rules in it at all.
+
+        That is the third time in two days that a field has been added at one
+        end of a seam and not the other — see `data/presence` for the two
+        before it. The lesson is the same every time: the mock and the real
+        backend are two implementations of one interface, and only one of them
+        is exercised by anything a browser can run.
+        ---------------------------------------------------------------------
       */
       allow update: if isOneOfUs()
         && request.resource.data.diff(resource.data)
              .affectedKeys()
-             .hasOnly(['hearts'])
+             .hasOnly(['hearts', 'marks'])
         // `get` with a default on *both* sides, because either one can be
         // absent: the first heart on a message arrives before the map exists,
         // and taking back the only heart can remove the map entirely. Reading
@@ -286,6 +300,11 @@ service cloud.firestore {
         // without this the two ends of a heart's life are the two that fail.
         && request.resource.data.get('hearts', {}).diff(
              resource.data.get('hearts', {})
+           ).affectedKeys().hasOnly([me()])
+        // And the same for the glyph, so neither of you can change which mark
+        // the other one left — only whether your own is there and what it is.
+        && request.resource.data.get('marks', {}).diff(
+             resource.data.get('marks', {})
            ).affectedKeys().hasOnly([me()]);
 
       allow delete: if false;
