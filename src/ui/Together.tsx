@@ -29,6 +29,8 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
+import { writingLine } from '@/systems/typing'
 import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { useSay } from '@/systems/useSay'
@@ -962,6 +964,12 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
   const [draft, setDraft] = useState('')
   const [said, setSaid] = useState<ScreenLine[]>([])
   const feed = useRef<HTMLDivElement>(null)
+  /*
+    Gated on there being a sitting, because the field is disabled without one
+    and a disabled field cannot be typed into — so reporting from here with no
+    screen on would be reporting a draft nobody can add to.
+  */
+  useReportTyping(draft, session !== '')
 
   useEffect(() => {
     if (session === '') {
@@ -1005,6 +1013,8 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
     if (!sent) setSaid((was) => was.filter((l) => l.id !== line.id))
   }
 
+  const writing = useTheyAreTyping()
+
   const shown = useMemo(() => {
     // The optimistic copy and the one off the wire are the same line.
     const byId = new Map<string, ScreenLine>()
@@ -1029,6 +1039,16 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
           ))
         )}
       </div>
+      {/*
+        Under the last thing said, above the field — where the next line will
+        appear, which is the only place it means anything.
+
+        A plain sentence rather than the three bouncing dots, because this room
+        already has words in it and a room with words in it does not need a
+        second vocabulary. The dots are also somebody else's house style; the
+        garden says things.
+      */}
+      {writing && <p className="together-writing">{writingLine(theirName)}</p>}
       <div className="together-write">
         <Ink
           className="ink together-field"

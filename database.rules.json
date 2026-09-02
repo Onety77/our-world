@@ -58,6 +58,16 @@
         ],
         "driving": { ".validate": "newData.isString() && newData.val().length <= 64" },
 
+        "//typing": [
+          "When this person was last writing something, in server ms. A time",
+          "rather than a flag so it expires by itself: a phone that drops out",
+          "mid-sentence stops claiming to be typing without needing a write it",
+          "is in no position to send. See Presence.typing in data/types.",
+          "",
+          "It says only that somebody is writing, never what or where."
+        ],
+        "typing": { ".validate": "newData.isNumber() && newData.val() > 0" },
+
         "position": {
           "$axis": { ".validate": "newData.isNumber()" },
           ".validate": "newData.hasChildren(['0', '1', '2'])"

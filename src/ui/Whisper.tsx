@@ -38,6 +38,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
+import { writingLine } from '@/systems/typing'
 import { useData, useWorldSlice } from '@/data/provider'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
@@ -126,6 +128,9 @@ export function Whisper() {
   const them = profiles[me === 'warm' ? 'cool' : 'warm']
   const [draft, setDraft] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
+  /* Same rule as the Stars: only while the panel is actually open. */
+  useReportTyping(draft, open)
+  const writing = useTheyAreTyping()
   const panel = useRef<HTMLDivElement>(null)
   const heard = useRef<string | null>(null)
   const attentionTimer = useRef<number | null>(null)
@@ -258,7 +263,7 @@ export function Whisper() {
     return (
       <button
         type="button"
-        className={`whisper-fold ${unread > 0 ? 'waiting' : ''}${arrival > 0 ? ' arriving' : ''}`}
+        className={`whisper-fold ${unread > 0 ? 'waiting' : ''}${arrival > 0 ? ' arriving' : ''}${writing ? ' writing' : ''}`}
         onClick={() => setOpen(true)}
         aria-label={
           unread > 0
@@ -267,13 +272,23 @@ export function Whisper() {
         }
       >
         <span key={arrival} className="whisper-mark" aria-hidden="true" />
+        {/*
+          What the fold says, in order of what you would want to know.
+
+          Her writing outranks both the unread count and the last thing said,
+          and that ordering is the whole point of putting it here: an unread
+          count is *the past* and this is the next few seconds. If she is
+          writing to you now, that is the most interesting fact the corner has.
+        */}
         <span className="whisper-fold-words">
-          {unread > 0
-            ? `${unread} from ${them.name}`
-            : (recent.at(-1)?.body ?? `say something to ${them.name}`)}
+          {writing
+            ? writingLine(them.name)
+            : unread > 0
+              ? `${unread} from ${them.name}`
+              : (recent.at(-1)?.body ?? `say something to ${them.name}`)}
         </span>
         <span className="whisper-fold-mobile" aria-hidden="true">
-          {unread > 0 ? `${unread} new` : 'messages'}
+          {writing ? writingLine(them.name) : unread > 0 ? `${unread} new` : 'messages'}
         </span>
       </button>
     )

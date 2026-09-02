@@ -22,6 +22,7 @@
     "rally-stream": "npx --yes tsx scripts/rally-stream-check.ts",
     "hollow": "node scripts/hollow-check.mjs",
     "day": "npx --yes tsx scripts/day-check.ts",
+    "typing": "npx --yes tsx scripts/typing-check.ts",
     "harmattan": "npx --yes tsx scripts/harmattan-check.ts",
     "chase": "node scripts/chase-check.mjs",
     "locks": "node scripts/locks-check.mjs",

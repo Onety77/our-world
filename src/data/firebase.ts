@@ -891,6 +891,16 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     const racing = pending.racing ?? here.racing
     const looking = pending.looking ?? here.looking
     const driving = pending.driving ?? here.driving
+    /*
+      And whether I am writing something.
+
+      Nought means "not", and is left out of the body entirely rather than
+      written as a zero — the same rule the three strings above follow, and for
+      the same reason: an absent child reads back as absent, where a zero would
+      have to be specially recognised as meaning nothing by everything that
+      ever looks at it.
+    */
+    const typing = pending.typing ?? here.typing
 
     const body = {
       online: true,
@@ -900,6 +910,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       ...(racing ? { racing } : {}),
       ...(looking ? { looking } : {}),
       ...(driving ? { driving } : {}),
+      ...(typing ? { typing } : {}),
       lastSeen: rtdbTimestamp(),
     }
     // Fire and forget. A dropped presence write is not worth a retry — another

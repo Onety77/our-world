@@ -124,6 +124,35 @@ export interface Presence {
    * gone by itself when the phone goes into a tunnel.
    */
   looking?: string
+  /**
+   * When this person was last known to be writing something, in server ms.
+   *
+   * ---------------------------------------------------------------------------
+   * **A time, not a boolean, and that is the whole design.**
+   *
+   * The obvious shape is `typing: true`, and it has one failure that every
+   * chat app has shipped at least once: a phone that goes into a tunnel, or a
+   * tab that is closed mid-sentence, leaves the flag set and the other person
+   * looking at *"she is writing…"* for the rest of the evening. Fixing that
+   * with a clear-on-exit write does not work either, because the case you are
+   * trying to handle is precisely the one where no further write arrives.
+   *
+   * A timestamp has no such state. It goes stale on its own: the reader
+   * decides what counts as recent, so the worst a lost write can do is stop
+   * the indicator a few seconds early — which nobody notices — rather than
+   * leave it on forever, which everybody does. Nothing has to be cleaned up
+   * and there is no exit path to get wrong.
+   *
+   * It costs nothing to carry. Presence is already written several times a
+   * second while either of you is moving, and this rides on that.
+   *
+   * Deliberately does *not* say **what** is being written, or where. It is one
+   * bit of warmth — somebody is thinking of you right now — and a version that
+   * reported which room she was typing in would be surveillance rather than
+   * company. See `systems/typing`.
+   * ---------------------------------------------------------------------------
+   */
+  typing?: number
 
   /**
    * Her car, on the road, while the two of you are racing wheel to wheel.

@@ -168,6 +168,18 @@ const main = async () => {
   await send('Page.navigate', { url: `http://localhost:${PORT}/?section=hollow&shot=1&mock=1` }, S)
   await wait(9000)
   await ev(`(() => { const b=[...document.querySelectorAll('button')].find(x=>/come in/i.test(x.textContent)); if(b)b.click(); return 1 })()`)
+  await wait(3000)
+  /*
+    The Hollow does not always open on the picker.
+
+    When there is something waiting for you it lands on the *standings*
+    instead — see the note beside `landed` in `ui/Threshold`. That is
+    deliberate and is the whole point of that screen, and this harness sets a
+    round up on purpose, so it happens here more often than it would to a
+    person. Every `.game-card` query after it was reading an empty list and
+    reporting it as a broken lock.
+  */
+  await ev(`(() => { const b = document.querySelector('.challenges-back'); if (b) { b.click(); return 'left the standings' } return null })()`)
   await wait(4500)
 
   const cards = await ev(`[...document.querySelectorAll('.game-card strong')].map(s=>s.textContent)`)
@@ -218,6 +230,18 @@ const main = async () => {
   await send('Page.navigate', { url: `http://localhost:${PORT}/?section=hollow&shot=1&mock=1` }, S)
   await wait(9000)
   await ev(`(() => { const b=[...document.querySelectorAll('button')].find(x=>/come in/i.test(x.textContent)); if(b)b.click(); return 1 })()`)
+  await wait(3000)
+  /*
+    The Hollow does not always open on the picker.
+
+    When there is something waiting for you it lands on the *standings*
+    instead — see the note beside `landed` in `ui/Threshold`. That is
+    deliberate and is the whole point of that screen, and this harness sets a
+    round up on purpose, so it happens here more often than it would to a
+    person. Every `.game-card` query after it was reading an empty list and
+    reporting it as a broken lock.
+  */
+  await ev(`(() => { const b = document.querySelector('.challenges-back'); if (b) { b.click(); return 'left the standings' } return null })()`)
   await wait(4500)
 
   const herCards = await ev(`[...document.querySelectorAll('.game-card strong')].map(s=>s.textContent)`)

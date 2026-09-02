@@ -40,6 +40,73 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · she is writing
+
+A typing indicator, and it turned out to be nearly free: presence already goes
+over the Realtime Database several times a second while either of you is
+moving, and already carries three live ephemeral flags — `racing`, `looking`,
+`driving` — with a note explaining that it is *"the one channel that is
+already live and already shared"*. This is the fourth. No new collection, no
+new listener, no extra writes.
+
+### Three decisions
+
+**It is a time, not a boolean.** `typing: number` — when you were last known
+to be writing. The boolean version has one failure that every chat app has
+shipped at least once: a phone goes into a tunnel mid-sentence and the flag
+stays true, so the other person watches *"she is writing…"* for the rest of the
+evening. The fix people reach for is a clear-on-exit write, which is
+unavailable in precisely the case that causes it. A timestamp goes stale by
+itself. The worst a lost write can do is stop the indicator a few seconds
+early, which nobody notices.
+
+**It does not say where.** One bit: she is writing *something*. Not which room,
+not how much, not for how long. This is meant to read as *she is thinking about
+you right now*; anything more precise turns warmth into surveillance.
+
+**Stopping is not an event.** No "stopped typing" message. Deleting a draft,
+putting the phone down, and thinking for eight seconds all end it the same way
+— the clock runs out — which is simpler and truer than detecting the
+difference. The one exception is sending: that clears immediately, because
+otherwise the indicator outlives the message it was announcing and reads as a
+second one that never comes.
+
+The refresh is 3s and the window is 7s, deliberately more than double, so one
+lost write cannot make it flicker.
+
+### No bouncing dots
+
+Three grey circles are as recognisable as a brand mark, and they would be the
+first thing in this garden borrowed from an interface rather than made for the
+place. Each surface says it in its own vocabulary:
+
+- **the Stars** — a message here *is* a light, so someone writing one is a
+  light that has not finished forming. It breathes rather than blinks, because
+  a blink is a notification and a breath is a person. Never fully out (reads as
+  broken) and never fully in (reads as arrived — and it has not arrived, which
+  is the entire message).
+- **the corner** — a sentence on the fold, and it *outranks the unread count*.
+  A count is the past; this is the next few seconds.
+- **the film chat** — a line under the last thing said, where the next one will
+  appear.
+
+### Measured
+
+`npm run typing` — 23 checks, all of them timing, because every bug this
+feature can have is a timing bug and none is visible by reading. The one that
+matters is driven end-to-end in a browser with **no clear ever sent**: her
+presence is stamped eight seconds ago and nothing follows it, exactly as if the
+tab had been killed mid-sentence. It goes off on its own.
+
+### And one thing that was not mine
+
+`npm run locks` was failing, and the failure looked like it might be. It was
+not: the Hollow lands on the *standings* rather than the picker when something
+is waiting for you — deliberate, and older than any of this work (`git log -S`
+puts it several commits before this session started). The harness did not know,
+so every `.game-card` query came back empty and got reported as a broken lock.
+Both of its entry points step past the standings now, and all twenty pass.
+
 ## 2 Sep · Claude · the Harmattan
 
 A fourth road: the Sahel with the dust wind blowing. Laterite, baobabs, termite

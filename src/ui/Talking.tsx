@@ -20,6 +20,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
+import { writingLine } from '@/systems/typing'
 import { useData, useWorldSlice } from '@/data/provider'
 import type { Message, UserId } from '@/data/types'
 import { useSections } from '@/systems/sections'
@@ -969,6 +971,17 @@ export function Talking() {
   const field = useRef<HTMLTextAreaElement>(null)
   const composer = useRef<HTMLDivElement>(null)
 
+  /*
+    And she is told, while there is anything in it.
+
+    Only while the composer is actually open: the draft deliberately outlives
+    a fold so an unfinished message is not thrown away, and reporting from a
+    folded composer would mean the sky said you were writing for as long as
+    that draft sat there — which could be days.
+  */
+  useReportTyping(draft, composing)
+  const writing = useTheyAreTyping()
+
   // The draft lives above the conditional render, so folding the composer
   // does not throw away an unfinished message.
   useDismissOutside(here && composing, stopWriting, [composer], { allowOutsideDrag: true })
@@ -1219,7 +1232,7 @@ export function Talking() {
           </div>
         </div>
       ) : (
-        <button type="button" className="start-saying" onClick={startWriting}>
+        <button type="button" className={`start-saying${writing ? ' writing' : ''}`} onClick={startWriting}>
           {/*
             Only when there is something to say.
 
@@ -1231,11 +1244,21 @@ export function Talking() {
             the place is for. What is left is the one case where the line is
             *news*: how much of hers you have not read.
           */}
-          {unread > 0 && (
+          {/*
+            Her writing outranks the unread count, for the same reason it does
+            in the corner: a count is the past and this is the next few
+            seconds. And it takes the light with it — see `.start-saying` in
+            the stylesheet — because in this place a message *is* a light, so
+            one arriving should be a light that has not finished forming yet
+            rather than three dots borrowed from somewhere else.
+          */}
+          {writing ? (
+            <span className="start-saying-hint">{writingLine(them.name)}</span>
+          ) : unread > 0 ? (
             <span className="start-saying-hint">
               {unread} from {them.name}, since you were last here
             </span>
-          )}
+          ) : null}
           <span className="start-saying-name">say something</span>
         </button>
       )}

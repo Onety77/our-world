@@ -4711,6 +4711,77 @@ body:has(.talking) .leave-place {
   color: var(--ink-faint);
 }
 
+/* --------------------------------------------------------------------------
+   She is writing something
+
+   ---------------------------------------------------------------------------
+   **No bouncing dots.** They are the right answer in a chat app, and they are
+   somebody else's house style — three grey circles are as recognisable as a
+   brand mark, and dropping them into this garden would be the first thing in
+   it borrowed from an interface rather than made for the place.
+
+   In the Stars a message *is* a light: it arrives, it takes a position in the
+   sky, and it stays lit for good. So somebody writing one is a light that has
+   not finished forming — it breathes rather than blinks, because a blink is a
+   notification and a breath is a person. Slow enough to be company and not an
+   alert; nothing here has ever asked for attention and this must not either.
+
+   The corner and the film chat get the same *idea* in their own vocabulary: a
+   sentence, because both of those places are made of sentences.
+   -------------------------------------------------------------------------- */
+
+.start-saying.writing .start-saying-hint {
+  color: #ffd9a8;
+}
+
+.start-saying.writing::before {
+  content: '';
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-bottom: 0.1rem;
+  border-radius: 50%;
+  background: #ffd9a8;
+  box-shadow: 0 0 0.9rem rgba(255, 200, 140, 0.75), 0 0 2.2rem rgba(255, 170, 90, 0.4);
+  animation: forming 2.6s ease-in-out infinite;
+}
+
+/*
+  Never all the way out and never all the way in.
+
+  A light that reaches zero reads as broken, and one that reaches full reads as
+  arrived — and it has not arrived, that is the entire message. So it lives
+  between a third and full, which is the visual equivalent of somebody being
+  about to say something.
+*/
+@keyframes forming {
+  0%, 100% { opacity: 0.34; transform: scale(0.82); }
+  50%      { opacity: 1;    transform: scale(1.06); }
+}
+
+/* The corner says it in words, and warms the fold the way an arrival does. */
+.whisper-fold.writing .whisper-fold-words,
+.whisper-fold.writing .whisper-fold-mobile {
+  color: #ffd9a8;
+}
+
+/* And the film chat, under the last thing said, where the next line will go. */
+.together-writing {
+  margin: 0.1rem 0 0.2rem;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  color: #ffd9a8;
+  opacity: 0.86;
+  text-shadow: var(--lift);
+  animation: forming 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .start-saying.writing::before,
+  .together-writing { animation: none; }
+}
+
 .start-saying-name {
   font-family: var(--serif);
   font-size: 1.32rem;
