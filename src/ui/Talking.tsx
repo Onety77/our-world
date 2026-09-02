@@ -376,6 +376,15 @@ export function Talking() {
   const failed = useTalking((s) => s.failed)
   const loading = useTalking((s) => s.loading)
   const composing = useTalking((s) => s.composing)
+  /*
+    Declared up here because the sky's frame-loop effect lists it as a
+    dependency, and a dependency array is evaluated during *render* — so
+    leaving it beside the composer, three hundred lines down, put a
+    block-scoped read before its own declaration and threw on the first paint.
+    The whole conversation went blank and every check went quietly green,
+    because an empty document has no indicator in it either.
+  */
+  const writing = useTheyAreTyping()
   const startWriting = useTalking((s) => s.startWriting)
   const stopWriting = useTalking((s) => s.stopWriting)
   const replyTo = useTalking((s) => s.replyTo)
@@ -842,6 +851,15 @@ export function Talking() {
           glide.current = 0
         }
       }
+      /*
+        Where the newest message ends, so the writing light can sit under it.
+
+        Taken from the ladder as it runs rather than measured afterwards: the
+        sky moves every frame, and a second pass reading `getBoundingClientRect`
+        on the bottom line sixty times a second is a layout flush sixty times a
+        second. This is the number the ladder already computed.
+      */
+      let footOfSky: number | null = null
       for (let i = 0; i < lines.length; i++) {
         const el = lines[i]
         const own = ages[i]
@@ -922,11 +940,32 @@ export function Talking() {
           `translate3d(${side + gaze.yaw * -150 + Math.sin(own * 1.7) * 6}px,` +
           ` ${lift + gaze.pitch * 90}px, 0) scale(${shrink})`
         el.style.opacity = String(fade)
+        // Index nought is the newest — the ladder stacks upward from it.
+        if (i === 0) footOfSky = lift + gaze.pitch * 90 + drawn
         // Once a line is faint enough to be unreadable it must also stop
         // catching the pointer, or the newest message sits under a stack of
         // invisible ones.
         const visible = fade * (laneMask?.visibility ?? 1)
         el.style.pointerEvents = visible > 0.5 ? 'auto' : 'none'
+      }
+
+      /*
+        The writing light rides the sky with everything else.
+
+        A fixed offset was tried first and was wrong for the obvious reason:
+        the newest message is one line or four, so a constant gap either
+        overlapped it or floated a long way under it. Measured, it sat across
+        the last two words of "It is nearly morning here and I am still awake
+        looking at this."
+      */
+      const foot = writingRow.current
+      if (foot) {
+        if (footOfSky === null) foot.style.opacity = '0'
+        else {
+          foot.style.transform =
+            `translate3d(${gaze.yaw * -150}px, ${columnTop + footOfSky + 14}px, 0)`
+          foot.style.opacity = '1'
+        }
       }
 
       const still =
@@ -964,12 +1003,23 @@ export function Talking() {
       viewport?.removeEventListener('resize', fitViewport)
       viewport?.removeEventListener('scroll', fitViewport)
     }
-  }, [here, messages, composing, idle, viewAge])
+    /*
+      `writing` is a dependency because the sky's frame loop *parks*.
+
+      It settles after four still frames and stops, which is the whole reason
+      a conversation costs nothing to sit in front of. Her starting to write
+      adds an element that only this loop can position, so without waking it
+      the light was mounted, correct, and left at the opacity it starts at —
+      in the DOM, passing its test, and invisible on the screen.
+    */
+  }, [here, messages, composing, idle, viewAge, writing])
 
   // --- writing --------------------------------------------------------------
   const [draft, setDraft] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
   const composer = useRef<HTMLDivElement>(null)
+  /** The "she is writing" light, positioned by the same frame loop as the sky. */
+  const writingRow = useRef<HTMLParagraphElement>(null)
 
   /*
     And she is told, while there is anything in it.
@@ -980,7 +1030,6 @@ export function Talking() {
     that draft sat there — which could be days.
   */
   useReportTyping(draft, composing)
-  const writing = useTheyAreTyping()
 
   // The draft lives above the conditional render, so folding the composer
   // does not throw away an unfinished message.
@@ -1148,6 +1197,37 @@ export function Talking() {
         ))}
       </div>
 
+      {/*
+        Her next message, before it exists.
+
+        ==================================================================
+        This lived on the "say something" button at the bottom of the sky,
+        and that was wrong twice over. It was nowhere near the conversation
+        — a notice at the foot of the screen about something happening in
+        the sky above it. And **the moment you started writing, the button
+        was replaced by the composer**, so the one time you most want to
+        know she is answering you is the one time you could not see it.
+
+        It belongs where her next line will actually land: under the newest
+        message, on her side of the sky. Which makes it the same object as
+        the thing it is announcing — a light that has not finished forming,
+        in the place the finished one will appear.
+
+        Outside the ladder on purpose. The messages are laid out by a
+        per-frame walk that stacks measured heights, and putting a phantom
+        row into it would mean the whole sky shifted every time she picked
+        up her phone.
+        ==================================================================
+      */}
+      {writing && (
+        <div className="sky-writing-lane">
+          <p ref={writingRow} className="sky-writing" role="status">
+            <i aria-hidden="true" />
+            {writingLine(them.name)}
+          </p>
+        </div>
+      )}
+
       {awayFromNewest && (
         <button
           type="button"
@@ -1234,7 +1314,7 @@ export function Talking() {
       ) : (
         <button
           type="button"
-          className={`start-saying${writing ? ' writing' : ''}`}
+  className="start-saying"
           aria-label={`say something to ${them.name}`}
           onClick={startWriting}
         >
@@ -1249,21 +1329,11 @@ export function Talking() {
             the place is for. What is left is the one case where the line is
             *news*: how much of hers you have not read.
           */}
-          {/*
-            Her writing outranks the unread count, for the same reason it does
-            in the corner: a count is the past and this is the next few
-            seconds. And it takes the light with it — see `.start-saying` in
-            the stylesheet — because in this place a message *is* a light, so
-            one arriving should be a light that has not finished forming yet
-            rather than three dots borrowed from somewhere else.
-          */}
-          {writing ? (
-            <span className="start-saying-hint">{writingLine(them.name)}</span>
-          ) : unread > 0 ? (
+          {unread > 0 && (
             <span className="start-saying-hint">
               {unread} from {them.name}, since you were last here
             </span>
-          ) : null}
+          )}
           {/*
             No standing invitation.
 

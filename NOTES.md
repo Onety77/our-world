@@ -40,6 +40,50 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 2 Sep · Claude · and it was in the wrong place
+
+Second report on the same feature, and the placement was the bigger miss:
+
+> *"now if i tap to write, even if i dont write anything, i cant really see
+> that shes writing, because the place thats suppose to show shes typing is
+> occupied by me"*
+
+It lived on the "say something" button at the foot of the sky. Two things wrong
+with that, and the second is the one worth writing down: **opening the composer
+replaces that button** — so the one moment you most want to know she is
+answering you was the exact moment it could not be shown. A control that hides
+the thing it reports whenever you use the control.
+
+It sits under the newest message now, on her side of the sky, which is where
+her next line will actually land — so it is the same object as the thing it
+announces: a light that has not finished forming, in the place the finished one
+appears.
+
+### Three bugs on the way there, none of which a test found
+
+> **It got its own rung on the ladder.** The sky's layout is built from
+> `column.children`, so putting the light *inside* `.sky-column` gave it a
+> place in the stack and pushed every message down one — two of them ended up
+> drawn on top of each other. Every check passed. It is a sibling with the
+> column's geometry now, and there is a check for piled-up messages.
+
+> **It was mounted, correct, and invisible.** The frame loop parks after four
+> still frames, which is why sitting in a conversation costs nothing — and
+> `writing` was not one of its dependencies, so her starting to type never
+> woke the only thing that could position the light.
+
+> **And then that dependency crashed the place.** `writing` was declared
+> three hundred lines below the effect that now lists it, and a dependency
+> array is evaluated during *render* — so it was a block-scoped read before its
+> own declaration. The whole conversation went blank, and every check went
+> quietly green, because an empty document has no indicator in it either. That
+> is why the probe now asserts computed opacity and on-screen bounds rather
+> than `querySelector` being truthy.
+
+A fixed offset under the newest message was tried first and is wrong for the
+obvious reason: that message is one line or four. The loop takes the ladder's
+own foot, which is the number it has already computed.
+
 ## 2 Sep · Claude · the typing indicator did nothing
 
 Reported after a real deploy: tried it twice, nothing happened. It was my bug
