@@ -82,7 +82,18 @@ export class ConfigError extends Error {
   mock. There is no query string anywhere that turns the real backend on.
 */
 function askedForTheMock(): boolean {
-  if (!import.meta.env.DEV || typeof window === 'undefined') return false
+  /*
+    `raw.DEV`, not `import.meta.env.DEV`, and the difference is the whole
+    reason this file has a `raw` at all.
+
+    `import.meta.env` does not exist under Node, so reading `.DEV` straight
+    off it threw on import — which made this module, and now anything that
+    imports it, impossible for a check script to load at all. That is the exact
+    failure the note above `raw` describes, left in one line that predates it.
+    `raw` already resolves to `process.env` off-Vite, where there is no DEV
+    and the answer is correctly "no, and there is no query string to read".
+  */
+  if (!raw.DEV || typeof window === 'undefined') return false
   return new URLSearchParams(window.location.search).get('mock') === '1'
 }
 

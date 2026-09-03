@@ -58,7 +58,7 @@ import { usePlaying } from '@/systems/playing'
 import { useArrival } from '@/systems/arrival'
 import { takenOverNow, useTakenOver } from '@/systems/attention'
 import { useMemories } from '@/systems/memories'
-import { atTheDoor, useHourOverride } from '@/systems/dev'
+import { atTheDoor, mayOpenTheDoor, useHourOverride } from '@/systems/dev'
 import { later } from '@/systems/later'
 import { useWatchLocks } from '@/systems/locks'
 import { usePublishedOutdoors } from '@/systems/outdoorsSync'
@@ -487,6 +487,37 @@ function Fatal({ error }: { error: Error }) {
   )
 }
 
+/**
+ * Which of the two things is on screen: the world, or the room behind it.
+ *
+ * ---------------------------------------------------------------------------
+ * This used to be a ternary sitting directly in <App />, and it could not stay
+ * one. `atTheDoor` can only see the URL, and the address is no longer the
+ * whole question — `mayOpenTheDoor` needs to know who is signed in, and the
+ * only thing that knows that is the provider. So the decision moved down one
+ * component, inside it.
+ *
+ * What did **not** change is where it sits relative to the garden: still ahead
+ * of <Garden />, so arriving at the control room creates no Canvas, compiles
+ * no shaders and renders no meadow behind a page of form controls.
+ *
+ * The other branch is the garden itself rather than a refusal, and that is the
+ * point rather than a shortcut — see the long note in `systems/dev`. A "you
+ * cannot open this" is an announcement that there is something to open.
+ * ---------------------------------------------------------------------------
+ */
+function Doorway() {
+  const me = useData().me
+  if (atTheDoor() && mayOpenTheDoor(me)) {
+    return (
+      <Suspense fallback={null}>
+        <Admin />
+      </Suspense>
+    )
+  }
+  return <Garden />
+}
+
 export default function App() {
   const [error, setError] = useState<Error | null>(null)
 
@@ -507,20 +538,7 @@ export default function App() {
   try {
     return (
       <DataProvider door={(state) => <Door state={state} />}>
-        {/*
-          The control room instead of the world, not over it.
-
-          Inside the provider, because everything it does needs the data layer —
-          but ahead of <Garden />, so no Canvas is created, no shaders compile
-          and no meadow renders behind a page of form controls.
-        */}
-        {atTheDoor() ? (
-          <Suspense fallback={null}>
-            <Admin />
-          </Suspense>
-        ) : (
-          <Garden />
-        )}
+        <Doorway />
       </DataProvider>
     )
   } catch (e) {

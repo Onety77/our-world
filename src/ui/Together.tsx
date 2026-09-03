@@ -28,12 +28,23 @@
  * ---------------------------------------------------------------------------
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
+// One sentence, in one place: no pronoun of its own and no ellipsis. The rules
+// it has to keep are checked in `npm run typing`, not remembered here.
+import { writingLine } from '@/systems/typing'
 import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { useSay } from '@/systems/useSay'
-import type { Queued, ScreenLine } from '@/data/types'
+import type { Queued, ScreenLine, UserId } from '@/data/types'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { useListening } from '@/systems/listening'
@@ -72,6 +83,73 @@ function savedCaptionChoice(): boolean {
     return localStorage.getItem(CAPTIONS_KEY) === 'on'
   } catch {
     return false
+  }
+}
+
+/**
+ * A device with a mouse.
+ *
+ * The garden's existing question is `(pointer: coarse)` — see
+ * `cornerCanBeTucked` — and this is the other side of it, asked for the one
+ * decision that genuinely differs: a desktop's immersion is the browser's real
+ * fullscreen, and a phone's is a layout. A phone can do element fullscreen too
+ * and it is the wrong thing there, because portrait's best cinema is a film
+ * across the top with the conversation under it, not a letterboxed strip in
+ * the middle of a black screen.
+ */
+function hasMouse(): boolean {
+  if (typeof matchMedia === 'undefined') return false
+  return matchMedia('(pointer: fine)').matches
+}
+
+/**
+ * How long the words over a filled screen stay up with nothing happening.
+ *
+ * Thirty seconds is long enough to read what she said and answer it, and short
+ * enough that a film you are actually watching is a film with nothing on it.
+ * A half-written line does not count as nothing — see `ScreenChat`.
+ */
+const CHAT_REST_MS = 30_000
+
+/** How many lines the overlay carries. The film is the thing on the screen. */
+const CHAT_LINES = 7
+
+const SCRIM_KEY = 'garden:night-screen:scrim'
+
+/**
+ * How much dark the words sit on, over the picture.
+ *
+ * ---------------------------------------------------------------------------
+ * The right answer is *none* — a caption with a panel behind it is a panel over
+ * the film, and the whole point of this overlay is that it is text on the
+ * picture and nothing else. A text shadow carries it over almost everything.
+ *
+ * Almost. A white kitchen, a snow scene, a title card: pale text on pale
+ * picture, and no amount of shadow saves it. So there is a dial, it starts
+ * barely-there, and it goes to nothing at one end for anybody who would rather
+ * read badly than see a box.
+ * ---------------------------------------------------------------------------
+ */
+const SCRIM_REST = 0.4
+
+function savedScrim(): number {
+  try {
+    /*
+      The null is read before the number, and that is the whole function.
+
+      `Number(localStorage.getItem(k))` on a key that was never set is
+      `Number(null)`, which is **0** — finite, in range, and indistinguishable
+      from somebody having deliberately turned the backing off. So the default
+      was silently the one end of the dial nobody chose, and the words shipped
+      onto the picture with nothing behind them at all. It looked like the
+      shadow was not strong enough.
+    */
+    const stored = localStorage.getItem(SCRIM_KEY)
+    if (stored === null) return SCRIM_REST
+    const raw = Number(stored)
+    return Number.isFinite(raw) && raw >= 0 && raw <= 0.7 ? raw : SCRIM_REST
+  } catch {
+    return SCRIM_REST
   }
 }
 
@@ -153,6 +231,16 @@ export function Together() {
   const [miniControls, setMiniControls] = useState(false)
   /** Immersion is a personal layout choice; it must never rearrange her screen. */
   const [immersive, setImmersive] = useState(false)
+  /**
+   * True while the browser is actually giving us the whole screen.
+   *
+   * Separate from `immersive` on purpose. Immersion is *what we are asking
+   * for*; this is *what we got* — a request can be refused, a phone is never
+   * asked, and either way the in-page layout is already up and works. Only the
+   * second one may lay the picture edge to edge and hang the conversation over
+   * it, because only the second one owns every pixel.
+   */
+  const [filling, setFilling] = useState(false)
   const [immersiveControls, setImmersiveControls] = useState(true)
   const immersiveTimer = useRef<number | null>(null)
   const lastImmersiveMove = useRef(0)
@@ -212,12 +300,24 @@ export function Together() {
       }, 3200)
     }
 
+    /*
+      Escape leaves, and it has to leave *the fullscreen too*.
+
+      This used to flip the two pieces of state and stop there, which was
+      right while immersion was only a layout. It is not any more: the same
+      key the browser uses to end fullscreen would have left the page laid out
+      for a window it no longer had — a letterboxed film with the browser back
+      around it. Every way out now goes through one door.
+
+      In practice the browser exits on its own and the listener below would
+      have caught it; this is what makes that a second line of defence rather
+      than the only one.
+    */
     const leaveOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
-      setImmersive(false)
-      setImmersiveControls(true)
+      leaveImmersion()
     }
     document.addEventListener('keydown', leaveOnEscape, true)
     return () => {
@@ -228,6 +328,33 @@ export function Together() {
       }
     }
   }, [immersive, shared.playing, trouble, joined])
+
+  /*
+    ---------------------------------------------------------------------------
+    **The browser's own door, and it opens both ways.**
+
+    Fullscreen can end without this app being told to end it: Escape, F11, the
+    tab going to the background, the browser deciding it has had enough. If
+    immersion did not follow it out, the result is the worst state available —
+    a page laid out for a screen it no longer has, with the picture edge to
+    edge behind the browser's own furniture.
+
+    So the element is the truth. `filling` is set from what the document says
+    is fullscreen rather than from what was asked for, and leaving it leaves
+    immersion with it.
+    ---------------------------------------------------------------------------
+  */
+  useEffect(() => {
+    const changed = () => {
+      const ours = document.fullscreenElement === paneRef.current
+      setFilling(ours)
+      if (ours) return
+      setImmersive(false)
+      setImmersiveControls(true)
+    }
+    document.addEventListener('fullscreenchange', changed)
+    return () => document.removeEventListener('fullscreenchange', changed)
+  }, [])
 
   /* A dark or folded screen cannot retain an invisible immersive layout. */
   useEffect(() => {
@@ -520,17 +647,52 @@ export function Together() {
     setImmersiveControls(false)
   }
 
+  /*
+    ---------------------------------------------------------------------------
+    **Immersion asks the browser for the screen, and does not depend on getting
+    it.**
+
+    What this used to be was a layout: the picture took the left of the page
+    and the conversation took a column down the right. On a desktop that is a
+    video in a browser window with a tab strip, an address bar, a row of
+    bookmarks and a taskbar around it, and a wide black gutter where a quarter
+    of the film should be. It was immersive in name.
+
+    So it asks for the real thing. The element handed over is the pane root,
+    which is the whole point of asking for *an element* rather than the
+    document: everything inside it comes with it, including the iframe — which
+    is never re-parented and so never stops playing — and including the words
+    over the picture. Fullscreening the document instead would put the browser
+    in charge of what is on top, and the conversation would be under it.
+
+    The request can be refused, and a phone is never asked. Both land in the
+    same place: `immersive` is already true, the in-page layout is already up,
+    and it is the fallback rather than an error path. Nothing here waits on the
+    promise, and nothing tells anybody it failed, because from where you are
+    sitting it did not.
+    ---------------------------------------------------------------------------
+  */
   const enterImmersion = () => {
     if (!live) return
     setTab('talk')
     setImmersiveControls(true)
     setImmersive(true)
+    const el = paneRef.current
+    if (!el || !hasMouse()) return
+    if (!document.fullscreenEnabled || document.fullscreenElement !== null) return
+    void el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {
+      /* The layout is the fallback and it is already on screen. */
+    })
   }
 
   const leaveImmersion = () => {
     clearImmersiveTimer()
     setImmersive(false)
     setImmersiveControls(true)
+    if (document.fullscreenElement !== paneRef.current) return
+    void document.exitFullscreen().catch(() => {
+      /* Already gone, or refused; the listener above holds the truth either way. */
+    })
   }
 
   const toggleCaptions = () => {
@@ -669,7 +831,43 @@ export function Together() {
     willEnd.current = false
     setCarrying(false)
     setOverGround(false)
-    if (!held?.moved || held.id !== event.pointerId) return
+    if (!held || held.id !== event.pointerId) return
+
+    /*
+      -----------------------------------------------------------------------
+      **A press that never travelled is a tap, and this is where that is
+      decided — not by a `click` on the overlay underneath.**
+
+      This was reported as "on desktop it doesn't accept any touch": the
+      miniature could be dragged around perfectly, and nothing on it could be
+      pressed. Not the way in, not anything.
+
+      `onPaneDown` calls `setPointerCapture` so a drag cannot be lost out of a
+      small box, and a captured pointer retargets the **compatibility mouse
+      events** with it — `mousedown` and `mouseup` are delivered to the pane
+      rather than to whatever is under the cursor. A `click` is synthesised at
+      the nearest common ancestor of those two, which with capture in force is
+      always the pane itself. So every button inside it was unreachable by
+      mouse, and the `onClick` handlers were never wrong — they were never
+      called.
+
+      **Touch was fine, which is exactly why it survived.** A touch pointer is
+      implicitly captured to its own target anyway, and the click a browser
+      synthesises from a tap is aimed at the touch target rather than derived
+      from the retargeted mouse pair. It worked on the one device it was tested
+      on and could not work on the other.
+
+      Deciding the tap here rather than downstream of a click makes the two
+      pointer types one path, and the drag keeps its capture. What is left for
+      `onClick` is the keyboard, which never had a capture in the first place.
+      -----------------------------------------------------------------------
+    */
+    if (!held.moved) {
+      // A cancelled gesture is not a tap — a phone can take the pointer away
+      // mid-press for its own reasons, and that is not somebody asking.
+      if (event.type === 'pointerup') setMiniControls((shown) => !shown)
+      return
+    }
     if (dropped) {
       /*
         Put down in the ground: the screen ends.
@@ -788,7 +986,7 @@ export function Together() {
         in, belong here rather than on the picture.
       */
       ref={paneRef}
-      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
+      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
@@ -822,12 +1020,17 @@ export function Together() {
       )}
 
       {/* The persistent YouTube host never leaves the document between views. */}
+      {/*
+        No pointer handlers here, deliberately.
+
+        They used to be on this element *as well as* on the root, and since one
+        is `inset: 0` inside the other every press ran the whole gesture twice
+        — the second run overwriting the first's captured pointer and its grab
+        offset. The root is the box that moves and the box that is remembered,
+        so the root is the only thing that listens.
+      */}
       <div
         className={`together-screen${live ? '' : ' dark'}${trouble ? ' has-trouble' : ''}${!open && spot !== null ? ' placed' : ''}`}
-        onPointerDown={onPaneDown}
-        onPointerMove={onPaneMove}
-        onPointerUp={onPaneUp}
-        onPointerCancel={onPaneUp}
       >
         <div ref={stage} className="together-stage" />
         {open && live && !immersive && (
@@ -865,14 +1068,64 @@ export function Together() {
         )}
         {!open && (
           <>
+            {/*
+              A clear sheet over the iframe, and it is load-bearing twice.
+
+              An iframe is another document: a pointer that lands on it is
+              gone, and nothing here ever hears about it. Without a layer of
+              our own above it the miniature could not be dragged at all — so
+              this is not decoration over the picture, it is the picture's
+              only handle.
+
+              It stays a real `<button>` for the keyboard, and its `onClick`
+              answers to the keyboard alone: a pointer tap is settled in
+              `onPaneUp`, and letting a click through as well would toggle
+              twice and appear to do nothing. `detail` is 0 only for an
+              activation that came from a key rather than a pointer, which is
+              precisely the split we want.
+            */}
             <button
               type="button"
               className="together-mini-reveal"
-              onClick={() => setMiniControls((shown) => !shown)}
+              onClick={(event) => {
+                if (event.detail !== 0) return
+                setMiniControls((shown) => !shown)
+              }}
               aria-expanded={miniControls}
               aria-label="show miniature screen controls"
             />
-            <div className="together-mini-actions">
+            <div
+              className="together-mini-actions"
+              /*
+                The controls are not the pane. Swallowing the press here keeps
+                the gesture above from capturing the pointer, which is what
+                lets these buttons receive an ordinary click — see the long
+                note in `onPaneUp`.
+              */
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {/*
+                Play and pause, on the miniature.
+
+                It is the one control anybody expects to find on a small video
+                and the only one that was genuinely missing — YouTube's own
+                button is under our sheet and unreachable by design, so "the
+                play button doesn't work" was the honest reading of a picture
+                with nothing to press.
+
+                It reaches her screen, which is why it is behind the same two
+                presses everything here is behind: one to wake the controls,
+                one to use them. Unlike ending the session it is completely
+                reversible, which is the line this overlay draws.
+              */}
+              <button
+                type="button"
+                onClick={playPause}
+                aria-label={shared.playing ? 'pause for both of us' : 'play for both of us'}
+              >
+                <span aria-hidden="true">{shared.playing ? '❚❚' : '▶'}</span>
+                {shared.playing ? 'pause' : 'play'}
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -938,7 +1191,18 @@ export function Together() {
         />
       )}
 
-      {open && (
+      {/*
+        Over the picture, when the picture is the whole screen.
+
+        Not "instead of the panel on a narrow window" — instead of the panel
+        when there is no room for one that isn't taken from the film. A column
+        beside a fullscreen video is a video that is not fullscreen.
+      */}
+      {open && live && immersive && filling && (
+        <ScreenChat session={shared.session} theirName={them.name} me={me} />
+      )}
+
+      {open && !filling && (
         <aside className="together-room" aria-label={immersive ? 'conversation beside the screen' : 'shared screen controls'}>
           {!immersive && (
             <>
@@ -1231,20 +1495,26 @@ function Transport({
  * commentary on a film.
  * ---------------------------------------------------------------------------
  */
-function Talk({ session, theirName }: { session: string; theirName: string }) {
+/**
+ * One sitting's conversation: what has been said, and how to add to it.
+ *
+ * ---------------------------------------------------------------------------
+ * Two things show this and they are not the same shape — a panel beside the
+ * screen, and a handful of lines lying over a filled one. What they share is
+ * every part that is easy to get subtly wrong: which sitting a line belongs
+ * to, the optimistic copy that has to be replaced rather than joined, undoing
+ * that copy when the write is refused, and the sound.
+ *
+ * Written twice, one of them would drift. The same argument as the three
+ * composers in `systems/useTyping`, and the same answer.
+ * ---------------------------------------------------------------------------
+ */
+function useScreenTalk(session: string) {
   const data = useData()
   const me = data.me
-  /** `say` is taken here — this one turns {her} into her name. */
+  /** `say` is taken by the sender below — this one turns {her} into her name. */
   const inWords = useSay()
-  const [draft, setDraft] = useState('')
   const [said, setSaid] = useState<ScreenLine[]>([])
-  const feed = useRef<HTMLDivElement>(null)
-  /*
-    Gated on there being a sitting, because the field is disabled without one
-    and a disabled field cannot be typed into — so reporting from here with no
-    screen on would be reporting a draft nobody can add to.
-  */
-  useReportTyping(draft, session !== '')
 
   useEffect(() => {
     if (session === '') {
@@ -1257,18 +1527,13 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
     })
   }, [data, session])
 
-  useEffect(() => {
-    const conversation = feed.current
-    if (conversation) conversation.scrollTop = conversation.scrollHeight
-  }, [said.length])
-
-  async function say() {
-    const text = draft.trim()
-    if (text === '' || session === '') return
+  const say = async (text: string): Promise<boolean> => {
+    const body = text.trim()
+    if (body === '' || session === '') return false
     const line: ScreenLine = {
       id: `said-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
       by: me,
-      body: text,
+      body,
       at: Date.now(),
     }
     /*
@@ -1280,15 +1545,13 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
       just typed.
     */
     setSaid((was) => [...was, line])
-    setDraft('')
     ambience.said(true)
     const sent = await attempt(inWords('that didn’t reach {her} screen'), () =>
       data.sayOnScreen(session, line),
     )
     if (!sent) setSaid((was) => was.filter((l) => l.id !== line.id))
+    return sent
   }
-
-  const writing = useTheyAreTyping()
 
   const shown = useMemo(() => {
     // The optimistic copy and the one off the wire are the same line.
@@ -1296,6 +1559,34 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
     for (const line of said) byId.set(line.id, line)
     return [...byId.values()].sort((a, b) => a.at - b.at).slice(-60)
   }, [said])
+
+  return { shown, say, me }
+}
+
+function Talk({ session, theirName }: { session: string; theirName: string }) {
+  const [draft, setDraft] = useState('')
+  const { shown, say: send, me } = useScreenTalk(session)
+  const feed = useRef<HTMLDivElement>(null)
+  /*
+    Gated on there being a sitting, because the field is disabled without one
+    and a disabled field cannot be typed into — so reporting from here with no
+    screen on would be reporting a draft nobody can add to.
+  */
+  useReportTyping(draft, session !== '')
+
+  useEffect(() => {
+    const conversation = feed.current
+    if (conversation) conversation.scrollTop = conversation.scrollHeight
+  }, [shown.length])
+
+  async function say() {
+    const text = draft
+    if (text.trim() === '' || session === '') return
+    setDraft('')
+    await send(text)
+  }
+
+  const writing = useTheyAreTyping()
 
   return (
     <div className="together-talk">
@@ -1344,6 +1635,259 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The conversation over a filled screen.
+ *
+ * ---------------------------------------------------------------------------
+ * **The film gets the whole screen, and the words live on top of it.** That is
+ * the trade this component exists to make. A column beside the picture is
+ * honest and it costs a quarter of the film; a few lines lying over the
+ * bottom-right corner cost a corner of the picture, only while somebody is
+ * saying something, and give the rest of it back.
+ *
+ * Four rules, and each one is doing work:
+ *
+ * **No box.** No panel, no border, no card. Words on the picture, in the
+ * colour of whoever said them, carried by a shadow rather than by a surface.
+ * The one concession is `--screen-chat-scrim` — a wash of dark behind the
+ * type, for the white kitchen and the snow scene — which starts barely-there
+ * and goes all the way to nothing. See `SCRIM_REST`.
+ *
+ * **It leaves.** Thirty seconds with nothing said and nothing being written
+ * and it fades off the picture entirely. A film you are watching should have
+ * nothing on it.
+ *
+ * **It comes back on its own.** A line arriving brings it back — the message
+ * you did not know about is the one thing here that must never be missed —
+ * and so does her starting to type, which is the same news half a second
+ * earlier.
+ *
+ * **You do not go and find the field.** Start typing and it is there, with
+ * what you typed already in it. This is the part that makes the rest work:
+ * reaching for a control, aiming at it and pressing it is a thing you do
+ * *instead of* watching, which is why talking over a film normally means one
+ * of you has stopped watching it. A keystroke costs nothing.
+ * ---------------------------------------------------------------------------
+ */
+function ScreenChat({
+  session,
+  theirName,
+  me,
+}: {
+  session: string
+  theirName: string
+  me: UserId
+}) {
+  const { shown: everything, say: send } = useScreenTalk(session)
+  const [draft, setDraft] = useState('')
+  const [composing, setComposing] = useState(false)
+  const [awake, setAwake] = useState(true)
+  const [scrim, setScrim] = useState(savedScrim)
+  const field = useRef<HTMLTextAreaElement>(null)
+  const rest = useRef<number | null>(null)
+  const writing = useTheyAreTyping()
+
+  useReportTyping(draft, composing && session !== '')
+
+  const shown = useMemo(() => everything.slice(-CHAT_LINES), [everything])
+
+  /*
+    One timer, re-armed by everything that counts as something happening. It is
+    replaced rather than stacked, so there is never more than one alive.
+  */
+  const wake = useCallback(() => {
+    setAwake(true)
+    if (rest.current !== null) window.clearTimeout(rest.current)
+    rest.current = window.setTimeout(() => {
+      rest.current = null
+      setAwake(false)
+      setComposing(false)
+    }, CHAT_REST_MS)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (rest.current !== null) window.clearTimeout(rest.current)
+    },
+    [],
+  )
+
+  /*
+    A line arriving, or her beginning one. Her typing wakes it about a second
+    before the line does, which is the difference between reading her message
+    and watching it appear.
+  */
+  useEffect(() => { wake() }, [shown.length, wake])
+  useEffect(() => { if (writing) wake() }, [writing, wake])
+  /*
+    And a draft in progress is not "nothing happening", however long the pause.
+
+    Somebody thinking mid-sentence for thirty-one seconds should not have the
+    field taken away with their words still in it. Every keystroke re-arms the
+    timer; this re-arms it for the silences between them, so a started line
+    keeps the overlay up until it is sent or emptied.
+  */
+  useEffect(() => { if (draft !== '') wake() }, [draft, wake])
+
+  /*
+    ---------------------------------------------------------------------------
+    **Type, and the field is there.**
+
+    The listener is on the document rather than on anything focusable, because
+    the entire point is that nothing has to be focused first. It stands aside
+    for the three cases that would make it wrong: a modifier held down (that is
+    a shortcut, not a sentence), a key something else has already handled, and
+    a field that already owns the keyboard — including this one's own, which is
+    how every character after the first reaches the textarea normally.
+
+    A single-character `key` is the test for "this is typing". It is true for
+    letters, digits, punctuation, every accented character and every script;
+    it is false for Escape, Tab, the arrows and the function keys, which have
+    names instead. Enter opens an empty field, because somebody who wants to
+    say something and has not yet decided what will press it.
+    ---------------------------------------------------------------------------
+  */
+  useEffect(() => {
+    if (session === '') return
+    const typed = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      const at = event.target as HTMLElement | null
+      if (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        setComposing(true)
+        wake()
+        return
+      }
+      if (event.key.length !== 1) return
+      event.preventDefault()
+      setComposing(true)
+      // Appended rather than replacing: a line left half-written when the
+      // overlay rested is still yours when you come back to it.
+      setDraft((was) => was + event.key)
+      wake()
+    }
+    document.addEventListener('keydown', typed)
+    return () => document.removeEventListener('keydown', typed)
+  }, [session, wake])
+
+  /* The caret belongs after what you have already typed, not in front of it. */
+  useEffect(() => {
+    if (!composing) return
+    const el = field.current
+    if (!el) return
+    el.focus()
+    const end = el.value.length
+    el.setSelectionRange(end, end)
+  }, [composing])
+
+  const putScrim = (next: number) => {
+    setScrim(next)
+    try {
+      localStorage.setItem(SCRIM_KEY, String(next))
+    } catch {
+      /* A private browser may refuse storage; the setting still holds tonight. */
+    }
+  }
+
+  async function say() {
+    const text = draft
+    if (text.trim() === '') return
+    setDraft('')
+    wake()
+    await send(text)
+    /*
+      Left open, because talking over a film is a back-and-forth rather than one
+      message — and closing it would take the keyboard away between two halves
+      of the same thought. It goes when the thirty seconds go.
+    */
+    field.current?.focus()
+  }
+
+  return (
+    <div
+      className={`screen-chat${awake ? ' awake' : ''}${composing ? ' writing' : ''}`}
+      style={{ '--screen-chat-scrim': String(scrim) } as CSSProperties}
+      aria-label={`what you and ${theirName} are saying about this`}
+    >
+      <div className="screen-chat-said">
+        {shown.map((line) => (
+          <p key={line.id} className={`screen-chat-line ${line.by === me ? 'mine' : 'hers'}`}>
+            <b>{line.by === me ? 'you' : theirName}</b>
+            {line.body}
+          </p>
+        ))}
+      </div>
+
+      {/* This line keeps its place whether or not she is writing, so a message
+          arriving never shifts the field out from under the cursor. */}
+      <p className="screen-chat-writing" aria-live="polite" aria-atomic="true">
+        {writing ? <span>{writingLine(theirName)}</span> : null}
+      </p>
+
+      {composing ? (
+        <div className="screen-chat-compose">
+          <Ink
+            className="ink screen-chat-field"
+            value={draft}
+            onChange={setDraft}
+            innerRef={field}
+            placeholder={`to ${theirName}`}
+            label={`say something to ${theirName} about what is on`}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                void say()
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="screen-chat-send"
+            disabled={draft.trim() === ''}
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => void say()}
+          >
+            send
+          </button>
+          {/*
+            The dial for the white kitchen, and it lives here rather than with
+            the viewing controls.
+
+            You discover you need it at the exact moment you cannot read a
+            line, and that moment is this one. A control you have to go and
+            open a different set of controls to reach is a control you use once
+            and then stop using. It is here only while you are writing, which
+            is the only time this corner belongs to you rather than to the film.
+          */}
+          <label className="screen-chat-scrim-set">
+            <span aria-hidden="true">backing</span>
+            <input
+              type="range"
+              min={0}
+              max={0.7}
+              step={0.05}
+              value={scrim}
+              onChange={(event) => putScrim(Number(event.currentTarget.value))}
+              /*
+                Back to the sentence afterwards. Without this the next thing
+                typed goes to the slider and moves it, because the slider is a
+                field and the document listener correctly stands aside for it.
+              */
+              onPointerUp={() => field.current?.focus()}
+              onBlur={() => field.current?.focus()}
+              aria-label="how much dark the words sit on"
+            />
+          </label>
+        </div>
+      ) : (
+        <p className="screen-chat-hint">type to say something</p>
+      )}
     </div>
   )
 }

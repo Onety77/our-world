@@ -40,6 +40,147 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 3 Sep · Claude · the night screen, filled
+
+> *"i want that same kinda full screen, where it actually is a full screen,
+> without nothing on the screen, just the video im watching"*
+
+Three things, and the first two turned out to be the same kind of bug: something
+that works on exactly one of the two devices this garden runs on.
+
+### The miniature could be dragged and not pressed
+
+Reported as "on desktop it doesn't accept any touch". The pane moved perfectly
+and nothing on it could be pressed — not the way in, not anything.
+
+`onPaneDown` calls `setPointerCapture` so a drag cannot be lost out of a small
+box, and **a captured pointer retargets the compatibility mouse events with
+it**. `mousedown` and `mouseup` go to the pane rather than to whatever is under
+the cursor, and the `click` a browser synthesises is aimed at the nearest common
+ancestor of that pair — which, with capture in force, is always the pane. Every
+`onClick` inside was correct and none of them was ever called.
+
+**Touch was fine, which is why it survived.** A touch pointer is implicitly
+captured to its own target anyway, and the click made from a tap is aimed at the
+touch target rather than derived from the retargeted mouse pair.
+
+- The tap is decided in `onPaneUp` now, from the same `moved` flag the drag
+  already keeps. One path for both pointer types, and the drag keeps its
+  capture.
+- `.together-mini-reveal` stays a real button for the keyboard, and answers only
+  to the keyboard — `event.detail === 0` is the split.
+- `.together-mini-actions` swallows the press so its buttons get an ordinary
+  click. **Play and pause is on the miniature now.** YouTube's own button is
+  under our sheet by design, so "the play button doesn't work" was the honest
+  reading of a picture with nothing to press.
+- The duplicate pointer handlers on `.together-screen` are gone. They ran the
+  whole gesture twice, the second run overwriting the first's captured pointer.
+
+### The corner said whatever YouTube said
+
+*open the night screen* is a length the column was laid out around. Then
+something goes on and the same line starts carrying a name written by a stranger
+— `shortTitle` in `systems/watching` cuts it to 34 characters on a word boundary.
+CSS was already ellipsising it and that was not enough: an ellipsis only bites
+after something upstream has decided how wide the column is.
+
+### And the film gets the whole screen
+
+Immersion was a *layout* — the picture on the left, a column down the right — so
+on a desktop it was a video in a browser window with a tab strip, an address
+bar, bookmarks and a taskbar around it, and a wide black gutter where a quarter
+of the film should have been.
+
+It asks the browser for the screen now: `requestFullscreen` on the pane root, so
+the persistent iframe comes with it and the shared clock never restarts. The
+request can be refused and a phone is never asked — `hasMouse()` — and both land
+on the old layout, which is the fallback rather than an error path.
+
+**The whole layout change is one number.** Everything in the immersive block
+measures the film against `--immersive-chat`; `.filling` takes it to zero.
+
+The conversation moves onto the picture. `ScreenChat`: bottom right, no panel,
+no border, lines carried by a triple text-shadow rather than by a surface. It
+rests after thirty seconds of nothing, comes back on a line arriving or on her
+starting to type, and **you never go and find the field** — start typing and it
+is there with what you typed already in it. `--screen-chat-scrim` is the dial
+for the white kitchen, from nothing to a little, and it lives in the composer
+because that is where you are when you discover you need it.
+
+`useScreenTalk` is the one implementation of a sitting's conversation, shared by
+the panel and the overlay. Same argument as the three composers in
+`systems/useTyping`.
+
+### Two silent ones found by looking rather than by thinking
+
+- `savedScrim` read `Number(localStorage.getItem(k))`, and on a key that was
+  never set that is `Number(null)` — **0**, finite, in range, and identical to
+  somebody deliberately turning the backing off. The default shipped as the one
+  end of the dial nobody chose, and it looked like the shadow was too weak.
+- A `\s` lost to a shell heredoc made `shortTitle` cut on `/s+/g`, which
+  silently deleted every letter *s* in the title. It compiled, it typechecked,
+  and it read correctly in the source.
+
+### `npm run screen`
+
+Drives `Input.dispatchMouseEvent` and `Input.dispatchTouchEvent` rather than
+calling `.click()`. **A synthetic click would have passed against the broken
+build** — it skips the pointer pipeline, the capture and the retargeting, which
+is the entire bug. It waits out the real thirty seconds too; a shortened timer
+would only prove a shortened timer works.
+
+Two of its own failures were the checker being wrong, and both are worth
+knowing: `Emulation.setTouchEmulationEnabled` is a property of the page, so a
+phone step leaves `(pointer: fine)` false for everything after it; and the
+miniature's position is kept in `localStorage`, so a run that does not empty
+that drawer measures the run before it.
+
+## 3 Sep · Claude · the control room is Warm's room now
+
+> *"in a case that she ever finds out about dev7731, can she sign in with her
+> mail and password?"*
+
+She could. `/dev7731` was hidden and nothing else, and the file said so in as
+many words — a secret in the sense of not lying around, not in the security
+sense. `atTheDoor()` only ever read the URL, and the page rendered inside the
+provider, so **either** address signing in and landing on that path got the
+whole room: the car republished under the other one mid-corner, the doors on the
+wall, the sky pinned to an hour she is not living in.
+
+The rules were already stricter than the interface. `rallyTuning` and the
+world volumes are Warm-only in `firestore.rules`, and a handful of controls
+disable themselves for Cool. So the server was never going to let her *publish*
+the car — but she could open the room, read everything in it, and drive a
+retuned car on her own phone, which is not what a hidden page was meant to mean.
+
+- `mayOpenTheDoor(me)` in `systems/dev`, and `App` now decides through a
+  `Doorway` component **inside** the provider — `atTheDoor()` can only see
+  the address, and the address stopped being the whole question. Still ahead of
+  `<Garden />`, so the control room still creates no Canvas.
+- **The other branch is the garden, not a refusal.** Cool at that path gets the
+  ordinary world, indistinguishable from any other path that isn't a thing. A
+  "you cannot open this" announces that there is something to open.
+- **The local mock stays open to both, deliberately.** There `me` is a
+  localStorage key with a dropdown pointed at it, so a gate stops nobody with
+  devtools — and "look at it as Cool" is a control *inside this room*, so the
+  first use of it would lock you out of the only page holding the switch back.
+
+### The thing that was actually broken on the way
+
+`config.ts` promises in its own header that it falls through to
+`process.env` off-Vite so check scripts can import it. `askedForTheMock()`
+never got the memo and read `import.meta.env.DEV` bare, which is `undefined`
+under Node — so importing `@/config` from any script threw before it could do
+anything. Nothing hit it because no check imported config, transitively or
+otherwise, until this one did. It reads `raw.DEV` now, the same fallback the
+rest of the file uses.
+
+`npm run door` is new. `DATA_BACKEND` is settled once at module load, so
+seeing both answers means a child process per backend — there is no honest way
+to ask twice in one. It also greps `App.tsx` for a branch straight off
+`atTheDoor()`, because the boundary is worth exactly as much as its one call
+site and a later tidy-up would put it all back, compile cleanly, and look right.
+
 ## 2 Sep · Claude · the fourth one, and a place to put the seam
 
 > *"whatever emoji i tap to do the reaction with, its only the heart that

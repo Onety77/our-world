@@ -14853,10 +14853,17 @@ body.on-the-road .broke-what {
 /* ===========================================================================
    The quiet Night Screen
 
-   Immersion is an app-level viewing room rather than the browser's native
-   fullscreen. Native YouTube fullscreen would take the conversation away and
-   hand the controls to a second, unrelated interface. Here the same persistent
-   iframe simply receives more room; the shared clock never restarts.
+   Immersion asks the browser for the screen — `requestFullscreen` on the pane
+   root, so the persistent iframe and the conversation both come with it. What
+   it does *not* do is hand the film to YouTube's own fullscreen, which would
+   take the conversation away and put a second, unrelated set of controls over
+   it. The same iframe simply receives the whole display; the shared clock
+   never restarts.
+
+   These rules are the layout for the two cases where we did not get it: a
+   request refused, and a phone, which is never asked because portrait cinema
+   is a film across the top with the conversation under it. The case where we
+   did get it is `.filling`, at the end of this file.
    =========================================================================== */
 
 .together-immerse-enter {
@@ -15128,4 +15135,281 @@ body.on-the-road .broke-what {
 @media (prefers-reduced-motion: reduce) {
   .together-immerse-enter,
   .together-immersive-controls { transition: none; }
+}
+
+/* ===========================================================================
+   A filled screen, and the words over it
+
+   `.filling` is set from what the browser says is fullscreen rather than from
+   what was asked for — see the note in `ui/Together`. So these rules describe
+   the one case where this app genuinely owns every pixel of the display, and
+   nothing here should ever be reached by a page that merely looks like it.
+
+   The whole layout change is **one number**. Everything in the immersive block
+   above measures the film against `--immersive-chat`, the width of the column
+   beside it; taking that column to zero gives the film the screen and leaves
+   the picture, the controls and the trouble states already laid out correctly
+   against it. The conversation does not move over — it stops being a column.
+   =========================================================================== */
+
+.together.full.immersive.filling {
+  --immersive-chat: 0px;
+  /*
+    Chrome paints a fullscreen element on `canvas`, which is white in a light
+    system. The immersive block already sets black; this says so again at the
+    specificity that wins, because a white flash at the moment a film goes
+    fullscreen is the most visible thing in the whole feature.
+  */
+  background: #000;
+}
+
+/* ---- the conversation, lying on the picture ----------------------------- */
+
+/*
+  Bottom right, no surface, and it is allowed to be in the way of nothing.
+
+  `pointer-events` is off for the whole overlay and back on for the one part
+  that is genuinely a control. A film with a dead rectangle over the corner of
+  it is a film you cannot press pause on.
+*/
+.screen-chat {
+  position: absolute;
+  z-index: 9;
+  right: clamp(1rem, 2.6vw, 2.4rem);
+  bottom: clamp(1rem, 2.6vw, 2.4rem);
+  width: min(24rem, 32vw);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 300ms ease, visibility 300ms ease, bottom 220ms ease;
+}
+
+.screen-chat.awake {
+  opacity: 1;
+  visibility: visible;
+}
+
+/*
+  Out of the transport's way while the transport is up.
+
+  The controls come and go on their own three-second timer and they live along
+  the bottom edge, which is also the best place for the words. Rather than move
+  either of them somewhere worse permanently, the conversation steps up while
+  there is something under it and comes back down when there is not.
+*/
+.together.immersive-awake .screen-chat {
+  bottom: calc(clamp(1rem, 2.6vw, 2.4rem) + 7rem);
+}
+
+.screen-chat-said {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.26rem;
+  width: 100%;
+}
+
+/*
+  A line hugs its own words.
+
+  Right-aligned so the column has one clean edge against the corner of the
+  screen, left-read inside so the words start where words start. The backing is
+  the only thing between the type and the film, and how much of it there is
+  belongs to whoever is watching — `--screen-chat-scrim`, from nothing to a
+  little, set from the composer. The shadow is not adjustable and is doing most
+  of the work: it costs no picture at all.
+*/
+.screen-chat-line {
+  margin: 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.16rem 0.52rem;
+  border-radius: 0.4rem;
+  background: rgba(2, 3, 6, var(--screen-chat-scrim, 0.4));
+  font: 0.84rem/1.42 var(--sans);
+  color: rgba(255, 253, 248, 0.96);
+  text-align: left;
+  /*
+     Three shadows, and it is not belt and braces.
+
+     A single soft shadow disappears against a bright frame — a white kitchen,
+     a snow scene, the title card of a cartoon — which is the case this whole
+     overlay is hardest to read in. A tight dark rim plus two wider halos is
+     what broadcast subtitles do, and it costs no picture at all, which is why
+     it carries the type rather than the backing behind it.
+  */
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 0 18px rgba(0, 0, 0, 0.7);
+  overflow-wrap: anywhere;
+  transition: background-color 160ms ease;
+}
+
+/* A label rather than the first word of the sentence: smaller, spaced, and
+   the only coloured thing in the line. */
+.screen-chat-line b {
+  margin-right: 0.5rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: lowercase;
+}
+
+/* The same two colours the panel beside the screen uses, so a line does not
+   change who said it depending on how you are watching. */
+.screen-chat-line.mine b { color: #ffdcab; }
+.screen-chat-line.hers b { color: #c3d6ff; }
+
+/* Its place is kept whether or not she is writing, so a line arriving mid
+   sentence never shifts the field out from under the cursor. */
+.screen-chat-writing {
+  margin: 0;
+  min-height: 1.1em;
+  font: 0.58rem var(--sans);
+  letter-spacing: 0.1em;
+  color: rgba(195, 214, 255, 0.74);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.92);
+}
+
+/* Quiet, but not invisible. It is the only thing that teaches the gesture,
+   and it was unreadable over a bright frame at the opacity it started at. */
+.screen-chat-hint {
+  margin: 0 0.2rem;
+  font: 0.5rem var(--sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 253, 248, 0.5);
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 0 16px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- the one part that is a control ------------------------------------- */
+
+.screen-chat-compose {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.45rem;
+  /* A shade more than a line gets: this one has to be read while it is being
+     written into, which is harder than reading it afterwards. */
+  background: rgba(2, 3, 6, calc(var(--screen-chat-scrim, 0.4) + 0.14));
+  pointer-events: auto;
+}
+
+.screen-chat-field {
+  flex: 1 1 8rem;
+  min-width: 0;
+  max-height: 5.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  resize: none;
+  color: #fffdf8;
+  font: 0.86rem/1.42 var(--sans);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.92);
+  outline: none;
+}
+
+.screen-chat-field::placeholder { color: rgba(255, 253, 248, 0.4); }
+
+.screen-chat-send {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.2rem;
+  border: 0;
+  background: none;
+  color: #ffd9a8;
+  font: 0.52rem var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.92);
+  cursor: pointer;
+}
+
+.screen-chat-send:disabled { opacity: 0.3; cursor: default; }
+
+/*
+  The dial, in the garden's language rather than the browser's.
+
+  A native range control over a film is a piece of operating system lying on a
+  picture. It is the same line-and-dot the scrubber uses, at a quarter of the
+  size, because it is the same kind of thing: a quantity you set by feel and
+  never by number.
+*/
+.screen-chat-scrim-set {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 253, 248, 0.42);
+  font: 0.46rem var(--sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.screen-chat-scrim-set input {
+  flex: 1 1 auto;
+  height: 0.9rem;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  cursor: pointer;
+}
+
+.screen-chat-scrim-set input:focus-visible {
+  outline: 1px solid rgba(255, 222, 178, 0.6);
+  outline-offset: 2px;
+}
+
+.screen-chat-scrim-set input::-webkit-slider-runnable-track {
+  height: 1px;
+  background: rgba(255, 253, 248, 0.3);
+}
+
+.screen-chat-scrim-set input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: -0.27rem;
+  border: 0;
+  border-radius: 50%;
+  background: #ffd9a8;
+}
+
+.screen-chat-scrim-set input::-moz-range-track {
+  height: 1px;
+  background: rgba(255, 253, 248, 0.3);
+}
+
+.screen-chat-scrim-set input::-moz-range-thumb {
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 0;
+  border-radius: 50%;
+  background: #ffd9a8;
+}
+
+/* A short window has no room to lift the words over the transport, so they
+   narrow instead and sit beside the clock rather than above it. */
+@media (max-height: 620px) {
+  .screen-chat { width: min(19rem, 34vw); }
+  .together.immersive-awake .screen-chat {
+    bottom: calc(clamp(1rem, 2.6vw, 2.4rem) + 5.4rem);
+  }
+  .screen-chat-line { font-size: 0.76rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-chat { transition: none; }
 }

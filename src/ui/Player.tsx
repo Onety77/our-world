@@ -34,7 +34,7 @@ import {
 } from '@/systems/listening'
 import type { Listening } from '@/data/types'
 import { useDismissOutside } from './useDismissOutside'
-import { useWatching } from '@/systems/watching'
+import { shortTitle, useWatching } from '@/systems/watching'
 
 /**
  * How many songs the list shows before it starts scrolling.
@@ -507,8 +507,12 @@ export function Player() {
                 her name in the corner already says whether she is about to.
               */}
               <span className="player-watch-title">
+                {/*
+                  Cut, not merely ellipsised. `shortTitle` and the note on it
+                  in `systems/watching` say why the CSS alone was not enough.
+                */}
                 {watchingLive
-                  ? (watchingTitle || 'return to the screen')
+                  ? (shortTitle(watchingTitle) || 'return to the screen')
                   : presence[them.id]?.online === true
                     ? `${them.name} is here · open the night screen`
                     : 'open the night screen'}

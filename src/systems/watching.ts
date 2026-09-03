@@ -280,6 +280,47 @@ export function clock(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 
+/**
+ * How much of a video's name the corner is allowed to say.
+ *
+ * ---------------------------------------------------------------------------
+ * The line in the corner was written to a length: *open the night screen*, or
+ * *Tife is here · open the night screen* when she is. That is the shape the
+ * column was laid out around, and on a phone it is exactly as much text as
+ * fits on one line.
+ *
+ * Then something is put on, and the same line starts saying what is on — and a
+ * video's name is written by a stranger with no idea this column exists.
+ * "How It's Made: Noodles, Pasta, Mac & Cheese | Season 12 Episode 4 | Full
+ * Episode" is a real title and it is four times the budget.
+ *
+ * CSS already ellipsises it, and that was not enough: the ellipsis only bites
+ * once something upstream has decided how wide the column is, and every one of
+ * those decisions is a place a long word can push. Cutting the string is the
+ * one fix that cannot be undone by a layout further out — the corner never
+ * receives the long name in the first place.
+ * ---------------------------------------------------------------------------
+ */
+export const TITLE_ROOM = 34
+
+/**
+ * A name cut to a length a line can hold.
+ *
+ * Cuts on a word boundary when there is one worth having — a title chopped
+ * mid-word reads as damage, whereas one that stops between words reads as a
+ * title that carries on. "Worth having" is the last two thirds of the budget;
+ * a boundary earlier than that throws away more than the ragged edge costs.
+ *
+ * The ellipsis is one character and is inside the budget, not added to it.
+ */
+export function shortTitle(title: string, room = TITLE_ROOM): string {
+  const clean = title.replace(/\s+/g, ' ').trim()
+  if (clean.length <= room) return clean
+  const cut = clean.slice(0, room - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > room * 0.66 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
+
 // ---------------------------------------------------------------------------
 // Somewhere to begin
 // ---------------------------------------------------------------------------
