@@ -60,6 +60,7 @@ import {
   type Screen,
 } from '@/systems/youtube'
 import { Ink } from './Ink'
+import { Scrub } from './Scrub'
 import { gainOf, useVolume } from '@/systems/volume'
 
 /** How often the two screens are compared. See `DRIFT` for why not per frame. */
@@ -260,6 +261,41 @@ export function Together() {
       (state: number) => {
         if (state === PLAYING || state === PAUSED) setTrouble('')
         if (state === ENDED && !applying.current) void onEnded()
+        /*
+          ==================================================================
+          **YouTube's own play button is one of the controls now.**
+
+          It used to fight the sync and lose in about a second, which is what
+          the report described exactly: press the big red button, the film
+          starts, and a moment later it stops itself. Nothing was broken —
+          the loop below reads the shared anchor every nine hundred
+          milliseconds and makes the player match it, and nobody had told the
+          anchor that anything happened. So it dutifully undid it. Pausing
+          with YouTube's button did the same in reverse, which is why that
+          "worked" for a second too.
+
+          The model was: the anchor is the truth and the player obeys. That is
+          right for *her* device and wrong for the one with the finger on it.
+          A press here is now a press on ours — it moves the shared screen,
+          she gets it, and the loop has nothing to correct.
+
+          `applying` is what stops this becoming a loop of its own: every
+          change this app makes to the player sets it first, so only a state
+          change nobody here asked for is treated as a person asking.
+          ==================================================================
+        */
+        if (applying.current) return
+        if (state !== PLAYING && state !== PAUSED) return
+        const anchor = useWatching.getState().shared
+        if (anchor.videoId === null) return
+        const nowPlaying = state === PLAYING
+        if (nowPlaying === anchor.playing) return
+        const player = screen.current
+        const at = player ? player.where() : positionOf(anchor, data.now())
+        // Its own reported position, not the anchor's — the whole point is
+        // that the player is ahead of what we believed.
+        move({ ...anchor, playing: nowPlaying, at: Math.max(0, at) })
+        setJoined(true)
       },
       (why) => setTrouble(why),
     )
@@ -331,8 +367,22 @@ export function Together() {
     const sync = () => {
       const player = screen.current
       if (!player) return
-      const anchor = useWatching.getState().shared
+      const watching = useWatching.getState()
+      const anchor = watching.shared
       if (anchor.videoId === null) return
+      /*
+        Not while a thumb is on the scrubber.
+
+        This loop pulls the player back to the shared anchor, which is right
+        every moment except that one: mid-drag the anchor is still where the
+        film was before you took hold of it, so a correction is a fight with
+        the finger — and it fights with a nine-hundred-millisecond round trip
+        behind it, which is precisely what "sticky" felt like.
+
+        The drag writes once, on release. Until then nothing here has anything
+        to say.
+      */
+      if (watching.scrubbing) return
 
       const want = positionOf(anchor, data.now())
       const at = player.where()
@@ -710,7 +760,6 @@ export function Together() {
 
   // --- what is on --------------------------------------------------------
   const shown = shared.playing ? Math.max(where, 0) : shared.at
-  const through = span > 0 ? Math.max(0, Math.min(1, shown / span)) : 0
 
   /*
     ------------------------------------------------------------------------
@@ -876,7 +925,7 @@ export function Together() {
           awake={immersiveControls}
           captions={captions}
           playing={shared.playing}
-          through={through}
+          live={live}
           shown={shown}
           span={span}
           hasNext={shared.queue.length > 0}
@@ -898,7 +947,6 @@ export function Together() {
                 onStop={endSession}
                 captions={captions}
                 playing={shared.playing}
-                through={through}
                 shown={shown}
                 span={span}
                 hasNext={shared.queue.length > 0}
@@ -977,7 +1025,7 @@ function ImmersiveTransport({
   awake,
   captions,
   playing,
-  through,
+  live,
   shown,
   span,
   hasNext,
@@ -991,7 +1039,8 @@ function ImmersiveTransport({
   awake: boolean
   captions: boolean
   playing: boolean
-  through: number
+  /** Whether there is a film at all — the scrubber and skips need it. */
+  live: boolean
   shown: number
   span: number
   hasNext: boolean
@@ -1002,14 +1051,6 @@ function ImmersiveTransport({
   onLeave(): void
   onActivity(): void
 }) {
-  const beam = useRef<HTMLDivElement>(null)
-
-  const scrubTo = (clientX: number) => {
-    const box = beam.current?.getBoundingClientRect()
-    if (!box || box.width === 0 || span <= 0) return
-    onSeek(((clientX - box.left) / box.width) * span)
-  }
-
   return (
     <div
       className={`together-immersive-controls${awake ? ' awake' : ''}`}
@@ -1030,31 +1071,13 @@ function ImmersiveTransport({
       </button>
 
       <div className="together-immersive-transport">
-        <div
-          ref={beam}
-          className="together-beamline"
-          role="slider"
-          tabIndex={0}
-          aria-label="how far through"
-          aria-valuemin={0}
-          aria-valuemax={Math.round(span)}
-          aria-valuenow={Math.round(shown)}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId)
-            scrubTo(event.clientX)
-          }}
-          onPointerMove={(event) => {
-            if (event.buttons === 0) return
-            scrubTo(event.clientX)
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowLeft') onSeek(Math.max(0, shown - 5))
-            if (event.key === 'ArrowRight') onSeek(shown + 5)
-          }}
-        >
-          <span className="together-beam" style={{ transform: `scaleX(${through})` }} />
-          <span className="together-hold" style={{ left: `${through * 100}%` }} aria-hidden="true" />
-        </div>
+        <Scrub
+          shown={shown}
+          span={span}
+          live={live}
+          onSeek={onSeek}
+          onActivity={onActivity}
+        />
 
         <div className="together-immersive-moves">
           <span className="together-clock">{clock(shown)}{span > 0 ? ` / ${clock(span)}` : ''}</span>
@@ -1102,7 +1125,6 @@ function Transport({
   onStop,
   captions,
   playing,
-  through,
   shown,
   span,
   hasNext,
@@ -1118,7 +1140,6 @@ function Transport({
   onStop(): void
   captions: boolean
   playing: boolean
-  through: number
   shown: number
   span: number
   hasNext: boolean
@@ -1130,14 +1151,6 @@ function Transport({
   onToggleCaptions(): void
   onTuck(): void
 }) {
-  const beam = useRef<HTMLDivElement>(null)
-
-  const scrubTo = (clientX: number) => {
-    const box = beam.current?.getBoundingClientRect()
-    if (!box || box.width === 0 || span <= 0) return
-    onSeek(((clientX - box.left) / box.width) * span)
-  }
-
   return (
     <div className="together-transport">
       <p className="together-now">
@@ -1153,41 +1166,7 @@ function Transport({
         <span className="together-by">{playing ? 'playing' : 'paused'} · {movedBy}</span>
       </p>
 
-      <div
-        ref={beam}
-        className="together-beamline"
-        role="slider"
-        tabIndex={0}
-        aria-label="how far through"
-        aria-valuemin={0}
-        aria-valuemax={Math.round(span)}
-        aria-valuenow={Math.round(shown)}
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId)
-          scrubTo(event.clientX)
-        }}
-        onPointerMove={(event) => {
-          if (event.buttons === 0) return
-          scrubTo(event.clientX)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowLeft') onSeek(Math.max(0, shown - 5))
-          if (event.key === 'ArrowRight') onSeek(shown + 5)
-        }}
-      >
-        <span className="together-beam" style={{ transform: `scaleX(${through})` }} />
-        {/*
-          Where you are, as a thing you can take hold of.
-
-          A one-pixel beam says how far through you are and gives a thumb
-          nothing to aim at — you can drag it, but only by trusting that the
-          line is draggable, and you cannot see the point you are dragging. The
-          mark is both halves of that: it reads the position at a glance and it
-          is the handle. Left on `pointer-events: none` so it never eats the
-          gesture belonging to the line underneath it.
-        */}
-        <span className="together-hold" style={{ left: `${through * 100}%` }} aria-hidden="true" />
-      </div>
+      <Scrub shown={shown} span={span} live={live} onSeek={onSeek} />
 
       <div className="together-moves">
         <span className="together-clock">{clock(shown)}{span > 0 ? ` / ${clock(span)}` : ''}</span>

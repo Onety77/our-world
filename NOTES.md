@@ -108,6 +108,57 @@ round was about writing fast rather than about finding answers. Five is long
 enough to get stuck on one, give up, and come back — which is where the good
 ones are.
 
+## 3 Sep · Claude · the scrubber, and who owns the film
+
+Three reports about the shared screen, and the third one explained the other
+two: *"the youtube play button plays for one second and then pauses itself."*
+
+**The model was wrong, not the code.** The anchor was the truth and the player
+obeyed it — right for *her* device, wrong for the one with a finger on it. The
+sync loop reads the anchor every nine hundred milliseconds and makes the player
+match, so pressing YouTube's own button changed something nobody had told the
+anchor about, and it was dutifully undone. Pausing did the same in reverse,
+which is why that "worked" for a second too.
+
+YouTube's controls are ours now: a play or pause nobody here asked for is
+written to the anchor, so it moves the shared screen exactly as our own button
+does. `applying` — which already existed — is what stops it becoming a loop,
+because every change this app makes to the player sets it first.
+
+### And the same mistake, one layer up, was the sticky scrubber
+
+`scrubTo` ran on **every pointer move**, and each one was a YouTube seek *and*
+a write to the shared document. Dozens a second while a thumb was down. Three
+faults compounding:
+
+- **every move was a seek**, and the player takes a moment to honour one, so
+  they queued up behind the thumb
+- **every move was a write**, which came back through the sync loop and
+  corrected this device toward a position it had already left
+- **and the mark was drawn from the anchor**, not from the finger — so it never
+  tracked the drag at all, it jumped to wherever the last round trip landed
+
+Which is exactly *"you touch seek and hope and wait"*.
+
+While a thumb is down the scrubber now owns the position entirely and tells
+nobody: the mark follows the finger because it **is** the finger. One seek and
+one write on release. The sync loop is suspended for the duration, because
+mid-drag the anchor is still where the film was before you took hold of it and
+correcting toward it is a fight with a round trip behind it.
+
+Which is how the volume slider has always worked, and why that one always felt
+right.
+
+### ±15
+
+Asked for, and the right ask. The line alone was the wrong shape for a thumb —
+the only way to move a film was to land on a one-pixel line at the exact
+fraction you wanted, on a phone, while it fought back. A jump you can take
+without aiming is most of what anybody does with a scrubber anyway.
+
+Either side of the line rather than in the transport row, because they are
+*about* the line: you reach for them for the same reason you reach for it.
+
 ## 2 Sep · Claude · her weather
 
 Asked why the garden was not reacting to real weather. It was not broken — it

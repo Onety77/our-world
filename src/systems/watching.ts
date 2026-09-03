@@ -116,6 +116,19 @@ interface WatchingState {
    */
   spot: { x: number; y: number } | null
   putSpot(spot: { x: number; y: number } | null): void
+
+  /**
+   * True while a thumb is on the scrubber.
+   *
+   * The sync loop pulls the player back to the shared anchor every nine
+   * hundred milliseconds, which is right every moment except this one: mid
+   * drag the anchor is where the film was *before* you started, so correcting
+   * toward it fights the finger. It is on the store rather than passed down
+   * because the loop and the scrubber are three components apart and neither
+   * is the other's parent.
+   */
+  scrubbing: boolean
+  setScrubbing(scrubbing: boolean): void
 }
 
 const SPOT_KEY = 'garden:watching-spot:v1'
@@ -146,6 +159,8 @@ export const useWatching = create<WatchingState>((set) => ({
   close: () => set({ open: false, live: false }),
   hunt: '',
   setHunt: (hunt) => set({ hunt }),
+  scrubbing: false,
+  setScrubbing: (scrubbing) => set({ scrubbing }),
   spot: readSpot(),
   putSpot(spot) {
     try {

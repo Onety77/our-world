@@ -14690,6 +14690,88 @@ body.on-the-road .broke-what {
   it reads the position at a glance and it is the handle. `pointer-events` off
   so it never takes the gesture belonging to the line underneath it.
 */
+/* --------------------------------------------------------------------------
+   The scrubber, and the fifteen either side of it
+
+   The line used to be the whole control and it was the wrong shape for a
+   thumb: the only way to move a film was to land on a one-pixel line at the
+   exact fraction you wanted, on a phone, while it fought you. The two skips
+   are what make that tolerable — a jump you can take without aiming, which is
+   most of what anybody actually does with a scrubber.
+
+   Either side of the line rather than in the transport row, because they are
+   *about* the line. You reach for them for the same reason you reach for it.
+   -------------------------------------------------------------------------- */
+
+.together-scrub {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.together-scrub .together-beamline {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.together-skip {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  /* Forty-four pixels, the same rule as everything else a thumb has to hit. */
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.16s ease, background-color 0.16s ease, scale 0.12s ease;
+}
+
+.together-skip span {
+  font-size: 1.32rem;
+  line-height: 1;
+}
+
+/* The number inside the arrow, small, the way every video app draws it. */
+.together-skip b {
+  position: absolute;
+  font-family: var(--sans);
+  font-size: 0.46rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  /* A hair low: the glyph's own gap is above centre. */
+  transform: translateY(0.08em);
+}
+
+.together-skip:hover:not(:disabled),
+.together-skip:focus-visible:not(:disabled) {
+  color: #ffd9a8;
+  background: rgba(255, 168, 105, 0.12);
+  outline: none;
+}
+
+.together-skip:active:not(:disabled) { scale: 0.92; }
+
+.together-skip:disabled {
+  opacity: 0.22;
+  cursor: default;
+}
+
+/*
+  While a thumb is down the line grows, and the mark with it.
+
+  A scrubber that looks identical whether or not you are holding it gives you
+  no confirmation that the drag was picked up — which, on a control that used
+  to be genuinely unreliable, is exactly the reassurance that was missing.
+*/
+.together-beamline.held { padding-block: 0.5rem; }
+.together-beamline.held .together-hold { scale: 1.5; }
+
 .together-hold {
   position: absolute;
   top: 50%;
