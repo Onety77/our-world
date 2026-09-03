@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useConnection, useData, useWorldSlice } from '@/data/provider'
 import { parseCoordinates } from '@/systems/geo'
+import { findPlace, type Place } from '@/systems/places'
 import { isValidTimeZone, localTimeLabel } from '@/systems/time'
 import { useProfileSheet } from '@/systems/profileSheet'
 import { useDismissOutside } from './useDismissOutside'
@@ -183,6 +184,9 @@ export function ProfileSheet() {
   const [city, setCity] = useState(profile.city)
   const [zone, setZone] = useState(profile.timeZone)
   const [where, setWhere] = useState('')
+  /** What the city name resolved to, once it has. */
+  const [found, setFound] = useState<Place | null>(null)
+  const [looking, setLooking] = useState(false)
   const [trouble, setTrouble] = useState<string | null>(null)
   const sheet = useRef<HTMLDivElement>(null)
   const actions = useRef<HTMLDivElement>(null)
@@ -193,6 +197,57 @@ export function ProfileSheet() {
     city === profile.city &&
     zone === profile.timeZone &&
     where === savedWhere
+
+  /*
+    ==========================================================================
+    **The city you already typed knows where it is.**
+
+    Coordinates were the only thing this form asked for that you had to go and
+    look up somewhere else, and the only one where a typo — one degree, a
+    hundred and eleven kilometres — produces no error, just a quietly wrong
+    distance and, now, somebody else's weather.
+
+    So the name does the work. Debounced rather than done on every keystroke,
+    because "Kano" passes through K, Ka and Kan on the way and two of those are
+    real places somewhere.
+
+    It fills the coordinates in rather than replacing them: what it found is
+    still shown, still editable, and still clearable. A lookup that silently
+    overwrote a number somebody had deliberately typed would be worse than the
+    problem it solves.
+    ==========================================================================
+  */
+  useEffect(() => {
+    const asked = city.trim()
+    if (!open || asked.length < 2) return
+    let live = true
+    const wait = window.setTimeout(() => {
+      setLooking(true)
+      void findPlace(asked).then((place) => {
+        if (!live) return
+        setLooking(false)
+        setFound(place)
+        /*
+          Only fills what is empty or was itself found. Typing a city must not
+          throw away coordinates somebody put in by hand — see the note above.
+        */
+        if (place && (where.trim() === '' || where === savedWhere)) {
+          setWhere(`${place.lat.toFixed(4)}, ${place.lon.toFixed(4)}`)
+          // The zone almost always is the thing you meant, and getting it from
+          // the same answer means the clock and the distance cannot disagree.
+          if (place.timeZone && isValidTimeZone(place.timeZone)) setZone(place.timeZone)
+        }
+      })
+    }, 600)
+    return () => {
+      live = false
+      window.clearTimeout(wait)
+      setLooking(false)
+    }
+    // `where` is read as a guard, not a trigger: re-running on every keystroke
+    // in the coordinates field would fight whoever is typing in it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city, open])
 
   useDismissOutside(open && untouched, close, [sheet, actions])
 
@@ -209,6 +264,10 @@ export function ProfileSheet() {
         : `${profile.lat}, ${profile.lon}`,
     )
     setTrouble(null)
+    // A found place belongs to the name that was in the box; reopening the
+    // sheet starts again rather than showing what the last edit resolved to.
+    setFound(null)
+    setLooking(false)
   }, [open, profile])
 
   useEffect(() => {
@@ -310,14 +369,19 @@ export function ProfileSheet() {
                   className="ink pot-inline profile-coords"
                   value={where}
                   onChange={(e) => setWhere(e.target.value)}
-                  placeholder="12.0022, 8.5920"
+                  placeholder="found from the city above"
                   inputMode="decimal"
                   aria-label="your coordinates"
                 />
               </label>
               <span className="pot-why">
-                The only thing the distance between you is measured from. Leave
-                it empty and no distance is shown, rather than a wrong one.
+                {looking
+                  ? 'Looking that up…'
+                  : found
+                    ? `Found ${found.label}. The distance between you is measured from here, and the weather comes from it.`
+                    : city.trim().length > 1
+                      ? 'That name was not found — you can put the numbers in yourself, or try adding the country.'
+                      : 'The only thing the distance between you is measured from. Leave it empty and no distance is shown, rather than a wrong one.'}
               </span>
             </p>
 

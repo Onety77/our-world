@@ -1,5 +1,5 @@
 /**
- * Her weather, and every way a weather service can be unhelpful.
+ * Her weather, her city, and every way either service can be unhelpful.
  *
  * -----------------------------------------------------------------------------
  * The rule this whole feature is built on is that **the garden opens whether or
@@ -27,6 +27,7 @@ import {
   type Sky,
 } from '../src/systems/sky'
 import { paletteAt, underSky } from '../src/systems/palette'
+import { placeUrl, readPlace } from '../src/systems/places'
 
 let failed = 0
 function ok(what: string, good: boolean, saw = '') {
@@ -179,6 +180,54 @@ console.log('\nwhat the weather does to the light\n')
       [p.sunIntensity, p.ambientIntensity, p.fogNear, p.fogFar, p.wind, p.cloud]
         .every((n) => Number.isFinite(n)))
   }
+}
+
+console.log('')
+console.log('finding a place by name')
+console.log('')
+
+{
+  /*
+    The real shape, taken from an actual answer for "Kano". The timezone is
+    the part that makes this worth doing rather than merely tidy: typing a
+    city sets the clock, the distance and the weather together, so none of the
+    three can end up disagreeing with the other two.
+  */
+  const kano = readPlace({
+    results: [{
+      name: 'Kano', latitude: 12.00012, longitude: 8.51672,
+      country: 'Nigeria', timezone: 'Africa/Lagos', population: 4_910_000,
+    }],
+  })
+  ok('a city resolves', kano !== null)
+  ok('to the right place', Math.abs((kano?.lat ?? 0) - 12) < 0.1, JSON.stringify(kano))
+  ok('and brings its timezone', kano?.timeZone === 'Africa/Lagos', kano?.timeZone)
+  /*
+    The country is in the label because the first answer is not always the one
+    you meant — "Kano" is a city of five million in Nigeria and a hamlet in
+    Osaka. Showing what was found is what lets somebody notice.
+  */
+  ok('and says which one it found', kano?.label === 'Kano, Nigeria', kano?.label)
+
+  ok('nothing found is null', readPlace({ results: [] }) === null)
+  ok('no results key is null', readPlace({}) === null)
+  ok('nothing at all is null', readPlace(null) === null)
+  ok('a string is null', readPlace('sorry') === null)
+  ok('results of rubbish is null', readPlace({ results: ['x'] }) === null)
+  ok('a result with no coordinates is null',
+    readPlace({ results: [{ name: 'Nowhere', country: 'X' }] }) === null)
+  ok('a result with impossible coordinates is null',
+    readPlace({ results: [{ name: 'X', latitude: 900, longitude: 0 }] }) === null)
+  ok('and a NaN is null',
+    readPlace({ results: [{ name: 'X', latitude: Number.NaN, longitude: 0 }] }) === null)
+  ok('a place with no timezone still resolves',
+    readPlace({ results: [{ name: 'X', latitude: 1, longitude: 2 }] })?.timeZone === '')
+
+  const url = placeUrl(' Kano ')
+  ok('the query is trimmed and escaped', url.includes('name=Kano'), url)
+  // Same reason as the weather: nothing to keep secret means nothing to leak.
+  ok('and carries no key either', !/key|token|appid/i.test(url), url)
+  ok('a name with a space survives', placeUrl('New York').includes('New%20York'))
 }
 
 console.log(failed === 0 ? '\nall good\n' : `\n${failed} failed\n`)

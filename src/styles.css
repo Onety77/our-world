@@ -4888,22 +4888,33 @@ body:has(.talking) .leave-place {
   color: #ffd9a8;
 }
 
-/* And the film chat, under the last thing said, where the next line will go. */
+/* The film chat keeps one quiet, fixed line above its field. Mounting and
+   unmounting this row used to move the whole bottom-filled conversation. */
+.together-composer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
 .together-writing {
-  margin: 0.1rem 0 0.2rem;
+  flex: 0 0 0.68rem;
+  height: 0.68rem;
+  margin: 0;
+  overflow: hidden;
   font-family: var(--sans);
-  font-size: 0.62rem;
-  letter-spacing: 0.14em;
+  font-size: 0.56rem;
+  line-height: 0.68rem;
+  letter-spacing: 0.16em;
   text-transform: lowercase;
-  color: #ffd9a8;
-  opacity: 0.86;
+  white-space: nowrap;
+  color: rgba(255, 217, 168, 0.76);
   text-shadow: var(--lift);
-  animation: forming 2.6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .start-saying.writing::before,
-  .together-writing { animation: none; }
+  .start-saying.writing::before { animation: none; }
 }
 
 .start-saying-name {

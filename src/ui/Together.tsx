@@ -30,7 +30,6 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
-import { writingLine } from '@/systems/typing'
 import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { useSay } from '@/systems/useSay'
@@ -1336,39 +1335,35 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
           ))
         )}
       </div>
-      {/*
-        Under the last thing said, above the field — where the next line will
-        appear, which is the only place it means anything.
-
-        A plain sentence rather than the three bouncing dots, because this room
-        already has words in it and a room with words in it does not need a
-        second vocabulary. The dots are also somebody else's house style; the
-        garden says things.
-      */}
-      {writing && <p className="together-writing">{writingLine(theirName)}</p>}
-      <div className="together-write">
-        <Ink
-          className="ink together-field"
-          value={draft}
-          onChange={setDraft}
-          placeholder={session === '' ? 'nothing on yet' : `to ${theirName}`}
-          label={`say something to ${theirName} about what is on`}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void say()
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="together-send"
-          disabled={draft.trim() === '' || session === ''}
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => void say()}
-        >
-          send
-        </button>
+      <div className="together-composer">
+        {/* This line always keeps its place, so typing never moves the field. */}
+        <p className="together-writing" aria-live="polite" aria-atomic="true">
+          {writing ? <span aria-label={`${theirName} is typing`}>typing</span> : null}
+        </p>
+        <div className="together-write">
+          <Ink
+            className="ink together-field"
+            value={draft}
+            onChange={setDraft}
+            placeholder={session === '' ? 'nothing on yet' : `to ${theirName}`}
+            label={`say something to ${theirName} about what is on`}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                void say()
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="together-send"
+            disabled={draft.trim() === '' || session === ''}
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => void say()}
+          >
+            send
+          </button>
+        </div>
       </div>
     </div>
   )

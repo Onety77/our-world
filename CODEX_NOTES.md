@@ -884,3 +884,9 @@ shared-file changes, measurements, and anything another agent should preserve.
   optional, guarded calls so a future iframe change cannot interrupt playback.
   A mocked iframe lifecycle verified off at readiness, restoring the previous
   language when enabled, and off again after the module reloads.
+# Night Screen typing indicator — 2026-09-03
+
+- Stabilized the Watch Together chat typing status in `src/ui/Together.tsx` and `src/styles.css`.
+- The visible copy is now only `typing`; the other person's name remains available to assistive technology.
+- The status has a permanently reserved, compact line inside the composer, so appearing/disappearing no longer moves the message feed or input.
+- Removed the scale animation that made the indicator pulse upward and sideways.
