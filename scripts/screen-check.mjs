@@ -69,8 +69,40 @@ const LONG =
 
 const main = async () => {
   run('npx', ['vite', '--port', String(PORT), '--strictPort'], true)
+  /*
+    `--touch-events=disabled`, and it is the difference between this file
+    working and not.
+
+    Headless Chrome on this machine reports ten touch points whatever the
+    device metrics say, and Chrome derives `(pointer: coarse)` from touch
+    support — so every "desktop" step was running on something the page could
+    only read as a phone. The garden asks `matchMedia('(pointer: fine)')`
+    before requesting fullscreen, correctly declined, and the whole filling
+    half of this check failed in a way that read as an app bug.
+
+    Neither `setDeviceMetricsOverride({mobile: false})` nor
+    `setTouchEmulationEnabled({enabled: false})` moves it, and neither does
+    `setEmulatedMedia`'s pointer feature. The launch flag does. The phone steps
+    turn touch back on through `setTouchEmulationEnabled`, which works in that
+    direction.
+  */
+  /*
+    A profile directory of its own, every run.
+
+    Chrome does not start a second browser on a profile another one is already
+    holding — it hands the arguments to the browser that has it and exits. So a
+    run that was interrupted (a timeout, a Ctrl-C) leaves a browser alive, and
+    every run after it silently attaches to *that* one: old flags, old tabs,
+    old emulation. This is where the launch flag above appeared not to work,
+    and it is a fair part of why the click checks were intermittent.
+
+    A fresh directory per run cannot be inherited, and the stale browser dies
+    with `done()` below or is simply left holding a profile nobody wants.
+  */
+  const profile = `${process.env.TEMP}/garden-screen-${Date.now().toString(36)}`
   run(CHROME, ['--headless=new', `--remote-debugging-port=${CDP}`,
-    '--user-data-dir=' + process.env.TEMP + '/garden-screen', '--no-first-run', '--disable-gpu',
+    '--user-data-dir=' + profile, '--no-first-run', '--disable-gpu',
+    '--touch-events=disabled',
     '--autoplay-policy=no-user-gesture-required', 'about:blank'])
   await up(`http://localhost:${PORT}/`)
   const v = await up(`http://127.0.0.1:${CDP}/json/version`)
@@ -120,30 +152,55 @@ const main = async () => {
   })()`)
 
   /*
-    Touch emulation has to be turned back *off*, not merely left alone.
+    ---------------------------------------------------------------------------
+    **Which device this run is pretending to be, and why it is said rather than
+    emulated.**
 
-    It is a property of the page rather than of the metrics, so a phone step
-    earlier in this file leaves it on — and with it on, `(pointer: fine)`
-    stops matching and `hasMouse()` in `ui/Together` correctly declines to
-    ask for fullscreen. The first run of this check failed exactly there and
-    it was the checker that was wrong, not the app.
+    The metrics and the touch switch below are real and do their job — the
+    viewport is genuinely 1280 wide or genuinely 390, and touch events are
+    genuinely dispatched or not. What they cannot do is move
+    `matchMedia('(pointer: fine)')`, which is the one thing the garden asks
+    before handing the film the browser's whole screen.
+
+    Headless Chrome on this machine reports ten touch points and therefore
+    `(pointer: coarse)` no matter what it is told: not by
+    `setDeviceMetricsOverride({mobile: false})`, not by
+    `setTouchEmulationEnabled({enabled: false})`, not by the
+    `--touch-events=disabled` launch flag, and not by `setEmulatedMedia`'s
+    pointer feature. All four were tried. The same machine with a window on it
+    answers `fine`, which is why this only ever failed here.
+
+    So the assumption goes in the URL — `?mouse=1`, honoured only in a
+    development build, the same bargain as `?mock=1` for the backend. The
+    checker states what it is pretending instead of trying to trick the browser
+    into it, and every other line of the feature under test is the real one.
+    ---------------------------------------------------------------------------
   */
+  let pretending = 'desktop'
   const desktop = async () => {
+    pretending = 'desktop'
     await send('Emulation.setDeviceMetricsOverride',
       { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false }, S)
     await send('Emulation.setTouchEmulationEnabled', { enabled: false }, S)
   }
   const phone = async () => {
+    pretending = 'phone'
     await send('Emulation.setDeviceMetricsOverride',
       { width: 390, height: 844, deviceScaleFactor: 2, mobile: true }, S)
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }, S)
   }
 
-  const url = `http://localhost:${PORT}/?shot=1&mock=1`
+  /*
+    `mouse=` states, per step, which kind of device this run is pretending to
+    be — see the long note on `hasMouse` in `ui/Together` for why the browser
+    cannot simply be asked. Everything else about the page is real.
+  */
+  const url = () =>
+    `http://localhost:${PORT}/?shot=1&mock=1&mouse=${pretending === 'desktop' ? 1 : 0}`
 
   /** In through the door, with a film on and the pane folded into the corner. */
   const openWithAFilm = async (title = FILM.title) => {
-    await send('Page.navigate', { url }, S)
+    await send('Page.navigate', { url: url() }, S)
     await wait(2500)
     /*
       An empty drawer, and it is not tidiness.
@@ -160,7 +217,7 @@ const main = async () => {
       localStorage.removeItem("garden:night-screen:scrim")
       return 1
     })()`)
-    await send('Page.navigate', { url }, S)
+    await send('Page.navigate', { url: url() }, S)
     await wait(4500)
     await ev(`(() => { const b=[...document.querySelectorAll('button')]
       .find(x=>/come in/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
@@ -449,6 +506,159 @@ const main = async () => {
 
 
   // =========================================================================
+
+  // =========================================================================
+  console.log('\nthe keys, with the field never touched\n')
+
+  /*
+    Nothing here clicks the field, and that is the whole point.
+
+    Enter and backspace used to be handled only inside the textarea, so they
+    worked if and only if the browser had happened to put the caret there —
+    "type and it works, backspace and it does not" was the report. A check that
+    focuses the field first would pass against that build and prove nothing.
+
+    So focus is deliberately parked on the film's own sheet before every one of
+    these, which is where it really is after you have clicked to pause.
+    Anything below that still works is genuinely independent of it.
+  */
+  const press = async (key, code, vk) => {
+    await send('Input.dispatchKeyEvent',
+      { type: 'keyDown', key, code, windowsVirtualKeyCode: vk, text: key.length === 1 ? key : undefined }, S)
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk }, S)
+    await wait(140)
+  }
+  const parkFocus = () => ev(`(() => {
+    const sheet = document.querySelector('.together-immersive-wake')
+    if (sheet) sheet.focus()
+    return document.activeElement ? document.activeElement.className : null
+  })()`)
+  const draftNow = () => ev(`(() => {
+    const f = document.querySelector('.screen-chat-field')
+    return f ? f.value : null
+  })()`)
+
+  console.log('    focus parked on:', await parkFocus())
+  for (const c of ['g', 'o', 'o', 'd']) await press(c, 'Key' + c.toUpperCase(), c.toUpperCase().charCodeAt(0))
+  check((await draftNow()) === 'good', 'typing still lands', String(await draftNow()))
+
+  /* Backspace, with focus put back on the film first — the reported case. */
+  await parkFocus()
+  await press('Backspace', 'Backspace', 8)
+  await press('Backspace', 'Backspace', 8)
+  const rubbed = await draftNow()
+  check(rubbed === 'go', 'backspace erases without the field being touched', String(rubbed))
+
+  /* And enter sends it, again from the sheet rather than the field. */
+  await parkFocus()
+  await press('Enter', 'Enter', 13)
+  await wait(1200)
+  const sent = await ev(`[...document.querySelectorAll('.screen-chat-line')]
+    .map(p => p.textContent).join(' | ')`)
+  console.log('    on the picture:', sent)
+  check(/go/.test(sent.split('|').pop() ?? ''), 'enter sends from anywhere', sent)
+  check((await draftNow()) === '', 'and empties the line it sent', String(await draftNow()))
+
+  /* Enter on an empty line sends nothing at all. */
+  const before = await ev(`document.querySelectorAll('.screen-chat-line').length`)
+  await parkFocus()
+  await press('Enter', 'Enter', 13)
+  await wait(900)
+  const after = await ev(`document.querySelectorAll('.screen-chat-line').length`)
+  check(before === after, 'and an empty line sends nothing', `${before} → ${after}`)
+
+  // =========================================================================
+  console.log('\nand the film answers a click again\n')
+
+  /*
+    YouTube's own button is under our sheet and always will be — an iframe
+    swallows the pointer, and the sheet is what lets a mouse reach the film at
+    all. What changed is what the sheet does with the click.
+  */
+  const playing = () => ev(`window.__watching.read().playing`)
+  const filmMiddle = await middleOf('.together-immersive-wake')
+  /*
+    What is actually under the cursor, printed alongside the state.
+
+    The first version of this check reported "stuck at true" and two separate
+    theories about why were both wrong. Whatever is genuinely on top at that
+    point is a fact rather than a theory, and it costs one line.
+  */
+  const atPoint = () => ev(`(() => {
+    const el = document.elementFromPoint(${filmMiddle.x}, ${filmMiddle.y})
+    const w = window.__watching.read()
+    return {
+      hit: el ? (el.className || el.tagName) : null,
+      playing: w.playing,
+      at: Math.round(w.at),
+      join: !!document.querySelector('.together-join'),
+    }
+  })()`)
+  /*
+    ---------------------------------------------------------------------------
+    **Let the film finish its first buffer before asking it to do anything.**
+
+    This is not padding. A video that has only just been handed to YouTube is
+    still settling, and in a headless browser with software rendering that
+    takes seconds rather than the fraction of a second it takes on a machine
+    with a screen. Toggling during it produced a genuine, repeatable "stuck at
+    playing" — and it cost two wrong diagnoses before the transport button,
+    which goes through exactly the same `playPause`, turned out to be just as
+    stuck at the same moment and just as reliable afterwards.
+
+    So the transport is exercised first: it is worth checking on its own, and
+    it doubles as the settling this needs. Anything after it is measuring the
+    control rather than the buffer.
+    ---------------------------------------------------------------------------
+  */
+  for (let i = 0; i < 4; i++) {
+    const before = await playing()
+    await ev(`(() => { const b = document.querySelector('.together-immersive-moves .together-go')
+      if (b) b.click(); return 1 })()`)
+    await wait(1400)
+    const after = await playing()
+    if (i >= 2) {
+      check(after !== before, `the transport still toggles, press ${i + 1}`, `stuck at ${before}`)
+    }
+  }
+
+  const was = await playing()
+  console.log('    settled at:', JSON.stringify(await atPoint()))
+
+  /*
+    Polled, and the whole trace is kept.
+
+    "It ended up in the wrong state" cannot tell a click that never registered
+    from one that registered and was then undone by something else, and those
+    two have completely different fixes. The sequence can: a run of `false`
+    turning back to `true` is the anchor being argued with.
+  */
+  const traceTo = async (want) => {
+    const seen = []
+    let steady = 0
+    for (let i = 0; i < 30; i++) {
+      const now = await playing()
+      if (seen[seen.length - 1] !== now) seen.push(now)
+      // Three samples in a row, so a value that is about to be argued with
+      // does not read as settled — the trace exists to catch exactly that.
+      steady = now === want ? steady + 1 : 0
+      if (steady >= 3) return { settled: true, seen }
+      await wait(200)
+    }
+    return { settled: (await playing()) === want, seen }
+  }
+
+  await mouseClick(filmMiddle.x, filmMiddle.y)
+  const one = await traceTo(!was)
+  console.log('    after one:', JSON.stringify(one), JSON.stringify(await atPoint()))
+  check(one.settled, 'clicking the film plays and pauses it', `saw ${JSON.stringify(one.seen)}`)
+  await mouseClick(filmMiddle.x, filmMiddle.y)
+  const two = await traceTo(was)
+  console.log('    after two:', JSON.stringify(two), JSON.stringify(await atPoint()))
+  check(two.settled, 'and clicking it again puts it back', `saw ${JSON.stringify(two.seen)}`)
+  check(await ev(`!!document.querySelector('.together.immersive-awake')`),
+    'and the controls come up with it, which is when you want them', 'controls stayed hidden')
+
   console.log('\nand the way back out\n')
 
   /*

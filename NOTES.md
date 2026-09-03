@@ -40,6 +40,102 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 3 Sep · Claude · enter, backspace, and pressing the film
+
+> *"backspace thinks it needs you to actually tap on the text field so it knows
+> what to delete"*
+
+### Everything but the letters was left to the textarea
+
+Typing over a filled screen worked because the document listener handled
+printable characters itself. Enter only *opened* the field and left sending to
+the textarea's own handler; backspace was not handled anywhere at all, because
+it is not a single character and fell straight through the test for one.
+
+Both therefore worked if and only if the browser had happened to put the caret
+in the field — and when it had not, you had to reach for the mouse and click it,
+which is the exact thing this overlay exists to avoid. Letters going on and then
+refusing to come off is the visible half of one bug.
+
+The document listener owns all three now: a character appends, backspace erases,
+enter sends whatever is there and sends nothing when there is nothing. A real
+field that is not ours still keeps its own keys, and ours does too — the
+textarea's handler runs first and calls `preventDefault`, so the document
+listener has already stood aside by the time it looks.
+
+Two things fell out of it:
+
+- **Backspace on an empty line puts the overlay away.** Escape cannot do that
+  job here: the browser takes Escape for leaving fullscreen and will not be
+  talked out of it, so there was previously no way to change your mind about
+  writing except to wait out the thirty seconds.
+- **`draftRef` is assigned during render, not in an effect.** The listener is
+  registered once and cannot close over `draft` without sending what was written
+  one character ago; an effect that copies it afterwards is wrong by one tick.
+
+### And the film answers a click again
+
+The clear sheet over the iframe has to be there — an iframe swallows the pointer,
+so without a layer of our own a mouse cannot reach the film at all, and on the
+miniature nothing could be dragged. That was a real reason and it was the wrong
+conclusion: on a device with a mouse the controls already come back on
+*movement*, so spending the click on them too spent it twice and left click-to-
+pause doing nothing.
+
+It pauses now. A finger keeps the old behaviour, because a finger has no
+movement to reveal anything with. The split is decided from `event.pointerType`
+captured on pointerdown rather than from `matchMedia` — what was *used*, not
+what is *plugged in*, which also gets a touchscreen laptop right.
+
+`playPause` also moves the player itself now instead of leaving it to the next
+tick of the sync loop, which was up to nine hundred milliseconds of a pause not
+having happened yet.
+
+### Two wrong diagnoses, kept here because they were expensive
+
+The film click was intermittently "stuck at playing", and I twice fixed
+something that was not it.
+
+**First: a stale `PLAYING` event.** The theory was sound — a buffer finishing
+after `applying` has expired is indistinguishable from somebody pressing
+YouTube's own play — so I held unexpected state changes for 450 ms and re-asked
+the player. **It was reverted, and it is worth knowing why: it makes things
+worse.** The sync loop runs every 900 ms, so a hold can be outlived by a tick
+that drags the player back to the anchor, and the press is then discarded
+because the player no longer agrees with the event that reported it. Writing
+immediately is what puts the anchor ahead of the loop.
+
+**Second: the media query lagging.** Also wrong. What actually settled it was
+pressing the transport button — which goes through exactly the same
+`playPause` — and finding it just as stuck at the same moment and just as
+reliable afterwards. The film had not finished its first buffer.
+
+### The checker was wrong three separate ways
+
+- **A lingering browser.** Chrome does not start a second browser on a profile
+  another one holds; it hands the arguments over and exits. Runs interrupted by
+  a timeout left one alive, and every run after it silently attached to *that*
+  one — old flags, old tabs, old emulation. A fresh profile directory per run
+  cannot be inherited.
+- **`localStorage` carried between runs.** Where the miniature was last put down
+  is deliberately kept, so a drag step that starts where the previous drag step
+  finished has nowhere to go. Same shape as `garden:rounds:v1` in the chase
+  check.
+- **The pointer could not be emulated at all.** Headless Chrome here reports ten
+  touch points and therefore `(pointer: coarse)` whatever it is told —
+  `setDeviceMetricsOverride({mobile: false})`, `setTouchEmulationEnabled`,
+  `--touch-events=disabled` and `setEmulatedMedia`'s pointer feature were all
+  tried and none of them moves it. The same machine with a window answers
+  `fine`. So `hasMouse()` in `ui/Together` takes `?mouse=1` in a development
+  build, the same bargain `?mock=1` makes for the backend: the checker states
+  what it is pretending rather than trying to trick the browser, and everything
+  else under test stays real.
+
+`npm run screen` is 46 checks and has now run clean four times in a row. Enter,
+backspace and the click are all exercised with focus deliberately parked on the
+film's own sheet, which is where it really is after you have clicked to pause —
+anything that still works there is genuinely independent of it.
+
 ## 3 Sep · Claude · the night screen, filled
 
 > *"i want that same kinda full screen, where it actually is a full screen,

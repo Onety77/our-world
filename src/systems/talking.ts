@@ -129,7 +129,24 @@ export function heartedBy(message: Message, who: UserId): boolean {
  */
 export { HEART }
 
-export const MARKS = ['♥', '😂', '💀', '👍', '💃', '🫤'] as const
+export const MARKS = ['♥', '😂', '💀', '👀', '💃', '🫤'] as const
+
+/** Which part of the conversation owns a finger once its intention is clear. */
+export type ConversationGestureAxis = 'horizontal' | 'vertical' | null
+
+/**
+ * Wait through the small diagonal wobble at the start of a human swipe, then
+ * choose one axis for the rest of that gesture. Returning `null` means there
+ * is not enough evidence yet, so neither replying nor scrolling should move.
+ */
+export function conversationGestureAxis(dx: number, dy: number): ConversationGestureAxis {
+  const x = Math.abs(dx)
+  const y = Math.abs(dy)
+  if (Math.max(x, y) < 8) return null
+  if (x >= y * 1.15) return 'horizontal'
+  if (y >= x * 1.15) return 'vertical'
+  return null
+}
 
 /**
  * The newest thing she has reacted to that you have not been shown.

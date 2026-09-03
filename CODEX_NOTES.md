@@ -890,3 +890,9 @@ shared-file changes, measurements, and anything another agent should preserve.
 - The visible copy is now only `typing`; the other person's name remains available to assistive technology.
 - The status has a permanently reserved, compact line inside the composer, so appearing/disappearing no longer moves the message feed or input.
 - Removed the scale animation that made the indicator pulse upward and sideways.
+# Stars reply swipe axis lock — 2026-09-03
+
+- Added a shared conversation gesture-axis decision with an 8px jitter allowance.
+- Horizontal reply swipes now contribute zero vertical movement to the Stars history, even when a finger drifts slightly up or down.
+- Genuine vertical gestures still scroll normally, and the chosen axis stays locked until release.
+- Changed the reaction vocabulary from `👍` to `👀`.

@@ -41,7 +41,15 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { useData } from '@/data/provider'
-import { HEART, MARKS, heartedBy, markBy, useTalking } from '@/systems/talking'
+import {
+  HEART,
+  MARKS,
+  conversationGestureAxis,
+  heartedBy,
+  markBy,
+  type ConversationGestureAxis,
+  useTalking,
+} from '@/systems/talking'
 import type { Message } from '@/data/types'
 import { useMenuKeys } from './useMenuKeys'
 
@@ -50,8 +58,6 @@ const DOUBLE_MS = 340
 const NEAR = 22
 /** How far left a message has to travel before letting go answers it. */
 const SWIPE = 46
-/** And how straight that has to be, so a drag through the sky is not a reply. */
-const STRAIGHT = 38
 /**
  * How long a finger has to stay still before it means "give me the menu".
  *
@@ -93,6 +99,7 @@ export function useSaidGestures(message: Message) {
 
   const lastTap = useRef(0)
   const from = useRef<{ x: number; y: number; id: number } | null>(null)
+  const axis = useRef<ConversationGestureAxis>(null)
   /** The pending press-and-hold, cancelled by anything that is not a hold. */
   const holding = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** Set when a hold fired, so the release that follows is not read as a tap. */
@@ -127,6 +134,7 @@ export function useSaidGestures(message: Message) {
 
     onPointerDown(event: React.PointerEvent) {
       from.current = { x: event.clientX, y: event.clientY, id: event.pointerId }
+      axis.current = null
       held.current = false
       dropHold()
       /*
@@ -144,6 +152,7 @@ export function useSaidGestures(message: Message) {
       */
       event.preventDefault()
       window.getSelection()?.removeAllRanges()
+      ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
       /*
         The *message's* box, not the finger's position.
 
@@ -176,10 +185,11 @@ export function useSaidGestures(message: Message) {
       const dy = event.clientY - start.y
       // A finger that is travelling is not a finger that is holding.
       if (Math.abs(dx) > STILL || Math.abs(dy) > STILL) dropHold()
-      // Leftward only, and only while it is still a horizontal gesture. A
-      // downward drag in the Stars is walking back through the conversation
-      // and must not drag the line along with it.
-      if (dx > 0 || Math.abs(dy) > STRAIGHT) return
+      axis.current ??= conversationGestureAxis(dx, dy)
+      // Once horizontal wins, incidental vertical movement cannot turn this
+      // into a scroll. A genuinely vertical start never drags the line.
+      if (axis.current !== 'horizontal' || dx > 0) return
+      event.preventDefault()
       const el = event.currentTarget as HTMLElement
       /*
         `translate` and not `transform`.
@@ -198,6 +208,8 @@ export function useSaidGestures(message: Message) {
       dropHold()
       const start = from.current
       from.current = null
+      const gestureAxis = axis.current
+      axis.current = null
       // The menu is already open; letting go of it is not a tap on anything.
       if (held.current) {
         held.current = false
@@ -214,7 +226,7 @@ export function useSaidGestures(message: Message) {
       const dx = event.clientX - start.x
       const dy = event.clientY - start.y
 
-      if (dx < -SWIPE && Math.abs(dy) < STRAIGHT) {
+      if (gestureAxis === 'horizontal' && dx < -SWIPE) {
         reply()
         return
       }
@@ -235,6 +247,7 @@ export function useSaidGestures(message: Message) {
       dropHold()
       held.current = false
       from.current = null
+      axis.current = null
       const el = event.currentTarget as HTMLElement
       el.style.translate = ''
       el.removeAttribute('data-answering')

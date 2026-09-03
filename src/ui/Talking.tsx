@@ -30,7 +30,19 @@ import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { gaze } from '@/systems/pointerLook'
 import { useTakenOver } from '@/systems/attention'
-import { newestMarkFrom, marksSeenUpTo, rememberMarksSeen, HEART, markBy, messageById, toNewest, useTalking, walk } from '@/systems/talking'
+import {
+  conversationGestureAxis,
+  newestMarkFrom,
+  marksSeenUpTo,
+  rememberMarksSeen,
+  HEART,
+  markBy,
+  messageById,
+  toNewest,
+  type ConversationGestureAxis,
+  useTalking,
+  walk,
+} from '@/systems/talking'
 import { useSaidGestures } from './Said'
 import { Ink } from './Ink'
 import { shouldTell, tell } from '@/systems/notify'
@@ -643,6 +655,9 @@ export function Talking() {
 
     let dragging = false
     let pointerId: number | null = null
+    let gestureAxis: ConversationGestureAxis = null
+    let startX = 0
+    let startY = 0
     let lastY = 0
     let lastAt = 0
     /*
@@ -661,6 +676,9 @@ export function Talking() {
       if (pointerId !== null) return
       dragging = true
       pointerId = e.pointerId
+      gestureAxis = null
+      startX = e.clientX
+      startY = e.clientY
       lastY = e.clientY
       lastAt = performance.now()
       recent.length = 0
@@ -670,6 +688,13 @@ export function Talking() {
     }
     const move = (e: PointerEvent) => {
       if (!dragging || e.pointerId !== pointerId) return
+      gestureAxis ??= conversationGestureAxis(e.clientX - startX, e.clientY - startY)
+      // A horizontal message gesture belongs wholly to reply. In particular,
+      // its unavoidable one- or two-pixel vertical drift must not move the sky.
+      if (gestureAxis !== 'vertical') {
+        glide.current = 0
+        return
+      }
       const dy = e.clientY - lastY
       lastY = e.clientY
       lastAt = performance.now()
@@ -689,6 +714,12 @@ export function Talking() {
       if (!dragging || e.pointerId !== pointerId) return
       dragging = false
       pointerId = null
+      const releasedAxis = gestureAxis
+      gestureAxis = null
+      if (releasedAxis !== 'vertical') {
+        glide.current = 0
+        return
+      }
       /*
         And then it keeps going, and stops the way a heavy thing stops.
 

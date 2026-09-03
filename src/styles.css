@@ -7468,11 +7468,18 @@ body:has(.talking) .leave-place {
    rather than a control and so are always visible.
    -------------------------------------------------------------------------- */
 
-.said,
 .whisper-said {
   /* The line is the control, so it has to accept the gesture — and the browser
      must not decide a leftward drag on it was a scroll and take it away. */
   touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The Stars owns both axes: horizontal replies, vertical walks through chat.
+   WebKit must not pre-claim a slightly diagonal reply as a native pan. */
+.said {
+  touch-action: none;
   -webkit-user-select: none;
   user-select: none;
 }

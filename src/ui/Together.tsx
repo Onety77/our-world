@@ -99,6 +99,29 @@ function savedCaptionChoice(): boolean {
  */
 function hasMouse(): boolean {
   if (typeof matchMedia === 'undefined') return false
+  /*
+    `?mouse=1`, in development only, and it is the same bargain as `?mock=1`.
+
+    ---------------------------------------------------------------------------
+    This one question decides whether the film gets the browser's whole screen,
+    which means a headless browser that answers it wrongly cannot check any of
+    that half — and headless Chrome on a Windows laptop answers it wrongly. It
+    reports ten touch points and therefore `(pointer: coarse)`, whatever the
+    device metrics, the touch-emulation switch or `setEmulatedMedia` are told;
+    the same machine running the same Chrome with a window answers `fine`.
+
+    So the checker states the assumption in the URL rather than trying to talk
+    the browser into it, and every other line of this feature — the request,
+    the layout, the words over the picture, the click — is the real one. The
+    switch is one-directional in the sense that matters: it cannot appear in a
+    build anybody uses, because `import.meta.env.DEV` is false there.
+    ---------------------------------------------------------------------------
+  */
+  if (import.meta.env?.DEV && typeof location !== 'undefined') {
+    const asked = new URLSearchParams(location.search).get('mouse')
+    if (asked === '1') return true
+    if (asked === '0') return false
+  }
   return matchMedia('(pointer: fine)').matches
 }
 
@@ -244,6 +267,16 @@ export function Together() {
   const [immersiveControls, setImmersiveControls] = useState(true)
   const immersiveTimer = useRef<number | null>(null)
   const lastImmersiveMove = useRef(0)
+  /**
+   * What kind of thing last pressed the film: `'mouse'`, `'touch'`, `'pen'`.
+   *
+   * Asked of the event rather than of the device, because the two are not the
+   * same question. `matchMedia('(pointer: fine)')` describes what is plugged
+   * in; this describes what was actually used, which is the thing the click
+   * needs to know — and a laptop with a touchscreen answers the first question
+   * "yes" while somebody is using their finger.
+   */
+  const lastImmersivePress = useRef<string>('mouse')
   const [captions, setCaptions] = useState(savedCaptionChoice)
   const captionsRef = useRef(captions)
 
@@ -419,6 +452,18 @@ export function Together() {
         if (nowPlaying === anchor.playing) return
         const player = screen.current
         const at = player ? player.where() : positionOf(anchor, data.now())
+        /*
+          Acted on straight away, and that is a decision rather than an
+          oversight.
+
+          Holding it for half a second first and re-asking the player what it
+          is doing looks safer and is worse: the sync loop below runs every
+          nine hundred milliseconds, so a hold can be outlived by a tick that
+          drags the player back to the anchor — and the press is then thrown
+          away because the player no longer agrees with the event that
+          reported it. Writing immediately is what puts the anchor ahead of
+          the loop, which is the whole point of treating a press as a press.
+        */
         // Its own reported position, not the anchor's — the whole point is
         // that the player is ahead of what we believed.
         move({ ...anchor, playing: nowPlaying, at: Math.max(0, at) })
@@ -607,10 +652,43 @@ export function Together() {
     else move({ ...useWatching.getState().shared, playing: false, at: 0 })
   }
 
+  /*
+    ---------------------------------------------------------------------------
+    **The picture moves here, not on the next tick of the sync loop.**
+
+    This used to write the anchor and stop, leaving the loop to notice up to
+    nine hundred milliseconds later and only then tell the player. Two things
+    came out of that, and the second one is the reason for this note.
+
+    The small one is feel: a pause that takes most of a second to happen is a
+    pause you press twice.
+
+    The real one is that the gap is long enough for YouTube to contradict it.
+    The player is still running during those nine hundred milliseconds, and any
+    state it reports in the meantime — the PLAYING that follows a buffer, most
+    often — arrives with `applying` clear, which is this file's definition of
+    "a person did that". So it is taken as a press on the player's own
+    controls, and the anchor is dutifully moved back to playing. Pressing pause
+    just after starting something could un-pause it, and it looked random
+    because it depended on when a buffer happened to end.
+
+    Moving the player in the same breath as the anchor closes the window: what
+    it reports next is a state we asked for, and `applying` says so.
+    ---------------------------------------------------------------------------
+  */
   const playPause = () => {
     const player = screen.current
     const at = player ? player.where() : positionOf(shared, data.now())
-    move({ ...shared, playing: !shared.playing, at })
+    const next = !shared.playing
+    if (player) {
+      applying.current = true
+      if (next) player.play()
+      else player.pause()
+      // Longer than the eighty milliseconds a video swap uses: a play or pause
+      // can travel through BUFFERING on the way to the state it was asked for.
+      window.setTimeout(() => { applying.current = false }, 260)
+    }
+    move({ ...shared, playing: next, at })
     setJoined(true)
   }
 
@@ -1048,7 +1126,52 @@ export function Together() {
           <button
             type="button"
             className="together-immersive-wake"
-            onClick={toggleImmersiveControls}
+            /*
+              ---------------------------------------------------------------
+              **The sheet has to be here. What it does with a click does not.**
+
+              An iframe is another document: a pointer that lands on it is gone
+              and this page never hears about it. So YouTube's own play button
+              genuinely cannot be pressed while a clear layer of ours is over
+              the film — and the layer cannot simply be removed, because it is
+              also the only thing that lets a mouse wake our controls, and on
+              the miniature the only thing that lets the pane be dragged at
+              all. That was the reason, and it was a real one.
+
+              It was the wrong conclusion though. On a device with a mouse the
+              controls already come back on **movement**, a few lines below, so
+              spending the click on them as well was spending it twice — and it
+              left the single most expected gesture in front of a film, click
+              to pause, doing nothing at all. It now pauses, the way it does in
+              every player anybody has ever used, and the controls come up with
+              it because pausing is when you want them.
+
+              A finger has no movement to reveal anything with, so a tap there
+              keeps its old job. Two pointer types, two different right
+              answers.
+              ---------------------------------------------------------------
+            */
+            onPointerDown={(event) => {
+              lastImmersivePress.current = event.pointerType
+            }}
+            onClick={(event) => {
+              /*
+                A mouse pauses; a finger and the keyboard reveal the controls.
+
+                `detail` is 0 only when the activation came from a key, and a
+                key has no cursor to have aimed with — pausing on it would be
+                acting on a press nobody made at anything. It gets the safe
+                half, which is also the half the transport does not already
+                offer from the keyboard.
+              */
+              const byMouse = event.detail !== 0 && lastImmersivePress.current === 'mouse'
+              if (!byMouse) {
+                toggleImmersiveControls()
+                return
+              }
+              playPause()
+              revealImmersiveControls()
+            }}
             onPointerMove={(event) => {
               if (event.pointerType !== 'mouse') return
               const now = performance.now()
@@ -1056,7 +1179,15 @@ export function Together() {
               lastImmersiveMove.current = now
               revealImmersiveControls()
             }}
-            aria-label={immersiveControls ? 'hide viewing controls' : 'show viewing controls'}
+            aria-label={
+              /*
+                Named for what the *keyboard* gets, which is the controls —
+                see `detail === 0` above. Naming it "pause" would be describing
+                the mouse's half of this button to the one person who cannot
+                reach it.
+              */
+              immersiveControls ? 'hide viewing controls' : 'show viewing controls'
+            }
           />
         )}
         {!live && open && (
@@ -1696,6 +1827,46 @@ function ScreenChat({
   const shown = useMemo(() => everything.slice(-CHAT_LINES), [everything])
 
   /*
+    ---------------------------------------------------------------------------
+    **Read during render, not in an effect.**
+
+    The document key listener is registered once and must not be torn down and
+    rebuilt on every keystroke, so it cannot close over `draft` — it would send
+    whatever was written one character ago. An effect that copies the value
+    afterwards has the same fault one tick later.
+
+    Assigning here is the version that is always right: it happens as part of
+    the render that produced the value, so by the time any handler can run, the
+    ref and the screen agree.
+    ---------------------------------------------------------------------------
+  */
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const composingRef = useRef(composing)
+  composingRef.current = composing
+
+  /*
+    Put the caret back after a key this component handled itself.
+
+    Every key that gets here is a key the textarea did *not* receive, which
+    means the browser had the focus somewhere else — the film, the wake sheet,
+    nothing at all. Typing should move it back, exactly as clicking into the
+    field would, so the next character goes to the field natively and selection,
+    dictation and a phone's own keyboard all behave normally.
+
+    Null-safe on purpose: on the very first character the field has not been
+    rendered yet, and the effect below catches that case when it mounts.
+  */
+  const keepTheCaret = () => {
+    const el = field.current
+    if (!el || document.activeElement === el) return
+    el.focus()
+    const end = el.value.length
+    el.setSelectionRange(end, end)
+  }
+
+
+  /*
     One timer, re-armed by everything that counts as something happening. It is
     replaced rather than stacked, so there is never more than one alive.
   */
@@ -1757,13 +1928,66 @@ function ScreenChat({
       if (event.defaultPrevented) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       const at = event.target as HTMLElement | null
-      if (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return
-      if (event.key === 'Enter') {
+      const inAField =
+        !!at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))
+
+      /*
+        Enter sends, from wherever the keyboard happens to be pointing.
+
+        This is the half that was missing. Enter used only to *open* the field
+        and leave the sending to the textarea's own handler — which meant it
+        worked if and only if the browser had put the caret in there, and if it
+        had not, pressing Enter did nothing at all until you reached for the
+        mouse and clicked the field. That is the exact thing this overlay
+        exists to avoid.
+
+        A real field that is not ours keeps its own Enter. Ours does too, by
+        the line at the top: the textarea's handler runs first and calls
+        `preventDefault`, so this one has already stood aside by the time it
+        looks.
+      */
+      if (event.key === 'Enter' && !event.shiftKey) {
+        if (inAField) return
         event.preventDefault()
+        if (draftRef.current.trim() !== '') {
+          void say()
+          return
+        }
+        // Nothing written: nothing is sent, and the field simply opens.
         setComposing(true)
         wake()
         return
       }
+
+      if (inAField) return
+
+      /*
+        And backspace erases, for the same reason.
+
+        It is not a printable character, so it fell through the test below and
+        was never handled anywhere but inside the textarea — the same
+        focus-dependent trap as Enter, and more obvious in use, because you can
+        watch the letters go on and then refuse to come off.
+
+        On an empty line it puts the overlay away instead. Escape cannot do
+        that job here: the browser takes Escape for leaving fullscreen and will
+        not be talked out of it, so without this there was no way to change
+        your mind about writing except to wait out the thirty seconds.
+      */
+      if (event.key === 'Backspace') {
+        if (draftRef.current === '') {
+          if (!composingRef.current) return
+          event.preventDefault()
+          setComposing(false)
+          return
+        }
+        event.preventDefault()
+        setDraft((was) => was.slice(0, -1))
+        wake()
+        keepTheCaret()
+        return
+      }
+
       if (event.key.length !== 1) return
       event.preventDefault()
       setComposing(true)
@@ -1771,6 +1995,7 @@ function ScreenChat({
       // overlay rested is still yours when you come back to it.
       setDraft((was) => was + event.key)
       wake()
+      keepTheCaret()
     }
     document.addEventListener('keydown', typed)
     return () => document.removeEventListener('keydown', typed)
@@ -1796,7 +2021,7 @@ function ScreenChat({
   }
 
   async function say() {
-    const text = draft
+    const text = draftRef.current
     if (text.trim() === '') return
     setDraft('')
     wake()
