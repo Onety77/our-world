@@ -31,10 +31,23 @@ export interface Found {
   thumb: string
 }
 
-/** The states the iframe reports. Only these four are ever acted on. */
+/**
+ * The states a screen reports.
+ *
+ * YouTube's numbers, and they are now a vocabulary rather than an
+ * implementation detail: `systems/film` is a second `Screen` over a plain
+ * `<video>` element, and the sync loop that reads these does not know which of
+ * the two it is holding. So they are named here and spoken by both.
+ *
+ * `BUFFERING` was previously only a bare 3 at the one place that tests for it
+ * — `setJoined`, where "we asked it to play and it is loading" must not read
+ * as "this device refused to play". A second implementation has to be able to
+ * say that, so it needs a name.
+ */
 export const PLAYING = 1
 export const PAUSED = 2
 export const ENDED = 0
+export const BUFFERING = 3
 
 interface YTPlayer {
   loadVideoById(id: string, start?: number): void

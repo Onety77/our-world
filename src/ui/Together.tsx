@@ -70,6 +70,21 @@ import {
   type Found,
   type Screen,
 } from '@/systems/youtube'
+import {
+  filmFor,
+  filmId,
+  forgetFilms,
+  holdFilm,
+  isFilm,
+  makeFilmScreen,
+  offsetWords,
+  printIn,
+  putOffset,
+  readFilm,
+  savedOffset,
+  sizeIn,
+  type Film,
+} from '@/systems/film'
 import { Ink } from './Ink'
 import { Scrub } from './Scrub'
 import { gainOf, useVolume } from '@/systems/volume'
@@ -240,6 +255,8 @@ export function Together() {
   const tuck = useWatching((s) => s.tuck)
 
   const musicLevel = useVolume((s) => s.levels.music)
+  const musicRef = useRef(musicLevel)
+  musicRef.current = musicLevel
 
   const stage = useRef<HTMLDivElement>(null)
   const screen = useRef<Screen | null>(null)
@@ -281,6 +298,35 @@ export function Together() {
   const lastImmersivePress = useRef<string>('mouse')
   const [captions, setCaptions] = useState(savedCaptionChoice)
   const captionsRef = useRef(captions)
+
+  /*
+    ---------------------------------------------------------------------------
+    **A film off the disk, and which copy of it this machine has.**
+
+    `shared.videoId` says which film is on and reaches both of you. This says
+    whether *this device* can play it, and it never leaves the device — see the
+    note at the top of `systems/film`. The two are allowed to disagree about
+    the bytes: her copy is a perfectly good answer to "what should be on this
+    screen" even when it is a different encode from his.
+
+    `mine` is null in two completely different situations and the screen has
+    to tell them apart: nothing is on at all, or something is on and this is
+    the person who has not chosen their copy yet. `isFilm(shared.videoId)` is
+    what separates them.
+    ---------------------------------------------------------------------------
+  */
+  const [mine, setMine] = useState<Film | null>(null)
+  const [reading, setReading] = useState(false)
+  const [pickTrouble, setPickTrouble] = useState('')
+  /** How far this copy runs ahead of the anchor's. See `savedOffset`. */
+  const [offset, setOffset] = useState(0)
+  /*
+    Read during render rather than through an effect: the sync loop is built
+    once and cannot close over a value that changes while it is running, and an
+    effect that copies it afterwards is a tick late every time it moves.
+  */
+  const offsetRef = useRef(offset)
+  offsetRef.current = offset
 
   // --- the feed -------------------------------------------------------------
   useEffect(
@@ -398,6 +444,42 @@ export function Together() {
     setImmersiveControls(true)
   }, [open, live])
 
+  /*
+    ---------------------------------------------------------------------------
+    **Which kind of screen this is, and the one thing that may rebuild it.**
+
+    The rule at the top of this file — that the stage is never unmounted — is
+    about a YouTube iframe, which stops playing and forgets where it was the
+    moment it leaves the document. It still holds inside a kind: swapping to
+    the next video in the queue goes through `show()`, never through a rebuild.
+
+    Across kinds it cannot hold, because the two are different elements. So the
+    effect below is keyed on this as well as on `live`, and going from a video
+    to a film tears one down and builds the other — which is correct, and is
+    the only time it happens.
+    ---------------------------------------------------------------------------
+  */
+  const kind = isFilm(shared.videoId) ? 'film' : 'youtube'
+  const filmPrint = printIn(shared.videoId)
+
+  /*
+    ---------------------------------------------------------------------------
+    **The anchor's timeline, and this machine's.**
+
+    Everything shared is counted in the timeline of whoever put the film on.
+    Everything the player here reports is counted in the copy of the film this
+    machine actually has, and for two rips of one film those are not the same
+    timeline — see `savedOffset` in `systems/film`.
+
+    Every read from the player goes through `toShared`, and every instruction
+    to it through `toHere`. With a matching file the offset is zero and both
+    are the identity they always were, which is why the arithmetic below reads
+    the same as it did before there were films in it.
+    ---------------------------------------------------------------------------
+  */
+  const toShared = (here: number) => here - offsetRef.current
+  const toHere = (there: number) => there + offsetRef.current
+
   // --- the screen -----------------------------------------------------------
   useEffect(() => {
     if (!live || !stage.current) return
@@ -417,12 +499,35 @@ export function Together() {
     stage.current.append(host)
 
     const anchor = useWatching.getState().shared
-    void makeScreen(
+    const build = kind === 'film' ? makeFilmScreen : makeScreen
+    void build(
       host,
       { videoId: anchor.videoId, at: positionOf(anchor, data.now()), playing: anchor.playing },
       (state: number) => {
         if (state === PLAYING || state === PAUSED) setTrouble('')
-        if (state === ENDED && !applying.current) void onEnded()
+        /*
+          ==================================================================
+          **Whose end is the end.**
+
+          Reaching the end moves both of you on to whatever is next, and for a
+          YouTube video that is exactly right: the two of you are watching one
+          object, so you arrive at its end together and the second write is
+          the same as the first.
+
+          Two rips of one film are not one object. Hers is four minutes
+          shorter because it has no credits on it, so **her copy ends while
+          his is still playing, and ends it for him too** — the film stops
+          before it is over, on the machine of the person who has the whole
+          thing, and nothing on either screen says why.
+
+          So the copy that is not the one the anchor is counting in keeps its
+          ending to itself. It stops, because it has genuinely run out; it
+          does not decide the evening is over. The person whose copy the
+          shared clock is measured against still ends it for both, which is
+          the only definition of "the end" the two of you share.
+          ==================================================================
+        */
+        if (state === ENDED && !applying.current && !otherCutRef.current) void onEnded()
         /*
           ==================================================================
           **YouTube's own play button is one of the controls now.**
@@ -453,7 +558,7 @@ export function Together() {
         const nowPlaying = state === PLAYING
         if (nowPlaying === anchor.playing) return
         const player = screen.current
-        const at = player ? player.where() : positionOf(anchor, data.now())
+        const at = player ? toShared(player.where()) : positionOf(anchor, data.now())
         /*
           Acted on straight away, and that is a decision rather than an
           oversight.
@@ -482,6 +587,21 @@ export function Together() {
         screen.current = built
         screenVideo.current = anchor.videoId
         built.captions(captionsRef.current)
+        /*
+          The fader, applied here rather than only when it next moves.
+
+          `loud` had one caller — an effect on the music level — and that
+          effect first runs while the screen is still being built, so
+          `screen.current` is null and the call goes nowhere. YouTube survived
+          that by defaulting to full volume; a `<video>` element starts where
+          it is told to start, and `systems/film` deliberately tells it zero
+          so a film cannot be briefly louder than the room. Between the two,
+          a film played in silence until somebody happened to touch the fader.
+
+          A ref rather than the value, because this closure is built once and
+          the fader is a thing people move.
+        */
+        built.loud(gainOf(musicRef.current))
         setTrouble('')
       })
       .catch((why: unknown) => {
@@ -496,10 +616,10 @@ export function Together() {
       // Whatever is left of it — the div, or the iframe it became.
       stage.current?.replaceChildren()
     }
-    // Built once for the life of a session. Rebuilding it on any other change
-    // is the thing the note at the top of this file is about.
+    // Built once per kind for the life of a session. Rebuilding it on any
+    // other change is the thing the note at the top of this file is about.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live])
+  }, [live, kind])
 
   /*
     The iframe survives a queue change, so it must explicitly be shown the new
@@ -559,7 +679,7 @@ export function Together() {
       if (watching.scrubbing) return
 
       const want = positionOf(anchor, data.now())
-      const at = player.where()
+      const at = toShared(player.where())
       setWhere(at)
       setSpan(player.length())
 
@@ -583,7 +703,8 @@ export function Together() {
       applying.current = true
       const gap = at - want
       const { do: how, rate } = correction(gap)
-      if (how === 'seek') player.seek(want)
+      // Told in its own timeline, compared in the shared one.
+      if (how === 'seek') player.seek(toHere(want))
       player.rate(how === 'drift' ? rate : 1)
 
       const state = player.state()
@@ -678,9 +799,88 @@ export function Together() {
     it reports next is a state we asked for, and `applying` says so.
     ---------------------------------------------------------------------------
   */
+  /*
+    ---------------------------------------------------------------------------
+    **A film is checked before it is put on, not after.**
+
+    Putting something on reaches her screen, so everything that can be found
+    out about a file is found out first — that the container is one a browser
+    opens, that it decodes, and how long it is. A film that fails afterwards
+    has failed in front of two people instead of one, and the second person has
+    no idea which of them is broken.
+
+    Joining is the same call with the other half of the answer: her copy does
+    not have to be his copy, so it is held under *the anchor's* fingerprint and
+    whether the bytes match is a thing to report rather than a thing to
+    enforce. See `holdFilm`.
+    ---------------------------------------------------------------------------
+  */
+  const takeFilm = async (file: File, why: 'start' | 'join') => {
+    setPickTrouble('')
+    setReading(true)
+    try {
+      const film = await readFilm(file)
+      if (film.why !== null) {
+        setPickTrouble(film.why)
+        return
+      }
+      const under = why === 'start' ? film.print : printIn(shared.videoId)
+      if (under === null) return
+      holdFilm(under, film)
+      setMine(film)
+      setOffset(savedOffset(under))
+      if (why === 'start') put(filmId(film.print), film.title)
+      else screen.current?.show(filmId(under), toHere(positionOf(shared, data.now())), shared.playing)
+    } catch {
+      setPickTrouble('That file could not be read from here.')
+    } finally {
+      setReading(false)
+    }
+  }
+
+  /*
+    Which copy this device holds, whenever what is on changes.
+
+    The person who started it is already in the map under their own print; the
+    other person is not in it at all until they choose, which is exactly the
+    state the invitation on the screen is for.
+  */
+  useEffect(() => {
+    const print = printIn(shared.videoId)
+    setPickTrouble('')
+    if (print === null) {
+      setMine(null)
+      setOffset(0)
+      return
+    }
+    setMine(filmFor(print))
+    setOffset(savedOffset(print))
+  }, [shared.videoId])
+
+  /** True when this copy is a different encode from the one the anchor counts. */
+  const otherCut = mine !== null && filmPrint !== null && mine.print !== filmPrint
+  /*
+    Read by the screen callback, which is built once and would otherwise be
+    holding whatever this was at the moment the film went on — which is always
+    `false`, because a copy is chosen after that. See the note on `ENDED`.
+  */
+  const otherCutRef = useRef(otherCut)
+  otherCutRef.current = otherCut
+
+  const nudge = (by: number) => {
+    if (filmPrint === null) return
+    const next = Math.round((offset + by) * 10) / 10
+    setOffset(next)
+    putOffset(filmPrint, next)
+    // Applied at once rather than at the next tick of the loop, so a nudge is
+    // something you can hear land while your finger is still on the button.
+    const player = screen.current
+    if (player) player.seek(positionOf(shared, data.now()) + next)
+  }
+
   const playPause = () => {
     const player = screen.current
-    const at = player ? player.where() : positionOf(shared, data.now())
+    const at = player ? toShared(player.where()) : positionOf(shared, data.now())
     const next = !shared.playing
     if (player) {
       applying.current = true
@@ -696,8 +896,9 @@ export function Together() {
 
   const skip = () => void onEnded()
 
+  /* `seconds` is where on the scrubber, which is the shared timeline. */
   const goTo = (seconds: number) => {
-    screen.current?.seek(seconds)
+    screen.current?.seek(toHere(seconds))
     move({ ...shared, at: Math.max(0, seconds) })
   }
 
@@ -796,6 +997,11 @@ export function Together() {
   const endSession = () => {
     screen.current?.pause()
     setTrouble('')
+    // The files go with it. Each one holds a whole film open in memory, and
+    // the next sitting is a new question about which copy anybody has.
+    forgetFilms()
+    setMine(null)
+    setPickTrouble('')
     leaveImmersion()
     useWatching.getState().close()
     setMiniControls(false)
@@ -1299,7 +1505,40 @@ export function Together() {
             )}
           </div>
         )}
-        {open && !joined && trouble === '' && (
+        {/*
+          A film is on and this device has no copy of it.
+
+          -----------------------------------------------------------------
+          This is the whole second half of watching a film together, and it
+          is *not* an error state — it is the ordinary condition of the
+          person who did not put it on. Nothing has gone wrong, nothing has
+          failed, and there is exactly one thing to do.
+
+          It stands in front of "tap to join", which would otherwise be the
+          message here and would be a lie: pressing play cannot help, because
+          there is nothing on this machine to play. Everything that reaches
+          this screen from her side has already happened correctly.
+          -----------------------------------------------------------------
+        */}
+        {open && live && isFilm(shared.videoId) && mine === null && trouble === '' && (
+          <div className="film-ask">
+            <p className="film-ask-what">
+              {shared.by === me ? 'You put on' : `${them.name} put on`} <b>{shared.title}</b>
+            </p>
+            <small>
+              It plays from your own copy of the file — nothing was uploaded and
+              nothing is being sent. Choose it here and the two screens run
+              together.
+            </small>
+            <FilmPick
+              label="choose my copy"
+              busy={reading}
+              onFile={(file) => void takeFilm(file, 'join')}
+            />
+            {pickTrouble !== '' && <p className="film-trouble">{pickTrouble}</p>}
+          </div>
+        )}
+        {open && !joined && trouble === '' && !(isFilm(shared.videoId) && mine === null) && (
           <button type="button" className="together-join" onClick={playPause}>
             tap to join {them.name} here
           </button>
@@ -1310,6 +1549,10 @@ export function Together() {
         <ImmersiveTransport
           awake={immersiveControls}
           captions={captions}
+          film={isFilm(shared.videoId)}
+          otherCut={otherCut}
+          offset={offset}
+          onNudge={nudge}
           playing={shared.playing}
           live={live}
           shown={shown}
@@ -1342,6 +1585,12 @@ export function Together() {
               <Transport
                 live={live}
                 onStop={endSession}
+                film={isFilm(shared.videoId)}
+                mine={mine}
+                otherCut={otherCut}
+                theirSize={filmPrint === null ? 0 : sizeIn(filmPrint)}
+                offset={offset}
+                onNudge={nudge}
                 captions={captions}
                 playing={shared.playing}
                 shown={shown}
@@ -1380,6 +1629,9 @@ export function Together() {
               queue={shared.queue}
               theirName={them.name}
               nothingOn={shared.videoId === null}
+              reading={reading}
+              pickTrouble={pickTrouble}
+              onFilm={(file) => void takeFilm(file, 'start')}
               onPlayNow={(videoId, title) => put(videoId, title)}
               onQueue={(item) => move({ ...shared, queue: [...shared.queue, item] })}
               onDrop={(id) => move({ ...shared, queue: shared.queue.filter((q) => q.id !== id) })}
@@ -1417,10 +1669,148 @@ export function Together() {
   )
 }
 
+/**
+ * The one way a file gets in, and it is a real file input.
+ *
+ * ---------------------------------------------------------------------------
+ * Nothing is uploaded by this, and that is worth being able to see from the
+ * markup: a chosen file becomes an object URL and is handed to a `<video>`.
+ * There is no request anywhere in this path.
+ *
+ * `accept` is deliberately loose. A file this browser cannot open is a thing
+ * to *explain* rather than a thing to hide — a picker that will not show you
+ * your own .mkv teaches you nothing, while one that shows it and then says
+ * why it cannot play it sends you off with an errand.
+ *
+ * The input is cleared on every change. Without that, choosing the same file a
+ * second time — after fixing it, most likely — fires no event at all, and the
+ * button appears to be broken at the exact moment somebody is already annoyed.
+ * ---------------------------------------------------------------------------
+ */
+function FilmPick({
+  label,
+  busy,
+  onFile,
+}: {
+  label: string
+  busy: boolean
+  onFile(file: File): void
+}) {
+  const input = useRef<HTMLInputElement>(null)
+  return (
+    <>
+      <input
+        ref={input}
+        type="file"
+        className="film-input"
+        accept="video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0]
+          event.currentTarget.value = ''
+          if (file) onFile(file)
+        }}
+      />
+      <button
+        type="button"
+        className="film-choose"
+        disabled={busy}
+        /*
+          The press stops here, and on the miniature that is the difference
+          between this button working and not.
+
+          A film nobody on this device has chosen shows its invitation on the
+          tucked pane too, which is the pane you drag — so a press on this
+          button reaches the pane's gesture, which captures the pointer, which
+          retargets the compatibility mouse events, which means the click is
+          synthesised on the pane instead of here. Exactly the trap documented
+          at length in `onPaneUp`, in a second place.
+
+          Harmless in the full screen, where the pane takes no gesture at all.
+        */
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => input.current?.click()}
+      >
+        {busy ? 'reading the file…' : label}
+      </button>
+    </>
+  )
+}
+
+/** `1.4 GB`, because a byte count is not something anybody reads. */
+function heft(bytes: number): string {
+  if (bytes <= 0) return ''
+  const gb = bytes / 1024 ** 3
+  if (gb >= 1) return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`
+  return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`
+}
+
+/**
+ * Lining two different encodes up, by hand, because nothing else can.
+ *
+ * ---------------------------------------------------------------------------
+ * When the two of you have the same file this never appears, and it should
+ * not: the clock does the whole job. When you have different rips of the same
+ * film it is the only thing that can do the job, because the difference is not
+ * drift — it is a distributor card at the front of one of them, and no amount
+ * of synchronising fixes a film that genuinely starts four seconds later.
+ *
+ * It is a *viewing* control, so it sits with the viewing controls and its
+ * setting never leaves this device. Pressing the reading itself puts it back
+ * to nothing, which is the one thing you want when you have nudged your way
+ * into a mess.
+ * ---------------------------------------------------------------------------
+ */
+function Nudge({
+  offset,
+  wide,
+  onNudge,
+}: {
+  offset: number
+  /** The full transport has room for the ten-second jumps; the film does not. */
+  wide: boolean
+  onNudge(by: number): void
+}) {
+  return (
+    <span className="film-nudge" role="group" aria-label="line this copy up with theirs">
+      {wide && (
+        <button type="button" onClick={() => onNudge(-10)} aria-label="ten seconds earlier">
+          −10
+        </button>
+      )}
+      <button type="button" onClick={() => onNudge(-1)} aria-label="a second earlier">
+        −1
+      </button>
+      <button
+        type="button"
+        className="film-nudge-read"
+        onClick={() => onNudge(-offset)}
+        aria-label={`this copy is ${offsetWords(offset)}; put it back`}
+        title="put it back"
+      >
+        {offsetWords(offset)}
+      </button>
+      <button type="button" onClick={() => onNudge(1)} aria-label="a second later">
+        +1
+      </button>
+      {wide && (
+        <button type="button" onClick={() => onNudge(10)} aria-label="ten seconds later">
+          +10
+        </button>
+      )}
+    </span>
+  )
+}
+
 /** The small set of controls that is allowed to exist over an immersed film. */
 function ImmersiveTransport({
   awake,
   captions,
+  film,
+  otherCut,
+  offset,
+  onNudge,
   playing,
   live,
   shown,
@@ -1435,6 +1825,10 @@ function ImmersiveTransport({
 }: {
   awake: boolean
   captions: boolean
+  film: boolean
+  otherCut: boolean
+  offset: number
+  onNudge(by: number): void
   playing: boolean
   /** Whether there is a film at all — the scrubber and skips need it. */
   live: boolean
@@ -1495,15 +1889,26 @@ function ImmersiveTransport({
           >
             ›
           </button>
-          <button
-            type="button"
-            className={`together-caption${captions ? ' on' : ''}`}
-            onClick={onToggleCaptions}
-            aria-pressed={captions}
-            aria-label={captions ? 'turn captions off' : 'turn captions on'}
-          >
-            cc
-          </button>
+          {!film && (
+            <button
+              type="button"
+              className={`together-caption${captions ? ' on' : ''}`}
+              onClick={onToggleCaptions}
+              aria-pressed={captions}
+              aria-label={captions ? 'turn captions off' : 'turn captions on'}
+            >
+              cc
+            </button>
+          )}
+          {/*
+            Narrow here, and it has to be reachable here.
+
+            Two rips are discovered to be out of step while you are watching
+            them, which is when the film is filling the screen — a control you
+            have to leave immersion to reach is one you use once and then put
+            up with being four seconds apart.
+          */}
+          {otherCut && <Nudge offset={offset} wide={false} onNudge={onNudge} />}
         </div>
       </div>
     </div>
@@ -1520,6 +1925,12 @@ function ImmersiveTransport({
 function Transport({
   live,
   onStop,
+  film,
+  mine,
+  otherCut,
+  theirSize,
+  offset,
+  onNudge,
   captions,
   playing,
   shown,
@@ -1535,6 +1946,14 @@ function Transport({
 }: {
   live: boolean
   onStop(): void
+  /** A film off the disk rather than a video, which changes what is offered. */
+  film: boolean
+  mine: Film | null
+  otherCut: boolean
+  /** The byte count the anchor's fingerprint carries, for saying how they differ. */
+  theirSize: number
+  offset: number
+  onNudge(by: number): void
   captions: boolean
   playing: boolean
   shown: number
@@ -1563,6 +1982,25 @@ function Transport({
         <span className="together-by">{playing ? 'playing' : 'paused'} · {movedBy}</span>
       </p>
 
+      {/*
+        Which copy is loaded, and whether it is the same one.
+
+        Worth a line of its own because it is the single fact that explains
+        every strange thing a shared film can do. Matching, it says so once and
+        is never thought about again; different, it says how they differ and
+        hands over the only control that can help.
+      */}
+      {film && mine !== null && (
+        <p className={`film-copy${otherCut ? ' other' : ''}`}>
+          <span className="film-copy-name">{mine.name}</span>
+          <span className="film-copy-note">
+            {otherCut
+              ? `a different copy · yours ${heft(mine.size)}${theirSize > 0 ? `, theirs ${heft(theirSize)}` : ''}`
+              : `the same copy · ${heft(mine.size)}`}
+          </span>
+        </p>
+      )}
+
       <Scrub shown={shown} span={span} live={live} onSeek={onSeek} />
 
       <div className="together-moves">
@@ -1575,7 +2013,16 @@ function Transport({
           aria-label="next in the queue">
           ›
         </button>
-        {live && (
+        {/*
+          Hidden for a film rather than offered and ignored.
+
+          An .mp4 almost never carries a track a browser will show, so this
+          control would be a switch that does nothing — which is worse than an
+          absent one, because it makes somebody wonder whether their subtitles
+          are broken. Subtitles for a film want a chosen `.srt` beside it, and
+          that is a feature rather than a line here.
+        */}
+        {live && !film && (
           <button
             type="button"
             className={`together-caption${captions ? ' on' : ''}`}
@@ -1586,6 +2033,7 @@ function Transport({
             cc
           </button>
         )}
+        {otherCut && <Nudge offset={offset} wide onNudge={onNudge} />}
         {/*
           Two ways out, and they are genuinely different.
 
@@ -2126,6 +2574,9 @@ function Queue({
   queue,
   theirName,
   nothingOn,
+  reading,
+  pickTrouble,
+  onFilm,
   onPlayNow,
   onQueue,
   onDrop,
@@ -2133,6 +2584,10 @@ function Queue({
   queue: Queued[]
   theirName: string
   nothingOn: boolean
+  /** True while a chosen file is being fingerprinted and opened. */
+  reading: boolean
+  pickTrouble: string
+  onFilm(file: File): void
   onPlayNow(videoId: string, title: string): void
   onQueue(item: Queued): void
   onDrop(id: string): void
@@ -2247,6 +2702,37 @@ function Queue({
         >
           {pasted !== null ? (nothingOn ? 'play' : 'add') : looking ? '…' : 'find'}
         </button>
+      </div>
+
+      {/*
+        -------------------------------------------------------------------
+        **Our own film, and it is a place rather than a line of small print.**
+
+        Six years of "we can't watch this together because it isn't on
+        YouTube" is the thing this whole screen was missing, and a way in that
+        was a bare extra button beside the search would be filing the answer
+        under the problem. It comes after the search, because pasting a link
+        is still the commoner errand — and it gets a heading, a sentence and a
+        door of its own rather than a corner of somebody else's.
+
+        The copy is doing one specific job: saying, before anybody worries
+        about it, that the film does not go anywhere. People have been trained
+        by every other tool to expect an upload, a wait, and a bill.
+        -------------------------------------------------------------------
+      */}
+      <div className="film-way">
+        <p className="together-list-label">our own film</p>
+        <p className="film-way-note">
+          Something you both already have. It stays on your machine — nothing
+          is uploaded, nothing is sent, and only the clock is shared. An .mp4
+          plays everywhere.
+        </p>
+        <FilmPick
+          label={nothingOn ? 'choose a film from this device' : 'put on a film from this device'}
+          busy={reading}
+          onFile={onFilm}
+        />
+        {pickTrouble !== '' && <p className="film-trouble">{pickTrouble}</p>}
       </div>
 
       {trouble !== '' && <p className="together-trouble flat">{trouble}</p>}

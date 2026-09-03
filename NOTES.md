@@ -40,6 +40,143 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 3 Sep · Claude · our own film
+
+> *"you honestly telling me despite us building this cool thing, we cant watch
+> our own movie thats downloaded on our computer together?"*
+
+Six years of that, and the answer turned out to be small, because **the hard
+part was already built**. Keeping two people on the same second across a bad
+connection is `positionOf` and `correction`, and neither of them has ever known
+or cared what is playing.
+
+### It rides in the field that was already there
+
+`Watching` carries `videoId · title · playing · at · since · by · seq · queue ·
+session`. Only the first names YouTube, and it is a string — so a film is
+`film:<fingerprint>`, which cannot collide with an eleven-character video id in
+either direction. **No schema change, no rules change, no migration, and a
+queue can hold both kinds at once.** `Screen` in `systems/youtube` was already
+an interface; `systems/film` is a second implementation of it over a `<video>`
+element, and it satisfies it more easily than an iframe does.
+
+The rejected options are written up at the top of `systems/film`, but the short
+of it: **unlisted YouTube** is Content ID matching a commercial film days later
+and taking a strike on the account you sign into everything with, and **cloud
+storage** sends the file up once and back down *twice*, so a three-gigabyte film
+costs nine gigabytes of somebody's data to watch, on two connections in Kano and
+Lagos, for a file already on the disk.
+
+### The fingerprint is deliberately not cryptographic
+
+`crypto.subtle` is `[SecureContext]`, so it is `undefined` on the LAN dev server
+a phone reaches at `http://192.168.x.x`. **`data/ids.ts` exists entirely because
+of the same trap with `crypto.randomUUID`, and it failed silently both times.**
+So: FNV-1a over three one-megabyte slices, twice with different seeds, carried
+beside the exact byte count. Nothing here needs to resist an adversary — the
+question is "are these the same file", asked of two people both trying to answer
+yes.
+
+**Three slices, and the middle one earns its place.** Two encodes of one film
+often share a great deal of their opening — the same container defaults, the
+same leading black — and differ where it matters. `npm run film` fails if it is
+ever removed.
+
+### Different rips are the normal case, not an edge case
+
+You will both download separately, so the two files will not match, and that is
+not a failure to prevent. Her copy is a perfectly good answer to "what should be
+on this screen"; it is held under **the anchor's** fingerprint rather than its
+own, the shared clock stays in one timeline, and each device keeps its own
+translation into its own copy. Nudge until her laugh lands where yours does and
+it stays nudged, per film, per device, never sent.
+
+Every read from the player goes through `toShared`, every instruction through
+`toHere`. With a matching file the offset is zero and both are the identity they
+always were, which is why the arithmetic still reads the way it did.
+
+### The check found a real hazard nobody would have looked for
+
+Her clip ended and **stopped his film**. With a real film that is not a test
+artefact: her rip has no credits, so she reaches the end four minutes early and
+ends the evening for the person who still has four minutes left, with nothing on
+either screen saying why. A copy that is not the one the anchor counts in now
+keeps its ending to itself — it stops, because it has genuinely run out; it does
+not decide the film is over.
+
+### And one that built cleanly and read correctly
+
+The film rendered at its own natural size in the corner of a black rectangle.
+`.together-stage > *` sizes whatever is in the stage, and `YT.Player`
+**replaces** the div it is handed — so the iframe is a direct child and gets the
+rule, while a `<video>` appended into that div is a grandchild and does not.
+`object-fit: contain` is the other half, and matters more than it looks: a film
+is not 16:9, and without it everybody in a 2.39:1 picture is thin.
+
+### What is checked
+
+`npm run film` is the arithmetic — identity, fingerprinting, containers, names,
+offsets — and `npm run screen` grew a section that plays a real one.
+
+There is no ffmpeg on this machine, and committing a sample video to test a
+feature whose whole point is that files stay off the wire would be a poor joke,
+so **the page records its own**: a canvas, a `captureStream`, a `MediaRecorder`,
+two clips kept as bytes on the checker's side so the *same* file can be handed
+back after a reload. That reload is how the second person is simulated — the
+mock keeps the anchor in `localStorage`, so what comes back knows exactly which
+film is on and has nothing on the machine to play it with, which is her
+situation precisely and not one that can be faked by hiding something.
+
+The file goes in through the real `<input type="file">` with a `DataTransfer`.
+**Nothing in `src/` knows the checker exists.**
+
+Three of its own failures were the checker sampling before the browser had
+finished opening a file. That is now polled in three places, and the note beside
+each says so, because a fixed sleep twice read as the app failing to recognise a
+file it had simply not finished reading.
+
+### Two the checker taught me, at its own expense
+
+**A green that proved nothing.** The nudge check wound the anchor back and
+*paused* it, then compared two positions — and passed, because the pause never
+stuck. Writing `playing: false` from a script while the video is still running
+is, to this app, indistinguishable from the other person pressing play, which is
+a rule it holds on purpose; so it wrote `true` straight back, the film ran on to
+its end, and the position duly went up. It now measures the thing a nudge
+actually claims — *this picture leads the shared clock by the offset* — with the
+film left playing and nothing to fight. `lead: [-0.2, 1]`, `anchorAt: [0, 0]`.
+
+**A check that went red because YouTube was down.** Half of `npm run screen`
+needs a real iframe playing a real video — the sheet over it only matters
+because an iframe swallows pointers, and click-to-pause can only be checked
+against something that plays. One run could not reach `youtube.com` and
+reported "no iframe", "stuck at playing" and "the controls stayed hidden",
+which is three regressions' worth of message for a network that was not there.
+It is asked once now, said out loud, and the checks that genuinely need it are
+**skipped with a count** rather than failed — never silently passed. The film
+half needs nobody's network and always runs.
+
+**And a backtick inside a template literal**, in `screen-check.mjs` this time,
+which is the same trap `npm run shaders` sweeps the shaders for. It ended the
+template several lines early and reported a missing parenthesis somewhere else
+entirely. Worth remembering that the trap is not specific to GLSL — anything
+built as a template string can be closed by a stray backtick in a comment.
+
+### Not in this, and worth knowing
+
+- **Subtitles.** The big one. `cc` is hidden for a film rather than offered and
+  ignored, because an `.mp4` almost never carries a track a browser will show.
+  The real answer is a chosen `.srt` beside the film, converted to WebVTT and
+  attached as a `<track>` — a feature rather than a line, and the obvious next
+  one.
+- **Remembering the file.** Chromium can persist a file handle through the File
+  System Access API, so night two would be one click rather than a walk through
+  a folder. Left out on purpose: it needs a second picker path and a permission
+  re-grant flow, and a half-working one is worse than the file dialog.
+- **Silent audio.** H.264 video with AC3 sound in an `.mp4` plays with no sound
+  in Chrome rather than failing. Detectable after a few seconds through
+  `webkitAudioDecodedByteCount`, not detected yet.
+
 ## 3 Sep · Claude · enter, backspace, and pressing the film
 
 > *"backspace thinks it needs you to actually tap on the text field so it knows

@@ -35,7 +35,8 @@
     "questions": "npx --yes tsx scripts/questions-check.ts",
     "watch": "npx --yes tsx scripts/watch-check.ts",
     "door": "npx --yes tsx scripts/door-check.ts",
-    "screen": "node scripts/screen-check.mjs"
+    "screen": "node scripts/screen-check.mjs",
+    "film": "npx --yes tsx scripts/film-check.ts"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",
