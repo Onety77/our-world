@@ -108,6 +108,69 @@ round was about writing fast rather than about finding answers. Five is long
 enough to get stuck on one, give up, and come back — which is where the good
 ones are.
 
+## 2 Sep · Claude · her weather
+
+Asked why the garden was not reacting to real weather. It was not broken — it
+had never been built. No weather call anywhere, no geolocation, and the whole
+sky is `paletteAt(hour)`: **one number in, everything out.** The word
+"weather" in `whoseHour` is metaphorical. This world had *time*, not weather.
+
+### Whose
+
+Hers, always — the same call `whoseHour` already made about the clock and for
+the same reason: you can see your own sky out of the window. So it rides the
+switch that exists rather than adding a second one, and there is no
+arrangement where the sky is her midnight and the cloud is your afternoon.
+
+Her coordinates were already on her profile, so there is no permission prompt
+and nothing to ask for.
+
+### Open-Meteo, and that choice is load-bearing
+
+No API key. Which means no secret to keep, **no proxy in `functions/` to
+build**, nothing to leak from a browser, and one fewer thing that can be down.
+That is a third of the work of the alternative, and the harness asserts the
+URL carries no key so nobody quietly swaps in one that does.
+
+### One funnel, again
+
+Weather is applied in `underSky`, once, on the palette — and arrives at the
+sky dome, the fog, the grass, its wind, the clouds and the light without any
+of them being told weather exists. Exactly the property that made swapping to
+her clock free.
+
+Four numbers and no more — cloud, rain, haze, wind — because the palette is
+the only place weather can express itself here, and anything beyond what it
+can *show* would be a number nobody reads.
+
+Haze is where **harmattan** lands: Saharan dust reports as low visibility and
+nothing else, so a hazy day in Kano and a foggy Shanghai morning arrive as the
+same number. Which is right — from inside a garden they look the same.
+
+### Two mistakes worth keeping
+
+> **The first rain was brighter than a clear day.** I greyed the sky toward
+> its own `skyBottom`, which at two in the afternoon is the *pale horizon* —
+> so a downpour bleached the world. Overcast has to go toward a neutral that
+> is darker, derived from the hour so a cloudy midnight stays black.
+
+> **And `Color.lerp` extrapolates.** The mixes are built by adding two
+> readings — rain and cloud both darken the grass — and they sum past one on
+> the worst day of the year, which is the day nobody would be looking at a
+> screenshot. Clamped.
+
+### What it does not do
+
+**There is no rain.** The only rain in this repo is inside Ember Rally, bound
+to that road's own camera and materials, and none of it is reusable. So a
+genuinely wet day reads as *very overcast and closed-in* rather than as rain —
+convincing on its own, but rain and heavy cloud look more alike than they
+should. That is the argument for building it, and it is the one piece of this
+that is real work rather than a knob.
+
+`?sky=cloud,rain,haze,wind` forces any weather, for looking at it. It also
+skips the fetch entirely, which is how to see the garden with the network out.
+
 ## 2 Sep · Claude · three lights instead of a name
 
 I argued against three dots on the grounds that they are somebody else's house

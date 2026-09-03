@@ -47,6 +47,11 @@ interface YTPlayer {
   getPlayerState(): number
   setPlaybackRate(rate: number): void
   setVolume(volume: number): void
+  /** Caption-module methods exist on the iframe player but are not stable API. */
+  getOption?(module: string, option: string): unknown
+  setOption?(module: string, option: string, value: unknown): void
+  loadModule?(module: string): void
+  unloadModule?(module: string): void
   destroy(): void
 }
 
@@ -61,6 +66,7 @@ interface YT {
         onReady?(event: { target: YTPlayer }): void
         onStateChange?(event: { data: number; target: YTPlayer }): void
         onError?(event: { data: number }): void
+        onApiChange?(event: { target: YTPlayer }): void
       }
     },
   ) => YTPlayer
@@ -116,6 +122,8 @@ export interface Screen {
   /** 1 is normal. Used only to close a small gap; see `correction`. */
   rate(rate: number): void
   loud(volume: number): void
+  /** Captions are a local viewing preference, never shared with the other screen. */
+  captions(showing: boolean): void
   stop(): void
 }
 
@@ -143,6 +151,8 @@ export async function makeScreen(
 ): Promise<Screen> {
   const YT = await loadApi()
   let ready = false
+  let captionsWanted = false
+  let lastCaptionTrack: Record<string, unknown> | null = null
   /** Held until the player says it is ready, then applied in one go. */
   let waiting: { videoId: string; at: number; playing: boolean } | null = null
 
@@ -177,12 +187,17 @@ export async function makeScreen(
       disablekb: 1,
       playsinline: 1,
       fs: 0,
+      // YouTube otherwise restores the viewer's own "captions on" preference.
+      // Zero is only the first line of defence; `captions()` reapplies the
+      // choice after the caption module and each new video have loaded.
+      cc_load_policy: 0,
       iv_load_policy: 3,
       origin: location.origin,
     },
     events: {
       onReady: () => {
         ready = true
+        applyCaptionPreference()
         if (first.videoId !== null && waiting === null) {
           // Whatever it was built with is now however long ago; the sync loop
           // will place it exactly, but starting from the right second beats
@@ -195,6 +210,7 @@ export async function makeScreen(
           apply(videoId, at, playing)
         }
       },
+      onApiChange: () => applyCaptionPreference(),
       onStateChange: (event) => onState(event.data),
       onError: (event) => {
         /*
@@ -218,6 +234,51 @@ export async function makeScreen(
   function apply(videoId: string, at: number, playing: boolean) {
     if (playing) player.loadVideoById(videoId, at)
     else player.cueVideoById(videoId, at)
+  }
+
+  /*
+    YouTube hides its native CC switch with `controls: 0`, and its currently
+    documented caption options only cover size and reload. The iframe still
+    exposes its long-standing caption track module, so this bridge uses it
+    defensively: every call is optional and guarded, and failure never affects
+    playback. `onApiChange` is important because a new video's caption module
+    arrives after the video itself.
+  */
+  function applyCaptionPreference() {
+    if (!ready || !player.setOption) return
+    try {
+      if (!captionsWanted) {
+        const current = player.getOption?.('captions', 'track')
+        if (current && typeof current === 'object' && Object.keys(current).length > 0) {
+          lastCaptionTrack = current as Record<string, unknown>
+        }
+        player.setOption('captions', 'track', {})
+        return
+      }
+
+      const listed = player.getOption?.('captions', 'tracklist')
+      const tracks = Array.isArray(listed)
+        ? listed.filter((track): track is Record<string, unknown> => Boolean(track) && typeof track === 'object')
+        : []
+      const preferred = lastCaptionTrack
+        ?? tracks.find((track) => track.languageCode === 'en')
+        ?? tracks[0]
+      if (preferred) player.setOption('captions', 'track', preferred)
+    } catch {
+      /* An iframe version without the private track option simply ignores CC. */
+    }
+  }
+
+  function chooseCaptions(showing: boolean) {
+    captionsWanted = showing
+    if (!ready) return
+    try {
+      if (showing) player.loadModule?.('captions')
+      applyCaptionPreference()
+      if (!showing) player.unloadModule?.('captions')
+    } catch {
+      /* Captions are optional; no caption failure is allowed to stop the film. */
+    }
   }
 
   const safe = <T,>(read: () => T, fallback: T): T => {
@@ -259,6 +320,7 @@ export async function makeScreen(
     loud: (volume) => {
       if (ready) safe(() => player.setVolume(Math.round(volume * 100)), undefined)
     },
+    captions: chooseCaptions,
     stop() {
       ready = false
       try {

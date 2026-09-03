@@ -11,6 +11,8 @@
 
 import { Color } from 'three'
 
+import type { Sky } from './sky'
+
 export interface SkyPalette {
   hour: number
   skyTop: string
@@ -27,6 +29,17 @@ export interface SkyPalette {
   ground: string
   /** How hard the wind blows at this hour. Dawn is still; afternoon is not. */
   wind: number
+  /**
+   * How much of her sky is covered, 0..1.
+   *
+   * Nought on every keyframe — the hours do not know about weather — and
+   * written by `underSky` afterwards. It is on the palette rather than passed
+   * around separately because the palette is the one thing every part of this
+   * world already reads, which is exactly why adding the hour swap needed no
+   * teaching. Anything that wants to know whether it is overcast can now ask
+   * the same object it already asks about the light.
+   */
+  cloud: number
 }
 
 const KEYFRAMES: SkyPalette[] = [
@@ -45,6 +58,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#44584c',
     ground: '#1d2827',
     wind: 0.35,
+    cloud: 0,
   },
   {
     hour: 5.4,
@@ -61,6 +75,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#4e5546',
     ground: '#232a28',
     wind: 0.25,
+    cloud: 0,
   },
   {
     hour: 6.8,
@@ -77,6 +92,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#7d8560',
     ground: '#3c4234',
     wind: 0.4,
+    cloud: 0,
   },
   {
     hour: 10,
@@ -93,6 +109,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#b4c16d',
     ground: '#5b6a45',
     wind: 0.7,
+    cloud: 0,
   },
   {
     hour: 13.5,
@@ -109,6 +126,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#c2cd73',
     ground: '#647448',
     wind: 1.0,
+    cloud: 0,
   },
   {
     hour: 16.6,
@@ -125,6 +143,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#c4b571',
     ground: '#4e4e39',
     wind: 0.85,
+    cloud: 0,
   },
   {
     hour: 18.6,
@@ -141,6 +160,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#7c6a4c',
     ground: '#33332a',
     wind: 0.5,
+    cloud: 0,
   },
   {
     hour: 20.4,
@@ -157,6 +177,7 @@ const KEYFRAMES: SkyPalette[] = [
     grassTip: '#4e6055',
     ground: '#25302e',
     wind: 0.4,
+    cloud: 0,
   },
 ]
 
@@ -171,10 +192,41 @@ const scratchB = new Color()
  * happens in linear, which is why dusk crossfades without going muddy — and why
  * calling convertSRGBToLinear() here as well would be a double conversion.
  */
+/**
+ * A colour with the colour taken out of it, and turned down.
+ *
+ * This is what overcast actually *is*, and getting it wrong is what made the
+ * first attempt at rain come out brighter than a clear day: the sky was mixed
+ * toward its own `skyBottom`, which at two in the afternoon is the pale
+ * horizon — so a downpour bleached the world instead of darkening it.
+ *
+ * Cloud does two things to light and both are here. It removes the *hue* — a
+ * sky with a lid on it is grey, not blue — and it removes some of the value,
+ * because the lid is between you and the sun. Derived from the hour's own
+ * colour rather than a fixed grey, so an overcast midnight stays black and an
+ * overcast dawn stays faintly pink.
+ */
+function dulled(hex: string, colourOut: number, darker: number): string {
+  scratchA.set(hex)
+  const flat = (scratchA.r + scratchA.g + scratchA.b) / 3
+  scratchB.setRGB(flat, flat, flat)
+  scratchA.lerp(scratchB, colourOut).multiplyScalar(1 - darker)
+  return `#${scratchA.getHexString()}`
+}
+
 function mixHex(a: string, b: string, t: number): string {
   scratchA.set(a)
   scratchB.set(b)
-  scratchA.lerp(scratchB, t)
+  /*
+    Clamped, and it had to be.
+
+    `Color.lerp` extrapolates: hand it 1.08 and it goes *past* the colour you
+    asked for, into whatever lies beyond. The weather layer builds its mixes by
+    adding two readings together — rain and cloud both darken the grass — and
+    they sum past one on the worst day of the year, which is exactly the day
+    nobody would be looking at a screenshot.
+  */
+  scratchA.lerp(scratchB, Math.max(0, Math.min(1, t)))
   return `#${scratchA.getHexString()}`
 }
 
@@ -211,6 +263,106 @@ export function paletteAt(hour: number): SkyPalette {
     grassTip: mixHex(a.grassTip, b.grassTip, t),
     ground: mixHex(a.ground, b.ground, t),
     wind: lerp(a.wind, b.wind, t),
+    cloud: 0,
+  }
+}
+
+/**
+ * The hour's palette, with her weather laid over it.
+ *
+ * =============================================================================
+ * **One funnel, and this is why the funnel was worth having.** Everything in
+ * this world already reads a `SkyPalette` — the sky dome, the fog, the grass
+ * colour and its wind, the clouds, the light. So weather does not need wiring
+ * into any of them: it is applied here, once, and arrives everywhere at the
+ * same time. That is the same property that made swapping to her clock free.
+ *
+ * Four moves, and each is what the weather actually does to light:
+ *
+ *   **Cloud flattens.** Overcast is not darker so much as *lower contrast*: the
+ *   sun stops being a direction and becomes a bright grey ceiling, so the sun's
+ *   intensity falls, the ambient rises to fill in the shadows it was casting,
+ *   and every colour slides toward the grey of the sky itself.
+ *
+ *   **Rain darkens and desaturates**, on top of the cloud that comes with it.
+ *   Wet grass is darker than dry grass, which is most of why a rainy meadow
+ *   reads as rainy even with nothing falling.
+ *
+ *   **Haze closes the distance.** The one weather that acts on space rather
+ *   than on colour: the fog comes in and the far plane comes with it. This is
+ *   also the harmattan, which is why the Kano end of this garden will
+ *   occasionally go the colour of the road.
+ *
+ *   **Wind moves the grass**, which already has a knob for it and needed
+ *   nothing at all.
+ *
+ * Nothing here is allowed to reach the extremes: a garden under solid overcast
+ * still has to be a place you want to sit in, so cloud takes about half the
+ * sun rather than all of it, and the fog never closes past the trees. This is
+ * weather as *mood*, not as simulation.
+ * =============================================================================
+ */
+export function underSky(base: SkyPalette, sky: Sky): SkyPalette {
+  if (!sky.known) return base
+
+  const cloud = Math.max(0, Math.min(1, sky.cloud))
+  const rain = Math.max(0, Math.min(1, sky.rain))
+  const haze = Math.max(0, Math.min(1, sky.haze))
+  // Rain is always overcast, whatever the cloud reading says. It cannot rain
+  // out of a clear sky, and a service that says so is wrong about one of them.
+  const grey = Math.max(cloud, rain)
+
+  /*
+    The lid, derived from this hour's own sky.
+
+    Colour comes out in proportion to the cover, and value comes down — more
+    for rain than for cloud, because a rainy afternoon genuinely is darker than
+    an overcast one and that difference is most of how you tell them apart with
+    nothing falling.
+  */
+  const lid = dulled(base.skyBottom, grey * 0.85, grey * 0.3 + rain * 0.22)
+  const lidTop = dulled(base.skyTop, grey * 0.9, grey * 0.18 + rain * 0.2)
+
+  return {
+    ...base,
+    cloud: grey,
+    // The blue goes first, and then some of the light.
+    skyTop: mixHex(base.skyTop, lidTop, grey),
+    skyBottom: mixHex(base.skyBottom, lid, grey * 0.85),
+    /*
+      The sun stops being a *direction* — that is what overcast means — and the
+      shadows it was casting fill in behind it. Cloud raises the ambient
+      because a bright lid is a huge soft light; rain takes some of that back,
+      because a rainy sky is a dark lid.
+    */
+    sunIntensity: base.sunIntensity * (1 - grey * 0.6) * (1 - rain * 0.3),
+    sunColor: mixHex(base.sunColor, lid, grey * 0.6),
+    ambientIntensity: base.ambientIntensity * (1 + cloud * 0.22 - rain * 0.3),
+    ambientColor: mixHex(base.ambientColor, lid, grey * 0.5),
+    // Wet ground is dark ground, and this is most of why a rainy meadow reads
+    // as rainy with nothing falling out of the sky.
+    /*
+      And the ground, which is most of what you are looking at.
+
+      The first attempt moved the sky convincingly and left the meadow bright
+      green underneath it, which read as a nice day photographed through a grey
+      filter. Wet grass is *much* darker than dry grass and noticeably less
+      yellow — the tips lose their bleached look first, which is why the tip
+      loses more colour than the base does.
+    */
+    grassBase: mixHex(base.grassBase, dulled(base.grassBase, 0.34, 0.52), rain * 0.9 + grey * 0.3),
+    grassTip: mixHex(base.grassTip, dulled(base.grassTip, 0.55, 0.46), rain * 0.9 + grey * 0.38),
+    ground: mixHex(base.ground, dulled(base.ground, 0.3, 0.5), rain * 0.9 + grey * 0.25),
+    // Haze is the one weather that acts on distance rather than on colour.
+    fogColor: mixHex(base.fogColor, lid, grey * 0.6 + haze * 0.3),
+    fogNear: base.fogNear * (1 - haze * 0.55),
+    fogFar: base.fogFar * (1 - haze * 0.62) * (1 - rain * 0.25),
+    /*
+      Wind adds to the hour's own rather than replacing it, because the hour's
+      wind is a *character* — dawn is still, afternoon is not — and a calm day
+      should still be calmer at six in the morning than at three.
+    */
+    wind: Math.min(1.6, base.wind + sky.wind * 0.9),
   }
 }
 

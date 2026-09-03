@@ -65,6 +65,15 @@ import { gainOf, useVolume } from '@/systems/volume'
 
 /** How often the two screens are compared. See `DRIFT` for why not per frame. */
 const CHECK_MS = 900
+const CAPTIONS_KEY = 'garden:night-screen:captions'
+
+function savedCaptionChoice(): boolean {
+  try {
+    return localStorage.getItem(CAPTIONS_KEY) === 'on'
+  } catch {
+    return false
+  }
+}
 
 /**
  * How far a finger must travel before it is moving the pane rather than tapping.
@@ -142,6 +151,13 @@ export function Together() {
   const [span, setSpan] = useState(0)
   const say = useSay()
   const [miniControls, setMiniControls] = useState(false)
+  /** Immersion is a personal layout choice; it must never rearrange her screen. */
+  const [immersive, setImmersive] = useState(false)
+  const [immersiveControls, setImmersiveControls] = useState(true)
+  const immersiveTimer = useRef<number | null>(null)
+  const lastImmersiveMove = useRef(0)
+  const [captions, setCaptions] = useState(savedCaptionChoice)
+  const captionsRef = useRef(captions)
 
   // --- the feed -------------------------------------------------------------
   useEffect(
@@ -175,6 +191,50 @@ export function Together() {
   useEffect(() => {
     if (!live) setTrouble('')
   }, [live])
+
+  /*
+    The picture is the switch once the room is quiet. Controls stay present
+    while paused, and leave after a short grace period while the film runs.
+    Escape is deliberately local: it leaves immersion, never the shared film.
+  */
+  useEffect(() => {
+    if (immersiveTimer.current !== null) {
+      window.clearTimeout(immersiveTimer.current)
+      immersiveTimer.current = null
+    }
+    if (!immersive) return
+
+    setImmersiveControls(true)
+    if (shared.playing && trouble === '' && joined) {
+      immersiveTimer.current = window.setTimeout(() => {
+        setImmersiveControls(false)
+        immersiveTimer.current = null
+      }, 3200)
+    }
+
+    const leaveOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      setImmersive(false)
+      setImmersiveControls(true)
+    }
+    document.addEventListener('keydown', leaveOnEscape, true)
+    return () => {
+      document.removeEventListener('keydown', leaveOnEscape, true)
+      if (immersiveTimer.current !== null) {
+        window.clearTimeout(immersiveTimer.current)
+        immersiveTimer.current = null
+      }
+    }
+  }, [immersive, shared.playing, trouble, joined])
+
+  /* A dark or folded screen cannot retain an invisible immersive layout. */
+  useEffect(() => {
+    if (open && live) return
+    setImmersive(false)
+    setImmersiveControls(true)
+  }, [open, live])
 
   // --- the screen -----------------------------------------------------------
   useEffect(() => {
@@ -212,6 +272,7 @@ export function Together() {
         made = built
         screen.current = built
         screenVideo.current = anchor.videoId
+        built.captions(captionsRef.current)
         setTrouble('')
       })
       .catch((why: unknown) => {
@@ -384,7 +445,59 @@ export function Together() {
     move({ ...shared, at: Math.max(0, seconds) })
   }
 
+  const clearImmersiveTimer = () => {
+    if (immersiveTimer.current === null) return
+    window.clearTimeout(immersiveTimer.current)
+    immersiveTimer.current = null
+  }
+
+  const revealImmersiveControls = () => {
+    setImmersiveControls(true)
+    clearImmersiveTimer()
+    if (!shared.playing || trouble !== '' || !joined) return
+    immersiveTimer.current = window.setTimeout(() => {
+      setImmersiveControls(false)
+      immersiveTimer.current = null
+    }, 3200)
+  }
+
+  const toggleImmersiveControls = () => {
+    if (!immersiveControls) {
+      revealImmersiveControls()
+      return
+    }
+    if (!shared.playing) return
+    clearImmersiveTimer()
+    setImmersiveControls(false)
+  }
+
+  const enterImmersion = () => {
+    if (!live) return
+    setTab('talk')
+    setImmersiveControls(true)
+    setImmersive(true)
+  }
+
+  const leaveImmersion = () => {
+    clearImmersiveTimer()
+    setImmersive(false)
+    setImmersiveControls(true)
+  }
+
+  const toggleCaptions = () => {
+    const next = !captionsRef.current
+    captionsRef.current = next
+    setCaptions(next)
+    screen.current?.captions(next)
+    try {
+      localStorage.setItem(CAPTIONS_KEY, next ? 'on' : 'off')
+    } catch {
+      /* A private browser may refuse storage; the current sitting still works. */
+    }
+  }
+
   const fold = () => {
+    leaveImmersion()
     setMiniControls(false)
     tuck()
   }
@@ -392,6 +505,7 @@ export function Together() {
   const endSession = () => {
     screen.current?.pause()
     setTrouble('')
+    leaveImmersion()
     useWatching.getState().close()
     setMiniControls(false)
     // The screen goes dark and what was said in front of it goes with it.
@@ -626,13 +740,13 @@ export function Together() {
         in, belong here rather than on the picture.
       */
       ref={paneRef}
-      className={`together ${open ? 'full' : 'tucked'}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
+      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
       onPointerCancel={onPaneUp}
     >
-      {open && (
+      {open && !immersive && (
         <>
           <div className="together-place" aria-hidden="true">
             <i className="together-glow warm" />
@@ -668,6 +782,32 @@ export function Together() {
         onPointerCancel={onPaneUp}
       >
         <div ref={stage} className="together-stage" />
+        {open && live && !immersive && (
+          <button
+            type="button"
+            className="together-immerse-enter"
+            onClick={enterImmersion}
+            aria-label="enter immersive view"
+            title="immerse"
+          >
+            <span className="together-expand-mark" aria-hidden="true" />
+          </button>
+        )}
+        {open && live && immersive && trouble === '' && joined && (
+          <button
+            type="button"
+            className="together-immersive-wake"
+            onClick={toggleImmersiveControls}
+            onPointerMove={(event) => {
+              if (event.pointerType !== 'mouse') return
+              const now = performance.now()
+              if (immersiveControls && now - lastImmersiveMove.current < 180) return
+              lastImmersiveMove.current = now
+              revealImmersiveControls()
+            }}
+            aria-label={immersiveControls ? 'hide viewing controls' : 'show viewing controls'}
+          />
+        )}
         {!live && open && (
           <div className="together-nothing">
             <span className="together-empty-mark" aria-hidden="true">◇</span>
@@ -732,40 +872,64 @@ export function Together() {
         )}
       </div>
 
+      {open && live && immersive && (
+        <ImmersiveTransport
+          awake={immersiveControls}
+          captions={captions}
+          playing={shared.playing}
+          through={through}
+          shown={shown}
+          span={span}
+          hasNext={shared.queue.length > 0}
+          onPlayPause={playPause}
+          onSkip={skip}
+          onSeek={goTo}
+          onToggleCaptions={toggleCaptions}
+          onLeave={leaveImmersion}
+          onActivity={revealImmersiveControls}
+        />
+      )}
+
       {open && (
-        <aside className="together-room" aria-label="shared screen controls">
-          <Transport
-            live={live}
-            onStop={endSession}
-            playing={shared.playing}
-            through={through}
-            shown={shown}
-            span={span}
-            hasNext={shared.queue.length > 0}
-            movedBy={shared.by === me ? 'you' : them.name}
-            title={shared.title}
-            onPlayPause={playPause}
-            onSkip={skip}
-            onSeek={goTo}
-            onTuck={fold}
-          />
+        <aside className="together-room" aria-label={immersive ? 'conversation beside the screen' : 'shared screen controls'}>
+          {!immersive && (
+            <>
+              <Transport
+                live={live}
+                onStop={endSession}
+                captions={captions}
+                playing={shared.playing}
+                through={through}
+                shown={shown}
+                span={span}
+                hasNext={shared.queue.length > 0}
+                movedBy={shared.by === me ? 'you' : them.name}
+                title={shared.title}
+                onPlayPause={playPause}
+                onSkip={skip}
+                onSeek={goTo}
+                onToggleCaptions={toggleCaptions}
+                onTuck={fold}
+              />
 
-          <div className="together-tabs" role="tablist" aria-label="beside the screen">
-            {(['talk', 'queue'] as const).map((which) => (
-              <button
-                key={which}
-                type="button"
-                role="tab"
-                aria-selected={tab === which}
-                className={`together-tab${tab === which ? ' on' : ''}`}
-                onClick={() => setTab(which)}
-              >
-                {which === 'talk' ? 'talk' : `find & queue${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
-              </button>
-            ))}
-          </div>
+              <div className="together-tabs" role="tablist" aria-label="beside the screen">
+                {(['talk', 'queue'] as const).map((which) => (
+                  <button
+                    key={which}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === which}
+                    className={`together-tab${tab === which ? ' on' : ''}`}
+                    onClick={() => setTab(which)}
+                  >
+                    {which === 'talk' ? 'talk' : `find & queue${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
-          {tab === 'talk' ? (
+          {immersive || tab === 'talk' ? (
             <Talk session={shared.session} theirName={them.name} />
           ) : (
             <Queue
@@ -809,6 +973,124 @@ export function Together() {
   )
 }
 
+/** The small set of controls that is allowed to exist over an immersed film. */
+function ImmersiveTransport({
+  awake,
+  captions,
+  playing,
+  through,
+  shown,
+  span,
+  hasNext,
+  onPlayPause,
+  onSkip,
+  onSeek,
+  onToggleCaptions,
+  onLeave,
+  onActivity,
+}: {
+  awake: boolean
+  captions: boolean
+  playing: boolean
+  through: number
+  shown: number
+  span: number
+  hasNext: boolean
+  onPlayPause(): void
+  onSkip(): void
+  onSeek(seconds: number): void
+  onToggleCaptions(): void
+  onLeave(): void
+  onActivity(): void
+}) {
+  const beam = useRef<HTMLDivElement>(null)
+
+  const scrubTo = (clientX: number) => {
+    const box = beam.current?.getBoundingClientRect()
+    if (!box || box.width === 0 || span <= 0) return
+    onSeek(((clientX - box.left) / box.width) * span)
+  }
+
+  return (
+    <div
+      className={`together-immersive-controls${awake ? ' awake' : ''}`}
+      aria-hidden={!awake}
+      inert={!awake}
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        onActivity()
+      }}
+    >
+      <button
+        type="button"
+        className="together-immersion-exit"
+        onClick={onLeave}
+        aria-label="leave immersive view"
+      >
+        <span className="together-contract-mark" aria-hidden="true" />
+      </button>
+
+      <div className="together-immersive-transport">
+        <div
+          ref={beam}
+          className="together-beamline"
+          role="slider"
+          tabIndex={0}
+          aria-label="how far through"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(span)}
+          aria-valuenow={Math.round(shown)}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId)
+            scrubTo(event.clientX)
+          }}
+          onPointerMove={(event) => {
+            if (event.buttons === 0) return
+            scrubTo(event.clientX)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowLeft') onSeek(Math.max(0, shown - 5))
+            if (event.key === 'ArrowRight') onSeek(shown + 5)
+          }}
+        >
+          <span className="together-beam" style={{ transform: `scaleX(${through})` }} />
+          <span className="together-hold" style={{ left: `${through * 100}%` }} aria-hidden="true" />
+        </div>
+
+        <div className="together-immersive-moves">
+          <span className="together-clock">{clock(shown)}{span > 0 ? ` / ${clock(span)}` : ''}</span>
+          <button
+            type="button"
+            className="together-go"
+            onClick={onPlayPause}
+            aria-label={playing ? 'pause for both of us' : 'play for both of us'}
+          >
+            {playing ? '❚❚' : '▶'}
+          </button>
+          <button
+            type="button"
+            className="together-next"
+            onClick={onSkip}
+            disabled={!hasNext}
+            aria-label="next in the queue"
+          >
+            ›
+          </button>
+          <button
+            type="button"
+            className={`together-caption${captions ? ' on' : ''}`}
+            onClick={onToggleCaptions}
+            aria-pressed={captions}
+            aria-label={captions ? 'turn captions off' : 'turn captions on'}
+          >
+            cc
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /**
  * The controls, which are a line of light and three marks.
  *
@@ -819,6 +1101,7 @@ export function Together() {
 function Transport({
   live,
   onStop,
+  captions,
   playing,
   through,
   shown,
@@ -829,10 +1112,12 @@ function Transport({
   onPlayPause,
   onSkip,
   onSeek,
+  onToggleCaptions,
   onTuck,
 }: {
   live: boolean
   onStop(): void
+  captions: boolean
   playing: boolean
   through: number
   shown: number
@@ -843,6 +1128,7 @@ function Transport({
   onPlayPause(): void
   onSkip(): void
   onSeek(seconds: number): void
+  onToggleCaptions(): void
   onTuck(): void
 }) {
   const beam = useRef<HTMLDivElement>(null)
@@ -914,6 +1200,17 @@ function Transport({
           aria-label="next in the queue">
           ›
         </button>
+        {live && (
+          <button
+            type="button"
+            className={`together-caption${captions ? ' on' : ''}`}
+            onClick={onToggleCaptions}
+            aria-pressed={captions}
+            aria-label={captions ? 'turn captions off' : 'turn captions on'}
+          >
+            cc
+          </button>
+        )}
         {/*
           Two ways out, and they are genuinely different.
 

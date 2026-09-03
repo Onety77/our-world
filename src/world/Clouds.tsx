@@ -89,7 +89,16 @@ const FRAG = /* glsl */ `
 export function Clouds({ palette }: { palette: SkyPalette }) {
   const geometry = useMemo(() => {
     const rng = makeRng(seedFrom('sky:clouds'))
-    const COUNT = 34
+    /*
+      Built for the worst weather, shown according to the sky.
+
+      `instanceCount` is set every frame from the cover reading rather than the
+      geometry being rebuilt, which is what makes this free: a clear day draws
+      four billboards and an overcast one draws all of them, and neither costs
+      an allocation. The order is the order they were dealt, so the sky fills
+      in and empties out through the same clouds rather than shuffling.
+    */
+    const COUNT = 96
 
     const base = new PlaneGeometry(1, 1)
     const geo = new InstancedBufferGeometry()
@@ -103,7 +112,7 @@ export function Clouds({ palette }: { palette: SkyPalette }) {
 
     for (let i = 0; i < COUNT; i++) {
       const angle = rng() * Math.PI * 2
-      const distance = range(rng, 320, 900)
+      const distance = range(rng, 300, 900)
       offset[i * 3] = Math.cos(angle) * distance
       offset[i * 3 + 1] = range(rng, 90, 260)
       offset[i * 3 + 2] = Math.sin(angle) * distance
@@ -146,11 +155,37 @@ export function Clouds({ palette }: { palette: SkyPalette }) {
   useEffect(() => {
     const u = material.uniforms
     const day = Math.min(1, palette.sunIntensity)
+    const cover = Math.max(0, Math.min(1, palette.cloud))
     // lit from the same direction as everything else, and dark at night
     u.uTop.value.set(palette.sunColor).multiplyScalar(0.55 + day * 0.5)
     u.uBelly.value.set(palette.skyBottom).multiplyScalar(0.7 + day * 0.25)
-    u.uOpacity.value = 0.45 + day * 0.45
+    /*
+      Overcast is not a lot of little clouds, it is one big flat one.
+
+      So cover does two things at once and they are both necessary: more of
+      them, *and* each one heavier. Only raising the count gives a sky full of
+      distinct fluffy shapes, which reads as a nice day with a lot of weather
+      in it rather than as a grey lid. Only raising the opacity gives four very
+      solid clouds and a lot of blue between them.
+    */
+    u.uOpacity.value = (0.45 + day * 0.45) * (1 + cover * 0.55)
   }, [material, palette])
+
+  /*
+    How many of them are up there, which is the sky's own reading.
+
+    Written on the geometry rather than through a uniform because an instance
+    that is not drawn costs nothing at all, where one drawn at zero opacity
+    still costs a quad and a fragment pass across a third of the screen. A
+    clear day should be as cheap as it was before weather existed.
+  */
+  useEffect(() => {
+    const cover = Math.max(0, Math.min(1, palette.cloud))
+    const most = geometry.attributes.iPhase.count
+    // Never none: a garden with no clouds at all in a blue sky looks unfinished,
+    // and a clear reading means "nothing much", not "vacuum".
+    geometry.instanceCount = Math.max(8, Math.round(most * (0.18 + cover * 0.82)))
+  }, [geometry, palette.cloud])
 
   const t = useRef(0)
   useFrame((_, delta) => {

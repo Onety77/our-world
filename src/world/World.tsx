@@ -14,10 +14,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, Suspense } from 
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ACESFilmicToneMapping, Group } from 'three'
 import { useData, useWorldSlice } from '@/data/provider'
-import { paletteAt } from '@/systems/palette'
+import { paletteAt, underSky } from '@/systems/palette'
 import { warmWhenIdle } from '@/systems/later'
 import { createFrameWatchdog, useQuality, type Tier } from '@/systems/quality'
 import { skyHour, useWhoseHour } from '@/systems/whoseHour'
+import { useHerSky } from '@/systems/useHerSky'
 import { SECTIONS } from '@/sections/registry'
 import { FADE_MS, useSections } from '@/systems/sections'
 import { usePlaying } from '@/systems/playing'
@@ -313,7 +314,16 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
 
   const whose = useWhoseHour((w) => w.whose)
   const myHour = hourOverride ?? skyHour(profiles, me, whose, nowTick)
-  const palette = useMemo(() => paletteAt(myHour), [myHour])
+  /*
+    And her weather over her hour — see `systems/sky`.
+
+    Applied here rather than anywhere else because this is where the palette is
+    made, and the palette is the one thing the whole world reads. The sky dome,
+    the fog, the grass and its wind, the clouds and the light all pick it up
+    without being told weather exists.
+  */
+  const sky = useHerSky(profiles, me, whose)
+  const palette = useMemo(() => underSky(paletteAt(myHour), sky), [myHour, sky])
 
   const env = useMemo(
     () => ({ palette, grassCount, flowerCount, hour: myHour }),

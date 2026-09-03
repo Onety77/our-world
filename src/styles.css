@@ -13661,6 +13661,7 @@ body.on-the-road .broke-what {
 
 .together-go,
 .together-next,
+.together-caption,
 .together-tuck {
   background: none;
   border: 0;
@@ -13673,6 +13674,27 @@ body.on-the-road .broke-what {
 .together-go { font-size: 0.92rem; }
 .together-next { font-size: 1.3rem; line-height: 1; }
 .together-next:disabled { opacity: 0.25; cursor: default; }
+
+.together-caption {
+  min-width: 1.8rem;
+  font-family: var(--sans);
+  font-size: .52rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, .42);
+}
+
+.together-caption.on {
+  color: #ffe0b5;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .2rem;
+  text-shadow: 0 0 10px rgba(255, 202, 137, .48);
+}
+
+.together-caption:hover,
+.together-caption:focus-visible { color: #fff6e9; outline: none; }
 
 .together-tuck {
   font-family: var(--sans);
@@ -14733,4 +14755,284 @@ body.on-the-road .broke-what {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ===========================================================================
+   The quiet Night Screen
+
+   Immersion is an app-level viewing room rather than the browser's native
+   fullscreen. Native YouTube fullscreen would take the conversation away and
+   hand the controls to a second, unrelated interface. Here the same persistent
+   iframe simply receives more room; the shared clock never restarts.
+   =========================================================================== */
+
+.together-immerse-enter {
+  position: absolute;
+  z-index: 6;
+  right: .72rem;
+  bottom: .72rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 242, 222, .18);
+  border-radius: 50%;
+  background: rgba(3, 5, 9, .62);
+  color: #fff4e3;
+  box-shadow: 0 .5rem 1.8rem rgba(0, 0, 0, .38);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  opacity: .76;
+  transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.together-immerse-enter:hover,
+.together-immerse-enter:focus-visible {
+  opacity: 1;
+  border-color: rgba(255, 222, 178, .5);
+  transform: scale(1.045);
+  outline: none;
+}
+
+.together-expand-mark,
+.together-contract-mark {
+  width: 1rem;
+  height: .78rem;
+  display: block;
+  background:
+    linear-gradient(currentColor, currentColor) left top / .34rem 1px no-repeat,
+    linear-gradient(currentColor, currentColor) left top / 1px .34rem no-repeat,
+    linear-gradient(currentColor, currentColor) right top / .34rem 1px no-repeat,
+    linear-gradient(currentColor, currentColor) right top / 1px .34rem no-repeat,
+    linear-gradient(currentColor, currentColor) left bottom / .34rem 1px no-repeat,
+    linear-gradient(currentColor, currentColor) left bottom / 1px .34rem no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / .34rem 1px no-repeat,
+    linear-gradient(currentColor, currentColor) right bottom / 1px .34rem no-repeat;
+}
+
+.together-contract-mark { transform: rotate(180deg) scale(.82); }
+
+.together.full.immersive {
+  --immersive-chat: clamp(19rem, 27vw, 28rem);
+  background: #000;
+}
+
+.together.full.immersive .together-screen {
+  inset: 0 var(--immersive-chat) 0 0;
+  width: auto;
+  height: auto;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+}
+
+.together.full.immersive .together-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.together.full.immersive .together-room {
+  inset: 0 0 0 auto;
+  width: var(--immersive-chat);
+  padding:
+    max(1.25rem, env(safe-area-inset-top))
+    max(1.15rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom))
+    1.15rem;
+  gap: 0;
+  border: 0;
+  border-left: 1px solid rgba(255, 224, 184, .1);
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(94, 112, 164, .13), transparent 42%),
+    radial-gradient(circle at 0% 100%, rgba(198, 132, 72, .09), transparent 45%),
+    #070a12;
+  box-shadow: -.8rem 0 3rem rgba(0, 0, 0, .45);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.together.full.immersive .together-talk { flex: 1 1 auto; }
+.together.full.immersive .together-said { padding: .25rem .15rem .65rem 0; }
+.together.full.immersive .together-line { max-width: 90%; }
+.together.full.immersive .together-none { color: rgba(242, 239, 230, .34); }
+
+/* A clear layer over the disabled YouTube chrome makes the film itself the
+   one large, forgiving target that wakes and hushes our controls. */
+.together-immersive-wake {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.together.full.immersive .together-screen-trouble,
+.together.full.immersive .together-join { z-index: 8; }
+
+.together-immersive-controls {
+  position: absolute;
+  z-index: 7;
+  inset: 0 var(--immersive-chat) 0 0;
+  color: #f7f1e8;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 220ms ease, visibility 220ms ease;
+}
+
+.together-immersive-controls.awake {
+  opacity: 1;
+  visibility: visible;
+}
+
+.together-immersion-exit,
+.together-immersive-transport {
+  pointer-events: auto;
+}
+
+.together-immersion-exit {
+  position: absolute;
+  z-index: 2;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 242, 222, .2);
+  border-radius: 50%;
+  background: rgba(4, 6, 10, .58);
+  color: #fff4e3;
+  box-shadow: 0 .55rem 2rem rgba(0, 0, 0, .38);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+.together-immersion-exit:focus-visible {
+  outline: 1px solid rgba(255, 222, 178, .8);
+  outline-offset: 3px;
+}
+
+.together-immersive-transport {
+  position: absolute;
+  left: clamp(1rem, 3vw, 2.6rem);
+  right: clamp(1rem, 3vw, 2.6rem);
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: .7rem;
+  padding: 2.7rem 1rem .8rem;
+  border-radius: .75rem;
+  background: linear-gradient(180deg, transparent, rgba(2, 3, 6, .78) 54%);
+  filter: drop-shadow(0 .8rem 1.8rem rgba(0, 0, 0, .5));
+}
+
+.together-immersive-transport .together-beamline {
+  height: 1.35rem;
+  margin: 0;
+}
+
+.together-immersive-transport .together-hold {
+  width: .72rem;
+  height: .72rem;
+  margin: -.36rem 0 0 -.36rem;
+}
+
+.together-immersive-moves {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.2rem;
+}
+
+.together-immersive-moves .together-clock {
+  margin-right: auto;
+  color: rgba(247, 241, 232, .62);
+  text-shadow: 0 2px 10px #000;
+}
+
+.together-immersive-moves .together-go,
+.together-immersive-moves .together-next {
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  color: #fff8ec;
+  text-shadow: 0 2px 12px #000;
+}
+
+/* Portrait is the cleanest cinema shape a phone can offer: no side gutters,
+   no title above it, and every remaining pixel belongs to the conversation. */
+@media (max-width: 900px) and (orientation: portrait) {
+  .together.full.immersive {
+    --immersive-film-top: env(safe-area-inset-top);
+    --immersive-film-height: calc(100vw * .5625);
+  }
+
+  .together.full.immersive .together-screen {
+    inset: var(--immersive-film-top) 0 auto 0;
+    width: 100vw;
+    height: var(--immersive-film-height);
+  }
+
+  .together.full.immersive .together-room {
+    inset: calc(var(--immersive-film-top) + var(--immersive-film-height)) 0 0 0;
+    width: auto;
+    padding: .9rem max(1rem, env(safe-area-inset-right)) max(.8rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    border-top: 1px solid rgba(255, 224, 184, .1);
+    border-left: 0;
+    box-shadow: 0 -1rem 3rem rgba(0, 0, 0, .42);
+  }
+
+  .together-immersive-controls {
+    inset: var(--immersive-film-top) 0 auto 0;
+    width: 100vw;
+    height: var(--immersive-film-height);
+  }
+
+  .together-immersion-exit {
+    top: .65rem;
+    left: max(.65rem, env(safe-area-inset-left));
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .together-immersive-transport {
+    left: .45rem;
+    right: .45rem;
+    bottom: .35rem;
+    gap: .2rem;
+    padding: 1.8rem .55rem .15rem;
+    border-radius: .5rem;
+  }
+
+  .together-immersive-moves { min-height: 2rem; gap: .65rem; }
+  .together-immersive-moves .together-go,
+  .together-immersive-moves .together-next { min-width: 2.15rem; min-height: 2.15rem; }
+  .together-immersive-moves .together-clock { font-size: .48rem; }
+}
+
+/* A rotated phone has room for the same side-by-side posture as a desktop. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .together.full.immersive { --immersive-chat: clamp(15.5rem, 34vw, 21rem); }
+  .together.full.immersive .together-room {
+    padding: max(.7rem, env(safe-area-inset-top)) max(.8rem, env(safe-area-inset-right)) max(.65rem, env(safe-area-inset-bottom)) .8rem;
+  }
+  .together-immersion-exit { top: max(.65rem, env(safe-area-inset-top)); left: max(.65rem, env(safe-area-inset-left)); }
+  .together-immersive-transport { bottom: max(.35rem, env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .together-immerse-enter,
+  .together-immersive-controls { transition: none; }
 }

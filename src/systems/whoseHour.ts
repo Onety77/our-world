@@ -109,6 +109,36 @@ export function skyHour(
 }
 
 /**
+ * And whose coordinates the *weather* comes from.
+ *
+ * -----------------------------------------------------------------------------
+ * The same person the clock belongs to, always, which is the point: you are
+ * standing in her four in the morning, so you should be standing in her rain.
+ * Riding `Whose` rather than adding a second setting is what keeps the two
+ * from ever disagreeing — there is no arrangement where the sky is her midnight
+ * and the cloud is your afternoon.
+ *
+ * `device` falls back to hers, for the same reason `otherHour` does: it is a
+ * way of checking what the sky looks like at a given hour, not a third
+ * relationship, and this machine's own coordinates are not something the garden
+ * knows anyway.
+ *
+ * Null when that person has never set a place, which is a perfectly ordinary
+ * state on a fresh garden and simply means no weather.
+ * -----------------------------------------------------------------------------
+ */
+export function skyWhere(
+  profiles: Record<UserId, Profile>,
+  me: UserId,
+  whose: Whose,
+): { lat: number; lon: number } | null {
+  const who = whose === 'mine' ? me : otherUser(me)
+  const there = profiles[who]
+  if (typeof there?.lat !== 'number' || typeof there?.lon !== 'number') return null
+  return { lat: there.lat, lon: there.lon }
+}
+
+/**
  * The hour the sky is *not* running on — the one on the far horizon.
  *
  * The Stars asks for this rather than for "her hour", which is what keeps the

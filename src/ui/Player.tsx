@@ -496,12 +496,22 @@ export function Player() {
             <span className="player-watch-mark" aria-hidden="true">▷</span>
             <span className="player-watch-words">
               <span className="player-watch-kicker">watch together</span>
+              {/*
+                Just the invitation, when she is not here.
+
+                It used to add "· ${her name} can join later", which was true
+                and cost the whole control its width — the line wrapped on a
+                phone and pushed the corner wider than the music above it. It
+                was also answering a question nobody asks: a screen you open
+                alone is obviously one she can walk into, and the dot beside
+                her name in the corner already says whether she is about to.
+              */}
               <span className="player-watch-title">
                 {watchingLive
                   ? (watchingTitle || 'return to the screen')
                   : presence[them.id]?.online === true
                     ? `${them.name} is here · open the night screen`
-                    : `open the night screen · ${them.name} can join later`}
+                    : 'open the night screen'}
               </span>
             </span>
             <span className="player-watch-arrow" aria-hidden="true">→</span>

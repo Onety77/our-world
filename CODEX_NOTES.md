@@ -852,3 +852,35 @@ shared-file changes, measurements, and anything another agent should preserve.
   The editable composer remains selectable and otherwise unchanged.
 - A 10,000-case variable-height motion probe stayed within 0.104 px; computed
   browser styles, TypeScript, the production build and whitespace checks pass.
+
+## 3 September 2026 - Codex - An immersive Night Screen
+
+- Added a device-local immersion control to the shared Night Screen. Entering
+  it never changes the other person's layout and never rebuilds the persistent
+  YouTube iframe, so playback and synchronization continue without a restart.
+- Removed the garden exit, Night Screen name, end-session action, title, search
+  and queue from the immersed view. Only the film and its live conversation
+  remain: side by side on wide screens, edge-to-edge film above chat in phone
+  portrait, and side by side again when a phone turns landscape.
+- Made the picture wake a minimal playback overlay. It fades away after 3.2
+  seconds while playing, remains available while paused or when playback needs
+  attention, and exposes only seek, time, play/pause, next and leave-immersion.
+  Escape leaves immersion locally without stopping the shared screen.
+- Kept the talk component in a stable React position so changing viewing mode
+  cannot discard a half-written message. TypeScript, Watch Together regression
+  checks, the production build, desktop/mobile visual checks and the React
+  lifecycle review pass.
+
+## 3 September 2026 - Codex - Captions belong to the viewer
+
+- Added a small CC switch to the regular Night Screen transport and to the
+  temporary immersive controls. The immersive copy disappears with the rest
+  of the overlay after the film is touched.
+- Made captions off the default for this garden, remembered each device's own
+  choice locally, and reapplied it after every delayed YouTube caption-module
+  load and video change. One person's caption choice never changes the other
+  person's screen.
+- Wrapped YouTube's long-standing but undocumented caption-track commands in
+  optional, guarded calls so a future iframe change cannot interrupt playback.
+  A mocked iframe lifecycle verified off at readiness, restoring the previous
+  language when enabled, and off again after the module reloads.
