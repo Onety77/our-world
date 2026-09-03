@@ -441,16 +441,18 @@ const main = async () => {
     'and it is clear which of you said which', JSON.stringify(lines))
 
   /*
-    The thirty seconds, waited out in full.
+    The fifteen seconds, waited out in full.
 
     There is no way to hurry this that would still be checking the thing: the
     whole promise is that a film you are watching ends up with nothing on it,
-    and a shortened timer would prove a shortened timer works.
+    and a shortened timer would prove a shortened timer works. The three
+    seconds on top are for a headless browser running a video in software,
+    where a render can arrive a good deal later than it was asked for.
   */
-  console.log('    (waiting out the thirty seconds)')
-  await wait(33_000)
+  console.log('    (waiting out the fifteen seconds)')
+  await wait(18_000)
   check(!(await ev(`!!document.querySelector('.screen-chat.awake')`)),
-    'and with nothing happening for thirty seconds, they go', 'still on the picture')
+    'and with nothing happening for fifteen seconds, they go', 'still on the picture')
   await shot('screen-filling-rested')
 
   /* And she says something. */

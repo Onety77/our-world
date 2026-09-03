@@ -136,6 +136,18 @@ backspace and the click are all exercised with focus deliberately parked on the
 film's own sheet, which is where it really is after you have clicked to pause —
 anything that still works there is genuinely independent of it.
 
+### And the overlay rests after fifteen seconds, not thirty
+
+Asked for after using it, which is the only way this number was ever going to
+be right. Thirty was a guess and it was a long one: it is most of a scene.
+
+It changes nothing structural — `CHAT_REST_MS` is one constant — but it does
+make the exception under it load-bearing rather than a nicety. A draft in
+progress holds the overlay up for as long as there are words waiting to be
+sent, and at fifteen seconds a pause for thought is an ordinary pause rather
+than an unusually long one. Without that rule this would take the field away
+mid-sentence often enough to be the next bug report.
+
 ## 3 Sep · Claude · the night screen, filled
 
 > *"i want that same kinda full screen, where it actually is a full screen,

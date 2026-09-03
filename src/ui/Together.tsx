@@ -128,11 +128,13 @@ function hasMouse(): boolean {
 /**
  * How long the words over a filled screen stay up with nothing happening.
  *
- * Thirty seconds is long enough to read what she said and answer it, and short
- * enough that a film you are actually watching is a film with nothing on it.
- * A half-written line does not count as nothing — see `ScreenChat`.
+ * Fifteen seconds is long enough to read what she said and answer it, and
+ * short enough that a film you are actually watching is a film with nothing on
+ * it. A half-written line does not count as nothing — see `ScreenChat`, which
+ * holds the overlay up for as long as there are words waiting to be sent, so
+ * this is only ever the timer on an *empty* corner.
  */
-const CHAT_REST_MS = 30_000
+const CHAT_REST_MS = 15_000
 
 /** How many lines the overlay carries. The film is the thing on the screen. */
 const CHAT_LINES = 7
@@ -1788,7 +1790,7 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
  * type, for the white kitchen and the snow scene — which starts barely-there
  * and goes all the way to nothing. See `SCRIM_REST`.
  *
- * **It leaves.** Thirty seconds with nothing said and nothing being written
+ * **It leaves.** Fifteen seconds with nothing said and nothing being written
  * and it fades off the picture entirely. A film you are watching should have
  * nothing on it.
  *
@@ -1897,10 +1899,12 @@ function ScreenChat({
   /*
     And a draft in progress is not "nothing happening", however long the pause.
 
-    Somebody thinking mid-sentence for thirty-one seconds should not have the
-    field taken away with their words still in it. Every keystroke re-arms the
-    timer; this re-arms it for the silences between them, so a started line
-    keeps the overlay up until it is sent or emptied.
+    Somebody thinking mid-sentence for sixteen seconds should not have the
+    field taken away with their words still in it — and at fifteen that pause is
+    an ordinary one rather than an unusually long one, which is what makes this
+    load-bearing rather than a nicety. Every keystroke re-arms the timer; this
+    re-arms it for the silences between them, so a started line keeps the
+    overlay up until it is sent or emptied.
   */
   useEffect(() => { if (draft !== '') wake() }, [draft, wake])
 
@@ -1972,7 +1976,7 @@ function ScreenChat({
         On an empty line it puts the overlay away instead. Escape cannot do
         that job here: the browser takes Escape for leaving fullscreen and will
         not be talked out of it, so without this there was no way to change
-        your mind about writing except to wait out the thirty seconds.
+        your mind about writing except to wait out the fifteen seconds.
       */
       if (event.key === 'Backspace') {
         if (draftRef.current === '') {
@@ -2029,7 +2033,7 @@ function ScreenChat({
     /*
       Left open, because talking over a film is a back-and-forth rather than one
       message — and closing it would take the keyboard away between two halves
-      of the same thought. It goes when the thirty seconds go.
+      of the same thought. It goes when the fifteen seconds go.
     */
     field.current?.focus()
   }
