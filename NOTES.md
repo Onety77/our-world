@@ -40,6 +40,109 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 4 Sep · Claude · room to choose, and a keyboard that comes up
+
+> *"i can only scroll through like 1. video per the available view space which
+> is literally so bad"*
+
+### The half of the screen that was doing nothing
+
+A phone showing the night screen is a picture, a transport, a row of tabs, and
+then whatever is left — and what was left is about one search result. You
+cannot choose between things you cannot see.
+
+So while somebody is looking, the part that is doing nothing gets out of the
+way. **Never the picture itself**: a film that is playing stays exactly where
+it is, because searching for the next thing is not a reason to stop watching
+this one. What goes is the dark rectangle standing in for a film nobody has
+chosen and the transport for it — which is why the rules hang off
+`.together-screen.dark` rather than off the search.
+
+Measured on a 390-wide phone: the space under the search field went from
+**315px to 637px**. Two results became six.
+
+**Focus alone was not the right trigger.** You type a word, take your finger
+off the field to scroll the results, and everything would spring back and shove
+the list down mid-scroll. So a query still in the box counts as looking, and it
+stops counting when the box is empty and nobody is in it — which is exactly
+what choosing something does, since taking a result clears the field.
+
+`Ink` learned to forward `onFocus` and `onBlur` for this, which the composer
+wanted anyway.
+
+### And a way to empty the field
+
+Holding backspace is fine on a keyboard and miserable on a phone, where the
+alternative is thirty taps or a select-all most people do not know is there.
+The `×` is inside the field where every phone keyboard has taught people to
+look, it appears only when there is something to clear, and it hands the
+keyboard straight back — emptying a search is nearly always the start of a
+different one.
+
+### The conversation can be moved off the subtitles
+
+Four corners. The reason there is a choice at all is subtitles: they are drawn
+along the bottom of the picture where subtitles have always been drawn, and a
+long line reaches a good way towards both bottom corners — so the one place the
+conversation cannot always live is the place it started.
+
+The top corners avoid them completely and cost a little sky; the bottom ones
+are further out of the way of the film and sometimes in the way of the words.
+Which matters more depends on the film, the subtitles and the person, which is
+the shape of thing that should be a setting.
+
+Two things fall out of moving it up: the lift over the transport belongs to the
+bottom corners only, and the column has to grow *down* from a fixed top edge —
+newest last either way, by a different route.
+
+### Answering in the Stars puts the keyboard up
+
+Two things were wrong, and the first was invisible: the focus effect watched
+only `composing`, so it fired on the way *open* and never again. Swipe a line to
+answer it while the composer is already up — which is most of the time, once
+you are talking — and the quote appeared above a field that did not have the
+cursor.
+
+And on a phone the swipe itself takes the keyboard away, because the gesture
+starts with a finger on a message. Answering had become: swipe, then tap the
+box, then type.
+
+`replyTo` is in the dependencies now — choosing something to answer is choosing
+to write, every time and not only the first.
+
+**A layout effect rather than an ordinary one**, and that is the iOS half.
+Safari only raises the keyboard for a `focus()` inside the gesture that asked
+for it; layout effects run during the commit, which React flushes in the same
+task as the handler that set the state, while an ordinary effect runs after
+paint with the gesture over and the focus granted silently with no keyboard
+under it. **Unconfirmed on a real iPhone** — it is the known-correct shape and I
+cannot observe it here.
+
+### A green that was passing for the wrong reason
+
+`.film-trouble` is worn by three different notices — a file that will not open,
+subtitles that will not read, and a film with no sound. The subtitle-refusal
+check asked for *any* of them and was matching the no-sound notice, so it would
+have passed with the subtitle handling entirely broken. Each is asked for by
+name now.
+
+Worth generalising: a shared class is a fine thing for styling and a poor thing
+to assert on. When a check reads an element by a class that more than one state
+can wear, it is testing the stylesheet rather than the behaviour.
+
+### And two more sleeps, one of which was hiding behind a better assertion
+
+The subtitle read had grown past a second and a half, so four assertions
+described a subtitle that had not arrived rather than one that was wrong.
+
+The other is more interesting: `it is actually playing` compared the film's
+position before and after a wait, read 3.78 and then 3.2, and called the film
+stopped. What had happened is the correction loop pulling it back towards the
+shared clock in between — **the loop working**. The assertion is now the
+`running` primitive itself: two readings a quarter of a second apart, both
+playing, the second later than the first. A gap the loop can close cannot fit
+between them.
+
 ## 4 Sep · Claude · a tab of its own, and space
 
 > *"you really put the movie capability thing in the worst place... why cant you

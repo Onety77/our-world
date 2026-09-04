@@ -15939,3 +15939,164 @@ body.on-the-road .broke-what {
 
 .film-tab-subs .film-way-note { margin: 0.25rem 0 0.6rem; }
 .film-tab-subs .film-subs { margin: 0.1rem 0 0; }
+
+/* ===========================================================================
+   Room to choose
+
+   A phone showing the night screen is a picture, a transport, a row of tabs
+   and then whatever is left — and what is left is about one search result.
+   You cannot choose between things you cannot see.
+
+   So while somebody is looking, the half of the screen that is doing nothing
+   gets out of the way. **Never the picture itself**: a film that is playing
+   stays exactly where it is, because searching for the next thing is not a
+   reason to stop watching this one. What goes is the dark placeholder that is
+   standing in for a film nobody has chosen, and the transport for it.
+   =========================================================================== */
+
+@media (max-width: 719px) {
+  /*
+    The dark screen is a rectangle saying "nothing on yet". It has done its
+    job by the time somebody is typing into the search field.
+  */
+  .together.full.searching .together-screen.dark {
+    display: none;
+  }
+
+  /*
+    And the controls for a film that is not playing. `nothing on`, a scrubber
+    that cannot be dragged, and a play button with nothing to play: two hundred
+    pixels of a phone screen spent saying nothing is happening.
+  */
+  .together.full.searching .together-screen.dark ~ .together-room .together-transport {
+    display: none;
+  }
+
+  /*
+    With the screen gone the panel starts under the header instead of under a
+    rectangle that is no longer there. Both figures are the ones the ordinary
+    layout uses for the screen's own top edge, so nothing moves except the gap
+    that has been given back.
+  */
+  .together.full.searching .together-screen.dark ~ .together-room {
+    top: max(7rem, calc(env(safe-area-inset-top) + 6.2rem));
+  }
+}
+
+@media (max-width: 390px), (max-width: 719px) and (max-height: 700px) {
+  .together.full.searching .together-screen.dark ~ .together-room {
+    top: max(5.5rem, calc(env(safe-area-inset-top) + 4.8rem));
+  }
+}
+
+/* ---- emptying the field ------------------------------------------------- */
+
+/*
+  Inside the field rather than beside it, because that is where every phone
+  keyboard has taught people to look for it — and quiet, because it is not a
+  thing you are meant to notice until you want it.
+*/
+.together-clear {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-right: -0.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(242, 239, 230, 0.07);
+  color: rgba(242, 239, 230, 0.55);
+  font: 0.9rem/1 var(--sans);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.together-clear:hover,
+.together-clear:focus-visible {
+  background: rgba(242, 239, 230, 0.14);
+  color: var(--ink);
+  outline: none;
+}
+
+/* ---- which corner the conversation sits in ------------------------------ */
+
+/*
+  Four corners, because subtitles live along the bottom of the picture and a
+  long line of them reaches a good way towards both bottom ones. The base rule
+  further up places it bottom-right; these move it, and each has to undo the
+  side that rule set as well as set its own.
+*/
+.screen-chat.at-bottom-left {
+  right: auto;
+  left: clamp(1rem, 2.6vw, 2.4rem);
+  align-items: flex-start;
+}
+
+.screen-chat.at-bottom-left .screen-chat-said,
+.screen-chat.at-top-left .screen-chat-said { align-items: flex-start; }
+
+/*
+  The top corners clear the subtitles completely, and they must also give up
+  the lift: the transport that the bottom corners step over is not up here.
+*/
+.screen-chat.at-top-left,
+.screen-chat.at-top-right {
+  top: clamp(1rem, 2.6vw, 2.4rem);
+  bottom: auto;
+}
+
+.screen-chat.at-top-left {
+  right: auto;
+  left: clamp(1rem, 2.6vw, 2.4rem);
+  align-items: flex-start;
+}
+
+/*
+  Newest at the bottom is right when the column hangs off the bottom edge and
+  wrong when it hangs off the top: up there the block grows downwards into the
+  film and the newest line keeps moving. From a fixed top edge it grows down
+  with the newest line always last, which is the same reading order by a
+  different route.
+*/
+.screen-chat.at-top-left .screen-chat-said,
+.screen-chat.at-top-right .screen-chat-said { justify-content: flex-start; }
+
+/* The lift over the transport belongs to the bottom corners alone. */
+.together.immersive-awake .screen-chat.at-top-left,
+.together.immersive-awake .screen-chat.at-top-right {
+  bottom: auto;
+  top: clamp(1rem, 2.6vw, 2.4rem);
+}
+
+.together.immersive-awake .screen-chat.at-bottom-left {
+  bottom: calc(clamp(1rem, 2.6vw, 2.4rem) + 7rem);
+}
+
+@media (max-height: 620px) {
+  .together.immersive-awake .screen-chat.at-bottom-left {
+    bottom: calc(clamp(1rem, 2.6vw, 2.4rem) + 5.4rem);
+  }
+}
+
+/* A word rather than a control, in the same voice as the backing beside it. */
+.screen-chat-corner {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.3rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 253, 248, 0.62);
+  font: 0.46rem var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.screen-chat-corner:hover,
+.screen-chat-corner:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  outline: none;
+}

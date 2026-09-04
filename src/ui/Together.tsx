@@ -169,6 +169,41 @@ const CHAT_REST_MS = 15_000
 const CHAT_LINES = 7
 
 const SCRIM_KEY = 'garden:night-screen:scrim'
+const CORNER_KEY = 'garden:night-screen:corner'
+
+/**
+ * Which corner the conversation sits in, over a filled film.
+ *
+ * ---------------------------------------------------------------------------
+ * Four, and the reason there is a choice at all is subtitles. They are drawn
+ * along the bottom of the picture where subtitles have always been drawn, and
+ * a long line of them reaches a good way towards both bottom corners — so the
+ * one place the conversation cannot always live is the place it started.
+ *
+ * The top corners avoid them completely and cost a little of the picture's
+ * sky; the bottom ones are further out of the way of the film and sometimes
+ * in the way of the words. Which of those matters more depends on the film,
+ * the subtitles and the person, which is exactly the shape of thing that
+ * should be a setting rather than a decision made here.
+ *
+ * Per device, like the backing and the volume faders. Hers can be somewhere
+ * else entirely and neither of you need ever know.
+ * ---------------------------------------------------------------------------
+ */
+const CORNERS = ['bottom right', 'bottom left', 'top left', 'top right'] as const
+type Corner = (typeof CORNERS)[number]
+
+function savedCorner(): Corner {
+  try {
+    const stored = localStorage.getItem(CORNER_KEY)
+    return CORNERS.includes(stored as Corner) ? (stored as Corner) : CORNERS[0]
+  } catch {
+    return CORNERS[0]
+  }
+}
+
+/** `bottom right` becomes `at-bottom-right`, which is what the stylesheet reads. */
+const cornerClass = (corner: Corner) => `at-${corner.replace(' ', '-')}`
 
 /**
  * How much dark the words sit on, over the picture.
@@ -349,6 +384,26 @@ export function Together() {
    * film's own name where somebody hunting for a volume control will find it.
    */
   const [noSound, setNoSound] = useState(false)
+  /**
+   * True while somebody is looking for something to watch.
+   *
+   * ---------------------------------------------------------------------------
+   * On a phone the night screen is a picture, a transport, a row of tabs and
+   * then whatever is left — and what is left is about one search result. You
+   * cannot choose between things you cannot see, so the half of the screen
+   * that is doing nothing gets out of the way while you look.
+   *
+   * Focus is not enough on its own: you type a word, then take your finger off
+   * the field to scroll the results, and everything would spring back and shove
+   * the list down again mid-scroll. So a query still in the box counts as
+   * looking, and it stops counting when the box is empty and nobody is in it —
+   * which is exactly what choosing something does, since taking a result
+   * clears the field.
+   * ---------------------------------------------------------------------------
+   */
+  const [hunting, setHunting] = useState(false)
+  const hunt = useWatching((s) => s.hunt)
+  const searching = hunting || hunt.trim() !== ''
   /**
    * Films this device has opened before — see `systems/filmShelf`.
    *
@@ -1523,7 +1578,7 @@ export function Together() {
         in, belong here rather than on the picture.
       */
       ref={paneRef}
-      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
+      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${searching ? ' searching' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
@@ -1947,6 +2002,7 @@ export function Together() {
               queue={shared.queue}
               theirName={them.name}
               nothingOn={shared.videoId === null}
+              onHunting={setHunting}
               onPlayNow={(videoId, title) => put(videoId, title)}
               onQueue={(item) => move({ ...shared, queue: [...shared.queue, item] })}
               onDrop={(id) => move({ ...shared, queue: shared.queue.filter((q) => q.id !== id) })}
@@ -2688,6 +2744,7 @@ function ScreenChat({
   const [composing, setComposing] = useState(false)
   const [awake, setAwake] = useState(true)
   const [scrim, setScrim] = useState(savedScrim)
+  const [corner, setCorner] = useState<Corner>(savedCorner)
   const field = useRef<HTMLTextAreaElement>(null)
   const rest = useRef<number | null>(null)
   const writing = useTheyAreTyping()
@@ -2894,6 +2951,24 @@ function ScreenChat({
     el.setSelectionRange(end, end)
   }, [composing])
 
+  /*
+    Stepped rather than picked from a list of four.
+
+    A control on top of a film has to be small, and a person moving the
+    conversation is not choosing an abstract corner — they are getting it off
+    something, and they will know when it is off it. Pressing until it looks
+    right is fewer decisions than reading four options and choosing one.
+  */
+  const nextCorner = () => {
+    const next = CORNERS[(CORNERS.indexOf(corner) + 1) % CORNERS.length]
+    setCorner(next)
+    try {
+      localStorage.setItem(CORNER_KEY, next)
+    } catch {
+      /* A private browser may refuse storage; it still holds tonight. */
+    }
+  }
+
   const putScrim = (next: number) => {
     setScrim(next)
     try {
@@ -2919,7 +2994,7 @@ function ScreenChat({
 
   return (
     <div
-      className={`screen-chat${awake ? ' awake' : ''}${composing ? ' writing' : ''}`}
+      className={`screen-chat ${cornerClass(corner)}${awake ? ' awake' : ''}${composing ? ' writing' : ''}`}
       style={{ '--screen-chat-scrim': String(scrim) } as CSSProperties}
       aria-label={`what you and ${theirName} are saying about this`}
     >
@@ -2973,6 +3048,23 @@ function ScreenChat({
             and then stop using. It is here only while you are writing, which
             is the only time this corner belongs to you rather than to the film.
           */}
+          {/*
+            Where the words sit, next to how dark they sit on — the two things
+            you reach for when something on the picture is in the way of
+            something else on the picture.
+          */}
+          <button
+            type="button"
+            className="screen-chat-corner"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => {
+              nextCorner()
+              field.current?.focus()
+            }}
+            aria-label={`the conversation is in the ${corner}; move it`}
+          >
+            {corner}
+          </button>
           <label className="screen-chat-scrim-set">
             <span aria-hidden="true">backing</span>
             <input
@@ -3112,6 +3204,7 @@ function Queue({
   queue,
   theirName,
   nothingOn,
+  onHunting,
   onPlayNow,
   onQueue,
   onDrop,
@@ -3119,6 +3212,8 @@ function Queue({
   queue: Queued[]
   theirName: string
   nothingOn: boolean
+  /** Whether the field has the keyboard, so the screen can make room. */
+  onHunting(looking: boolean): void
   onPlayNow(videoId: string, title: string): void
   onQueue(item: Queued): void
   onDrop(id: string): void
@@ -3137,6 +3232,8 @@ function Queue({
   const [looking, setLooking] = useState(false)
   const [trouble, setTrouble] = useState('')
   const request = useRef<AbortController | null>(null)
+  /** So clearing the field can hand the keyboard straight back to it. */
+  const field = useRef<HTMLTextAreaElement>(null)
 
   const pasted = videoIdIn(hunt)
 
@@ -3215,6 +3312,9 @@ function Queue({
           className="ink together-field"
           value={hunt}
           onChange={setHunt}
+          innerRef={field}
+          onFocus={() => onHunting(true)}
+          onBlur={() => onHunting(false)}
           placeholder={canSearch ? 'a link, or something to look for' : 'paste a YouTube link'}
           label="find something to watch"
           onKeyDown={(event) => {
@@ -3224,6 +3324,31 @@ function Queue({
             }
           }}
         />
+        {/*
+          One press to empty it, and it is not a nicety.
+
+          Clearing a search by holding backspace is fine on a keyboard and
+          miserable on a phone, where the alternative to this is thirty taps or
+          a select-all most people do not know is there. It appears only when
+          there is something to clear, so the field is unadorned the rest of
+          the time — and it puts the keyboard back where it was rather than
+          dismissing it, because emptying a search is nearly always the start
+          of a different one.
+        */}
+        {hunt !== '' && (
+          <button
+            type="button"
+            className="together-clear"
+            aria-label="clear what you are looking for"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setHunt('')
+              field.current?.focus()
+            }}
+          >
+            ×
+          </button>
+        )}
         <button
           type="button"
           className="together-find"

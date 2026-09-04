@@ -12,6 +12,16 @@ export interface InkProps {
   label: string
   placeholder?: string
   onKeyDown?(event: KeyboardEvent<HTMLTextAreaElement>): void
+  /*
+    Whether this field has the keyboard.
+
+    Passed through rather than watched from outside because only the field
+    knows, and two places now need to: the night screen makes room for search
+    results while somebody is looking, and a composer that is being written in
+    is a composer that keeps its own spaces.
+  */
+  onFocus?(): void
+  onBlur?(): void
   /** Focus it as soon as it appears. */
   autoFocus?: boolean
   /** The element itself, for places that deliberately restore the cursor. */
@@ -33,6 +43,8 @@ export function Ink({
   label,
   placeholder,
   onKeyDown,
+  onFocus,
+  onBlur,
   autoFocus,
   innerRef,
 }: InkProps) {
@@ -75,6 +87,8 @@ export function Ink({
       onChange={(event) => onChange(event.currentTarget.value)}
       onInput={fit}
       onKeyDown={onKeyDown}
+      onFocus={onFocus}
+      onBlur={onBlur}
     />
   )
 }

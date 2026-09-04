@@ -19,7 +19,8 @@
  * than on the glass in front of it.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect,
+  useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
 import { writingLine } from '@/systems/typing'
 import { useData, useWorldSlice } from '@/data/provider'
@@ -1204,9 +1205,36 @@ export function Talking() {
   // does not throw away an unfinished message.
   useDismissOutside(here && composing, stopWriting, [composer], { allowOutsideDrag: true })
 
-  useEffect(() => {
+  /*
+    ---------------------------------------------------------------------------
+    **Picking something to answer puts the keyboard up.**
+
+    Two things were wrong with watching only `composing`.
+
+    It only ever fires on the way *open*. Swipe a line to answer it while the
+    composer is already up — which is most of the time, once you are talking —
+    and nothing happened at all: the quote appeared above a field that did not
+    have the cursor, and you had to reach down and tap it.
+
+    And on a phone the swipe itself takes the keyboard away. The gesture starts
+    with a finger on a message, so whatever had focus loses it, and the field
+    is left open, quoted, and dead. Answering became: swipe, then tap the box,
+    then type.
+
+    `replyTo` is in the dependencies for that reason — choosing something to
+    answer is choosing to write, every time and not only the first.
+
+    **A layout effect rather than an ordinary one**, and that is the iOS half
+    of it: Safari only raises the keyboard for a `focus()` that happens inside
+    the gesture that asked for it. Layout effects run during the commit, which
+    React flushes in the same task as the event handler that set the state; an
+    ordinary effect runs after paint, by which time the gesture is over and the
+    focus is granted silently with no keyboard under it.
+    ---------------------------------------------------------------------------
+  */
+  useLayoutEffect(() => {
     if (composing) field.current?.focus()
-  }, [composing])
+  }, [composing, replyTo])
 
   useEffect(() => {
     if (!here && composing) stopWriting()

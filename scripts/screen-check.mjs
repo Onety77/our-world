@@ -988,16 +988,42 @@ const main = async () => {
       return 1
     })()`)
     let was = null
-    for (let i = 0; i < 60; i++) {
-      const now = await ev(`(() => {
+    let last = null
+    for (let i = 0; i < 80; i++) {
+      /*
+        Halfway through, ask the app rather than the anchor.
+
+        Writing `playing: true` is a request that the correction loop carries
+        out on its next tick, and a film sitting on its own last frame has to
+        be sought back before it can start — which is two round trips through
+        a browser rendering video in software. When that has plainly not been
+        enough, the transport's own button is pressed, which is what a person
+        would do and goes through `playPause` directly.
+      */
+      if (i === 40) {
+        await ev(`(() => {
+          const b = document.querySelector('.together-moves .together-go')
+            || document.querySelector('.together-immersive-moves .together-go')
+          if (b) b.click()
+          return !!b
+        })()`)
+      }
+      last = await ev(`(() => {
         const v = document.querySelector('.together-stage video')
-        return v && !v.paused && !v.ended ? Math.round(v.currentTime * 100) / 100 : null
+        if (!v) return { none: true }
+        return {
+          at: Math.round(v.currentTime * 100) / 100,
+          paused: v.paused, ended: v.ended, ready: v.readyState,
+          wants: window.__watching.read().playing,
+        }
       })()`)
+      const now = last && !last.none && !last.paused && !last.ended ? last.at : null
       // Two readings, both playing, the second later than the first.
       if (now !== null && was !== null && now > was) return now
       was = now
       await wait(250)
     }
+    console.log('    would not start:', JSON.stringify(last))
     return null
   }
 
@@ -1131,15 +1157,18 @@ const main = async () => {
   check(!on.nudge, 'so there is nothing to line up', 'the nudge appeared')
   await shot('film-playing')
 
-  const ranOn = await (async () => {
-    const first = await running()
-    if (first === null) return { first: null, then: null }
-    await wait(2500)
-    return { first, then: (await filmState()).here }
-  })()
+  /*
+    `running` is the whole assertion, and comparing two positions across a
+    wait was worse than it.
+
+    That version read 3.78 and then 3.2 and called the film stopped, when what
+    had happened is the correction loop pulling it back towards the shared
+    clock in between — which is the loop working. Two readings a quarter of a
+    second apart, both playing and the second later, cannot be confused by it.
+  */
+  const ranOn = await running()
   console.log('    it moves:', JSON.stringify(ranOn))
-  check(ranOn.first !== null && ranOn.then > ranOn.first,
-    'and it is actually playing', JSON.stringify(ranOn))
+  check(ranOn !== null, 'and it is actually playing', 'it never advanced')
 
   // ---- her device: the film is on, and she has no copy of it -------------
   /*
@@ -1462,15 +1491,30 @@ const main = async () => {
     'a film with no subtitles offers no cc, which would do nothing', 'cc is there')
 
   console.log(await giveText('.film-tab-subs', SRT, 'Blue Ruin.srt'))
-  await wait(1500)
-  const took = await ev(`(() => {
-    const p = document.querySelector('.film-tab-subs')
-    return {
-      says: p ? p.textContent : null,
-      cc: !!document.querySelector('.together-moves .together-caption'),
-      ccOn: !!document.querySelector('.together-moves .together-caption.on'),
+  /*
+    Polled, like everything else that waits on the browser reading a file.
+
+    A sleep of a second and a half was enough until it was not: the label was
+    still saying "reading the file…" when the sample was taken, and four
+    assertions failed describing a subtitle that had not arrived yet rather
+    than one that was wrong.
+  */
+  const took = await (async () => {
+    let seen = null
+    for (let i = 0; i < 50; i++) {
+      seen = await ev(`(() => {
+        const p = document.querySelector('.film-tab-subs')
+        return {
+          says: p ? p.textContent : null,
+          cc: !!document.querySelector('.together-moves .together-caption'),
+          ccOn: !!document.querySelector('.together-moves .together-caption.on'),
+        }
+      })()`)
+      if (seen.says !== null && !/reading the file/.test(seen.says)) return seen
+      await wait(250)
     }
-  })()`)
+    return seen
+  })()
   console.log('    subtitles:', JSON.stringify(took))
   check(/Blue Ruin\.srt/.test(String(took.says)), 'a subtitle file is taken', String(took.says))
   check(/2 lines/.test(String(took.says)), 'and it says how much it read', String(took.says))
@@ -1551,7 +1595,7 @@ const main = async () => {
   console.log(await giveText('.film-tab-subs', 'this is not a subtitle file at all', 'notes.srt'))
   await wait(1200)
   const refusedSubs = await ev(`(() => {
-    const t = document.querySelector('.film-trouble')
+    const t = document.querySelector('.film-tab-subs .film-trouble')
     return t ? t.textContent : ''
   })()`)
   console.log('    not subtitles:', JSON.stringify(refusedSubs))
@@ -1726,7 +1770,7 @@ const main = async () => {
     // The detection deliberately waits a few seconds before it will answer.
     for (let i = 0; i < 40; i++) {
       const now = await ev(`(() => {
-        const notice = document.querySelector('.film-trouble')
+        const notice = document.querySelector('.together-transport .film-trouble')
         return {
           says: notice ? notice.textContent : '',
           hush: !!document.querySelector('.film-hush'),
@@ -1736,7 +1780,7 @@ const main = async () => {
       await wait(400)
     }
     return await ev(`(() => ({
-      says: (document.querySelector('.film-trouble') || {}).textContent || '',
+      says: (document.querySelector('.together-transport .film-trouble') || {}).textContent || '',
       hush: !!document.querySelector('.film-hush'),
     }))()`)
   })()
