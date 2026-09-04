@@ -1078,6 +1078,64 @@ export function Together() {
 
   const skip = () => void onEnded()
 
+  /*
+    ---------------------------------------------------------------------------
+    **Space is play and pause, unless somebody is writing.**
+
+    One key, two jobs, and they never overlap because they are never wanted at
+    the same moment: in front of a film a space is the oldest gesture there is,
+    and inside a sentence it is a space. What separates them is simply where
+    the keyboard is pointing.
+
+    Three things it stands aside for, and the third is the one worth writing
+    down:
+
+    - **A field.** Anything being typed into keeps its own spaces, ours and
+      anybody else's, including the film chat's composer.
+    - **A key somebody else has already handled**, which is what
+      `defaultPrevented` means, and a modifier held down, which is a shortcut
+      rather than a gesture.
+    - **A focused control.** A space on a focused button *activates* it — that
+      is what the browser does and what a keyboard user expects — so taking it
+      would break `cc`, `stop` and every other control on the transport for
+      anybody who reaches them by tab. The exception is the clear sheet over
+      the film itself, which is a button only because it has to be something:
+      it is where the focus lands after you click the picture, and it is
+      exactly where a space should play and pause.
+
+    Only while the screen is open, deliberately. A tucked film is a film you
+    are half-watching from somewhere else in the garden, and space belongs to
+    wherever you actually are — most sharply inside Ember Rally, where it is a
+    driving control.
+    ---------------------------------------------------------------------------
+  */
+  const playPauseRef = useRef(playPause)
+  playPauseRef.current = playPause
+
+  useEffect(() => {
+    if (!open || !live) return
+    const onSpace = (event: KeyboardEvent) => {
+      if (event.key !== ' ' && event.code !== 'Space') return
+      if (event.defaultPrevented) return
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      const at = event.target as HTMLElement | null
+      if (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return
+      const focused = document.activeElement as HTMLElement | null
+      if (
+        focused &&
+        !focused.classList.contains('together-immersive-wake') &&
+        /^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(focused.tagName)
+      ) {
+        return
+      }
+      // Held, so the page does not also scroll and the sheet is not activated.
+      event.preventDefault()
+      playPauseRef.current()
+    }
+    document.addEventListener('keydown', onSpace)
+    return () => document.removeEventListener('keydown', onSpace)
+  }, [open, live])
+
   /* `seconds` is where on the scrubber, which is the shared timeline. */
   const goTo = (seconds: number) => {
     screen.current?.seek(toHere(seconds))
@@ -1713,7 +1771,20 @@ export function Together() {
           this screen from her side has already happened correctly.
           -----------------------------------------------------------------
         */}
-        {open && live && isFilm(shared.videoId) && mine === null && trouble === '' && (
+        {/*
+          On the miniature as well as the full screen, and that is the point.
+
+          This was gated on the screen being open, which meant the person who
+          had folded the film into the corner and gone for a walk got a black
+          rectangle with nothing on it when the other one put a film on —
+          which is the exact failure this whole invitation exists to prevent,
+          reproduced in miniature.
+
+          The pane is small, so the stylesheet drops the paragraph and keeps
+          the name and the way in. The button stops its own pointer from
+          reaching the drag beneath it, as every control on the pane must.
+        */}
+        {live && isFilm(shared.videoId) && mine === null && trouble === '' && (
           <div className="film-ask">
             <p className="film-ask-what">
               {shared.by === me ? 'You put on' : `${them.name} put on`} <b>{shared.title}</b>
@@ -1814,10 +1885,6 @@ export function Together() {
                 noSound={noSound}
                 mine={mine}
                 subs={subs}
-                readingSubs={readingSubs}
-                subTrouble={subTrouble}
-                onSubtitles={(file) => void takeSubtitles(file)}
-                onDropSubtitles={takeOutSubtitles}
                 otherCut={otherCut}
                 theirSize={filmPrint === null ? 0 : sizeIn(filmPrint)}
                 offset={offset}
@@ -1837,7 +1904,7 @@ export function Together() {
               />
 
               <div className="together-tabs" role="tablist" aria-label="beside the screen">
-                {(['talk', 'queue'] as const).map((which) => (
+                {(['talk', 'queue', 'film'] as const).map((which) => (
                   <button
                     key={which}
                     type="button"
@@ -1846,7 +1913,11 @@ export function Together() {
                     className={`together-tab${tab === which ? ' on' : ''}`}
                     onClick={() => setTab(which)}
                   >
-                    {which === 'talk' ? 'talk' : `find & queue${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
+                    {which === 'talk'
+                      ? 'talk'
+                      : which === 'film'
+                        ? 'our film'
+                        : `find & queue${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
                   </button>
                 ))}
               </div>
@@ -1855,17 +1926,27 @@ export function Together() {
 
           {immersive || tab === 'talk' ? (
             <Talk session={shared.session} theirName={them.name} />
+          ) : tab === 'film' ? (
+            <OurFilm
+              mine={mine}
+              subs={subs}
+              reading={reading}
+              readingSubs={readingSubs}
+              pickTrouble={pickTrouble}
+              subTrouble={subTrouble}
+              shelf={shelf}
+              nothingOn={shared.videoId === null}
+              onFilm={(file) => void takeFilm(file, 'start')}
+              onKeepingFilm={canRemember() ? () => void chooseAndKeep('start') : undefined}
+              onShelved={(film) => void openAgain(film, 'start')}
+              onSubtitles={(file) => void takeSubtitles(file)}
+              onDropSubtitles={takeOutSubtitles}
+            />
           ) : (
             <Queue
               queue={shared.queue}
               theirName={them.name}
               nothingOn={shared.videoId === null}
-              reading={reading}
-              pickTrouble={pickTrouble}
-              onFilm={(file) => void takeFilm(file, 'start')}
-              onKeepingFilm={canRemember() ? () => void chooseAndKeep('start') : undefined}
-              shelf={shelf}
-              onShelved={(film) => void openAgain(film, 'start')}
               onPlayNow={(videoId, title) => put(videoId, title)}
               onQueue={(item) => move({ ...shared, queue: [...shared.queue, item] })}
               onDrop={(id) => move({ ...shared, queue: shared.queue.filter((q) => q.id !== id) })}
@@ -2164,7 +2245,7 @@ function ImmersiveTransport({
         */}
         {noSound && (
           <p className="film-hush">
-            no sound — this copy’s audio is a format the browser cannot play
+            no sound from this copy — no audio track, or one the browser cannot play
           </p>
         )}
         <Scrub
@@ -2234,10 +2315,6 @@ function Transport({
   noSound,
   mine,
   subs,
-  readingSubs,
-  subTrouble,
-  onSubtitles,
-  onDropSubtitles,
   otherCut,
   theirSize,
   offset,
@@ -2262,11 +2339,8 @@ function Transport({
   /** The film plays but this browser cannot decode its sound. */
   noSound: boolean
   mine: Film | null
+  /** Only to know whether `cc` has anything to switch; the tab owns choosing. */
   subs: Subtitles | null
-  readingSubs: boolean
-  subTrouble: string
-  onSubtitles(file: File): void
-  onDropSubtitles(): void
   otherCut: boolean
   /** The byte count the anchor's fingerprint carries, for saying how they differ. */
   theirSize: number
@@ -2309,51 +2383,30 @@ function Transport({
         hands over the only control that can help.
       */}
       {/*
-        Subtitles, on the line under the film's own.
-
-        They belong here rather than with the viewing controls because they are
-        a fact about *this copy* — like which file is loaded and how far out of
-        step it is — and not a thing you set while watching. Choosing one turns
-        it on; `cc` above is what turns it off again, and only appears once
-        there is something for it to turn off.
-      */}
-      {film && mine !== null && (
-        <p className="film-subs">
-          {subs === null ? (
-            <>
-              <span className="film-subs-none">no subtitles</span>
-              <FilmPick
-                label="add an .srt"
-                busy={readingSubs}
-                onFile={onSubtitles}
-                takes=".srt,.vtt,.sbv,text/plain"
-                quiet
-              />
-            </>
-          ) : (
-            <>
-              <span className="film-subs-name">{subs.name}</span>
-              <span className="film-subs-count">{subs.cues.length} lines</span>
-              <button type="button" className="film-quiet" onClick={onDropSubtitles}>
-                take out
-              </button>
-            </>
-          )}
-        </p>
-      )}
-      {subTrouble !== '' && <p className="film-trouble">{subTrouble}</p>}
-      {/*
         A film that plays and cannot be heard.
 
         Phrased as a fact about the file and a thing to do about it, because
         that is what it is — nothing here is broken, and the person reading it
         has almost certainly just been through their own volume controls twice.
       */}
+      {/*
+        The symptom first, then the likely cause — and it is *likely* rather
+        than certain, which the old wording got wrong.
+
+        What is actually known is that no audio has been decoded. That is
+        produced by a track the browser cannot play, and it is produced just as
+        exactly by a file with no sound on it at all: a screen recording, a
+        silent clip, something exported without its audio. Saying "this copy's
+        sound is in a format the browser cannot play" is a guess stated as a
+        fact, and it is the wrong guess about half the time somebody films
+        their own thing.
+      */}
       {noSound && (
         <p className="film-trouble">
-          This copy’s sound is in a format the browser cannot play — usually AC3
-          or DTS, which is what a disc rip carries. The picture is fine. An .mp4
-          with AAC sound plays everywhere.
+          No sound is coming from this copy. Either it has no audio track, or
+          its audio is a format the browser cannot play — usually AC3 or DTS,
+          which is what a disc rip carries. The picture is unaffected either
+          way, and an .mp4 with AAC sound plays everywhere.
         </p>
       )}
 
@@ -2808,6 +2861,17 @@ function ScreenChat({
       }
 
       if (event.key.length !== 1) return
+      /*
+        Space is not a way to start writing, because space is play and pause.
+
+        Every other single character opens the field, and a space would too if
+        it were allowed to — it is one character like any other. But a space is
+        also the gesture in front of a film, and a leading space is worth
+        nothing as the first thing in a sentence. So it goes to the film, and
+        the moment there *is* a field with the keyboard in it this listener
+        stands aside for it anyway and a space is a space again.
+      */
+      if (event.key === ' ') return
       event.preventDefault()
       setComposing(true)
       // Appended rather than replacing: a line left half-written when the
@@ -2936,17 +3000,118 @@ function ScreenChat({
   )
 }
 
+/**
+ * Our own film: choosing one, and everything about the copy on this device.
+ *
+ * ---------------------------------------------------------------------------
+ * **A tab, because it is one of the two ways to put something on.**
+ *
+ * This began as a section wedged under the YouTube search, and that was the
+ * wrong shape twice over. It pushed the queue itself off the bottom of a panel
+ * that is not tall — so the list of what the two of you had lined up, which is
+ * the point of that half, had nowhere left to be. And it read as something
+ * fitted in wherever there was room, which is exactly what it was.
+ *
+ * Watching a film off the disk is not a footnote to searching YouTube. It is
+ * the other answer to the same question, so it stands beside it.
+ *
+ * Everything here is about **this device's copy** and reaches nobody else: the
+ * file, the shelf it is remembered on, the subtitles, and how far out of step
+ * it is. What is shared is only ever which film is on — see the note at the
+ * top of `systems/film`. The controls that belong to *watching* rather than to
+ * *choosing* stay on the transport where they can be reached mid-film.
+ * ---------------------------------------------------------------------------
+ */
+function OurFilm({
+  mine,
+  subs,
+  reading,
+  readingSubs,
+  pickTrouble,
+  subTrouble,
+  shelf,
+  nothingOn,
+  onFilm,
+  onKeepingFilm,
+  onShelved,
+  onSubtitles,
+  onDropSubtitles,
+}: {
+  mine: Film | null
+  subs: Subtitles | null
+  reading: boolean
+  readingSubs: boolean
+  pickTrouble: string
+  subTrouble: string
+  shelf: Shelved[]
+  nothingOn: boolean
+  onFilm(file: File): void
+  onKeepingFilm?: () => void
+  onShelved(film: Shelved): void
+  onSubtitles(file: File): void
+  onDropSubtitles(): void
+}) {
+  return (
+    <div className="together-queue film-tab">
+      <p className="film-way-note">
+        Something you both already have. It stays on your machine — nothing is
+        uploaded, nothing is sent, and only the clock is shared. An .mp4 with
+        H.264 video and AAC sound plays everywhere.
+      </p>
+
+      <FilmPick
+        label={nothingOn ? 'choose a film from this device' : 'put on a film from this device'}
+        busy={reading}
+        onFile={onFilm}
+        keeping={onKeepingFilm}
+      />
+      {pickTrouble !== '' && <p className="film-trouble">{pickTrouble}</p>}
+
+      <FilmShelf films={shelf} busy={reading} onOpen={onShelved} />
+
+      {/*
+        Subtitles live here rather than on the transport, and it is the same
+        argument as the tab itself: they are a fact about the copy on this
+        machine, chosen once and then left alone. The transport is for the
+        things you reach for while the film is running.
+      */}
+      {mine !== null && (
+        <div className="film-tab-subs">
+          <p className="together-list-label">subtitles</p>
+          {subs === null ? (
+            <>
+              <p className="film-way-note">
+                A separate <b>.srt</b> or <b>.vtt</b> beside the film. Yours
+                only — {`hers can be a different language, or none at all`}.
+              </p>
+              <FilmPick
+                label="add subtitles"
+                busy={readingSubs}
+                onFile={onSubtitles}
+                takes=".srt,.vtt,.sbv,text/plain"
+              />
+            </>
+          ) : (
+            <p className="film-subs">
+              <span className="film-subs-name">{subs.name}</span>
+              <span className="film-subs-count">{subs.cues.length} lines</span>
+              <button type="button" className="film-quiet" onClick={onDropSubtitles}>
+                take out
+              </button>
+            </p>
+          )}
+          {subTrouble !== '' && <p className="film-trouble">{subTrouble}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** What is lined up, and the one field that finds more. */
 function Queue({
   queue,
   theirName,
   nothingOn,
-  reading,
-  pickTrouble,
-  onFilm,
-  onKeepingFilm,
-  shelf,
-  onShelved,
   onPlayNow,
   onQueue,
   onDrop,
@@ -2954,14 +3119,6 @@ function Queue({
   queue: Queued[]
   theirName: string
   nothingOn: boolean
-  /** True while a chosen file is being fingerprinted and opened. */
-  reading: boolean
-  pickTrouble: string
-  onFilm(file: File): void
-  /** The Chromium door, when there is one; see `FilmPick`. */
-  onKeepingFilm?: () => void
-  shelf: Shelved[]
-  onShelved(film: Shelved): void
   onPlayNow(videoId: string, title: string): void
   onQueue(item: Queued): void
   onDrop(id: string): void
@@ -3078,38 +3235,6 @@ function Queue({
         </button>
       </div>
 
-      {/*
-        -------------------------------------------------------------------
-        **Our own film, and it is a place rather than a line of small print.**
-
-        Six years of "we can't watch this together because it isn't on
-        YouTube" is the thing this whole screen was missing, and a way in that
-        was a bare extra button beside the search would be filing the answer
-        under the problem. It comes after the search, because pasting a link
-        is still the commoner errand — and it gets a heading, a sentence and a
-        door of its own rather than a corner of somebody else's.
-
-        The copy is doing one specific job: saying, before anybody worries
-        about it, that the film does not go anywhere. People have been trained
-        by every other tool to expect an upload, a wait, and a bill.
-        -------------------------------------------------------------------
-      */}
-      <div className="film-way">
-        <p className="together-list-label">our own film</p>
-        <p className="film-way-note">
-          Something you both already have. It stays on your machine — nothing
-          is uploaded, nothing is sent, and only the clock is shared. An .mp4
-          plays everywhere.
-        </p>
-        <FilmPick
-          label={nothingOn ? 'choose a film from this device' : 'put on a film from this device'}
-          busy={reading}
-          onFile={onFilm}
-          keeping={onKeepingFilm}
-        />
-        <FilmShelf films={shelf} busy={reading} onOpen={onShelved} />
-        {pickTrouble !== '' && <p className="film-trouble">{pickTrouble}</p>}
-      </div>
 
       {trouble !== '' && <p className="together-trouble flat">{trouble}</p>}
       {!canSearch && pasted === null && hunt.trim() !== '' && (

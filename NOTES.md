@@ -40,6 +40,93 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 4 Sep · Claude · a tab of its own, and space
+
+> *"you really put the movie capability thing in the worst place... why cant you
+> give the local movie thing its own tab"*
+
+Correct, and it was two mistakes at once. Choosing a film sat under the YouTube
+search **inside the queue tab**, which pushed the queue itself — the list of what
+the two of you have lined up, the whole point of that half — off the bottom of a
+panel that is not tall. And it read as something fitted in wherever there was
+room, which is exactly what it was.
+
+Watching a film off the disk is not a footnote to searching YouTube. It is the
+other answer to the same question, so `Tab` gained a third value and it stands
+beside it: **talk · find & queue · our film**.
+
+The transport got lighter with it. The subtitle picker moved onto the tab —
+subtitles are a fact about *this copy*, chosen once and then left alone, and the
+transport is for the things you reach for while the film is running. What stayed
+there is what belongs to watching: which copy is loaded, the nudge, and the
+no-sound notice.
+
+### Space, which is one key with two jobs
+
+They never overlap, because they are never wanted at the same moment: in front
+of a film a space is the oldest gesture there is, and inside a sentence it is a
+space. What separates them is only where the keyboard is pointing.
+
+Three things it stands aside for, and the third is the one worth writing down:
+
+- **A field**, ours or anybody else's, keeps its own spaces.
+- **A key somebody has already handled**, and a modifier held down.
+- **A focused control.** A space on a focused button *activates* it — that is
+  what the browser does and what a keyboard user expects — so taking it would
+  break `cc`, `stop` and everything else on the transport for anybody who
+  reaches them by tab. The one exception is the clear sheet over the film,
+  which is a button only because it has to be something: it is where focus
+  lands after you click the picture, and exactly where a space should play.
+
+Only while the screen is open. A tucked film is one you are half-watching from
+somewhere else in the garden, and space belongs to wherever you actually are —
+most sharply inside Ember Rally, where it is a driving control.
+
+It also meant space had to stop opening the film chat's composer, which it did
+as one printable character among all the others. Every other character still
+does; a leading space was worth nothing as the first thing in a sentence anyway.
+
+### The silent-audio notice was verified after all, and was worded wrong
+
+I had written this up as *verified by construction rather than by observation*,
+and that was a failure of imagination. **The test clips are canvas recordings,
+which have no audio track at all** — so `webkitAudioDecodedByteCount` stays at
+zero for them and the detection fires exactly as it would on an AC3 film. The
+whole path was already being exercised: the four-second wait, the poll on the
+sync loop, the state, the notice.
+
+Finding that fixed the wording too. The same zero is produced by a track the
+browser cannot decode **and** by a file with no sound on it — a screen
+recording, something exported without its audio — so *"this copy's sound is in a
+format the browser cannot play"* was a guess stated as a fact, and the wrong
+guess every time somebody films their own thing. It says what is known first
+and what is likely second.
+
+### Two more that were only ever reasoned about
+
+- **A queued film.** Queueing one and letting it come up is the only path into
+  the invitation nobody had walked. It works: the anchor carries it, and the
+  screen asks for a copy by the name it was queued under rather than going
+  black.
+- **The miniature asked for nothing.** The invitation was gated on the screen
+  being *open*, so somebody who had folded the film into the corner and gone
+  for a walk got a black rectangle when the other one put a film on — the exact
+  failure this invitation exists to prevent, reproduced in miniature. It shows
+  there now, with the stylesheet dropping the paragraph and keeping the name
+  and the way in.
+
+### And the checker, once more, in one lump
+
+Four assertions failed in four different-looking ways on the first run of the
+new section, and every one was the same thing: **the section before it leaves
+the film filling the screen**, and in that state the panel beside it does not
+exist. No transport, no tabs, no talk field, no fold-away. They were all looking
+for controls that were correctly absent.
+
+Worth remembering as a shape: when several checks fail at once and the failures
+look unrelated, suspect the state the section *starts* in rather than the thing
+each one is testing.
+
 ## 4 Sep · Claude · subtitles, the shelf, and the silence
 
 The three things left out of "our own film", built in the order they matter.

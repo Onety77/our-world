@@ -1059,16 +1059,16 @@ const main = async () => {
     await wait(1200)
     // The queue half is where a film is put on from.
     await ev(`(() => { const b=[...document.querySelectorAll('.together-tab')]
-      .find(x=>/find/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
+      .find(x=>/our film/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
     await wait(800)
   }
 
   await openEmpty()
-  check(await ev(`!!document.querySelector('.film-way .film-input')`),
-    'the way in to our own film is on the screen', 'no picker')
+  check(await ev(`!!document.querySelector('.film-tab .film-input')`),
+    'the film has a tab of its own, with the way in on it', 'no picker')
 
   // ---- a file no browser can open, refused before it reaches her ----------
-  console.log(await give('.film-way', A, 'The.Client.1996.mkv'))
+  console.log(await give('.film-tab', A, 'The.Client.1996.mkv'))
   await wait(1500)
   const refused = await filmState()
   console.log('    an .mkv:', JSON.stringify(refused.trouble).slice(0, 90))
@@ -1077,7 +1077,7 @@ const main = async () => {
   check(refused.id === null, 'and it never reaches the shared screen', String(refused.id))
 
   // ---- putting one on ----------------------------------------------------
-  console.log(await give('.film-way', A, 'Blue_Ruin_1080p.webm'))
+  console.log(await give('.film-tab', A, 'Blue_Ruin_1080p.webm'))
   await wait(3500)
   const on = await filmState()
   console.log('    on:', JSON.stringify(on))
@@ -1351,9 +1351,9 @@ const main = async () => {
   /* The queue half has to be open for its picker to exist — she arrived on the
      talk half, which is where the invitation put her. */
   await ev(`(() => { const b=[...document.querySelectorAll('.together-tab')]
-    .find(x=>/find/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
+    .find(x=>/our film/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
   await wait(900)
-  console.log(await give('.film-way', A, 'Blue_Ruin_1080p.webm'))
+  console.log(await give('.film-tab', A, 'Blue_Ruin_1080p.webm'))
   /*
     Polled, for the third time in this file and for the same reason each time:
     opening a file means the browser reading metadata off it, and how long that
@@ -1461,10 +1461,10 @@ const main = async () => {
   check(!(await ev(`!!document.querySelector('.together-moves .together-caption')`)),
     'a film with no subtitles offers no cc, which would do nothing', 'cc is there')
 
-  console.log(await giveText('.film-subs', SRT, 'Blue Ruin.srt'))
+  console.log(await giveText('.film-tab-subs', SRT, 'Blue Ruin.srt'))
   await wait(1500)
   const took = await ev(`(() => {
-    const p = document.querySelector('.film-subs')
+    const p = document.querySelector('.film-tab-subs')
     return {
       says: p ? p.textContent : null,
       cc: !!document.querySelector('.together-moves .together-caption'),
@@ -1515,7 +1515,7 @@ const main = async () => {
   })()`)
   await wait(1200)
   const off = await linesNow()
-  const stillThere = await ev(`/Blue Ruin\\.srt/.test(document.querySelector('.film-subs').textContent)`)
+  const stillThere = await ev(`/Blue Ruin\\.srt/.test(document.querySelector('.film-tab-subs').textContent)`)
   console.log('    cc off:', JSON.stringify(off))
   check(off.words === null, 'cc takes the words off the picture', String(off.words))
   check(stillThere, 'and leaves the file loaded, ready to come back', 'the file was dropped')
@@ -1530,7 +1530,7 @@ const main = async () => {
 
   /* And taking them out is a different thing from turning them off. */
   await ev(`(() => {
-    const b = [...document.querySelectorAll('.film-subs .film-quiet')]
+    const b = [...document.querySelectorAll('.film-tab-subs .film-quiet')]
       .find(x => /take out/i.test(x.textContent))
     if (b) b.click()
     return !!b
@@ -1538,16 +1538,17 @@ const main = async () => {
   await wait(1200)
   const gone = await ev(`(() => ({
     words: !!document.querySelector('.film-lines p'),
-    says: document.querySelector('.film-subs').textContent,
+    says: document.querySelector('.film-tab-subs').textContent,
     cc: !!document.querySelector('.together-moves .together-caption'),
   }))()`)
   console.log('    taken out:', JSON.stringify(gone))
   check(!gone.words, 'taking them out clears the picture', 'still showing')
-  check(/no subtitles/.test(String(gone.says)), 'and offers to add some again', String(gone.says))
+  check(/add subtitles/i.test(String(gone.says)),
+    'and offers to add some again', String(gone.says))
   check(!gone.cc, 'and cc goes with them', 'cc outlived its subtitles')
 
   /* A file that is not subtitles is refused in words. */
-  console.log(await giveText('.film-subs', 'this is not a subtitle file at all', 'notes.srt'))
+  console.log(await giveText('.film-tab-subs', 'this is not a subtitle file at all', 'notes.srt'))
   await wait(1200)
   const refusedSubs = await ev(`(() => {
     const t = document.querySelector('.film-trouble')
@@ -1557,7 +1558,7 @@ const main = async () => {
   check(refusedSubs !== '', 'a file with no cues in it says so', 'said nothing')
 
   /* Put them back for the screenshots below. */
-  console.log(await giveText('.film-subs', SRT, 'Blue Ruin.srt'))
+  console.log(await giveText('.film-tab-subs', SRT, 'Blue Ruin.srt'))
   await wait(1500)
 
   // ---- folded into the corner, and still the same element ----------------
@@ -1673,6 +1674,212 @@ const main = async () => {
   ! ${skipped} checks skipped because youtube.com did not load`)
 
   // =========================================================================
+
+  // =========================================================================
+  console.log('\nthe things that were only reasoned about\n')
+
+  /*
+    Out of fullscreen first, and it is worth saying why.
+
+    The section before this leaves the film filling the screen, and in that
+    state the panel beside it does not exist — no transport, no tabs, no talk
+    field, no fold-away. Four checks here failed in four different-looking ways
+    on the first run, and every one of them was this: they were looking for
+    controls that were correctly absent.
+  */
+  await ev(`(() => {
+    const b = document.querySelector('.together-immersion-exit')
+    if (b) b.click()
+    return !!b
+  })()`, true)
+  const backInTheRoom = await (async () => {
+    for (let i = 0; i < 40; i++) {
+      if (await ev(`!!document.querySelector('.together-room') && !document.fullscreenElement`)) {
+        return true
+      }
+      await wait(250)
+    }
+    return false
+  })()
+  check(backInTheRoom, 'the room beside the screen is back', 'still filling the screen')
+
+
+  /*
+    ---------------------------------------------------------------------------
+    **A film with no sound, which these clips are.**
+
+    This was written up as verified by construction rather than by observation,
+    and that was a failure of imagination: a canvas recording has **no audio
+    track at all**, so `webkitAudioDecodedByteCount` stays at zero for it and
+    the detection fires exactly as it would on an AC3 film. The whole path —
+    the four-second wait, the poll on the sync loop, the state, the notice —
+    is exercised by the clips already in this file.
+
+    Finding that also fixed the wording. The same zero is produced by a track
+    the browser cannot play *and* by a file with no sound on it, so the notice
+    now says what is known first and what is likely second.
+    ---------------------------------------------------------------------------
+  */
+  const said = await running()
+  check(said !== null, 'a film is running to be listened to', 'it would not start')
+  const heard = await (async () => {
+    // The detection deliberately waits a few seconds before it will answer.
+    for (let i = 0; i < 40; i++) {
+      const now = await ev(`(() => {
+        const notice = document.querySelector('.film-trouble')
+        return {
+          says: notice ? notice.textContent : '',
+          hush: !!document.querySelector('.film-hush'),
+        }
+      })()`)
+      if (/no sound/i.test(now.says)) return now
+      await wait(400)
+    }
+    return await ev(`(() => ({
+      says: (document.querySelector('.film-trouble') || {}).textContent || '',
+      hush: !!document.querySelector('.film-hush'),
+    }))()`)
+  })()
+  console.log('    listening:', JSON.stringify(heard))
+  check(/no sound/i.test(heard.says),
+    'a film with nothing to hear says so rather than leaving you hunting', heard.says)
+  check(/no audio track/i.test(heard.says),
+    'and does not claim to know which of the two reasons it is', heard.says)
+
+  // ---- space, which is one key with two jobs -----------------------------
+  /*
+    The two jobs never overlap, because they are never wanted at the same
+    moment. What separates them is only where the keyboard is pointing, so
+    that is what this presses on: nothing, and then a field.
+  */
+  const pressSpace = async () => {
+    await send('Input.dispatchKeyEvent',
+      { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' }, S)
+    await send('Input.dispatchKeyEvent',
+      { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 }, S)
+  }
+  const settledPlaying = async (want) => {
+    for (let i = 0; i < 30; i++) {
+      if ((await ev(`window.__watching.read().playing`)) === want) return true
+      await wait(200)
+    }
+    return false
+  }
+
+  await ev(`document.activeElement && document.activeElement.blur(), 1`)
+  const wasPlaying = await ev(`window.__watching.read().playing`)
+  await pressSpace()
+  check(await settledPlaying(!wasPlaying), 'space plays and pauses', `still ${wasPlaying}`)
+  await pressSpace()
+  check(await settledPlaying(wasPlaying), 'and again puts it back', `stuck at ${!wasPlaying}`)
+
+  /* And it is a space again the moment there is somewhere to type it. */
+  await ev(`(() => {
+    const b=[...document.querySelectorAll('.together-tab')].find(x=>/talk/i.test(x.textContent))
+    if (b) b.click()
+    return !!b
+  })()`)
+  await wait(900)
+  await ev(`(() => {
+    const f = document.querySelector('.together-field')
+    if (f) f.focus()
+    return !!f
+  })()`)
+  const heldAt = await ev(`window.__watching.read().playing`)
+  for (const key of ['h', 'i', ' ']) {
+    await send('Input.dispatchKeyEvent',
+      { type: 'keyDown', key, code: key === ' ' ? 'Space' : 'Key' + key.toUpperCase(),
+        windowsVirtualKeyCode: key === ' ' ? 32 : key.toUpperCase().charCodeAt(0), text: key }, S)
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key }, S)
+    await wait(150)
+  }
+  await wait(900)
+  const typed = await ev(`(() => {
+    const f = document.querySelector('.together-field')
+    return { value: f ? f.value : null, playing: window.__watching.read().playing }
+  })()`)
+  console.log('    while writing:', JSON.stringify(typed))
+  check(String(typed.value).includes(' '), 'a space while writing is a space', String(typed.value))
+  check(typed.playing === heldAt,
+    'and does not touch the film', `${heldAt} → ${typed.playing}`)
+
+  // ---- a film handed over through the queue ------------------------------
+  /*
+    Queueing a film and letting it come up is the one path into the invitation
+    that nobody had walked. It is the same code as putting one on directly, and
+    "the same code" is exactly the thing that is worth pressing once rather
+    than reasoning about twice.
+  */
+  await ev(`(() => {
+    const w = window.__watching.read()
+    window.__local.setWatching({
+      videoId: w.videoId, title: w.title, playing: false, at: 0, session: w.session,
+      queue: [{ id: 'q1', videoId: 'film:not-a-print-anybody-has', title: 'Something Else', by: 'cool' }],
+    })
+    return 1
+  })()`)
+  await wait(1500)
+  await ev(`(() => {
+    const b = document.querySelector('.together-moves .together-next')
+    if (b) b.click()
+    return !!b
+  })()`)
+  const handed = await (async () => {
+    for (let i = 0; i < 40; i++) {
+      const now = await ev(`(() => {
+        const ask = document.querySelector('.film-ask')
+        return {
+          id: window.__watching.read().videoId,
+          title: window.__watching.read().title,
+          asking: !!ask,
+          says: ask ? ask.textContent : '',
+        }
+      })()`)
+      if (now.asking && /Something Else/.test(now.says)) return now
+      await wait(300)
+    }
+    return await ev(`(() => ({
+      id: window.__watching.read().videoId,
+      title: window.__watching.read().title,
+      asking: !!document.querySelector('.film-ask'),
+      says: (document.querySelector('.film-ask') || {}).textContent || '',
+    }))()`)
+  })()
+  console.log('    off the queue:', JSON.stringify(handed).slice(0, 160))
+  check(String(handed.id).startsWith('film:'), 'a queued film comes up as a film', String(handed.id))
+  check(handed.asking,
+    'and a film nobody here has a copy of asks for one, rather than going black',
+    'no invitation')
+  check(/Something Else/.test(handed.says), 'by the name it was queued under', handed.says)
+
+  // ---- and the same invitation on the miniature --------------------------
+  /*
+    The miniature's own way in was fixed by reasoning from the identical
+    pointer-capture bug on its controls, and that button has never been
+    pressed. It is small, it is over an iframe, and it is the one place where
+    a press has to survive a gesture that also drags the pane.
+  */
+  await ev(`(() => { const b=[...document.querySelectorAll('button')]
+    .find(x=>/fold away/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
+  await wait(2000)
+  const onPane = await ev(`(() => {
+    const ask = document.querySelector('.together.tucked .film-ask')
+    const b = ask ? ask.querySelector('button') : null
+    if (!b) return null
+    const r = b.getBoundingClientRect()
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+             says: b.textContent.trim() }
+  })()`)
+  console.log('    on the miniature:', JSON.stringify(onPane))
+  check(onPane !== null, 'the miniature asks for a copy too', 'nothing to press')
+  if (onPane) {
+    await mouseClick(onPane.x, onPane.y)
+    await wait(1200)
+    check(await ev(`!!document.querySelector('.film-input')`),
+      'and its button reaches the file dialog rather than being swallowed',
+      'the press went nowhere')
+  }
+
   console.log('\nthe shelf, and the second night\n')
 
   /*
@@ -1754,7 +1961,7 @@ const main = async () => {
   await ev(`(() => { window.__watching.show(); return 1 })()`)
   await wait(1200)
   await ev(`(() => { const b=[...document.querySelectorAll('.together-tab')]
-    .find(x=>/find/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
+    .find(x=>/our film/i.test(x.textContent)); if(b)b.click(); return !!b })()`)
   await wait(900)
 
   check(await ev(`typeof window.showOpenFilePicker === 'function'`),
@@ -1764,7 +1971,7 @@ const main = async () => {
 
   /* The real button, which on this browser opens the door that keeps a handle. */
   await ev(`(() => {
-    const b = [...document.querySelectorAll('.film-way .film-choose')][0]
+    const b = [...document.querySelectorAll('.film-tab .film-choose')][0]
     if (b) b.click()
     return !!b
   })()`, true)

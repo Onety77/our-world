@@ -74,7 +74,16 @@ export const LURCH = 2.5
 /** The gentlest playback rate that still closes a gap in reasonable time. */
 export const NUDGE = 0.06
 
-export type Tab = 'talk' | 'queue'
+/**
+ * Which half — third, now — of the panel beside the screen is showing.
+ *
+ * `film` is its own place rather than a section inside `queue`, and that is a
+ * correction rather than a growth. Choosing a film off the disk was squeezed
+ * in under the YouTube search, where it pushed the queue itself off the bottom
+ * and read as something that had been fitted in wherever there was room. It is
+ * not that: it is one of the two ways to put something on.
+ */
+export type Tab = 'talk' | 'queue' | 'film'
 
 interface WatchingState {
   /** The shared truth, straight off the wire. */

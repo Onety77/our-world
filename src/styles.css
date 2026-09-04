@@ -15902,3 +15902,40 @@ body.on-the-road .broke-what {
 /* On the invitation the shelf's button is the main way in, and the ordinary
    file dialog steps back to being the second thing on the line. */
 .film-ask .film-quiet { margin-top: 0.35rem; }
+
+/* ---- the film's own tab -------------------------------------------------- */
+
+/*
+  A tab rather than a section wedged under the search.
+
+  The panel beside the screen is not tall, and the film's way in used to sit
+  below the YouTube field with the queue under *that* — which left the list of
+  what the two of you had lined up with nowhere to be, and made the film read
+  as something fitted in wherever there was room. It is one of the two ways to
+  put something on, so it stands beside the other one.
+
+  It scrolls on its own, because the shelf grows and a subtitle name is long.
+*/
+.film-tab {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-right: 0.2rem;
+}
+
+.film-tab .film-way-note {
+  margin: 0 0 0.7rem;
+}
+
+/*
+  Subtitles are the second thing on this tab, and are separated rather than
+  merely spaced: they belong to a film that is already chosen, so the rule is
+  a small statement that the part above has been settled.
+*/
+.film-tab-subs {
+  margin: 1.1rem 0 0;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid rgba(240, 216, 178, 0.1);
+}
+
+.film-tab-subs .film-way-note { margin: 0.25rem 0 0.6rem; }
+.film-tab-subs .film-subs { margin: 0.1rem 0 0; }
