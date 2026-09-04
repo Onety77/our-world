@@ -40,6 +40,142 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 4 Sep · Claude · subtitles, the shelf, and the silence
+
+The three things left out of "our own film", built in the order they matter.
+
+### Subtitles are parsed and drawn here, not handed to a `<track>`
+
+A `<track>` is less code and gives away the two things that matter most.
+
+**Where the words go.** WebVTT positioning belongs to the browser, and over a
+filled screen this app already has a conversation lying in the bottom-right
+corner and a transport that comes and goes along the bottom edge. Subtitles
+have to move out of the way of both — `::cue` cannot be told to, and
+`.film-lines` steps up exactly as `.screen-chat` does, same distance, same
+easing.
+
+**And a `<track>` looks like a browser.** White on a black slab in the system
+font, over a garden that has spent its whole life avoiding that.
+
+What it costs is a parser, and a subtitle file is not hard to parse. What it
+buys beyond position: **the arrow is looked for rather than assumed to be on
+the second line** (SubRip numbers its cues, WebVTT usually does not, and files
+in the wild do both), the cues are sorted because the reader walks forward
+through them, and `cueAt` takes last frame's index so the ordinary case is two
+comparisons rather than a search through nine hundred cues sixty times a
+second.
+
+Two things worth knowing:
+
+- **Encoding.** A great many subtitle files are Windows-1252, and read as UTF-8
+  every accented character becomes a black diamond — quietly, with the film
+  playing perfectly. It is decoded **strictly** first; a file that is genuinely
+  UTF-8 decodes, one that is not throws and is read again as Windows-1252,
+  which cannot itself fail.
+- **Nothing is ever assigned as markup.** `cueNodes` builds text nodes and
+  `<em>`s; `<i>` survives because italics in a subtitle are meaning — a song, a
+  thought, a voice from elsewhere — and every other tag is dropped rather than
+  interpreted. `npm run film` checks that a `<script>` in a cue arrives as
+  nothing.
+
+The timing is the *local* file's, with no arithmetic at all: subtitles belong
+to the copy on this machine, so they are read against `video.currentTime`,
+which is exactly where the offset for a different rip has already put it. Two
+people watching two encodes with two different subtitle files each see their
+own, correctly, and neither has to know.
+
+### The shelf: a handle is a bookmark, not a key
+
+A browser cannot keep your file and should not be able to — choosing one grants
+temporary access that dies with the tab, and the alternative is a website that
+can read your disk whenever it likes. The File System Access API's *handle* is
+the way through: storable, survives the tab closing, and grants nothing on its
+own. Coming back to it asks once, with a click. The security bargain is
+unchanged; the click replaces the hunt through a folder.
+
+`systems/filmShelf` is **written to be absent rather than broken**. Safari and
+Firefox have no handles, `canRemember` says so, and every way in falls back to
+the file dialog that has always worked. A shelf that half-works is worse than
+none, because the whole value is trusting the one button.
+
+It reaches for IndexedDB rather than `localStorage` for one reason: a handle is
+not a string. Structured clone is the only thing that keeps it a handle.
+
+Three answers from `fileFrom`, and they are genuinely different: the file;
+`null` with the row kept (permission refused, press it again); and `null` with
+the row **forgotten** — the file has moved, been renamed, or is on a drive that
+is not plugged in. A shelf that keeps offering a film that cannot be opened is
+worse than an empty one.
+
+### And the silence
+
+H.264 video with AC3 sound in an `.mp4` — what a disc rip carries — plays its
+picture perfectly in Chrome and decodes exactly zero bytes of audio, for ever,
+with no error of any kind. It was the last remaining way for this to fail
+without saying anything, and everyone it happens to spends five minutes on
+their own volume controls first.
+
+`Screen` gained an optional `quiet?()`. It is **polled rather than pushed**,
+because the loop that would carry a message is already running every nine
+hundred milliseconds and the question needs a few seconds of playback before it
+has an answer. Silence is not zero — a film that opens on four quiet seconds
+still *decodes* them — so zero means no track was decoded at all. Where the
+property does not exist it says no rather than inventing an answer: a warning
+nobody can act on is worse than none.
+
+### Four real bugs, three of them found by the checks
+
+- **A paused film could not drift back into sync.** `correction` answers with
+  seek, drift, or hold, and drift nudges the playback rate — which does nothing
+  to a paused video. Pause, one of you moves the scrubber a second, and neither
+  screen ever closes the gap: you press play together and start out of step,
+  which is the one thing that loop exists to prevent. A paused film seeks now.
+- **`cc` did nothing while paused.** The subtitle redraw only happened on a
+  frame or a seek, so turning them on between two lines showed nothing until
+  the film moved. `show()` is separate from the frame loop for exactly this.
+- **The way into fullscreen stood down whenever *anything* was fullscreen.**
+  That reads as caution and is a way to get stuck: a request whose
+  `fullscreenchange` never arrived leaves the document holding an element while
+  this app believes it holds nothing, and the way in is then dead until a
+  reload. Only *our* element is a reason to do nothing.
+- **A handle with no permission gate would have been refused.** Not every
+  handle comes from the picker; the origin's own storage hands out handles with
+  no `queryPermission` at all, because there is nobody to ask. Treating a
+  missing method as a refusal turns "always allowed" into "always denied".
+  Found by the check, which is the only reason it was ever exercised.
+
+### The check uses a real handle, and pretends only the dialog
+
+The one part of remembering a film that cannot be automated is the native file
+dialog, so that is the one part replaced: `showOpenFilePicker` is stubbed to
+hand back a handle the page makes for itself out of the origin's own storage.
+Everything after it is the app — `shelve` writing to IndexedDB, `recent`
+reading it back, the row rendering, `fileFrom` asking permission, `getFile`.
+
+**A fake handle would have passed a test the real thing fails.** IndexedDB
+clones what it is given and a plain object with functions cannot be cloned, so
+an invented handle would have been silently dropped at the moment of storing
+and the shelf would have been empty for a reason no assertion was looking at.
+
+The second night is simulated by a reload with the anchor still set, and the
+film-has-moved case by deleting the file out from under the handle.
+
+### And the checker was wrong four more times, all the same way
+
+Every one was a fixed sleep where a poll belonged, and each produced a message
+that read as a missing feature: the shelf row arrives from a database read a
+moment after the invitation renders, so "the shelf offers it back in one press"
+failed against a shelf that was on its way; the same sleep meant the
+film-has-moved press landed before there was anything to press, and reported
+silence from a failure that had not been triggered. There is now one
+`pressAgain` that waits, used both times.
+
+One assertion also passed for the wrong reason and had to be tightened: "stops
+offering it" tested for the word *again* anywhere in the invitation, and the
+message explaining what happened ends with "choose it again below". It asks the
+buttons now, not the prose.
+
 ## 3 Sep · Claude · our own film
 
 > *"you honestly telling me despite us building this cool thing, we cant watch

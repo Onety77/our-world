@@ -81,10 +81,24 @@ import {
   printIn,
   putOffset,
   readFilm,
+  readSubtitles,
   savedOffset,
   sizeIn,
+  subsFor,
+  dropSubs,
+  holdSubs,
   type Film,
+  type Subtitles,
 } from '@/systems/film'
+import {
+  askForFilm,
+  canRemember,
+  fileFrom,
+  recent,
+  shelfFor,
+  shelve,
+  type Shelved,
+} from '@/systems/filmShelf'
 import { Ink } from './Ink'
 import { Scrub } from './Scrub'
 import { gainOf, useVolume } from '@/systems/volume'
@@ -317,6 +331,34 @@ export function Together() {
   */
   const [mine, setMine] = useState<Film | null>(null)
   const [reading, setReading] = useState(false)
+  /*
+    The subtitles this device is reading, which are nobody else's business.
+
+    Chosen per film and per person, exactly like the offset and the volume:
+    hers may be in a different language from his, and there is no version of
+    this where one of you picking a subtitle file changes the other's screen.
+  */
+  const [subs, setSubs] = useState<Subtitles | null>(null)
+  const [readingSubs, setReadingSubs] = useState(false)
+  const [subTrouble, setSubTrouble] = useState('')
+  /**
+   * True once the film has decided it has no sound this browser can play.
+   *
+   * Not trouble — trouble replaces the picture, and this is a film that is
+   * playing perfectly and silently. It is a notice, and it belongs beside the
+   * film's own name where somebody hunting for a volume control will find it.
+   */
+  const [noSound, setNoSound] = useState(false)
+  /**
+   * Films this device has opened before — see `systems/filmShelf`.
+   *
+   * Empty on a browser that cannot keep a handle, which is the whole of the
+   * fallback: no shelf, no rows, and the ordinary file dialog exactly where it
+   * has always been.
+   */
+  const [shelf, setShelf] = useState<Shelved[]>([])
+  /** The one on the shelf that matches what is on, if there is one. */
+  const [again, setAgain] = useState<Shelved | null>(null)
   const [pickTrouble, setPickTrouble] = useState('')
   /** How far this copy runs ahead of the anchor's. See `savedOffset`. */
   const [offset, setOffset] = useState(0)
@@ -703,9 +745,33 @@ export function Together() {
       applying.current = true
       const gap = at - want
       const { do: how, rate } = correction(gap)
+      /*
+        ======================================================================
+        **A paused film cannot drift, so a paused film seeks.**
+
+        `correction` answers with one of three things, and the middle one —
+        nudge the playback rate by a few per cent and let the gap close on its
+        own — is the right answer *while a film is running* and is not an
+        answer at all while it is stopped. A rate change on a paused video
+        does nothing, so the gap is measured again nine hundred milliseconds
+        later, found to be exactly the same, and drifted at again, for ever.
+
+        It is reachable in the ordinary way: pause, and one of you nudges the
+        scrubber by a second. Both screens are stopped, they are a second
+        apart, and neither of them ever closes it — you press play together and
+        start out of step, which is the one thing this whole loop exists to
+        prevent.
+
+        A seek is free here for the same reason it is expensive while playing:
+        nothing is running, so there is no picture to stall and no sound to
+        cut. The threshold that decides *whether* to correct is left where it
+        is; only the method changes.
+        ======================================================================
+      */
+      const settle = how === 'drift' && !anchor.playing ? 'seek' : how
       // Told in its own timeline, compared in the shared one.
-      if (how === 'seek') player.seek(toHere(want))
-      player.rate(how === 'drift' ? rate : 1)
+      if (settle === 'seek') player.seek(toHere(want))
+      player.rate(settle === 'drift' ? rate : 1)
 
       const state = player.state()
       const shouldPlay = anchor.playing
@@ -719,6 +785,13 @@ export function Together() {
         every second would not help; saying so, once, does.
       */
       setJoined(!shouldPlay || state === 1 || state === 3)
+      /*
+        Asked here rather than pushed from the screen, because this loop is
+        already running at exactly the right cadence and a film needs a few
+        seconds of playing before the question has an answer. React does
+        nothing with a `false` it already holds, so asking every tick is free.
+      */
+      setNoSound(player.quiet?.() ?? false)
       window.setTimeout(() => {
         applying.current = false
       }, 60)
@@ -815,7 +888,16 @@ export function Together() {
     enforce. See `holdFilm`.
     ---------------------------------------------------------------------------
   */
-  const takeFilm = async (file: File, why: 'start' | 'join') => {
+  const takeFilm = async (
+    file: File,
+    why: 'start' | 'join',
+    /*
+      The way back to this file, when the browser gave us one. Kept only after
+      the film has been read and found to be good — a shelf full of files that
+      turned out not to open would be a shelf that wastes your time twice.
+    */
+    handle?: { name: string; getFile(): Promise<File> },
+  ) => {
     setPickTrouble('')
     setReading(true)
     try {
@@ -829,6 +911,16 @@ export function Together() {
       holdFilm(under, film)
       setMine(film)
       setOffset(savedOffset(under))
+      if (handle) {
+        await shelve({
+          print: film.print,
+          title: film.title,
+          name: film.name,
+          size: film.size,
+          handle: handle as Shelved['handle'],
+        })
+        if (canRemember()) void recent().then(setShelf)
+      }
       if (why === 'start') put(filmId(film.print), film.title)
       else screen.current?.show(filmId(under), toHere(positionOf(shared, data.now())), shared.playing)
     } catch {
@@ -855,7 +947,97 @@ export function Together() {
     }
     setMine(filmFor(print))
     setOffset(savedOffset(print))
+    setSubs(subsFor(print))
+    setSubTrouble('')
+    setNoSound(false)
   }, [shared.videoId])
+
+  /*
+    What is on the shelf, read when the screen is opened and whenever what is
+    on changes.
+
+    Two questions at once, and they are different: what has been watched here
+    lately — for the empty screen — and whether *this* film is among it, which
+    is what turns the invitation from a file hunt into one button.
+  */
+  useEffect(() => {
+    if (!open || !canRemember()) {
+      setShelf([])
+      setAgain(null)
+      return
+    }
+    let live = true
+    void recent().then((films) => { if (live) setShelf(films) })
+    void shelfFor(printIn(shared.videoId)).then((film) => { if (live) setAgain(film) })
+    return () => { live = false }
+  }, [open, shared.videoId])
+
+  /*
+    Subtitles, read and turned on in one move.
+
+    Nobody chooses a subtitle file in order to leave it off, so picking one
+    shows it — the switch is there afterwards for turning them back off, which
+    is the rarer thing to want.
+  */
+  const takeSubtitles = async (file: File) => {
+    const print = printIn(shared.videoId)
+    if (print === null) return
+    setSubTrouble('')
+    setReadingSubs(true)
+    try {
+      const read = await readSubtitles(file)
+      if (read.why !== null) {
+        setSubTrouble(read.why)
+        return
+      }
+      holdSubs(print, read)
+      setSubs(read)
+      captionsRef.current = true
+      setCaptions(true)
+      screen.current?.captions(true)
+    } catch {
+      setSubTrouble('That file could not be read from here.')
+    } finally {
+      setReadingSubs(false)
+    }
+  }
+
+  const takeOutSubtitles = () => {
+    const print = printIn(shared.videoId)
+    if (print !== null) dropSubs(print)
+    setSubs(null)
+    setSubTrouble('')
+    screen.current?.captions(false)
+  }
+
+  /*
+    The dialog that hands back a handle, where there is one.
+
+    Both doors lead to the same `takeFilm`; the only difference is whether
+    there is anything worth putting on the shelf afterwards. On a browser
+    without handles this is never called and `FilmPick`'s own input is the
+    whole story.
+  */
+  const chooseAndKeep = async (why: 'start' | 'join') => {
+    const got = await askForFilm()
+    if (!got) return
+    await takeFilm(got.file, why, got.handle)
+  }
+
+  /** A film off the shelf, which is one press and possibly one permission. */
+  const openAgain = async (film: Shelved, why: 'start' | 'join') => {
+    setPickTrouble('')
+    const file = await fileFrom(film)
+    if (!file) {
+      setPickTrouble(
+        `${film.name} could not be opened. It may have been moved or renamed — choose it again below.`,
+      )
+      void recent().then(setShelf)
+      setAgain(null)
+      return
+    }
+    await takeFilm(file, why, film.handle)
+  }
 
   /** True when this copy is a different encode from the one the anchor counts. */
   const otherCut = mine !== null && filmPrint !== null && mine.print !== filmPrint
@@ -960,7 +1142,18 @@ export function Together() {
     setImmersive(true)
     const el = paneRef.current
     if (!el || !hasMouse()) return
-    if (!document.fullscreenEnabled || document.fullscreenElement !== null) return
+    if (!document.fullscreenEnabled) return
+    /*
+      Only *ours* is a reason to do nothing.
+
+      This used to stand down whenever anything at all was fullscreen, which
+      reads as caution and is a way to get stuck: a request that was made and
+      whose `fullscreenchange` never arrived leaves the document holding an
+      element while this app believes it holds nothing, and from there the way
+      in is dead until the page is reloaded. Asking again when it is somebody
+      else's element is allowed and simply swaps, which is the recovery.
+    */
+    if (document.fullscreenElement === el) return
     void el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {
       /* The layout is the fallback and it is already on screen. */
     })
@@ -1530,11 +1723,41 @@ export function Together() {
               nothing is being sent. Choose it here and the two screens run
               together.
             </small>
-            <FilmPick
-              label="choose my copy"
-              busy={reading}
-              onFile={(file) => void takeFilm(file, 'join')}
-            />
+            {/*
+              One press when this device has opened this exact film before.
+
+              This is the whole of what the shelf is for. The second night is
+              otherwise identical to the first — a dialog, a folder, and a hunt
+              for a film you were watching yesterday — and it lands at the one
+              moment nobody wants to be doing anything but starting.
+            */}
+            {again !== null ? (
+              <>
+                <button
+                  type="button"
+                  className="film-choose"
+                  disabled={reading}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => void openAgain(again, 'join')}
+                >
+                  {reading ? 'opening…' : `open ${again.name} again`}
+                </button>
+                <FilmPick
+                  label="or choose another file"
+                  busy={reading}
+                  onFile={(file) => void takeFilm(file, 'join')}
+                  keeping={canRemember() ? () => void chooseAndKeep('join') : undefined}
+                  quiet
+                />
+              </>
+            ) : (
+              <FilmPick
+                label="choose my copy"
+                busy={reading}
+                onFile={(file) => void takeFilm(file, 'join')}
+                keeping={canRemember() ? () => void chooseAndKeep('join') : undefined}
+              />
+            )}
             {pickTrouble !== '' && <p className="film-trouble">{pickTrouble}</p>}
           </div>
         )}
@@ -1550,6 +1773,8 @@ export function Together() {
           awake={immersiveControls}
           captions={captions}
           film={isFilm(shared.videoId)}
+          noSound={noSound}
+          hasSubs={subs !== null}
           otherCut={otherCut}
           offset={offset}
           onNudge={nudge}
@@ -1586,7 +1811,13 @@ export function Together() {
                 live={live}
                 onStop={endSession}
                 film={isFilm(shared.videoId)}
+                noSound={noSound}
                 mine={mine}
+                subs={subs}
+                readingSubs={readingSubs}
+                subTrouble={subTrouble}
+                onSubtitles={(file) => void takeSubtitles(file)}
+                onDropSubtitles={takeOutSubtitles}
                 otherCut={otherCut}
                 theirSize={filmPrint === null ? 0 : sizeIn(filmPrint)}
                 offset={offset}
@@ -1632,6 +1863,9 @@ export function Together() {
               reading={reading}
               pickTrouble={pickTrouble}
               onFilm={(file) => void takeFilm(file, 'start')}
+              onKeepingFilm={canRemember() ? () => void chooseAndKeep('start') : undefined}
+              shelf={shelf}
+              onShelved={(film) => void openAgain(film, 'start')}
               onPlayNow={(videoId, title) => put(videoId, title)}
               onQueue={(item) => move({ ...shared, queue: [...shared.queue, item] })}
               onDrop={(id) => move({ ...shared, queue: shared.queue.filter((q) => q.id !== id) })}
@@ -1691,10 +1925,26 @@ function FilmPick({
   label,
   busy,
   onFile,
+  keeping,
+  takes = 'video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi',
+  quiet = false,
 }: {
   label: string
   busy: boolean
   onFile(file: File): void
+  /*
+    The other door, on a browser that has one.
+
+    Chromium can open a file dialog that hands back a *handle* as well as a
+    file — a bookmark this device can come back to tomorrow, which is what
+    `systems/filmShelf` keeps. When it exists it is used, and the input below
+    stays in the markup as the path every other browser takes.
+  */
+  keeping?: () => void
+  /** What the dialog offers first. Loose on purpose — see the note below. */
+  takes?: string
+  /** A word rather than a button, for the second thing on a line. */
+  quiet?: boolean
 }) {
   const input = useRef<HTMLInputElement>(null)
   return (
@@ -1703,7 +1953,7 @@ function FilmPick({
         ref={input}
         type="file"
         className="film-input"
-        accept="video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi"
+        accept={takes}
         tabIndex={-1}
         aria-hidden="true"
         onChange={(event) => {
@@ -1714,7 +1964,7 @@ function FilmPick({
       />
       <button
         type="button"
-        className="film-choose"
+        className={quiet ? 'film-quiet' : 'film-choose'}
         disabled={busy}
         /*
           The press stops here, and on the miniature that is the difference
@@ -1730,11 +1980,52 @@ function FilmPick({
           Harmless in the full screen, where the pane takes no gesture at all.
         */
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => input.current?.click()}
+        onClick={() => (keeping ? keeping() : input.current?.click())}
       >
         {busy ? 'reading the file…' : label}
       </button>
     </>
+  )
+}
+
+/** `1.4 GB`/**
+ * Films this device has opened before.
+ *
+ * ---------------------------------------------------------------------------
+ * The row is the film's own name and one press, and the press may bring up the
+ * browser's own "let this site read that file again?" — which is the bargain
+ * and is worth saying nothing about, because the answer is obviously yes to
+ * the person who put it there.
+ *
+ * It is absent rather than empty on a browser without handles, and absent
+ * rather than empty before anything has been watched. A heading over nothing
+ * is a promise that has not been kept yet.
+ * ---------------------------------------------------------------------------
+ */
+function FilmShelf({
+  films,
+  busy,
+  onOpen,
+}: {
+  films: Shelved[]
+  busy: boolean
+  onOpen(film: Shelved): void
+}) {
+  if (films.length === 0) return null
+  return (
+    <div className="film-shelf">
+      <p className="film-shelf-label">watched here before</p>
+      <ul>
+        {films.map((film) => (
+          <li key={film.print}>
+            <button type="button" disabled={busy} onClick={() => onOpen(film)}>
+              <span className="film-shelf-title">{film.title}</span>
+              <span className="film-shelf-size">{heft(film.size)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -1808,6 +2099,8 @@ function ImmersiveTransport({
   awake,
   captions,
   film,
+  noSound,
+  hasSubs,
   otherCut,
   offset,
   onNudge,
@@ -1826,6 +2119,8 @@ function ImmersiveTransport({
   awake: boolean
   captions: boolean
   film: boolean
+  noSound: boolean
+  hasSubs: boolean
   otherCut: boolean
   offset: number
   onNudge(by: number): void
@@ -1862,6 +2157,16 @@ function ImmersiveTransport({
       </button>
 
       <div className="together-immersive-transport">
+        {/*
+          Said over the film as well, because this is where somebody is when
+          they notice. One line, and only ever in a case that is genuinely
+          wrong — it is not a thing that appears during a normal evening.
+        */}
+        {noSound && (
+          <p className="film-hush">
+            no sound — this copy’s audio is a format the browser cannot play
+          </p>
+        )}
         <Scrub
           shown={shown}
           span={span}
@@ -1889,7 +2194,7 @@ function ImmersiveTransport({
           >
             ›
           </button>
-          {!film && (
+          {(!film || hasSubs) && (
             <button
               type="button"
               className={`together-caption${captions ? ' on' : ''}`}
@@ -1926,7 +2231,13 @@ function Transport({
   live,
   onStop,
   film,
+  noSound,
   mine,
+  subs,
+  readingSubs,
+  subTrouble,
+  onSubtitles,
+  onDropSubtitles,
   otherCut,
   theirSize,
   offset,
@@ -1948,7 +2259,14 @@ function Transport({
   onStop(): void
   /** A film off the disk rather than a video, which changes what is offered. */
   film: boolean
+  /** The film plays but this browser cannot decode its sound. */
+  noSound: boolean
   mine: Film | null
+  subs: Subtitles | null
+  readingSubs: boolean
+  subTrouble: string
+  onSubtitles(file: File): void
+  onDropSubtitles(): void
   otherCut: boolean
   /** The byte count the anchor's fingerprint carries, for saying how they differ. */
   theirSize: number
@@ -1990,6 +2308,55 @@ function Transport({
         is never thought about again; different, it says how they differ and
         hands over the only control that can help.
       */}
+      {/*
+        Subtitles, on the line under the film's own.
+
+        They belong here rather than with the viewing controls because they are
+        a fact about *this copy* — like which file is loaded and how far out of
+        step it is — and not a thing you set while watching. Choosing one turns
+        it on; `cc` above is what turns it off again, and only appears once
+        there is something for it to turn off.
+      */}
+      {film && mine !== null && (
+        <p className="film-subs">
+          {subs === null ? (
+            <>
+              <span className="film-subs-none">no subtitles</span>
+              <FilmPick
+                label="add an .srt"
+                busy={readingSubs}
+                onFile={onSubtitles}
+                takes=".srt,.vtt,.sbv,text/plain"
+                quiet
+              />
+            </>
+          ) : (
+            <>
+              <span className="film-subs-name">{subs.name}</span>
+              <span className="film-subs-count">{subs.cues.length} lines</span>
+              <button type="button" className="film-quiet" onClick={onDropSubtitles}>
+                take out
+              </button>
+            </>
+          )}
+        </p>
+      )}
+      {subTrouble !== '' && <p className="film-trouble">{subTrouble}</p>}
+      {/*
+        A film that plays and cannot be heard.
+
+        Phrased as a fact about the file and a thing to do about it, because
+        that is what it is — nothing here is broken, and the person reading it
+        has almost certainly just been through their own volume controls twice.
+      */}
+      {noSound && (
+        <p className="film-trouble">
+          This copy’s sound is in a format the browser cannot play — usually AC3
+          or DTS, which is what a disc rip carries. The picture is fine. An .mp4
+          with AAC sound plays everywhere.
+        </p>
+      )}
+
       {film && mine !== null && (
         <p className={`film-copy${otherCut ? ' other' : ''}`}>
           <span className="film-copy-name">{mine.name}</span>
@@ -2022,7 +2389,7 @@ function Transport({
           are broken. Subtitles for a film want a chosen `.srt` beside it, and
           that is a feature rather than a line here.
         */}
-        {live && !film && (
+        {live && (!film || subs !== null) && (
           <button
             type="button"
             className={`together-caption${captions ? ' on' : ''}`}
@@ -2577,6 +2944,9 @@ function Queue({
   reading,
   pickTrouble,
   onFilm,
+  onKeepingFilm,
+  shelf,
+  onShelved,
   onPlayNow,
   onQueue,
   onDrop,
@@ -2588,6 +2958,10 @@ function Queue({
   reading: boolean
   pickTrouble: string
   onFilm(file: File): void
+  /** The Chromium door, when there is one; see `FilmPick`. */
+  onKeepingFilm?: () => void
+  shelf: Shelved[]
+  onShelved(film: Shelved): void
   onPlayNow(videoId: string, title: string): void
   onQueue(item: Queued): void
   onDrop(id: string): void
@@ -2731,7 +3105,9 @@ function Queue({
           label={nothingOn ? 'choose a film from this device' : 'put on a film from this device'}
           busy={reading}
           onFile={onFilm}
+          keeping={onKeepingFilm}
         />
+        <FilmShelf films={shelf} busy={reading} onOpen={onShelved} />
         {pickTrouble !== '' && <p className="film-trouble">{pickTrouble}</p>}
       </div>
 

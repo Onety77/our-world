@@ -137,6 +137,23 @@ export interface Screen {
   loud(volume: number): void
   /** Captions are a local viewing preference, never shared with the other screen. */
   captions(showing: boolean): void
+  /**
+   * Whether this screen has worked out that there is no sound to play.
+   *
+   * ---------------------------------------------------------------------------
+   * Optional, and only a film answers it. A great many `.mp4` files carry
+   * H.264 video with AC3 sound — which is what a DVD or a Blu-ray rip has —
+   * and Chrome plays the picture perfectly while decoding none of the audio.
+   * Nothing fails. There is simply no sound, and every person this has ever
+   * happened to has spent the next five minutes on their own volume controls.
+   *
+   * A screen that can tell says so, and the answer is polled rather than
+   * pushed because the loop that would carry a message is already running
+   * every nine hundred milliseconds. YouTube leaves it undefined: an embed
+   * that cannot play its own audio is not a thing that happens.
+   * ---------------------------------------------------------------------------
+   */
+  quiet?(): boolean
   stop(): void
 }
 

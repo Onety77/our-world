@@ -285,6 +285,9 @@ export function filmFor(anchorPrint: string | null): Film | null {
 export function forgetFilms(): void {
   for (const film of held.values()) URL.revokeObjectURL(film.url)
   held.clear()
+  // The subtitles go with the films. They are chosen per film and are
+  // meaningless without one, so there is no lifetime in which they outlive it.
+  written.clear()
 }
 
 /**
@@ -373,6 +376,220 @@ export async function readFilm(file: File): Promise<Film> {
   }
 
   return film
+}
+
+// ---------------------------------------------------------------------------
+// The words along the bottom
+// ---------------------------------------------------------------------------
+
+/** One line of subtitle, and the seconds it belongs to. */
+export interface Cue {
+  from: number
+  to: number
+  /** Newlines kept — a two-line cue is two lines on purpose. */
+  text: string
+}
+
+export interface Subtitles {
+  name: string
+  cues: Cue[]
+  /** Null when it read; a sentence when it did not. */
+  why: string | null
+}
+
+/**
+ * `01:23:45,678` or `01:23:45.678`, and the hours are sometimes only one digit.
+ *
+ * SubRip writes a comma and WebVTT writes a full stop, which is the entire
+ * difference between the two formats at this level. Both are accepted rather
+ * than converting one into the other, because there is nothing to convert
+ * *to* — the cues are read into memory and drawn by this app, never handed
+ * back to a browser as a file.
+ */
+const AT = /(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})/
+
+function seconds(stamp: string): number | null {
+  const bits = AT.exec(stamp)
+  if (!bits) return null
+  const [, h, m, s, ms] = bits
+  return (
+    Number(h) * 3600 + Number(m) * 60 + Number(s) + Number(ms.padEnd(3, '0')) / 1000
+  )
+}
+
+/**
+ * Read a subtitle file into cues.
+ *
+ * ---------------------------------------------------------------------------
+ * **Parsed here rather than handed to the browser as a `<track>`, and that is
+ * the decision this whole section rests on.**
+ *
+ * A `<track>` is less code and gives away the two things that matter most.
+ * The first is *where the words go*: WebVTT positioning is the browser's, and
+ * over a filled screen this app already has a conversation lying in the
+ * bottom-right corner and a transport that comes and goes along the bottom
+ * edge. Subtitles have to move out of the way of both, and `::cue` cannot be
+ * told to.
+ *
+ * The second is that a `<track>` looks like a browser. White on a black slab,
+ * in the system font, over a garden that has spent its whole life avoiding
+ * exactly that. These are drawn in the same words-on-the-picture language as
+ * everything else here.
+ *
+ * What it costs is a parser, and a subtitle file is not a hard thing to parse:
+ * a time, an arrow, another time, and some lines.
+ * ---------------------------------------------------------------------------
+ */
+export function parseCues(text: string): Cue[] {
+  const cues: Cue[] = []
+  // A byte-order mark on the front of the file is not part of the first cue.
+  const clean = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n')
+  for (const block of clean.split(/\n{2,}/)) {
+    const lines = block.split('\n').filter((line) => line.trim() !== '')
+    if (lines.length === 0) continue
+    /*
+      The arrow is looked for rather than assumed to be on the second line.
+      SubRip numbers its cues and WebVTT usually does not, and files in the
+      wild do both — including files that number some cues and not others.
+    */
+    const arrow = lines.findIndex((line) => line.includes('-->'))
+    if (arrow === -1) continue
+    const [left, right] = lines[arrow].split('-->')
+    const from = seconds(left ?? '')
+    const to = seconds(right ?? '')
+    if (from === null || to === null || to <= from) continue
+    const body = lines.slice(arrow + 1).join('\n').trim()
+    if (body === '') continue
+    cues.push({ from, to, text: body })
+  }
+  /*
+    Sorted, because the reader below walks forward through them and a file
+    whose cues are out of order would make it skip. Rare, and free to prevent.
+  */
+  return cues.sort((a, b) => a.from - b.from)
+}
+
+/**
+ * The text of a subtitle file, whatever it was saved as.
+ *
+ * ---------------------------------------------------------------------------
+ * Subtitle files are old and are very often not UTF-8 — a great many are
+ * Windows-1252, and a good number of European ones are Latin-1. Read as UTF-8,
+ * those come back with U+FFFD where every accented character should be, and
+ * the failure is quiet: the film plays, the subtitles appear, and every name
+ * in them is spelled with a black diamond.
+ *
+ * So it is decoded strictly first. A file that is genuinely UTF-8 decodes; one
+ * that is not throws, and gets read again as Windows-1252, which is the
+ * single most likely thing it is and cannot itself fail.
+ * ---------------------------------------------------------------------------
+ */
+function words(bytes: ArrayBuffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes)
+  }
+}
+
+/** Subtitle files this is worth trying on at all. */
+const SUB_KINDS = new Set(['srt', 'vtt', 'sbv', 'txt'])
+
+export async function readSubtitles(file: File): Promise<Subtitles> {
+  const out: Subtitles = { name: file.name, cues: [], why: null }
+  if (!SUB_KINDS.has(endsIn(file.name))) {
+    out.why = 'That is not a subtitle file. It wants to be an .srt or a .vtt.'
+    return out
+  }
+  /*
+    A guard rather than a limit anybody will meet. A subtitle file for a
+    three-hour film is well under a megabyte; something far larger is a film
+    that has been handed to the wrong picker, and reading it as text would
+    freeze the tab rather than say so.
+  */
+  if (file.size > 8 * 1024 * 1024) {
+    out.why = 'That file is far too big to be subtitles. Is it the film?'
+    return out
+  }
+  out.cues = parseCues(words(await file.arrayBuffer()))
+  if (out.cues.length === 0) {
+    out.why = 'No subtitles could be read out of that file.'
+  }
+  return out
+}
+
+/**
+ * Whose subtitles, by the fingerprint the anchor is carrying.
+ *
+ * Kept beside the films for the same reason and with the same shape: which
+ * film is on is shared, and everything about *this device's* copy of it —
+ * which file, how far out of step it is, and now which subtitles — is not.
+ * Hers may be a different language from his, and that is nobody's business
+ * but hers.
+ */
+const written = new Map<string, Subtitles>()
+
+export function holdSubs(anchorPrint: string, subs: Subtitles): void {
+  written.set(anchorPrint, subs)
+}
+
+export function subsFor(anchorPrint: string | null): Subtitles | null {
+  if (anchorPrint === null) return null
+  return written.get(anchorPrint) ?? null
+}
+
+export function dropSubs(anchorPrint: string): void {
+  written.delete(anchorPrint)
+}
+
+/**
+ * The cue at a moment, given where you were last time.
+ *
+ * Told where it last was so the ordinary case — the next frame of the same
+ * film — is a couple of comparisons rather than a search through nine hundred
+ * cues sixty times a second. A seek anywhere falls back to a scan, which is
+ * still nothing.
+ */
+export function cueAt(cues: Cue[], at: number, from = 0): number {
+  if (cues.length === 0) return -1
+  let i = from >= 0 && from < cues.length ? from : 0
+  // Walked forward while the film plays, and rewound when it is scrubbed back.
+  while (i > 0 && cues[i].from > at) i--
+  while (i < cues.length - 1 && cues[i].to < at) i++
+  return at >= cues[i].from && at <= cues[i].to ? i : -1
+}
+
+/**
+ * A cue's text as nodes, with italics and without anything else.
+ *
+ * Subtitles carry `<i>` for songs, thoughts and off-screen voices, and losing
+ * it loses meaning. Everything else in the file — `<font>`, positioning
+ * braces, whatever else a converter left behind — is dropped rather than
+ * interpreted, and nothing is ever assigned as markup: each piece becomes a
+ * text node or an `<em>`, which is what makes reading somebody's downloaded
+ * subtitle file safe to do at all.
+ */
+export function cueNodes(text: string): Node[] {
+  const out: Node[] = []
+  const plain = text.replace(/\{\\[^}]*\}/g, '')
+  let italic = false
+  for (const piece of plain.split(/(<\/?i>|<\/?b>|<[^>]*>)/i)) {
+    if (piece === '') continue
+    if (/^<\/?[ib]>$/i.test(piece)) {
+      italic = piece[1] !== '/'
+      continue
+    }
+    // Any other tag is discarded, never rendered and never interpreted.
+    if (/^<[^>]*>$/.test(piece)) continue
+    if (italic) {
+      const em = document.createElement('em')
+      em.textContent = piece
+      out.push(em)
+    } else {
+      out.push(document.createTextNode(piece))
+    }
+  }
+  return out
 }
 
 // ---------------------------------------------------------------------------
@@ -525,6 +742,107 @@ export async function makeFilmScreen(
     })
   })
 
+  /*
+    ---------------------------------------------------------------------------
+    **The words along the bottom, drawn here rather than by the browser.**
+
+    The reasoning is in the long note on `parseCues`; what it buys is this
+    element, which the stylesheet can put wherever it needs to be. Over a
+    filled screen that matters twice: there is a conversation lying in the
+    bottom-right corner and a transport that comes and goes along the bottom
+    edge, and a `<track>` could not be told about either.
+
+    Its timing is the *local* file's, deliberately and without any arithmetic.
+    Subtitles belong to the copy on this machine, so they are read against
+    `video.currentTime` — which is exactly where the offset for a different rip
+    has already put it. Two people watching two encodes with two different
+    subtitle files each see their own, correctly, and neither has to know.
+    ---------------------------------------------------------------------------
+  */
+  const lines = document.createElement('div')
+  lines.className = 'film-lines'
+  lines.setAttribute('aria-live', 'off')
+  host.append(lines)
+
+  let wantLines = false
+  let atCue = -1
+  let ticking: number | null = null
+  /** When this film first started playing, for the sound check below. */
+  let began: number | null = null
+  /** Latched once decided, because the answer cannot become false again. */
+  let noSound = false
+
+  const draw = (index: number) => {
+    if (index === atCue) return
+    atCue = index
+    lines.replaceChildren()
+    if (index < 0) return
+    const cues = subsFor(printIn(showing))
+    const cue = cues?.cues[index]
+    if (!cue) return
+    /*
+      One element per cue rather than per line, so a two-line cue is two lines
+      of one thing — a wrapped sentence and a deliberate break look different
+      and should stay that way.
+    */
+    const line = document.createElement('p')
+    line.append(...cueNodes(cue.text))
+    lines.append(line)
+  }
+
+  /**
+   * Put the right words on the picture for wherever it is standing.
+   *
+   * Separate from the frame loop because it has to be callable *outside* one.
+   * A film paused between two lines is not running, so nothing schedules a
+   * redraw — and turning subtitles on at that moment showed nothing at all
+   * until somebody moved the film, which reads as the switch being broken.
+   */
+  const show = () => {
+    if (gone) return
+    const held = subsFor(printIn(showing))
+    if (wantLines && held && held.cues.length > 0) {
+      draw(cueAt(held.cues, video.currentTime, atCue))
+    } else if (atCue !== -1) {
+      draw(-1)
+    }
+  }
+
+  const tick = () => {
+    ticking = null
+    if (gone) return
+    show()
+    /*
+      A frame at a time while it runs, and not at all while it does not.
+
+      `timeupdate` fires about four times a second, which is enough to know
+      roughly where a film is and not enough for a line to land on the word it
+      belongs to — a quarter of a second late is visible and reads as broken.
+      A cue lookup is two comparisons from where it was last time, so this
+      costs nothing worth measuring, and it stops dead when the film is paused.
+    */
+    if (!video.paused && !video.ended) ticking = requestAnimationFrame(tick)
+  }
+
+  const start = () => {
+    if (ticking === null && !gone) ticking = requestAnimationFrame(tick)
+  }
+
+  video.addEventListener('play', start)
+  video.addEventListener('playing', () => {
+    if (began === null) began = performance.now()
+    start()
+  })
+  /*
+    A single pass on a paused film, so scrubbing while stopped still shows.
+    `show` rather than `tick`: `tick` owns the frame loop and clears its own
+    handle, so calling it from an event while a frame is already pending would
+    orphan that frame and leave two loops running.
+  */
+  video.addEventListener('seeked', show)
+  video.addEventListener('pause', show)
+  video.addEventListener('loadeddata', show)
+
   const apply = (videoId: string, at: number, playing: boolean) => {
     const film = filmFor(printIn(videoId))
     if (!film) {
@@ -547,6 +865,9 @@ export async function makeFilmScreen(
     }
     showing = videoId
     waiting = { at, playing }
+    // A new film is a new question about whether it has any sound.
+    began = null
+    noSound = false
     video.src = film.url
     video.load()
   }
@@ -597,22 +918,56 @@ export async function makeFilmScreen(
     loud(volume) {
       video.volume = Math.max(0, Math.min(1, volume))
     },
-    captions() {
-      /*
-        Nothing yet, and it says nothing rather than pretending.
+    captions(showing) {
+      wantLines = showing
+      // Drawn now, not at the next frame — there may not be a next frame.
+      show()
+      if (showing) start()
+    },
+    /*
+      ---------------------------------------------------------------------------
+      **Is anything actually coming out of this?**
 
-        An `.mp4` almost never carries a subtitle track a browser will show,
-        and the real answer — a separate `.srt` chosen alongside the film,
-        converted to WebVTT and attached as a `<track>` — is a feature of its
-        own rather than a line here. Until then the control is hidden for a
-        film rather than offered and ignored; see `Transport` in `ui/Together`.
-      */
+      `webkitAudioDecodedByteCount` counts bytes of audio the element has
+      decoded, and it is the only honest answer available. A film with a track
+      Chrome cannot decode — AC3 and DTS being the common ones, and both being
+      what a disc rip carries — plays its picture and decodes exactly zero
+      bytes of sound, for ever, with no error of any kind. It is the last
+      remaining way for this to fail without saying anything.
+
+      Three things make it safe to read:
+
+      **It waits.** Nothing is concluded until the film has been running a few
+      seconds, because a video that has only just started has decoded nothing
+      yet whatever its audio is.
+
+      **Silence is not zero.** A film that opens on four seconds of quiet still
+      *decodes* those four seconds, so the count moves. Zero means no track was
+      decoded at all, not that nothing was audible.
+
+      **Nowhere else is guessed at.** The property is Chrome's. Where it does
+      not exist this says no rather than inventing an answer, which is the
+      correct behaviour for "we cannot tell" — a warning nobody can act on is
+      worse than none.
+      ---------------------------------------------------------------------------
+    */
+    quiet() {
+      if (noSound) return true
+      if (began === null || performance.now() - began < 4000) return false
+      const heard = (video as unknown as { webkitAudioDecodedByteCount?: number })
+        .webkitAudioDecodedByteCount
+      if (typeof heard !== 'number') return false
+      noSound = heard === 0
+      return noSound
     },
     stop() {
       gone = true
+      if (ticking !== null) cancelAnimationFrame(ticking)
+      ticking = null
       video.pause()
       video.removeAttribute('src')
       video.load()
+      lines.remove()
       video.remove()
     },
   }
