@@ -787,6 +787,154 @@ const main = async () => {
   needsYouTube(await ev(`!!document.querySelector('.together.immersive-awake')`),
     'and the controls come up with it, which is when you want them', 'controls stayed hidden')
 
+  // ---- the arrows --------------------------------------------------------
+  /*
+    Seeking is shared and the sound is not, and that split is the whole design
+    of these four keys. Moving the film is moving *the film*, which is the one
+    thing the two of you are doing together; turning it down is a fact about
+    the room you are sitting in.
+  */
+  const arrow = async (key, extra = {}) => {
+    await send('Input.dispatchKeyEvent',
+      { type: 'rawKeyDown', key, code: key, windowsVirtualKeyCode:
+          key === 'ArrowRight' ? 39 : key === 'ArrowLeft' ? 37 : key === 'ArrowUp' ? 38 : 40,
+        ...extra }, S)
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, ...extra }, S)
+  }
+  const anchorAt = () => ev(`Math.round(window.__watching.read().at)`)
+  const settledNear = async (want, slack = 4) => {
+    for (let i = 0; i < 30; i++) {
+      const now = await anchorAt()
+      if (Math.abs(now - want) <= slack) return now
+      await wait(250)
+    }
+    return await anchorAt()
+  }
+
+  /*
+    Paused through the transport first.
+
+    Writing `playing: false` from a script while the picture is still running
+    reads to this app as the other person pressing play, and it correctly
+    writes it back — so the position set below would be overtaken a moment
+    later. Its own button does not have that argument with it.
+  */
+  for (let i = 0; i < 6; i++) {
+    if (!(await ev(`window.__watching.read().playing`))) break
+    await ev(`(() => {
+      const b = document.querySelector('.together-moves .together-go')
+        || document.querySelector('.together-immersive-moves .together-go')
+      if (b) b.click()
+      return !!b
+    })()`)
+    await wait(900)
+  }
+
+  await ev(`(() => {
+    const w = window.__watching.read()
+    window.__local.setWatching({ videoId: w.videoId, title: w.title, playing: false,
+      at: 30, queue: [], session: w.session })
+    return 1
+  })()`)
+  await settledNear(30)
+  await ev(`document.activeElement && document.activeElement.blur(), 1`)
+
+  await arrow('ArrowRight')
+  const forward = await settledNear(45)
+  console.log('    right:', forward)
+  check(Math.abs(forward - 45) <= 4, 'right moves the film fifteen seconds on', String(forward))
+
+  await arrow('ArrowLeft')
+  const rewound = await settledNear(30)
+  console.log('    left:', rewound)
+  check(Math.abs(rewound - 30) <= 4, 'and left brings it back', String(rewound))
+
+  /* Control turns the step into a stride. */
+  await arrow('ArrowRight', { modifiers: 2 })
+  const strode = await settledNear(90, 6)
+  console.log('    ctrl-right:', strode)
+  check(Math.abs(strode - 90) <= 6, 'and control makes it a minute', String(strode))
+
+  check(await ev(`!!document.querySelector('.together-osd')`),
+    'a key that moves the film says so on the picture', 'nothing was said')
+
+  /* The sound is this device's alone and must never reach the anchor. */
+  const soundBefore = await ev(`window.__watching.read().at`)
+  /*
+    An unwritten setting is not a missing one.
+
+    Nothing has touched the faders on a fresh profile, so there is no key in
+    storage at all — and reading that as `null` made the first assertion
+    compare a number against nothing and fail against behaviour that was
+    correct. The garden's default is full; that is the baseline.
+  */
+  const loudness = () => ev(`(() => {
+    const v = JSON.parse(localStorage.getItem('garden:volume:v1') || 'null')
+    return v && typeof v.music === 'number' ? v.music : 1
+  })()`)
+  const wasLoud = await loudness()
+  await arrow('ArrowDown')
+  await wait(700)
+  const quieter = {
+    music: await loudness(),
+    said: await ev(`(document.querySelector('.together-osd') || {}).textContent || ''`),
+  }
+  console.log('    down:', JSON.stringify({ from: wasLoud, to: quieter.music, said: quieter.said }))
+  check(quieter.music !== null && wasLoud !== null && quieter.music < wasLoud,
+    'down turns this screen down', `${wasLoud} → ${quieter.music}`)
+  check(/sound/i.test(quieter.said), 'and says how far', quieter.said)
+  check((await ev(`window.__watching.read().at`)) === soundBefore,
+    'and never touches the film, which is hers as much as yours',
+    'the volume moved the shared anchor')
+
+  await arrow('ArrowUp')
+  await wait(700)
+  const louder = await loudness()
+  check(louder !== null && louder > quieter.music, 'and up turns it back up',
+    `${quieter.music} → ${louder}`)
+
+  /*
+    And none of them fire while somebody is writing.
+
+    Out of fullscreen first: the panel beside the film — and with it every
+    field — does not exist while the picture has the whole screen, so the
+    focus below would land on nothing and the arrows would fire exactly as
+    they are supposed to when nobody is typing. Same shape as the section
+    further down; see the note there.
+  */
+  await ev(`(() => {
+    const b = document.querySelector('.together-immersion-exit')
+    if (b) b.click()
+    return !!b
+  })()`, true)
+  for (let i = 0; i < 40; i++) {
+    if (await ev(`!!document.querySelector('.together-room')`)) break
+    await wait(250)
+  }
+  await ev(`(() => {
+    const b=[...document.querySelectorAll('.together-tab')].find(x=>/talk/i.test(x.textContent))
+    if (b) b.click()
+    return !!b
+  })()`)
+  await wait(900)
+  check(await ev(`!!document.querySelector('.together-talk .together-field')`),
+    'there is a field to write in', 'no composer')
+  await ev(`(() => {
+    const f = document.querySelector('.together-talk .together-field')
+    if (f) f.focus()
+    return !!f
+  })()`)
+  const heldFilm = await anchorAt()
+  await arrow('ArrowRight')
+  await arrow('ArrowUp')
+  await wait(900)
+  const untouched = await anchorAt()
+  console.log('    while writing:', JSON.stringify({ before: heldFilm, after: untouched }))
+  check(untouched === heldFilm,
+    'and an arrow inside a field is an arrow inside a field',
+    `${heldFilm} → ${untouched}`)
+
+
   console.log('\nand the way back out\n')
 
   /*

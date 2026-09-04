@@ -175,22 +175,23 @@ const CORNER_KEY = 'garden:night-screen:corner'
  * Which corner the conversation sits in, over a filled film.
  *
  * ---------------------------------------------------------------------------
- * Four, and the reason there is a choice at all is subtitles. They are drawn
+ * Two, and the reason there is a choice at all is subtitles. They are drawn
  * along the bottom of the picture where subtitles have always been drawn, and
  * a long line of them reaches a good way towards both bottom corners — so the
  * one place the conversation cannot always live is the place it started.
  *
- * The top corners avoid them completely and cost a little of the picture's
- * sky; the bottom ones are further out of the way of the film and sometimes
- * in the way of the words. Which of those matters more depends on the film,
- * the subtitles and the person, which is exactly the shape of thing that
- * should be a setting rather than a decision made here.
+ * It was four for a moment, and four was one of those choices that is really
+ * no choice: the two extra corners are the same two answers mirrored, and
+ * nobody wants to press a button three times to find out that the third stop
+ * is the same as the first. Bottom right is where it belongs and top left is
+ * where it goes when the subtitles want the bottom — a place and its opposite,
+ * which is the whole of the question.
  *
  * Per device, like the backing and the volume faders. Hers can be somewhere
  * else entirely and neither of you need ever know.
  * ---------------------------------------------------------------------------
  */
-const CORNERS = ['bottom right', 'bottom left', 'top left', 'top right'] as const
+const CORNERS = ['bottom right', 'top left'] as const
 type Corner = (typeof CORNERS)[number]
 
 function savedCorner(): Corner {
@@ -401,9 +402,40 @@ export function Together() {
    * clears the field.
    * ---------------------------------------------------------------------------
    */
+  /**
+   * True while somebody has the keyboard in the conversation beside the film.
+   *
+   * ---------------------------------------------------------------------------
+   * **The film must not move when the keyboard comes up, and it was not the
+   * film that was moving it.**
+   *
+   * Measured on a 390-wide phone: the picture sits at 88 to 289 and stays
+   * exactly there when a keyboard takes a third of the screen —
+   * `interactive-widget=resizes-content` in the viewport tag sees to that. What
+   * happens instead is that the panel below it is left with about a hundred and
+   * ninety pixels, the transport takes half of them, and **the field being
+   * typed into ends up below the bottom of the screen**. The browser then does
+   * the only sensible thing and scrolls to reveal it — dragging the film up
+   * with it, which is what this looked like from the outside.
+   *
+   * So the transport gets out of the way while somebody is writing, for the
+   * same reason the dark screen does while somebody is searching: it is not
+   * what you are doing. The picture is what matters and the picture does not
+   * move.
+   * ---------------------------------------------------------------------------
+   */
+  const [writing, setWriting] = useState(false)
   const [hunting, setHunting] = useState(false)
   const hunt = useWatching((s) => s.hunt)
   const searching = hunting || hunt.trim() !== ''
+
+  /* A folded screen has no keyboard in it, and neither has a dark one. */
+  useEffect(() => {
+    if (!open) {
+      setWriting(false)
+      setHunting(false)
+    }
+  }, [open])
   /**
    * Films this device has opened before — see `systems/filmShelf`.
    *
@@ -1164,17 +1196,76 @@ export function Together() {
     driving control.
     ---------------------------------------------------------------------------
   */
+  /**
+   * A brief word over the picture, for the controls that have no other face.
+   *
+   * A key that moves the film fifteen seconds or the sound five per cent has
+   * nothing on screen to move with it — the scrubber is usually hidden and the
+   * fader lives in another room entirely. Without this you press and hope,
+   * then press again because you are not sure the first one landed.
+   */
+  const [osd, setOsd] = useState<string | null>(null)
+  const osdTimer = useRef<number | null>(null)
+  const flash = (words: string) => {
+    setOsd(words)
+    if (osdTimer.current !== null) window.clearTimeout(osdTimer.current)
+    osdTimer.current = window.setTimeout(() => {
+      osdTimer.current = null
+      setOsd(null)
+    }, 1300)
+  }
+  useEffect(() => () => {
+    if (osdTimer.current !== null) window.clearTimeout(osdTimer.current)
+  }, [])
+
+  /*
+    Everything the keyboard can reach, gathered where it can be read.
+
+    Assigned during render rather than through an effect: the listener below is
+    registered once and would otherwise be holding whatever the film's position
+    and length were at the moment the screen opened, which is nought and nought.
+  */
+  const keysRef = useRef({
+    playPause,
+    seekBy: (_by: number) => {},
+    louder: (_by: number) => {},
+  })
+  keysRef.current = {
+    playPause,
+    seekBy: (by: number) => {
+      const to = span > 0 ? Math.min(span, Math.max(0, shown + by)) : Math.max(0, shown + by)
+      goTo(to)
+      flash(`${by > 0 ? '+' : '−'}${Math.abs(by) >= 60 ? `${Math.abs(by) / 60}m` : `${Math.abs(by)}s`}`)
+    },
+    louder: (by: number) => {
+      /*
+        Yours alone. The garden's music fader is a fact about this device — see
+        `systems/volume` — so turning it up here does not reach across and turn
+        her film up in Lagos, which is the only sane reading of a volume key.
+      */
+      const now = useVolume.getState().levels.music
+      const next = Math.max(0, Math.min(1, Math.round((now + by) * 100) / 100))
+      useVolume.getState().set('music', next)
+      flash(`sound ${Math.round(next * 100)}%`)
+    },
+  }
+
   const playPauseRef = useRef(playPause)
   playPauseRef.current = playPause
 
   useEffect(() => {
     if (!open || !live) return
-    const onSpace = (event: KeyboardEvent) => {
-      if (event.key !== ' ' && event.code !== 'Space') return
+    const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
-      if (event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.metaKey || event.altKey) return
       const at = event.target as HTMLElement | null
       if (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return
+      /*
+        A focused control keeps its own keys — arrows move a slider, space
+        presses a button — with the one exception of the clear sheet over the
+        film, which is where focus lands after you click the picture and is
+        exactly where these gestures should work. See the long note above.
+      */
       const focused = document.activeElement as HTMLElement | null
       if (
         focused &&
@@ -1183,12 +1274,40 @@ export function Together() {
       ) {
         return
       }
-      // Held, so the page does not also scroll and the sheet is not activated.
-      event.preventDefault()
-      playPauseRef.current()
+
+      const space = event.key === ' ' || event.code === 'Space'
+      if (space && !event.ctrlKey) {
+        // Held, so the page does not also scroll and the sheet is not pressed.
+        event.preventDefault()
+        playPauseRef.current()
+        return
+      }
+
+      /*
+        A step, or a stride. Fifteen seconds is the one every player has
+        settled on — long enough to skip past something, short enough to find
+        your way back to it — and holding control turns it into a minute for
+        the times you are looking for a scene rather than a line.
+
+        A seek is shared, deliberately and unlike the sound: moving the film is
+        moving *the film*, which is the one thing the two of you are doing
+        together.
+      */
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        event.preventDefault()
+        const far = event.ctrlKey ? 60 : 15
+        keysRef.current.seekBy(event.key === 'ArrowRight' ? far : -far)
+        return
+      }
+
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        if (event.ctrlKey) return
+        event.preventDefault()
+        keysRef.current.louder(event.key === 'ArrowUp' ? 0.05 : -0.05)
+      }
     }
-    document.addEventListener('keydown', onSpace)
-    return () => document.removeEventListener('keydown', onSpace)
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
   }, [open, live])
 
   /* `seconds` is where on the scrubber, which is the shared timeline. */
@@ -1578,7 +1697,7 @@ export function Together() {
         in, belong here rather than on the picture.
       */
       ref={paneRef}
-      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${searching ? ' searching' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
+      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${searching ? ' searching' : ''}${writing ? ' writing-here' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
@@ -1625,6 +1744,9 @@ export function Together() {
         className={`together-screen${live ? '' : ' dark'}${trouble ? ' has-trouble' : ''}${!open && spot !== null ? ' placed' : ''}`}
       >
         <div ref={stage} className="together-stage" />
+        {osd !== null && (
+          <p className="together-osd" aria-live="polite">{osd}</p>
+        )}
         {open && live && !immersive && (
           <button
             type="button"
@@ -1980,7 +2102,7 @@ export function Together() {
           )}
 
           {immersive || tab === 'talk' ? (
-            <Talk session={shared.session} theirName={them.name} />
+            <Talk session={shared.session} theirName={them.name} onWriting={setWriting} />
           ) : tab === 'film' ? (
             <OurFilm
               mine={mine}
@@ -2620,7 +2742,16 @@ function useScreenTalk(session: string) {
   return { shown, say, me }
 }
 
-function Talk({ session, theirName }: { session: string; theirName: string }) {
+function Talk({
+  session,
+  theirName,
+  onWriting,
+}: {
+  session: string
+  theirName: string
+  /** Whether this field has the keyboard, so the screen can make room for it. */
+  onWriting(writing: boolean): void
+}) {
   const [draft, setDraft] = useState('')
   const { shown, say: send, me } = useScreenTalk(session)
   const feed = useRef<HTMLDivElement>(null)
@@ -2644,6 +2775,13 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
   }
 
   const writing = useTheyAreTyping()
+
+  /*
+    A field that is unmounted never blurs — see the same note in `Queue`. This
+    half goes away when you switch tabs or fold the screen, and without this
+    the screen would go on believing the keyboard was up.
+  */
+  useEffect(() => () => onWriting(false), [onWriting])
 
   return (
     <div className="together-talk">
@@ -2672,6 +2810,8 @@ function Talk({ session, theirName }: { session: string; theirName: string }) {
             className="ink together-field"
             value={draft}
             onChange={setDraft}
+            onFocus={() => onWriting(true)}
+            onBlur={() => onWriting(false)}
             placeholder={session === '' ? 'nothing on yet' : `to ${theirName}`}
             label={`say something to ${theirName} about what is on`}
             onKeyDown={(event) => {
@@ -3053,6 +3193,15 @@ function ScreenChat({
             you reach for when something on the picture is in the way of
             something else on the picture.
           */}
+          {/*
+            An arrow to where it is going, rather than a name for where it is.
+
+            "bottom right" written next to a thing that is visibly in the
+            bottom right is a label for something you can already see, and it
+            costs three words on a control that has to be small. The arrow says
+            the only thing that is not already on screen: press this and it
+            goes *there*. The words stay, for anybody reaching it by ear.
+          */}
           <button
             type="button"
             className="screen-chat-corner"
@@ -3061,9 +3210,11 @@ function ScreenChat({
               nextCorner()
               field.current?.focus()
             }}
-            aria-label={`the conversation is in the ${corner}; move it`}
+            aria-label={`move the conversation to the ${
+              CORNERS[(CORNERS.indexOf(corner) + 1) % CORNERS.length]
+            }`}
           >
-            {corner}
+            <span aria-hidden="true">{corner === 'bottom right' ? '↖' : '↘'}</span>
           </button>
           <label className="screen-chat-scrim-set">
             <span aria-hidden="true">backing</span>
@@ -3273,6 +3424,19 @@ function Queue({
   }, [hunt, pasted])
 
   useEffect(() => () => request.current?.abort(), [])
+
+  /*
+    And the screen is told when this half goes away.
+
+    `onHunting(false)` rides on the field's blur, and a field that is
+    *unmounted* never blurs — so switching to another tab with the keyboard
+    still in the search box left the night screen believing somebody was
+    looking, for ever. The picture stayed hidden on a tab that has no search
+    on it at all, which reads as the film having vanished.
+
+    Found by measuring the film's box on the talk tab and getting zero.
+  */
+  useEffect(() => () => onHunting(false), [onHunting])
 
   async function look() {
     if (pasted !== null) {

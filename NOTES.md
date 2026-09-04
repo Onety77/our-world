@@ -40,6 +40,120 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 4 Sep · Claude · the transport goes whatever is playing
+
+> *"What the hell is all this thing doing here when im trying to search"*
+
+Fair. The rule I wrote was wrong, and it was wrong in a way that looked right
+in the check because the check never searched with a film on.
+
+Making room while somebody searches was tied to the screen being **dark** — on
+the reasoning that a film that is actually playing has earned its controls, and
+that hiding them would be hiding something you are watching. But the controls
+are not the film. A title, a scrubber, a clock and five buttons is two hundred
+pixels of a phone spent on a film you are not touching, sitting directly
+between the search field and its results.
+
+The picture keeps its place; the transport does not. Measured on a 390-wide
+phone with a film on: the picture stays at **88–289** either way, and the room
+below the search field goes from **315 to 427 pixels**.
+
+The general shape of the mistake is worth keeping: *"never hide what they are
+watching"* was a good instinct applied to the wrong object. The thing being
+watched is the picture. Everything else on that screen is furniture, and
+furniture can move.
+
+### And the conversation has two corners, not four
+
+Four was one of those choices that is really no choice — the extra two are the
+same two answers mirrored, and nobody wants to press a button three times to
+discover the third stop is the same as the first. Bottom right is where it
+belongs and top left is where it goes when the subtitles want the bottom: a
+place and its opposite, which is the whole of the question.
+
+The control is an arrow to where it is *going* rather than a name for where it
+already is. "Bottom right" written beside a thing visibly in the bottom right
+is a label for something you can already see, and it costs three words on a
+control that has to be small. The words stay in the `aria-label`, for anybody
+reaching it by ear.
+
+## 4 Sep · Claude · the film does not move, and the arrows
+
+> *"what is the most important thing on the night screen? the movie ofcourse,
+> so why should a keyboard push it up too while writing"*
+
+### It was not the film that was moving it
+
+Measured before changing anything, which turned out to matter. On a 390-wide
+phone the picture sits at **88 to 289 and stays exactly there** when a keyboard
+takes a third of the screen — `interactive-widget=resizes-content`, already in
+the viewport tag, sees to that.
+
+What was actually happening is one line further down. The panel below is left
+with about a hundred and ninety pixels, the transport takes half of them, and
+**the field being typed into ends up at 500–533 on a 500-pixel page** — below
+the bottom edge. The browser then does the only sensible thing and scrolls to
+reveal it, dragging the fixed layer and the film with it.
+
+So the fix is not to pin the film. It is to stop giving the browser a reason to
+scroll: the transport steps aside while somebody is writing, the same way the
+dark screen steps aside while somebody is searching, and for the same reason —
+it is not what you are doing. Measured after: film unchanged at 88–289, field
+at **445–478, inside the page**.
+
+### A bug found by measuring rather than by thinking
+
+`onHunting(false)` rides on the search field's blur, and **a field that is
+unmounted never blurs**. Switching to another tab with the keyboard still in
+the search box left the night screen believing somebody was looking — for ever
+— so the picture stayed hidden on a tab that has no search on it at all, which
+reads as the film having vanished.
+
+Found by measuring the film's box on the talk tab and getting `{top: 0, bottom:
+0}`. Both halves clear their flag on unmount now.
+
+### The arrows
+
+`←` and `→` move fifteen seconds, which is the step every player has settled on
+— long enough to skip past something, short enough to find your way back to it.
+Holding control makes it a minute, for when you are looking for a scene rather
+than a line. `↑` and `↓` are five per cent of the sound.
+
+**Seeking is shared and the sound is not**, and that split is the whole design.
+Moving the film is moving *the film*, which is the one thing the two of you are
+doing together; turning it down is a fact about the room you are sitting in.
+There is a check that the volume keys never reach the shared anchor.
+
+They stand aside for exactly what space stands aside for: a field, a key
+somebody has already handled, and a focused control — arrows move a slider and
+space presses a button, and taking those would break the transport for anybody
+who reaches it by tab. The one exception is the clear sheet over the film,
+which is where focus lands after you click the picture.
+
+**A word over the picture**, because both of these are otherwise invisible: the
+scrubber is usually hidden and the volume fader lives in another room. Without
+it you press and hope, then press again because you are not sure the first one
+landed.
+
+### And the checker, twice more
+
+**An unwritten setting is not a missing one.** The volume baseline read
+`localStorage` on a fresh profile, found no key at all, and compared a number
+against `null` — failing against behaviour that was correct. The garden's
+default is full; that is the baseline.
+
+**And the same state-you-start-in shape as last time.** The "arrows do nothing
+while writing" check focused a field that does not exist, because the section
+before it leaves the film filling the screen and there is no panel beside it —
+so the focus landed on nothing and the arrows fired exactly as they should when
+nobody is typing. It leaves fullscreen first now, and asserts there is a field
+to write in before asserting what happens when you write in it.
+
+That is twice this has happened in two days. The lesson is not "remember to
+exit fullscreen" — it is that **a check should assert its own preconditions**,
+because a precondition that silently fails produces a failure that looks like
+the feature.
+
 ## 4 Sep · Claude · room to choose, and a keyboard that comes up
 
 > *"i can only scroll through like 1. video per the available view space which

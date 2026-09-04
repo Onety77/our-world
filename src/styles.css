@@ -15964,11 +15964,18 @@ body.on-the-road .broke-what {
   }
 
   /*
-    And the controls for a film that is not playing. `nothing on`, a scrubber
-    that cannot be dragged, and a play button with nothing to play: two hundred
-    pixels of a phone screen spent saying nothing is happening.
+    And the transport, whatever is on — which is the correction.
+
+    This was tied to the screen being dark, on the reasoning that controls for
+    a film that is *playing* are worth their space. They are not, not while you
+    are looking for the next thing: a title, a scrubber, a clock and five
+    buttons is two hundred pixels of a phone spent on a film you are not
+    touching, sitting directly between the search field and its results.
+
+    The picture keeps its place. The controls for it are one tap away again the
+    moment the field is empty and nobody is in it.
   */
-  .together.full.searching .together-screen.dark ~ .together-room .together-transport {
+  .together.full.searching .together-room .together-transport {
     display: none;
   }
 
@@ -16027,26 +16034,15 @@ body.on-the-road .broke-what {
   further up places it bottom-right; these move it, and each has to undo the
   side that rule set as well as set its own.
 */
-.screen-chat.at-bottom-left {
-  right: auto;
-  left: clamp(1rem, 2.6vw, 2.4rem);
-  align-items: flex-start;
-}
-
-.screen-chat.at-bottom-left .screen-chat-said,
 .screen-chat.at-top-left .screen-chat-said { align-items: flex-start; }
 
 /*
-  The top corners clear the subtitles completely, and they must also give up
-  the lift: the transport that the bottom corners step over is not up here.
+  Top left clears the subtitles completely, and gives up the lift with them:
+  the transport that the bottom corner steps over is not up here.
 */
-.screen-chat.at-top-left,
-.screen-chat.at-top-right {
+.screen-chat.at-top-left {
   top: clamp(1rem, 2.6vw, 2.4rem);
   bottom: auto;
-}
-
-.screen-chat.at-top-left {
   right: auto;
   left: clamp(1rem, 2.6vw, 2.4rem);
   align-items: flex-start;
@@ -16059,37 +16055,27 @@ body.on-the-road .broke-what {
   with the newest line always last, which is the same reading order by a
   different route.
 */
-.screen-chat.at-top-left .screen-chat-said,
-.screen-chat.at-top-right .screen-chat-said { justify-content: flex-start; }
+.screen-chat.at-top-left .screen-chat-said { justify-content: flex-start; }
 
-/* The lift over the transport belongs to the bottom corners alone. */
-.together.immersive-awake .screen-chat.at-top-left,
-.together.immersive-awake .screen-chat.at-top-right {
+/* The lift over the transport belongs to the bottom corner alone. */
+.together.immersive-awake .screen-chat.at-top-left {
   bottom: auto;
   top: clamp(1rem, 2.6vw, 2.4rem);
-}
-
-.together.immersive-awake .screen-chat.at-bottom-left {
-  bottom: calc(clamp(1rem, 2.6vw, 2.4rem) + 7rem);
-}
-
-@media (max-height: 620px) {
-  .together.immersive-awake .screen-chat.at-bottom-left {
-    bottom: calc(clamp(1rem, 2.6vw, 2.4rem) + 5.4rem);
-  }
 }
 
 /* A word rather than a control, in the same voice as the backing beside it. */
 .screen-chat-corner {
   flex: 0 0 auto;
-  padding: 0.1rem 0.3rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 0.3rem;
   background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 253, 248, 0.62);
-  font: 0.46rem var(--sans);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  color: rgba(255, 253, 248, 0.7);
+  font: 0.8rem/1 var(--sans);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease;
 }
@@ -16099,4 +16085,63 @@ body.on-the-road .broke-what {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
   outline: none;
+}
+
+/*
+  The transport steps aside while somebody is writing.
+
+  Same argument as the dark screen while somebody is searching, and the same
+  rule: **the picture never moves.** Measured on a 390-wide phone, the film
+  sits at 88–289 and stays there when a keyboard takes a third of the screen;
+  what was going wrong is that the panel below was left with about a hundred
+  and ninety pixels, the transport took half of them, and the field being typed
+  into ended up past the bottom edge. The browser then scrolled to reveal it
+  and dragged the film up — which is what this looked like from the outside.
+
+  A scrubber is not what you are doing while you are writing, and it is one tap
+  away again the moment you are finished.
+*/
+@media (max-width: 719px) {
+  .together.full.writing-here .together-transport {
+    display: none;
+  }
+}
+
+/*
+  A word over the picture, for a key that has nothing else to show for itself.
+
+  Seeking fifteen seconds and turning the sound down are both invisible: the
+  scrubber is usually hidden and the volume fader lives in another room. Without
+  a word you press and hope, then press again because you are not sure.
+
+  It sits top-centre where an OSD has always sat, it never takes a pointer, and
+  it is gone in a moment — a control's receipt, not a piece of the interface.
+*/
+.together-osd {
+  position: absolute;
+  z-index: 8;
+  top: 1.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(2, 3, 6, 0.66);
+  color: #fff6e8;
+  font: 0.58rem var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  animation: together-osd-in 160ms ease both;
+}
+
+@keyframes together-osd-in {
+  from { opacity: 0; transform: translate(-50%, -0.3rem); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .together-osd { animation: none; }
 }
