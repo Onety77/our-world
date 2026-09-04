@@ -161,6 +161,44 @@ and the shelf would have been empty for a reason no assertion was looking at.
 The second night is simulated by a reload with the anchor still set, and the
 film-has-moved case by deleting the file out from under the handle.
 
+### The check was poisoning the machine it ran on
+
+Worth its own heading, because it cost an hour and looked like nothing to do
+with itself.
+
+An unrelated tool failed with `fork: Permission denied`. What had actually
+happened is that `npm run screen` leaks about a dozen processes per run:
+`k.kill()` kills the Chrome that was launched and **none of its children**, and
+Chrome is a renderer per tab plus a GPU process, a network service and a
+storage service. Twelve strays and fifteen profile directories had built up
+across a day of runs until the machine could no longer fork a shell.
+
+`taskkill /pid … /T /F` takes the tree, and it is wired to `SIGINT` and
+`SIGTERM` as well as the ordinary exit — interrupted runs were the main source,
+and they are the same root cause as the earlier bug where a lingering browser
+silently captured every later run's flags.
+
+The profile directory is **not** deleted on the way out. Windows does not
+release a folder the instant the process holding it dies, so a delete that
+close to the kill fails quietly and leaves it anyway — which it did, three runs
+running. They are swept on the way *in* instead, when the run that made them
+finished long ago; anything still locked belongs to a run happening right now
+and is skipped. At rest there is one directory and no processes.
+
+### And two more sleeps that were races
+
+Both surfaced only once the run grew past five minutes, and both reported true
+statements about a finished film rather than anything about what was being
+tested: `it moves` saw `8.5 → 0`, and the tuck saw `0 → 0`. The test clips are
+seconds long and the run is minutes long, so by the time most assertions are
+reached the film has ended and is sitting on its own last frame.
+
+Lengthening the clips only moves the cliff. What removes it is one primitive —
+`running()` — that says *there should be a film playing here*, and then waits
+until two consecutive readings show it advancing rather than assuming that
+writing the anchor was enough. It is not: an ended video told to play from zero
+has to seek, load and start, and how long that takes is the browser's business.
+
 ### And the checker was wrong four more times, all the same way
 
 Every one was a fixed sleep where a poll belonged, and each produced a message

@@ -21,8 +21,8 @@
  *   npm run screen
  * ---------------------------------------------------------------------------
  */
-import { spawn } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { execSync, spawn } from 'node:child_process'
+import { readdirSync, rmSync, writeFileSync } from 'node:fs'
 
 const PORT = 5188
 const CDP = 9358
@@ -36,9 +36,77 @@ async function up(url, tries = 40) {
   }
   throw new Error('no ' + url)
 }
+/* Named out here so the teardown can delete it however the run ends. */
+const profileDir = `${process.env.TEMP}/garden-screen-${Date.now().toString(36)}`
+/*
+  Anything an earlier run left behind, cleared before this one starts.
+
+  Each run gets a profile directory of its own so a lingering browser cannot
+  be inherited, and the cost of that is a directory per run. They cannot be
+  removed on the way out — Windows still holds the folder for a moment after
+  the process dies — so they are removed on the way *in*, when the run that
+  made them finished long ago. A directory that is still locked belongs to a
+  run happening right now and is skipped.
+*/
+function sweep() {
+  try {
+    for (const name of readdirSync(process.env.TEMP)) {
+      if (!name.startsWith("garden-screen-")) continue
+      try {
+        rmSync(`${process.env.TEMP}/${name}`, { recursive: true, force: true })
+      } catch {
+        /* in use by another run; leave it alone */
+      }
+    }
+  } catch {
+    /* no temp directory to read is not this file's problem */
+  }
+}
+
 const kids = []
 const run = (c, a, s = false) => { const k = spawn(c, a, { stdio: 'ignore', shell: s }); kids.push(k); return k }
-const done = (c) => { for (const k of kids) k.kill(); process.exit(c) }
+/*
+  ---------------------------------------------------------------------------
+  **The whole tree, not just the process that was spawned.**
+
+  `k.kill()` kills the Chrome that was launched and none of its children, and
+  Chrome is a dozen processes: a renderer per tab, a GPU process, a network
+  service, a storage service. So every run of this file left about a dozen
+  processes and a profile directory behind, and after enough runs the machine
+  could no longer fork at all — which showed up as an unrelated tool failing
+  with "fork: Permission denied", a good half hour from anything to do with it.
+
+  `taskkill /T` takes the tree. The profile goes with it, since a fresh one is
+  made per run and a kept one is a few megabytes of nothing.
+  ---------------------------------------------------------------------------
+*/
+let cleaning = false
+const done = (c) => {
+  if (!cleaning) {
+    cleaning = true
+    for (const k of kids) {
+      try {
+        if (k.pid) execSync(`taskkill /pid ${k.pid} /T /F`, { stdio: 'ignore' })
+      } catch {
+        /* already gone, which is the point */
+      }
+      try { k.kill() } catch { /* likewise */ }
+    }
+    /*
+      The profile is *not* deleted here, deliberately.
+
+      Windows does not release a directory the moment the process holding it
+      dies, so a delete this close to the kill fails silently and leaves the
+      folder anyway — which is what it did, three runs running. Sweeping at
+      startup instead works every time, because by then the previous run's
+      handles are long gone. See `sweep` below.
+    */
+  }
+  process.exit(c)
+}
+/* Whatever happens — a thrown check, a Ctrl-C — the tree still goes. */
+process.on('SIGINT', () => done(130))
+process.on('SIGTERM', () => done(143))
 async function connect(wsUrl) {
   const ws = new WebSocket(wsUrl); let id = 0; const w = new Map()
   ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && w.has(m.id)) w.get(m.id)(m), w.delete(m.id) }
@@ -99,9 +167,9 @@ const main = async () => {
     A fresh directory per run cannot be inherited, and the stale browser dies
     with `done()` below or is simply left holding a profile nobody wants.
   */
-  const profile = `${process.env.TEMP}/garden-screen-${Date.now().toString(36)}`
+  sweep()
   run(CHROME, ['--headless=new', `--remote-debugging-port=${CDP}`,
-    '--user-data-dir=' + profile, '--no-first-run', '--disable-gpu',
+    '--user-data-dir=' + profileDir, '--no-first-run', '--disable-gpu',
     '--touch-events=disabled',
     '--autoplay-policy=no-user-gesture-required', 'about:blank'])
   await up(`http://localhost:${PORT}/`)
@@ -894,6 +962,45 @@ const main = async () => {
     return 'given'
   })()`)
 
+  /*
+    ---------------------------------------------------------------------------
+    **Put the film back at the start and wait until it is genuinely running.**
+
+    The clips this file records are seconds long and the run is minutes long,
+    so by the time any given assertion is reached the film has usually finished
+    and is sitting on its own last frame. Two checks failed that way on
+    different runs — "it is actually playing" saw 8.5 then 0, and the tuck saw
+    0 then 0 — and both were true statements about a finished film rather than
+    anything about the thing being tested.
+
+    Lengthening the clips only moves the cliff. What removes it is saying, at
+    each point that needs one, *there should be a film running here* — and then
+    waiting until there demonstrably is, rather than assuming the writing of it
+    was enough. It is not: an ended video told to play from zero has to seek,
+    load and start, and how long that takes is the browser's business.
+    ---------------------------------------------------------------------------
+  */
+  const running = async () => {
+    await ev(`(() => {
+      const w = window.__watching.read()
+      window.__local.setWatching({ videoId: w.videoId, title: w.title, playing: true,
+        at: 0, queue: [], session: w.session })
+      return 1
+    })()`)
+    let was = null
+    for (let i = 0; i < 60; i++) {
+      const now = await ev(`(() => {
+        const v = document.querySelector('.together-stage video')
+        return v && !v.paused && !v.ended ? Math.round(v.currentTime * 100) / 100 : null
+      })()`)
+      // Two readings, both playing, the second later than the first.
+      if (now !== null && was !== null && now > was) return now
+      was = now
+      await wait(250)
+    }
+    return null
+  }
+
   const filmState = () => ev(`(() => {
     const w = window.__watching.read()
     const v = document.querySelector('.together-stage video')
@@ -1025,12 +1132,14 @@ const main = async () => {
   await shot('film-playing')
 
   const ranOn = await (async () => {
-    const first = (await filmState()).here
+    const first = await running()
+    if (first === null) return { first: null, then: null }
     await wait(2500)
     return { first, then: (await filmState()).here }
   })()
   console.log('    it moves:', JSON.stringify(ranOn))
-  check(ranOn.then > ranOn.first, 'and it is actually playing', JSON.stringify(ranOn))
+  check(ranOn.first !== null && ranOn.then > ranOn.first,
+    'and it is actually playing', JSON.stringify(ranOn))
 
   // ---- her device: the film is on, and she has no copy of it -------------
   /*
@@ -1473,22 +1582,8 @@ const main = async () => {
     keeps it playing. Lengthening the clips would only move the cliff; saying
     where it should be is what makes the question answerable.
   */
-  await ev(`(() => {
-    const w = window.__watching.read()
-    window.__local.setWatching({ videoId: w.videoId, title: w.title, playing: true,
-      at: 0, queue: [], session: w.session })
-    return 1
-  })()`)
-  /* Waited for. Sleeping on it read 6.8 once and 0 the next moment, which is
-     the reset landing between the two samples rather than anything being wrong. */
-  for (let i = 0; i < 40; i++) {
-    const at = await ev(`(() => {
-      const v = document.querySelector('.together-stage video')
-      return v ? v.currentTime : null
-    })()`)
-    if (at !== null && at < 2) break
-    await wait(250)
-  }
+  check((await running()) !== null,
+    'the film can be set running again for this', 'it would not start')
   await ev(`(() => {
     const v = document.querySelector('.together-stage video')
     if (v) v.dataset.mark = 'the-one'
