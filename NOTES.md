@@ -40,6 +40,52 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 4 Sep · Claude · Safari's keyboard, and up rather than across
+
+> *"the last fix you said you did about the movie screen staying fixed in view
+> even when the keyboard is up didnt really work"*
+
+It did not, and the reason is that I fixed one of the two things a keyboard
+does and reported it as fixed.
+
+**Chrome** honours `interactive-widget=resizes-content` in the viewport tag and
+makes the *layout* viewport shorter. Everything anchored to the top stays put.
+That was measured, it was true, and it is the whole of the Android story.
+
+**Safari does not support that tag.** It leaves the layout viewport at full
+height, shrinks the visible part, and then scrolls the page to bring the
+focused field into view — dragging every `position: fixed` element up with it.
+The film slid off the top of the screen, which is exactly what the screenshots
+show, and no amount of measuring on Chrome would ever have found it.
+
+There is no CSS for the visual viewport. `systems/viewport` reads it and
+publishes two lengths and a class on the root: where the visible area begins,
+and how much of it there is. A night screen sized to exactly those cannot be
+scrolled off, because there is nothing above or below it to scroll to.
+
+The other half of it is one line of stylesheet with a note on it: the film and
+the panel become `position: absolute` inside the screen instead of `fixed` to
+the window. Identical geometry today — the screen is `fixed; inset: 0`, so an
+absolute child resolves against the same rectangle — and it is what makes them
+*follow* the screen when the screen moves to sit over the visible area. Fixed
+children would have stayed behind.
+
+Simulated by writing the variables Safari would have produced: with the page
+held ninety pixels up, the film moves from 88 to 178, so it lands at 88 on
+screen — where it was. Without it, it lands at −2.
+
+### And the conversation goes up, not across
+
+Two mistakes in a row, and the same one underneath: I kept treating this as a
+question about *which corner* when it is a question about *height*. The
+conversation is where you are already looking — it has the composer in it, you
+are typing into it — and sending it to the far side of the picture to dodge a
+subtitle costs the thing it is solving for, because a column that changes sides
+has to be found again every time it moves.
+
+Straight up the same edge. It clears the words along the bottom and stays where
+your eye already is, and the arrow is now the only two directions there are.
+
 ## 4 Sep · Claude · the transport goes whatever is playing
 
 > *"What the hell is all this thing doing here when im trying to search"*

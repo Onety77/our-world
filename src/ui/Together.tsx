@@ -102,6 +102,7 @@ import {
 import { Ink } from './Ink'
 import { Scrub } from './Scrub'
 import { gainOf, useVolume } from '@/systems/volume'
+import { watchTheView } from '@/systems/viewport'
 
 /** How often the two screens are compared. See `DRIFT` for why not per frame. */
 const CHECK_MS = 900
@@ -180,18 +181,19 @@ const CORNER_KEY = 'garden:night-screen:corner'
  * a long line of them reaches a good way towards both bottom corners — so the
  * one place the conversation cannot always live is the place it started.
  *
- * It was four for a moment, and four was one of those choices that is really
- * no choice: the two extra corners are the same two answers mirrored, and
- * nobody wants to press a button three times to find out that the third stop
- * is the same as the first. Bottom right is where it belongs and top left is
- * where it goes when the subtitles want the bottom — a place and its opposite,
- * which is the whole of the question.
+ * **Up, not across.** It was four corners for a moment and then the wrong two,
+ * and both were the same mistake: treating this as a question about *which
+ * corner* when it is a question about *height*. The conversation is where you
+ * are already looking — it has the composer in it, you are typing into it —
+ * and sending it to the far side of a film to dodge a subtitle means hunting
+ * for it every time it moves. It goes straight up the same edge, clears the
+ * words along the bottom, and stays where your eye already is.
  *
  * Per device, like the backing and the volume faders. Hers can be somewhere
  * else entirely and neither of you need ever know.
  * ---------------------------------------------------------------------------
  */
-const CORNERS = ['bottom right', 'top left'] as const
+const CORNERS = ['bottom right', 'top right'] as const
 type Corner = (typeof CORNERS)[number]
 
 function savedCorner(): Corner {
@@ -456,6 +458,15 @@ export function Together() {
   */
   const offsetRef = useRef(offset)
   offsetRef.current = offset
+
+  /*
+    Where the visible part of the page is, for as long as this screen exists.
+
+    Only the night screen needs it — it is the one place with a film that must
+    not move and a keyboard that wants to move it — so it is watched here
+    rather than for the whole garden, and stops when the screen does.
+  */
+  useEffect(watchTheView, [])
 
   // --- the feed -------------------------------------------------------------
   useEffect(
@@ -3194,7 +3205,7 @@ function ScreenChat({
             something else on the picture.
           */}
           {/*
-            An arrow to where it is going, rather than a name for where it is.
+            An arrow to where it is going, and it only ever goes up or down.
 
             "bottom right" written next to a thing that is visibly in the
             bottom right is a label for something you can already see, and it
@@ -3214,7 +3225,7 @@ function ScreenChat({
               CORNERS[(CORNERS.indexOf(corner) + 1) % CORNERS.length]
             }`}
           >
-            <span aria-hidden="true">{corner === 'bottom right' ? '↖' : '↘'}</span>
+            <span aria-hidden="true">{corner === 'bottom right' ? '↑' : '↓'}</span>
           </button>
           <label className="screen-chat-scrim-set">
             <span aria-hidden="true">backing</span>

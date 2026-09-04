@@ -16034,18 +16034,20 @@ body.on-the-road .broke-what {
   further up places it bottom-right; these move it, and each has to undo the
   side that rule set as well as set its own.
 */
-.screen-chat.at-top-left .screen-chat-said { align-items: flex-start; }
-
 /*
-  Top left clears the subtitles completely, and gives up the lift with them:
-  the transport that the bottom corner steps over is not up here.
+  Straight up the same edge, and only the edge it was already on.
+
+  Sending it across the picture to dodge a subtitle solves the collision and
+  costs the thing being solved for: the conversation is where you are already
+  looking, and a column that changes sides has to be found again every time.
+  Up clears the words along the bottom and keeps your eye where it was.
+
+  It gives up the lift with them — the transport the bottom corner steps over
+  is not up here.
 */
-.screen-chat.at-top-left {
+.screen-chat.at-top-right {
   top: clamp(1rem, 2.6vw, 2.4rem);
   bottom: auto;
-  right: auto;
-  left: clamp(1rem, 2.6vw, 2.4rem);
-  align-items: flex-start;
 }
 
 /*
@@ -16055,10 +16057,16 @@ body.on-the-road .broke-what {
   with the newest line always last, which is the same reading order by a
   different route.
 */
-.screen-chat.at-top-left .screen-chat-said { justify-content: flex-start; }
+/*
+  Newest at the bottom is right when the column hangs off the bottom edge and
+  wrong when it hangs off the top: up there the block grows downwards into the
+  film and the newest line keeps moving. From a fixed top edge it grows down
+  with the newest line always last.
+*/
+.screen-chat.at-top-right .screen-chat-said { justify-content: flex-start; }
 
 /* The lift over the transport belongs to the bottom corner alone. */
-.together.immersive-awake .screen-chat.at-top-left {
+.together.immersive-awake .screen-chat.at-top-right {
   bottom: auto;
   top: clamp(1rem, 2.6vw, 2.4rem);
 }
@@ -16144,4 +16152,39 @@ body.on-the-road .broke-what {
 
 @media (prefers-reduced-motion: reduce) {
   .together-osd { animation: none; }
+}
+
+/* ===========================================================================
+   A keyboard that cannot take the film with it
+
+   Chrome honours `interactive-widget=resizes-content` in the viewport tag and
+   simply makes the layout viewport shorter, which needs nothing from here.
+   **Safari does not support it.** It leaves the layout viewport at full height,
+   shrinks the visible part, and then scrolls the page to reveal the field —
+   dragging every `position: fixed` element up with it. The film slid off the
+   top of the screen, which is what this block is for.
+
+   `systems/viewport` publishes where the visible area actually is. Sized to
+   exactly that, the night screen cannot be scrolled off, because there is
+   nothing above or below it to scroll to.
+   =========================================================================== */
+
+/*
+  Absolute inside the screen rather than fixed to the window.
+
+  Identical geometry today — `.together.full` is `position: fixed; inset: 0`,
+  so an absolutely positioned child of it resolves against the same rectangle
+  the window would have given. What it buys is that the two of them now follow
+  their parent, so moving the parent to sit over the visible area moves the
+  film and the panel with it. Fixed children would have stayed behind.
+*/
+.together.full .together-screen,
+.together.full .together-room {
+  position: absolute;
+}
+
+html.keyboard-up .together.full {
+  top: var(--view-top, 0px);
+  height: var(--view-tall, 100%);
+  bottom: auto;
 }
