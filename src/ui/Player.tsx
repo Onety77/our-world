@@ -35,6 +35,7 @@ import {
 import type { Listening } from '@/data/types'
 import { useDismissOutside } from './useDismissOutside'
 import { shortTitle, useWatching } from '@/systems/watching'
+import { likelyAsleep, localHourIn } from '@/systems/time'
 
 /**
  * How many songs the list shows before it starts scrolling.
@@ -448,7 +449,12 @@ export function Player() {
               )}
             </button>
           ) : (
-            <p className="player-where">on your own · {them.name} isn’t here</p>
+            <p className="player-where">
+              on your own ·{` `}
+              {likelyAsleep(localHourIn(them.timeZone))
+                ? `${them.name} is asleep`
+                : `${them.name} isn’t here`}
+            </p>
           )}
 
           {/*

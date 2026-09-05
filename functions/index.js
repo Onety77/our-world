@@ -1,10 +1,24 @@
 /**
- * Closed-app notifications for the Stars.
+ * Closed-app notifications for everything either of you leaves for the other.
  *
- * One Firestore create is the only trigger. The sender cannot choose a token,
- * a title, or a destination: those are derived here with Admin privileges, so
- * client code and client rules never need access to the other person's device
- * addresses.
+ * ---------------------------------------------------------------------------
+ * **This used to be the Stars and nothing else**, which was the right first one
+ * and a strange place to stop. The Stars is the only thing in the garden that
+ * expects an answer *now*; everything else — a thought under the Tree, a
+ * picture in the Glasshouse, a move in a game, an answer to the question — is
+ * by design something the other one finds later. And "later" only happens if
+ * something tells them.
+ *
+ * `systems/newness` already lights what she left, in the place she left it,
+ * beautifully. But it lights it *once you are in the garden*, and with seven
+ * timezones coming that is the easier half of the problem. This is the half
+ * that gets you there.
+ *
+ * Every trigger is a Firestore create, and none of them trusts the client with
+ * anything: the sender cannot choose a token, a title, or a destination. Those
+ * are derived here with Admin privileges, so client code and client rules
+ * never need access to the other person's device addresses.
+ * ---------------------------------------------------------------------------
  */
 
 const { initializeApp } = require('firebase-admin/app')
@@ -52,23 +66,52 @@ async function recipientIsInGarden(recipient) {
   }
 }
 
-exports.notifyNewMessage = onDocumentCreated('messages/{messageId}', async (event) => {
-  const message = event.data?.data()
-  if (!message || (message.by !== 'warm' && message.by !== 'cool')) return
+/** Whichever of the two did not do it. */
+const theOther = (who) => (who === 'warm' ? 'cool' : 'warm')
 
-  const sender = message.by
-  const recipient = sender === 'warm' ? 'cool' : 'warm'
-  const db = getFirestore()
+/** One of the two, or nothing — every trigger below starts by asking this. */
+const oneOfThem = (who) => (who === 'warm' || who === 'cool' ? who : null)
 
-  // A visible copy already has the live Firestore message, authored tone and
-  // unread light. Do not send a system notification to any of this person's
-  // other registered devices while they are visibly in the garden.
+/** Their own name, or the side they are on if they have not written one. */
+async function nameOf(db, who) {
+  try {
+    const profile = await db.collection('profiles').doc(who).get()
+    const name = profile.exists ? profile.get('name') : null
+    if (typeof name === 'string' && name.trim()) return name.trim().slice(0, 80)
+  } catch (error) {
+    logger.warn('Could not read a profile name.', { who })
+  }
+  return who === 'warm' ? 'Warm' : 'Cool'
+}
+
+/**
+ * Say one thing to somebody's closed phone.
+ *
+ * ---------------------------------------------------------------------------
+ * The whole of the delivery, in one place, because there are five callers now
+ * and every one needs the same four things done exactly right: not disturbing
+ * somebody who is already looking at the garden, addressing only devices that
+ * have registered, forgetting addresses that have expired, and saying so when
+ * a delivery fails for any other reason.
+ *
+ * Written five times, one of them would quietly stop clearing its dead tokens
+ * and nobody would find out until a phone had silently stopped receiving
+ * anything at all.
+ *
+ * **The tag is what stops five kinds of news replacing one another.** The
+ * worker collapses notifications sharing one, which is right within a kind —
+ * four moves in a row is one "it is your turn" — and wrong across them: an
+ * unread letter must not be swallowed by a game.
+ * ---------------------------------------------------------------------------
+ */
+async function tell(recipient, { title, body, url, tag, about }) {
+  // A visible garden already has the live document, its own tone and its own
+  // light. Do not send system chrome to this person's other devices as well.
   if (await recipientIsInGarden(recipient)) return
 
-  const [devices, profile] = await Promise.all([
-    db.collection('pushDevices').doc(recipient).collection('devices').get(),
-    db.collection('profiles').doc(sender).get(),
-  ])
+  const db = getFirestore()
+  const devices = await db
+    .collection('pushDevices').doc(recipient).collection('devices').get()
 
   const addressed = devices.docs
     .map((entry) => ({ ref: entry.ref, token: entry.get('token') }))
@@ -78,26 +121,10 @@ exports.notifyNewMessage = onDocumentCreated('messages/{messageId}', async (even
 
   if (addressed.length === 0) return
 
-  const profileName = profile.exists ? profile.get('name') : null
-  const from = typeof profileName === 'string' && profileName.trim()
-    ? profileName.trim().slice(0, 80)
-    : sender === 'warm' ? 'Warm' : 'Cool'
-  const body = cleanBody(message.body) || 'Something is waiting in the Stars.'
-
   const result = await getMessaging().sendEachForMulticast({
     tokens: addressed.map((entry) => entry.token),
-    data: {
-      title: from,
-      body,
-      url: '/?section=stars',
-      messageId: event.params.messageId,
-    },
-    webpush: {
-      headers: {
-        Urgency: 'high',
-        TTL: '86400',
-      },
-    },
+    data: { title, body, url, tag },
+    webpush: { headers: { Urgency: 'high', TTL: '86400' } },
   })
 
   const expired = []
@@ -115,11 +142,145 @@ exports.notifyNewMessage = onDocumentCreated('messages/{messageId}', async (even
   }
 
   if (result.failureCount > expired.length) {
-    logger.warn('Some push deliveries failed without invalidating their device address.', {
-      messageId: event.params.messageId,
+    logger.warn('Some push deliveries failed without invalidating their address.', {
+      about,
       attempted: addressed.length,
       failed: result.failureCount,
       removed: expired.length,
     })
   }
+}
+
+exports.notifyNewMessage = onDocumentCreated('messages/{messageId}', async (event) => {
+  const message = event.data?.data()
+  const sender = oneOfThem(message?.by)
+  if (!sender) return
+  const db = getFirestore()
+
+  await tell(theOther(sender), {
+    title: await nameOf(db, sender),
+    body: cleanBody(message.body) || 'Something is waiting in the Stars.',
+    url: '/?section=stars',
+    tag: 'garden:said',
+    about: `message ${event.params.messageId}`,
+  })
 })
+
+/*
+  ---------------------------------------------------------------------------
+  The four quiet ones.
+
+  Everything below is something you find later by design, and every one of them
+  went unannounced until now. They differ from the Stars in what they should
+  say: a message carries its own words, and these mostly should not. A thought
+  under the Tree is worth reading where it was left, in the place it grew a
+  flower — putting its whole text on a lock screen spends it. So these say what
+  happened and where, and let the garden do the rest.
+  ---------------------------------------------------------------------------
+*/
+
+/** `word-duel` reads as "Word Duel" without a second copy of the registry. */
+function gameName(roundId) {
+  const id = String(roundId).split(':')[0].replace(/[-_]+/g, ' ').trim()
+  if (!id) return 'a game'
+  return id.replace(/\b[a-z]/g, (c) => c.toUpperCase())
+}
+
+/**
+ * A thought left under the Tree — or wherever else a letter is put down.
+ *
+ * The body is deliberately not sent. A letter is written to be found in the
+ * place it was left, with its flower beside it, and a lock screen is the
+ * opposite of that: it would be read once, out of the world, and then be old
+ * news by the time you got there.
+ */
+exports.notifyNewLetter = onDocumentCreated('letters/{letterId}', async (event) => {
+  const letter = event.data?.data()
+  const sender = oneOfThem(letter?.by)
+  if (!sender) return
+  const db = getFirestore()
+  const where = typeof letter.placeId === 'string' && /^[a-z-]{1,32}$/.test(letter.placeId)
+    ? letter.placeId
+    : 'tree'
+
+  await tell(theOther(sender), {
+    title: await nameOf(db, sender),
+    body: 'left you a thought.',
+    url: `/?section=${where}`,
+    tag: 'garden:thought',
+    about: `letter ${event.params.letterId}`,
+  })
+})
+
+/**
+ * A picture hung in the Glasshouse.
+ *
+ * Its own line goes with it — unlike a letter, a memory's words are a caption
+ * rather than the thing, and "the night before you left" is an invitation to
+ * go and look rather than a substitute for looking.
+ */
+exports.notifyNewMemory = onDocumentCreated('memories/{memoryId}', async (event) => {
+  const memory = event.data?.data()
+  const sender = oneOfThem(memory?.by)
+  if (!sender) return
+  const db = getFirestore()
+  const line = cleanBody(memory.why) || cleanBody(memory.when)
+
+  await tell(theOther(sender), {
+    title: await nameOf(db, sender),
+    body: line ? `hung a picture — ${line}` : 'hung a picture in the Glasshouse.',
+    url: '/?section=glasshouse',
+    tag: 'garden:picture',
+    about: `memory ${event.params.memoryId}`,
+  })
+})
+
+/**
+ * A move in a game, which is the one that most needs saying.
+ *
+ * These games are one move each, whenever you are here — the whole model
+ * assumes the other one is asleep. Until now the only thing that said your
+ * turn had come was opening the app and going to look.
+ *
+ * The move's own data is never read. It is opaque to everything but the game
+ * that wrote it (see `Move` in `data/types`), and a notification is no place
+ * to start being the exception.
+ */
+exports.notifyNewMove = onDocumentCreated('rounds/{roundId}/moves/{moveId}', async (event) => {
+  const move = event.data?.data()
+  const sender = oneOfThem(move?.by)
+  if (!sender) return
+  const db = getFirestore()
+
+  await tell(theOther(sender), {
+    title: await nameOf(db, sender),
+    body: `played in ${gameName(event.params.roundId)}. Your turn.`,
+    url: '/?section=hollow',
+    tag: 'garden:turn',
+    about: `move ${event.params.roundId}/${event.params.moveId}`,
+  })
+})
+
+/**
+ * An answer to the Tree's question.
+ *
+ * The answer itself is never sent, and that is not squeamishness — the whole
+ * ritual is that neither of you sees the other's answer until you have both
+ * written one. A notification carrying it would break the game it belongs to.
+ */
+exports.notifyNewAnswer = onDocumentCreated(
+  'questionRounds/{roundId}/answers/{who}',
+  async (event) => {
+    const sender = oneOfThem(event.params.who)
+    if (!sender) return
+    const db = getFirestore()
+
+    await tell(theOther(sender), {
+      title: await nameOf(db, sender),
+      body: 'answered. Yours is the one that opens it.',
+      url: '/?section=tree',
+      tag: 'garden:question',
+      about: `answer ${event.params.roundId}/${event.params.who}`,
+    })
+  },
+)

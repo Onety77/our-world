@@ -104,6 +104,7 @@ import {
   type QuestionRound,
   type RallyStreamInput,
   type VoiceLight,
+  type Wanted,
 } from './types'
 import {
   activeQuestion,
@@ -1397,6 +1398,62 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       that is half of each. A subcollection would need its own rules, its own
       ordering field and its own reconciliation, to hold six rows.
     */
+    /*
+      The wanted list rides on the world document, beside the shared screen.
+
+      A collection of its own would want its own rules block, its own listener
+      and its own per-document validation for something that will hold perhaps
+      a dozen short rows for the rest of its life. It is the same argument the
+      queue makes one field over: short, read whole, written whole.
+
+      Rebuilt field by field rather than trusted, like everything else read off
+      the wire here. A row missing its title, or carrying a fingerprint that is
+      not a string, is dropped rather than rendered — the list is written by
+      the other person's device, and "the other person's device" includes the
+      version of it that was running last month.
+    */
+    watchFilms(listener) {
+      return onSnapshot(doc(db, ...WORLD_DOC), (snap) => {
+        const rows = (snap.data() ?? {}).films
+        const seen = new Set<string>()
+        const films: Wanted[] = []
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (!row || typeof row !== 'object') continue
+          const r = row as Record<string, unknown>
+          const id = typeof r.id === 'string' ? r.id : ''
+          const title = typeof r.title === 'string' ? r.title.trim() : ''
+          if (id === '' || title === '' || seen.has(id)) continue
+          seen.add(id)
+          const print = (v: unknown) =>
+            typeof v === 'string' && v.length > 0 && v.length < 80 ? v : null
+          films.push({
+            id,
+            title: title.slice(0, 120),
+            by: r.by === 'cool' ? 'cool' : 'warm',
+            at: typeof r.at === 'number' && Number.isFinite(r.at) ? r.at : 0,
+            warm: print(r.warm),
+            cool: print(r.cool),
+          })
+        }
+        // Newest first, so the thing just added is the thing you look at.
+        listener(films.sort((a, b) => b.at - a.at))
+      })
+    },
+
+    async setFilms(films) {
+      /*
+        Capped, and not because two people will ever reach it. An unbounded
+        array in a document that is read on every change of the shared screen
+        is a cost that only ever goes one way, and forty is well past the point
+        where a list stops being a list and wants a different shape.
+      */
+      await setDoc(
+        doc(db, ...WORLD_DOC),
+        { films: films.slice(0, 40).map((f) => ({ ...f })) },
+        { merge: true },
+      )
+    },
+
     watchWatching(listener) {
       return onSnapshot(doc(db, ...WORLD_DOC), (snap) => {
         const d = ((snap.data() ?? {}).watching ?? {}) as Record<string, unknown>

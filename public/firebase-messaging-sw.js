@@ -52,7 +52,21 @@ messaging.onBackgroundMessage(async (payload) => {
     body: data.body || 'Something is waiting in the Stars.',
     icon: '/icons/icon-192.png',
     badge: '/icons/favicon-32.png',
-    tag: 'garden:said',
+    /*
+      The tag comes from the message now, and it matters more than it looks.
+
+      A tag makes a notification *replace* the one before it. One fixed tag was
+      right while the Stars was the only thing that ever sent anything: four
+      messages in a row should be one line on a lock screen, not four.
+
+      It became wrong the moment a thought, a picture, a game move and an
+      answer to the question started arriving here too — they would have taken
+      it in turns to erase each other, and whichever came last would be the
+      only thing you ever saw. Each kind carries its own now, so they collapse
+      within themselves and never across. Older senders that name none still
+      land on the Stars' tag, which is exactly where they came from.
+    */
+    tag: data.tag || 'garden:said',
     renotify: true,
     data: { url: data.url || '/?section=stars' },
   })

@@ -1589,11 +1589,12 @@ handling changed.
 - `FIREBASE.md` has a garbled commented-out table row (a stray user edit).
 - Word list ships ~86KB lazy-loaded — keep it out of the main bundle.
 - `dist/` may be stale; never judge by build output.
-- **`world/Water.tsx` is dead and collides by name with `world/water.ts`,
-  which is live and shared.** Nothing imports the old one; it should go. It is
-  named here rather than deleted because this is not a git repository and a
-  deletion could not be undone. The other orphans are `world/Bottles.tsx`,
-  `world/Lamps.tsx`, `world/SoftOrb.tsx` and `systems/controls.ts`.
+- ~~`world/Water.tsx`, `world/Bottles.tsx`, `world/Lamps.tsx`,
+  `world/SoftOrb.tsx`, `systems/controls.ts`.~~ **Done — all five are gone.**
+  This is a git repository now, so a deletion can be undone, which was the
+  only reason they were named here rather than removed. Kept as a struck line
+  rather than deleted outright because an unticked box is an instruction: the
+  next reader would otherwise go hunting for files that do not exist.
 - The Wellspring's banks sit twelve metres from the water when the pot is
   empty, which is what "narrow and low in its bed" means but reads oddly with
   nothing saved. Worth a look once there is a real balance in it.

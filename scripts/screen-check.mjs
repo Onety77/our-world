@@ -1101,7 +1101,17 @@ const main = async () => {
     const bytes = new Uint8Array(bin.length)
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
     const file = new File([bytes], ${JSON.stringify(name)}, { type: 'video/webm' })
-    const input = document.querySelector(${JSON.stringify(where + ' .film-input')})
+    /*
+      The direct child first, and that is not fussiness.
+
+      The list at the top of the film tab renders a picker per row, so from
+      the moment a row exists there are several film inputs under the tab and
+      the first one is a row rather than the way in. Every assertion after
+      that would still have gone green, about the wrong control. The main
+      pick is a direct child of the tab; the row ones never are.
+    */
+    const input = document.querySelector(${JSON.stringify(where + ' > .film-input')})
+      || document.querySelector(${JSON.stringify(where + ' .film-input')})
     if (!input) return 'no input at ' + ${JSON.stringify(where)}
     const dt = new DataTransfer()
     dt.items.add(file)
@@ -1191,7 +1201,7 @@ const main = async () => {
       ask: !!document.querySelector('.film-ask'),
       copy: copy ? copy.className : null,
       nudge: !!document.querySelector('.film-nudge'),
-      trouble: (document.querySelector('.film-trouble') || {}).textContent || '',
+      trouble: (document.querySelector('.film-trouble:not(.wanted-trouble)') || {}).textContent || '',
     }
   })()`)
 
@@ -1546,7 +1556,7 @@ const main = async () => {
         const copy = document.querySelector('.film-copy')
         return { id: w.videoId, copy: copy ? copy.className : null,
                  nudge: !!document.querySelector('.film-nudge'),
-                 trouble: (document.querySelector('.film-trouble') || {}).textContent || '' }
+                 trouble: (document.querySelector('.film-trouble:not(.wanted-trouble)') || {}).textContent || '' }
       })()`)
       if (last.copy !== null && !last.copy.includes('other')) return last
       await wait(300)
@@ -1586,7 +1596,17 @@ const main = async () => {
   const giveText = async (where, text, name) => ev(`(() => {
     const file = new File([${JSON.stringify(text)}], ${JSON.stringify(name)},
       { type: 'text/plain' })
-    const input = document.querySelector(${JSON.stringify(where + ' .film-input')})
+    /*
+      The direct child first, and that is not fussiness.
+
+      The list at the top of the film tab renders a picker per row, so from
+      the moment a row exists there are several film inputs under the tab and
+      the first one is a row rather than the way in. Every assertion after
+      that would still have gone green, about the wrong control. The main
+      pick is a direct child of the tab; the row ones never are.
+    */
+    const input = document.querySelector(${JSON.stringify(where + ' > .film-input')})
+      || document.querySelector(${JSON.stringify(where + ' .film-input')})
     if (!input) return 'no input at ' + ${JSON.stringify(where)}
     const dt = new DataTransfer()
     dt.items.add(file)
@@ -2135,6 +2155,176 @@ const main = async () => {
     return false
   }
 
+  console.log('\nthe list the two of you keep\n')
+
+  /*
+    ---------------------------------------------------------------------------
+    The list is checked before the shelf because it *feeds* the shelf: marking
+    a row through the handle-keeping door is also how a film gets remembered.
+    The shelf section below wipes the store first, so nothing here reaches it.
+    ---------------------------------------------------------------------------
+  */
+  await desktop()
+  await stubPicker(A, 'Blue Ruin 1080p.webm')
+  await openEmpty()
+
+  /* An empty list, so every row after this was put there by this run. */
+  await ev(`(async () => { await window.__local.setFilms([]); return 1 })()`)
+  await wait(600)
+
+  check(await ev(`!!document.querySelector('.film-tab .wanted')`),
+    'the film tab opens on the list the two of you keep', 'no list')
+  check(await ev(`!!document.querySelector('.wanted-none')`),
+    'and an empty one says so in a sentence rather than showing a heading over nothing',
+    'silence')
+
+  // ---- a name either of you puts down ------------------------------------
+  /*
+    Through the native setter, because the field is React-controlled: setting
+    `.value` alone is overwritten on the next render and the component never
+    sees it. This is the standard way and it is the only way that works.
+  */
+  await ev(`(() => {
+    const f = document.querySelector('.wanted-add .together-field')
+    if (!f) return false
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    set.call(f, 'Blue Ruin')
+    f.dispatchEvent(new Event('input', { bubbles: true }))
+    return true
+  })()`)
+  await wait(300)
+  await ev(`(() => {
+    const b = [...document.querySelectorAll('.wanted-add .film-quiet')][0]
+    if (b) b.click()
+    return !!b
+  })()`, true)
+  await wait(900)
+
+  const firstRow = await ev(`(() => {
+    const r = document.querySelector('.wanted-row')
+    if (!r) return null
+    return {
+      title: r.querySelector('.wanted-title').textContent.trim(),
+      copies: [...r.querySelectorAll('.wanted-copies span')].map((x) => x.textContent.trim()),
+    }
+  })()`)
+  console.log('    the row:', JSON.stringify(firstRow))
+  check(firstRow !== null && /Blue Ruin/.test(firstRow.title),
+    'a name either of you puts down becomes a row', JSON.stringify(firstRow))
+  check(firstRow !== null && firstRow.copies.length === 2
+    && firstRow.copies.every((t) => /^not /.test(t)),
+    'and starts with neither of you having a copy of it',
+    JSON.stringify(firstRow && firstRow.copies))
+
+  // ---- and then you say you have it ---------------------------------------
+  /*
+    Through the row's own word rather than its hidden input, on purpose: the
+    word is the door that hands back a *handle*, and the handle is what turns
+    a marked row into a one-press start. Giving the input a file directly
+    tests the other browser's path and would never reach the shelf.
+  */
+  await ev(`(() => {
+    const b = [...document.querySelectorAll('.wanted-doing .film-quiet')]
+      .find((x) => /i have this one/i.test(x.textContent))
+    if (b) b.click()
+    return !!b
+  })()`, true)
+
+  /* Polled: reading a file is the browser's errand and it takes as long as it takes. */
+  const marked = await (async () => {
+    for (let i = 0; i < 60; i++) {
+      const seen = await ev(`(() => {
+        const r = document.querySelector('.wanted-row')
+        if (!r) return null
+        return {
+          copies: [...r.querySelectorAll('.wanted-copies span')].map((x) => x.textContent.trim()),
+          doing: [...r.querySelectorAll('.wanted-doing button')].map((x) => x.textContent.trim()),
+          trouble: (document.querySelector('.wanted-trouble') || {}).textContent || '',
+        }
+      })()`)
+      /*
+        Both, and waiting for the second one is the point.
+
+        The mark lands as soon as the file has been read; the offer to start it
+        lands a beat later, when the shelf has been asked what it can still
+        open. Stopping at the first made this read as a missing button.
+      */
+      if (seen && seen.copies.some((t) => /^you have it/.test(t))
+        && seen.doing.some((t) => /put it on/i.test(t))) return seen
+      if (seen && seen.trouble !== '') return seen
+      await wait(300)
+    }
+    return null
+  })()
+  console.log('    once marked:', JSON.stringify(marked))
+  check(marked !== null, 'choosing your own copy marks the row', 'the row never changed')
+  check(marked !== null && marked.doing.some((t) => /put it on/i.test(t)),
+    'and a marked row can then start the film in one press',
+    JSON.stringify(marked && marked.doing))
+
+  // ---- the answer the list exists to give ---------------------------------
+  /*
+    Her side written straight into the mock, because there is one browser here
+    and the point of the row is what it says when the *other* device has
+    answered. A print that is deliberately not yours.
+  */
+  const otherPrint = async (make) => ev(`(async () => {
+    let got = []
+    const off = window.__local.watchFilms((f) => { got = f })
+    off()
+    await window.__local.setFilms(got.map((f) => ({ ...f, cool: ${make} })))
+    return got.length
+  })()`)
+
+  await otherPrint("'not-the-same-' + (f.warm || '')")
+  await wait(800)
+  const apart = await ev(`(() => {
+    const m = document.querySelector('.wanted-match')
+    return {
+      cls: m ? m.className : '',
+      says: m ? m.textContent.trim() : '',
+      note: (document.querySelector('.wanted-note') || {}).textContent || '',
+    }
+  })()`)
+  console.log('    two rips:', JSON.stringify(apart))
+  check(/apart/.test(apart.cls),
+    'two different downloads are named as different, before the evening',
+    JSON.stringify(apart))
+  check(/nudge/i.test(apart.note),
+    'and the row says what it costs, which is one nudge rather than a lost night',
+    apart.note)
+
+  await otherPrint("f.warm")
+  await wait(800)
+  const together = await ev(`(() => {
+    const m = document.querySelector('.wanted-match')
+    return {
+      cls: m ? m.className : '',
+      says: m ? m.textContent.trim() : '',
+      note: !!document.querySelector('.wanted-note'),
+    }
+  })()`)
+  console.log('    one file:', JSON.stringify(together))
+  check(/same/.test(together.cls) && !/apart/.test(together.cls),
+    'and the same bytes on both sides are named as the same file',
+    JSON.stringify(together))
+  check(!together.note, 'with nothing left to warn about', 'still warning')
+
+  await shot("screen-film-list")
+
+  // ---- and off it again ---------------------------------------------------
+  await ev(`(() => {
+    const b = [...document.querySelectorAll('.wanted-doing button')]
+      .find((x) => /take off the list/i.test(x.textContent))
+    if (b) b.click()
+    return !!b
+  })()`, true)
+  await wait(900)
+  check(await ev(`!!document.querySelector('.wanted-none')`),
+    'and a row can be taken off again', 'the row stayed')
+
+  console.log("\nthe shelf, and the second night\n")
+
   await desktop()
   await stubPicker(A, 'Blue Ruin 1080p.webm')
   await openEmpty()
@@ -2243,7 +2433,7 @@ const main = async () => {
           ask: !!document.querySelector('.film-ask'),
           src: v ? (v.src || '').slice(0, 5) : null,
           copy: copy ? copy.className : null,
-          trouble: (document.querySelector('.film-trouble') || {}).textContent || '',
+          trouble: (document.querySelector('.film-trouble:not(.wanted-trouble)') || {}).textContent || '',
         }
       })()`)
       if (!seen.ask && seen.src === 'blob:') return seen
@@ -2251,7 +2441,7 @@ const main = async () => {
     }
     return await ev(`(() => ({
       ask: !!document.querySelector('.film-ask'),
-      trouble: (document.querySelector('.film-trouble') || {}).textContent || '',
+      trouble: (document.querySelector('.film-trouble:not(.wanted-trouble)') || {}).textContent || '',
     }))()`)
   })()
   console.log('    one press later:', JSON.stringify(reopened))
@@ -2282,7 +2472,7 @@ const main = async () => {
     'the offer was already withdrawn')
   const missing = await (async () => {
     for (let i = 0; i < 40; i++) {
-      const t = await ev(`(document.querySelector('.film-trouble') || {}).textContent || ''`)
+      const t = await ev(`(document.querySelector('.film-trouble:not(.wanted-trouble)') || {}).textContent || ''`)
       if (t !== '') return t
       await wait(300)
     }

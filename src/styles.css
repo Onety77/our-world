@@ -15931,6 +15931,168 @@ body.on-the-road .broke-what {
   merely spaced: they belong to a film that is already chosen, so the rule is
   a small statement that the part above has been settled.
 */
+/*
+  ---------------------------------------------------------------------------
+  The list, which is the top of the film tab.
+
+  Rows rather than a table, and a phone is why: three facts about each film
+  (whose copy exists, whether they match, what you can do about it) laid side
+  by side would be three unreadable columns at 390 wide. Stacked, each line
+  reads as a sentence and the row is about four lines tall.
+
+  Nothing here draws a box. The panel already has an edge, and a card per
+  film would make a short list look like an inventory.
+  ---------------------------------------------------------------------------
+*/
+.wanted {
+  /* Never squashed by a long list; the tab scrolls instead. */
+  flex: 0 0 auto;
+  margin: 0 0 1.1rem;
+  padding: 0 0 1rem;
+  border-bottom: 1px solid rgba(240, 216, 178, 0.1);
+}
+
+.wanted .film-way-note { margin: 0.2rem 0 0.7rem; }
+
+.wanted-add { margin: 0 0 0.2rem; }
+
+/* An input, not the talk box: one line, and Enter means done. */
+.wanted-add .together-field {
+  font-size: 0.82rem;
+  max-height: none;
+  overflow-y: hidden;
+}
+
+.wanted-none {
+  margin: 0.85rem 0 0;
+  max-width: 34rem;
+  font: 0.66rem/1.5 var(--serif);
+  color: rgba(242, 239, 230, 0.42);
+}
+
+.wanted-rows {
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.wanted-row + .wanted-row {
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(240, 216, 178, 0.06);
+}
+
+.wanted-title {
+  margin: 0;
+  font: 0.92rem/1.35 var(--serif);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/*
+  Who has it, and whether they are the same file.
+
+  Words rather than ticks. A tick and a dash beside two names is a thing you
+  have to learn, and this is read a handful of times a month by two people who
+  will never learn it — so it says what it means and takes one more line.
+*/
+.wanted-copies {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.8rem;
+  margin: 0.3rem 0 0;
+  font: 0.56rem var(--sans);
+  letter-spacing: 0.09em;
+  /* No case rule of its own: her name lives in this line and `lowercase`
+     turned Tife into tife. The words are written in the case they are read. */
+}
+
+.wanted-has { color: rgba(242, 239, 230, 0.3); }
+.wanted-has.yes { color: rgba(242, 239, 230, 0.72); }
+
+.wanted-match {
+  padding-left: 0.8rem;
+  border-left: 1px solid rgba(240, 216, 178, 0.14);
+}
+
+/* The answer you wanted. Green would be a traffic light; this is the ink. */
+.wanted-match.same { color: rgba(198, 232, 198, 0.8); }
+
+/*
+  Warm, not red. Different downloads still play in step — it costs one nudge
+  — so this is the colour of an errand, exactly like `.film-trouble`.
+*/
+.wanted-match.apart { color: rgba(255, 205, 150, 0.85); }
+
+.wanted-note {
+  margin: 0.4rem 0 0;
+  max-width: 34rem;
+  padding-left: 0.65rem;
+  border-left: 1px solid rgba(255, 196, 140, 0.32);
+  font: 0.64rem/1.5 var(--serif);
+  color: rgba(255, 220, 180, 0.62);
+}
+
+/*
+  The things you can do to a row.
+
+  Generous vertical padding on a line of small underlined words: they are the
+  only touch targets in here and 0.56rem text is nowhere near a thumb.
+*/
+.wanted-doing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  margin: 0.5rem 0 0;
+}
+
+/*
+  Thirty-four pixels, measured on a 390-wide phone rather than guessed.
+
+  These are the only controls on a row and the words themselves are eight
+  pixels tall. At the padding the rest of the quiet words use they came out at
+  twenty-three, which is a miss waiting to happen on the one surface most of
+  this is read on.
+*/
+.wanted-doing .film-quiet {
+  padding: 0.7rem 0;
+}
+
+/* The one press an ordinary evening takes, so it is the one that is lit. */
+.wanted-start {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/*
+  Third on the line, not flung to the far edge.
+
+  It was right-aligned, which read well and put it underneath the overlay
+  scrollbar on a phone — measured. `scrollbar-gutter: stable` does nothing
+  about that, because an overlay scrollbar reserves no gutter to make stable.
+  What separates it from the two constructive words is that it is grey and a
+  full space away, which was doing the work anyway.
+*/
+.wanted-drop {
+  color: rgba(242, 239, 230, 0.34);
+  text-decoration-color: rgba(242, 239, 230, 0.16);
+}
+
+.wanted-drop:hover,
+.wanted-drop:focus-visible {
+  color: rgba(255, 200, 190, 0.8);
+  text-decoration-color: rgba(255, 200, 190, 0.4);
+}
+
+.wanted-trouble { margin-top: 0.85rem; }
+
+/* The device half of the tab, now that it is the second half. */
+.film-tab-label { margin-top: 0.2rem; }
+
 .film-tab-subs {
   margin: 1.1rem 0 0;
   padding: 0.9rem 0 0;
@@ -16187,4 +16349,78 @@ html.keyboard-up .together.full {
   top: var(--view-top, 0px);
   height: var(--view-tall, 100%);
   bottom: auto;
+}
+
+/* ===========================================================================
+   The field comes to the film, rather than the film going to the field
+
+   Three attempts at this compensated for what a keyboard does — a viewport
+   tag, then hiding the transport, then reading `visualViewport` and moving the
+   whole screen to match. Every one of them is a model of what the browser is
+   about to do, and the model has to be right on two browsers that behave
+   differently. On Safari it was not.
+
+   This removes the cause instead. **A keyboard only moves the page when the
+   focused field is underneath it.** On a 390-wide phone the composer sat at
+   about 789 of 844 — deep under any keyboard — so Safari scrolled to reveal
+   it and took the film with it. Put the field directly beneath the picture, at
+   about 310, and there is nothing to reveal: no scroll, no pan, and the film
+   does not move because nothing asked it to.
+
+   The conversation goes below the field while this is true. That is the trade,
+   and it is the one to make: you are writing, so the line you are writing is
+   the thing that has to be on screen, and the last few things said sit under
+   it in whatever room is left. It reverts the moment the keyboard goes.
+   =========================================================================== */
+
+@media (max-width: 719px) {
+  .together.full.writing-here .together-talk {
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+  }
+
+  /*
+    The conversation keeps its scroll and gives up its greed.
+
+    `.together-said` is `flex: 1 1 auto` so it fills the panel, which is right
+    when it is above the field and wrong when it is below one: it would push
+    itself down into the keyboard and take the last thing said with it. It
+    takes what is left instead.
+  */
+  .together.full.writing-here .together-said {
+    flex: 0 1 auto;
+    min-height: 0;
+    /*
+      And the newest line comes to the top, next to the field.
+
+      Reversing the panel put the conversation *below* what you are writing,
+      and a conversation that still reads oldest-to-newest downward puts the
+      thing she just said at the far bottom — under the keyboard, which is the
+      one place this whole block exists to keep things out of. Reversed, the
+      newest sits directly under your own line and it reads outward from the
+      present, which is what you want while answering.
+    */
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+  }
+}
+
+/*
+  Asleep is not away, and the corner should not say them the same way.
+
+  Away is a dark dot: she has put the phone down and might pick it up in a
+  minute. Asleep is a dark dot too, today, because both of these people are on
+  one clock — and it stops being true the moment one of them is seven hours
+  out, when the same dot means "do not wait up".
+
+  So the spark goes from dim to *closed*: a thin line rather than a point, the
+  way a light looks when it has been turned off rather than turned down. It is
+  the smallest possible mark for the difference, which is right — this is a
+  guess about a person, and a guess should whisper.
+*/
+.person.asleep .spark {
+  height: 1px;
+  align-self: center;
+  border-radius: 1px;
+  opacity: 0.55;
 }

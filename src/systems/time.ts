@@ -80,6 +80,33 @@ export function isNight(hour: number): boolean {
   return daylightAt(hour) < 0.25
 }
 
+/**
+ * Whether somebody is almost certainly asleep, from their clock alone.
+ *
+ * ---------------------------------------------------------------------------
+ * **"Away" and "asleep at four in the morning" are the same word today and
+ * will not be for much longer.**
+ *
+ * Both of these people are on one clock right now, so a dark dot beside her
+ * name means she has put her phone down and might pick it up in a minute. When
+ * one of them is seven hours away it will far more often mean she is asleep,
+ * and those call for opposite things: one is worth waiting for and the other
+ * is worth going to bed yourself.
+ *
+ * The garden already knows both time zones — it draws two clocks in the corner
+ * and puts her light in the sky at her own hour. This is the same fact, said
+ * in words, and it costs nothing that is not already being computed.
+ *
+ * Deliberately generous at both ends. It is a guess about a person, so it says
+ * *asleep* only for the hours nobody is reasonably up: past eleven, and before
+ * six. Anything else is simply away, which is honest — she may be at work, in
+ * traffic, or ignoring you, and the garden should not pretend to know which.
+ * ---------------------------------------------------------------------------
+ */
+export function likelyAsleep(hour: number): boolean {
+  return hour >= 23 || hour < 6
+}
+
 /** "morning" / "afternoon" / "evening" / "the middle of the night" */
 export function partOfDay(hour: number): string {
   if (hour < 4.5) return 'the middle of the night'

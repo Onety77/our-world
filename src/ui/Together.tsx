@@ -44,7 +44,9 @@ import { writingLine } from '@/systems/typing'
 import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { useSay } from '@/systems/useSay'
-import type { Queued, ScreenLine, UserId } from '@/data/types'
+import { likelyAsleep, localHourIn, localTimeLabel } from '@/systems/time'
+import type { Queued, ScreenLine, UserId, Wanted } from '@/data/types'
+import { newId } from '@/data/ids'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { useListening } from '@/systems/listening'
@@ -446,6 +448,46 @@ export function Together() {
    * has always been.
    */
   const [shelf, setShelf] = useState<Shelved[]>([])
+  /*
+    ---------------------------------------------------------------------------
+    **The list, which is the half of this that isn't about tonight.**
+
+    Everything else on this tab is the moment you sit down. The list is the
+    week before it: a name either of you puts down, and then — separately, at
+    whatever hour suits — each of you saying whether you have a copy yet. The
+    row carries both fingerprints, so by the time you are both in front of it
+    the question of whether your two downloads are the same download has
+    already been answered, in the afternoon, when a different file is an
+    errand rather than a ruined evening.
+
+    Lives on the world document — see `watchFilms` in `data/firebase`. What
+    crosses is a title and two short hashes; no part of either file goes
+    anywhere. See the note at the top of `systems/film`.
+    ---------------------------------------------------------------------------
+  */
+  const [wanted, setWanted] = useState<Wanted[]>([])
+  /*
+    The list as it stands *now*, not as it stood when a press began.
+
+    Marking a row reads a file first, and reading a file takes seconds — long
+    enough for her to have added something from Lagos in the meantime. Writing
+    back the array this render closed over would silently delete it. Read
+    during render, like `offsetRef`, so it is never a tick behind.
+  */
+  const wantedRef = useRef(wanted)
+  wantedRef.current = wanted
+  /** The row having a file read against it, if any. One at a time. */
+  const [marking, setMarking] = useState<string | null>(null)
+  const [listTrouble, setListTrouble] = useState('')
+  /**
+   * Marked copies this device can open again in one press.
+   *
+   * The shelf keeps handles; this is the set of their fingerprints, so a row
+   * can know whether it has a "put it on" to offer without asking the disk
+   * once per row. Empty on a browser that cannot keep handles, which is the
+   * whole of the fallback: the row still marks, it just cannot start.
+   */
+  const [atHand, setAtHand] = useState<ReadonlySet<string>>(new Set())
   /** The one on the shelf that matches what is on, if there is one. */
   const [again, setAgain] = useState<Shelved | null>(null)
   const [pickTrouble, setPickTrouble] = useState('')
@@ -473,6 +515,9 @@ export function Together() {
     () => data.watchWatching((w) => useWatching.getState().setShared(w)),
     [data],
   )
+
+  /* The list is small, read whole and written whole. See `Wanted`. */
+  useEffect(() => data.watchFilms(setWanted), [data])
 
   /*
     A video and a song are two things in one pair of ears.
@@ -1137,6 +1182,138 @@ export function Together() {
     await takeFilm(file, why, film.handle)
   }
 
+  /* --- the list ------------------------------------------------------------
+
+     Five small operations, and every one of them writes the whole list. It is
+     a dozen rows edited by two people who are almost never editing it at the
+     same second; a field-level merge would be more machinery than the thing
+     it protects. See `setFilms`.
+  */
+
+  const saveList = (next: Wanted[]) =>
+    void attempt(say('that didn’t reach {her} list'), () => data.setFilms(next))
+
+  const addWanted = (title: string) => {
+    const name = title.trim().replace(/\s+/g, ' ').slice(0, 120)
+    if (name === '') return
+    /*
+      The same film twice is a list nobody trusts, and the two of you will
+      absolutely both add it — that is what a shared list *is*. Matched
+      loosely, on purpose: "Dune Part Two" and "dune part two" are one film.
+    */
+    const list = wantedRef.current
+    if (list.some((f) => f.title.toLowerCase() === name.toLowerCase())) return
+    saveList([
+      { id: newId(), title: name, by: me, at: data.now(), warm: null, cool: null },
+      ...list,
+    ])
+  }
+
+  const forgetWanted = (id: string) =>
+    saveList(wantedRef.current.filter((f) => f.id !== id))
+
+  /** This person's fingerprint on a row, whichever side they are. */
+  const myPrintOn = (row: Wanted) => (me === 'warm' ? row.warm : row.cool)
+
+  /*
+    Marking a row is the same read as putting a film on — the file is opened,
+    checked that this browser can actually play it, and fingerprinted — and
+    then ends on the row instead of on the screen.
+
+    A file that will not play is refused rather than marked. Marking it would
+    be recording the wrong answer to the only question the list exists to ask.
+  */
+  const markWanted = async (
+    row: Wanted,
+    file: File,
+    handle?: { name: string; getFile(): Promise<File> },
+  ) => {
+    setListTrouble('')
+    setMarking(row.id)
+    try {
+      const film = await readFilm(file)
+      if (film.why !== null) {
+        setListTrouble(film.why)
+        return
+      }
+      /*
+        Shelved here too, and that is the whole reason marking is worth doing
+        twice over: having said you have it, you can also start it from the
+        row, tonight, without going back through a file dialog.
+      */
+      if (handle) {
+        await shelve({
+          print: film.print,
+          title: film.title,
+          name: film.name,
+          size: film.size,
+          handle: handle as Shelved['handle'],
+        })
+        if (canRemember()) void recent().then(setShelf)
+      }
+      saveList(wantedRef.current.map((f) => {
+        if (f.id !== row.id) return f
+        return me === 'warm' ? { ...f, warm: film.print } : { ...f, cool: film.print }
+      }))
+    } catch {
+      setListTrouble('That file could not be read from here.')
+    } finally {
+      setMarking(null)
+    }
+  }
+
+  /** The dialog that hands back a handle, aimed at one row. */
+  const markAndKeep = async (row: Wanted) => {
+    const got = await askForFilm()
+    if (!got) return
+    await markWanted(row, got.file, got.handle)
+  }
+
+  /** A film off the list, which is one press when this device still has it. */
+  const putOnWanted = async (row: Wanted) => {
+    const print = myPrintOn(row)
+    if (print === null) return
+    setListTrouble('')
+    setMarking(row.id)
+    try {
+      const on = await shelfFor(print)
+      const file = on ? await fileFrom(on) : null
+      if (!on || !file) {
+        setListTrouble(
+          `${row.title} isn’t reachable from this device any more — it may have been moved or renamed. Say you have it again below.`,
+        )
+        setAtHand((was) => {
+          const next = new Set(was)
+          next.delete(print)
+          return next
+        })
+        return
+      }
+      await takeFilm(file, 'start', on.handle)
+    } finally {
+      setMarking(null)
+    }
+  }
+
+  /*
+    Which of the marked copies are still openable in one press.
+
+    Read once when the screen opens and again whenever the list changes, which
+    is the only time the answer can have moved. Forty is far past the number
+    of rows this will ever hold; it costs one read of a small store.
+  */
+  useEffect(() => {
+    if (!open || !canRemember()) {
+      setAtHand(new Set())
+      return
+    }
+    let live = true
+    void recent(40).then((all) => {
+      if (live) setAtHand(new Set(all.map((f) => f.print)))
+    })
+    return () => { live = false }
+  }, [open, wanted])
+
   /** True when this copy is a different encode from the one the anchor counts. */
   const otherCut = mine !== null && filmPrint !== null && mine.print !== filmPrint
   /*
@@ -1731,7 +1908,11 @@ export function Together() {
                 <i className={`together-presence warm${presence[me]?.online ? ' online' : ''}`} />
                 you
                 <i className={`together-presence cool${presence[them.id]?.online ? ' online' : ''}`} />
-                {presence[them.id]?.online ? `${them.name} is here` : `${them.name} is away`}
+                {presence[them.id]?.online
+                  ? `${them.name} is here`
+                  : likelyAsleep(localHourIn(them.timeZone))
+                    ? `${them.name} is asleep · ${localTimeLabel(them.timeZone)} there`
+                    : `${them.name} is away`}
               </small>
             </div>
             {live ? (
@@ -2116,6 +2297,18 @@ export function Together() {
             <Talk session={shared.session} theirName={them.name} onWriting={setWriting} />
           ) : tab === 'film' ? (
             <OurFilm
+              wanted={wanted}
+              me={me}
+              theirName={them.name}
+              marking={marking}
+              listTrouble={listTrouble}
+              atHand={atHand}
+              onAddWanted={addWanted}
+              onMarkWanted={(row, file) => void markWanted(row, file)}
+              onMarkKeeping={canRemember() ? (row) => void markAndKeep(row) : undefined}
+              onPutOnWanted={(row) => void putOnWanted(row)}
+              onForgetWanted={forgetWanted}
+              onTyping={setHunting}
               mine={mine}
               subs={subs}
               reading={reading}
@@ -3276,7 +3469,215 @@ function ScreenChat({
  * *choosing* stay on the transport where they can be reached mid-film.
  * ---------------------------------------------------------------------------
  */
+/**
+ * The films the two of you mean to watch, and whether the copies match.
+ *
+ * ---------------------------------------------------------------------------
+ * **The half the night screen used to leave to WhatsApp.**
+ *
+ * Playing a film off the disk is in step to the frame, and getting to the
+ * point where you both have one was still entirely manual: one says a name,
+ * the other goes and finds it, and neither knows whether it worked until they
+ * are both sitting down. Two different rips is a thing you discover at nine in
+ * the evening, which is the worst possible hour to discover it.
+ *
+ * So a row carries both fingerprints, and each of you puts yours on it by
+ * choosing your own copy against it — which costs nothing you were not going
+ * to do anyway, and can be done at any hour, alone. From then on the row
+ * knows, in advance, whether your two files are the same file.
+ *
+ * Having said you have it, the row can also *start* it, on a browser that
+ * keeps handles: marking already put the file on the shelf. That is the
+ * fastest path on this tab, and the one an ordinary evening takes — a name
+ * you both agreed on last week, one press.
+ * ---------------------------------------------------------------------------
+ */
+function FilmList({
+  films,
+  me,
+  theirName,
+  marking,
+  trouble,
+  atHand,
+  onAdd,
+  onMark,
+  onMarkKeeping,
+  onPutOn,
+  onForget,
+  onTyping,
+}: {
+  films: Wanted[]
+  me: UserId
+  theirName: string
+  marking: string | null
+  trouble: string
+  atHand: ReadonlySet<string>
+  onAdd(title: string): void
+  onMark(row: Wanted, file: File): void
+  onMarkKeeping?: (row: Wanted) => void
+  onPutOn(row: Wanted): void
+  onForget(id: string): void
+  onTyping(typing: boolean): void
+}) {
+  const [adding, setAdding] = useState("")
+
+  /*
+    A field that is unmounted never blurs.
+
+    Switching tabs with the keyboard still in this box would otherwise leave
+    the night screen believing somebody was looking, for ever, and the picture
+    hidden on a tab that has no field on it at all. Exactly the trap the search
+    field carries a note about; the same cure.
+  */
+  useEffect(() => () => onTyping(false), [onTyping])
+
+  const put = () => {
+    onAdd(adding)
+    setAdding("")
+  }
+
+  return (
+    <div className="wanted">
+      <p className="together-list-label">the list</p>
+      <p className="film-way-note">
+        What the two of you mean to watch. Say when you have a copy, and the row
+        will tell you both — before the evening — whether they are the same file.
+      </p>
+
+      <div className="together-hunt wanted-add">
+        <input
+          type="text"
+          className="together-field"
+          value={adding}
+          placeholder="a film, by name"
+          maxLength={120}
+          enterKeyHint="done"
+          aria-label="add a film to the list"
+          onFocus={() => onTyping(true)}
+          onBlur={() => onTyping(false)}
+          onChange={(event) => setAdding(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            /*
+              Enter puts it down, and nothing here travels further.
+
+              The night screen reads keys off the window for play, pause and
+              seeking. None of that belongs to somebody typing a title, and a
+              space in the middle of a film name must never be a pause.
+            */
+            event.stopPropagation()
+            if (event.key === "Enter") {
+              event.preventDefault()
+              put()
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="film-quiet"
+          disabled={adding.trim() === ""}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={put}
+        >
+          add
+        </button>
+      </div>
+
+      {films.length === 0 ? (
+        <p className="wanted-none">
+          Nothing on it yet. Either of you can put a name down, and it is there
+          for the other one whenever they next look.
+        </p>
+      ) : (
+        <ul className="wanted-rows">
+          {films.map((row) => {
+            const yours = me === "warm" ? row.warm : row.cool
+            const hers = me === "warm" ? row.cool : row.warm
+            const both = yours !== null && hers !== null
+            const same = both && yours === hers
+            const busy = marking === row.id
+            return (
+              <li key={row.id} className="wanted-row">
+                <p className="wanted-title">{row.title}</p>
+
+                <p className="wanted-copies">
+                  <span className={yours !== null ? "wanted-has yes" : "wanted-has"}>
+                    {yours !== null ? "you have it" : "not you yet"}
+                  </span>
+                  <span className={hers !== null ? "wanted-has yes" : "wanted-has"}>
+                    {hers !== null ? theirName + " has it" : "not " + theirName + " yet"}
+                  </span>
+                  {both && (
+                    <span className={same ? "wanted-match same" : "wanted-match apart"}>
+                      {same ? "the same file" : "different copies"}
+                    </span>
+                  )}
+                </p>
+
+                {/*
+                  Two different rips is a heads-up, not a failure. They still
+                  play in step — the gap is set once with the nudge under the
+                  film — and saying so here, days early, is the whole difference
+                  between an errand and a ruined evening.
+                */}
+                {both && !same && (
+                  <p className="wanted-note">
+                    Different downloads. They still play together; you set the gap
+                    once with the nudge under the film.
+                  </p>
+                )}
+
+                <p className="wanted-doing">
+                  {yours !== null && atHand.has(yours) && (
+                    <button
+                      type="button"
+                      className="film-quiet wanted-start"
+                      disabled={busy}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() => onPutOn(row)}
+                    >
+                      {busy ? "opening…" : "put it on"}
+                    </button>
+                  )}
+                  <FilmPick
+                    quiet
+                    busy={busy}
+                    label={yours !== null ? "a different copy" : "i have this one"}
+                    onFile={(file) => onMark(row, file)}
+                    keeping={onMarkKeeping ? () => onMarkKeeping(row) : undefined}
+                  />
+                  <button
+                    type="button"
+                    className="film-quiet wanted-drop"
+                    disabled={busy}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => onForget(row.id)}
+                  >
+                    take off the list
+                  </button>
+                </p>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {trouble !== "" && <p className="film-trouble wanted-trouble">{trouble}</p>}
+    </div>
+  )
+}
 function OurFilm({
+  wanted,
+  me,
+  theirName,
+  marking,
+  listTrouble,
+  atHand,
+  onAddWanted,
+  onMarkWanted,
+  onMarkKeeping,
+  onPutOnWanted,
+  onForgetWanted,
+  onTyping,
   mine,
   subs,
   reading,
@@ -3291,6 +3692,22 @@ function OurFilm({
   onSubtitles,
   onDropSubtitles,
 }: {
+  wanted: Wanted[]
+  me: UserId
+  theirName: string
+  /** The row being read against a file, if any. */
+  marking: string | null
+  listTrouble: string
+  /** Fingerprints this device can reopen without a dialog. */
+  atHand: ReadonlySet<string>
+  onAddWanted(title: string): void
+  onMarkWanted(row: Wanted, file: File): void
+  /** The handle-keeping dialog, on a browser that has one. */
+  onMarkKeeping?: (row: Wanted) => void
+  onPutOnWanted(row: Wanted): void
+  onForgetWanted(id: string): void
+  /** Whether somebody has the keyboard in here. See `searching`. */
+  onTyping(typing: boolean): void
   mine: Film | null
   subs: Subtitles | null
   reading: boolean
@@ -3307,6 +3724,31 @@ function OurFilm({
 }) {
   return (
     <div className="together-queue film-tab">
+      {/*
+        The list comes first, and that is a claim about what this tab is for.
+
+        Below it is one device's business — which file on this disk, which
+        subtitles, which shelf. The list is the only part of the night screen
+        that is *both* of you, and it is the part that answers the question you
+        actually arrive with, which is not "where is the file" but "what are we
+        watching, and have we both got it".
+      */}
+      <FilmList
+        films={wanted}
+        me={me}
+        theirName={theirName}
+        marking={marking}
+        trouble={listTrouble}
+        atHand={atHand}
+        onAdd={onAddWanted}
+        onMark={onMarkWanted}
+        onMarkKeeping={onMarkKeeping}
+        onPutOn={onPutOnWanted}
+        onForget={onForgetWanted}
+        onTyping={onTyping}
+      />
+
+      <p className="together-list-label film-tab-label">from this device</p>
       <p className="film-way-note">
         Something you both already have. It stays on your machine — nothing is
         uploaded, nothing is sent, and only the clock is shared. An .mp4 with

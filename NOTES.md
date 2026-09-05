@@ -40,6 +40,67 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 5 Sep · Claude · The seven-timezone batch
+
+> *"dont do watching apart but together thing, dont do a date to look
+> forward to, but do thee rest of the things you suggested"*
+
+Four things, all of them following from the same fact: one of you is moving
+about seven hours away, and almost nothing in the garden assumed that yet.
+
+**Push for everything, not just the Stars.** `functions/index.js` had exactly
+one trigger. It now has five — a message, a thought under the Tree, a picture
+in the Glasshouse, a move in a game, an answer to the question — over one
+shared `tell()` rather than five copies of the delivery. The thing worth
+knowing: **the tag is what stops them erasing each other.** The worker
+collapses notifications sharing a tag, which is right within a kind (four
+moves is one "your turn") and catastrophic across them — an unread letter
+swallowed by a game. Each kind carries its own now.
+
+What is deliberately *not* sent: a letter’s text and an answer to the Tree’s
+question. A letter is written to be found where it was left; a lock screen
+spends it. And the question’s whole ritual is that neither of you sees the
+other’s answer first — a notification carrying it would break the game it
+belongs to. A memory’s caption does go, because a caption is an invitation
+to go and look rather than a substitute for looking.
+
+**Asleep is not away.** `likelyAsleep(hour)` in `systems/time`, off the clock
+the corner already holds. Today both of you are on WAT and it changes nothing;
+at seven hours apart, *away* and *asleep at 4am* are completely different
+facts and only one of them means "don’t wait up".
+
+**The shared film list** — `Wanted` in `data/types`, `FilmList` in
+`ui/Together`, on the world document beside the shared screen. A row is a
+title and two fingerprints; each of you marks it by choosing your own copy,
+which costs nothing you were not going to do anyway, and the row then knows
+whether your two downloads are the same download. **The point is the hour it
+tells you.** Two different rips still play in step — that is what the nudge is
+for — but finding out at three in the afternoon is an errand and finding out
+at nine in the evening is a ruined night. That gap is the entire feature.
+
+Marking also shelves the handle, so a marked row on a Chromium browser is a
+one-press start — the fastest path on that tab, and the one an ordinary
+evening takes.
+
+**Two traps this left in `screen-check.mjs`,** both the same shape as ones
+that have already cost a run here:
+
+- `give()` found `.film-tab .film-input` — the *first* one. The list renders a
+  picker per row, above the main one, so as soon as a row exists the harness
+  would have been handing files to the wrong input while every assertion still
+  passed for the wrong reason. Now it prefers the direct child.
+- `.film-trouble` is worn by the list’s message as well now. The unscoped
+  polls for it are narrowed to `:not(.wanted-trouble)`. This is the third time
+  a shared class in this file has made a green mean nothing.
+
+**And `PLAN.md`’s debt list was lying.** It still asked for the deletion of
+`Water.tsx`, `Bottles.tsx`, `Lamps.tsx`, `SoftOrb.tsx` and `controls.ts`, all
+five of which are gone. By the plan’s own rule — *an unticked box is an
+instruction* — that sends the next reader hunting for files that do not exist.
+Struck through rather than deleted, so it reads as done rather than as never
+having been said.
+
+---
 ## 4 Sep · Claude · Safari's keyboard, and up rather than across
 
 > *"the last fix you said you did about the movie screen staying fixed in view

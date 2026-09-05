@@ -16,7 +16,7 @@ import { LIGHT_COLORS } from '@/systems/palette'
 import { formatDistance, greatCircleKm } from '@/systems/geo'
 import { potTotal } from '@/data/local'
 import { format, progressToward } from '@/data/money'
-import { localTimeLabel, partOfDay } from '@/systems/time'
+import { likelyAsleep, localHourIn, localTimeLabel, partOfDay } from '@/systems/time'
 import { useProfileSheet } from '@/systems/profileSheet'
 import { useTakenOver } from '@/systems/attention'
 import { useSections } from '@/systems/sections'
@@ -59,6 +59,13 @@ export function Overlay() {
   const person = (id: (typeof USER_IDS)[number]) => {
     const p = profiles[id]
     const online = presence[id]?.online
+    /*
+      Away, or asleep — and the difference is the whole reason for this line.
+
+      See `likelyAsleep`. One is worth waiting up for and the other is worth
+      going to bed yourself, and today they are the same dark dot.
+    */
+    const asleep = !online && likelyAsleep(localHourIn(p.timeZone, tick))
     const inside = (
       <>
         <span className="clock">
@@ -84,13 +91,20 @@ export function Overlay() {
           className={online ? 'person mine' : 'person mine away'}
           onClick={showProfile}
           title="where you are"
-          aria-label={`${p.name}, you, ${online ? 'online' : 'away'}`}
+          aria-label={`${p.name}, you, ${online ? 'online' : asleep ? 'asleep' : 'away'}`}
         >
           {inside}
         </button>
       )
     }
-    return <div className={online ? 'person' : 'person away'}>{inside}</div>
+    return (
+      <div
+        className={online ? 'person' : asleep ? 'person away asleep' : 'person away'}
+        title={asleep ? `${p.name} is probably asleep` : undefined}
+      >
+        {inside}
+      </div>
+    )
   }
 
   /*
