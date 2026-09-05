@@ -622,6 +622,75 @@ export interface Wanted {
 }
 
 /**
+ * One film the two of you have actually watched, and what each of you made of
+ * it.
+ *
+ * ---------------------------------------------------------------------------
+ * **The other end of the night screen.** `Wanted` is what is coming; this is
+ * what happened. Over years it is the only record either of you will have of
+ * the evenings you spent in front of the same thing seven timezones apart, so
+ * it is kept for good and it is never trimmed — unlike the wanted list, which
+ * is a short standing list, and unlike `ScreenTalk`, which is meant to be
+ * thrown away.
+ *
+ * **The scores are sealed until both of you have given one, and that is the
+ * whole design of this thing rather than a flourish.** A number you can see
+ * before you choose your own is a number you cannot un-see: she says nine and
+ * the honest six you were about to give becomes a seven, every time, without
+ * anybody deciding to be dishonest. So the two of you commit blind and the
+ * film opens when the second rating lands — exactly the shape the question
+ * vine uses, and for exactly the same reason.
+ *
+ * That seal is enforced by the rules, not by this type: her score lives in a
+ * document this device may not read yet — see `firestore.rules`. `scores` is
+ * therefore *what may be seen*, not what exists. A missing entry means either
+ * "not rated" or "not yours to see yet", and `rated` is what tells the two
+ * apart. Nothing above this ever has to guess.
+ *
+ * A **note** is not sealed, deliberately. It is not a judgement being made in
+ * competition with hers — it is the line you would say walking out of the
+ * cinema, and half its worth is that she can find it there tomorrow.
+ * ---------------------------------------------------------------------------
+ */
+export interface Watched {
+  id: string
+  /** Whatever the two of you call it. Never parsed. */
+  title: string
+  /** Who put it in the archive. */
+  by: UserId
+  /** When it went in, epoch ms from the server clock. The archive's order. */
+  at: number
+  /**
+   * Whether each of you has sealed a score. Public, on the shared row.
+   *
+   * This is the *lock*, and it has to be readable by both of you while the
+   * scores themselves are not — which is why it is a pair of flags here and
+   * not something derived from `scores`. It is what lets this device say
+   * "waiting for her" rather than "she has not rated it, probably".
+   */
+  rated: Record<UserId, boolean>
+  /** Each person's own line about it. Open from the moment it is written. */
+  notes: Record<UserId, string>
+  /**
+   * The scores this device is allowed to see, in half-stars: 1 to 10.
+   *
+   * Halves rather than whole stars because the difference between a seven and
+   * an eight is a real difference and five boxes cannot hold it — and
+   * *integers* rather than 0.5-steps because a whole number is a thing the
+   * rules can check exactly, and a float is not.
+   */
+  scores: Partial<Record<UserId, Score>>
+}
+
+/** One person's score, and when they gave it. */
+export interface Score {
+  by: UserId
+  /** Half-stars: 1 to 10. See `Watched.scores`. */
+  score: number
+  at: number
+}
+
+/**
  * What was said in front of the screen, and only while it is on.
  *
  * ---------------------------------------------------------------------------
@@ -1377,6 +1446,44 @@ export interface DataLayer {
    * merge nobody asked for.
    */
   setFilms(films: Wanted[]): Promise<void>
+
+  // ---- the archive ---------------------------------------------------------
+
+  /**
+   * Every film the two of you have watched, newest first. See `Watched`.
+   *
+   * A collection of its own rather than a field on the world document, and
+   * that is the one place this parts company with the wanted list beside it.
+   * The wanted list is a dozen rows that are taken off as they are used; this
+   * one only ever grows, for as long as the two of you keep watching things.
+   * A capped array in a document read on every change of the shared screen is
+   * the wrong home for something that is meant to last.
+   *
+   * Fires immediately with what is known. Rows arrive with `rated` always
+   * filled in and `scores` holding only what this device may see — see the
+   * note on `Watched`.
+   */
+  watchWatched(listener: (films: Watched[]) => void): () => void
+
+  /** Put a film in the archive. Stamps `by` and `at` itself. */
+  addWatched(title: string): Promise<void>
+
+  /**
+   * Seal my score, in half-stars: 1 to 10.
+   *
+   * Mine alone — the seam has no way to say "score this on her behalf" and the
+   * rules would refuse it if it had. It may be changed for as long as it is
+   * still secret, which is to say until she has given hers; after that it is
+   * fixed, because a score changed in the light of hers is not the thing this
+   * was built to keep.
+   */
+  rateWatched(id: string, score: number): Promise<void>
+
+  /** Write, rewrite or clear my own line about it. Never sealed. */
+  noteWatched(id: string, note: string): Promise<void>
+
+  /** Take one out of the archive, scores and all. Either of you may. */
+  forgetWatched(id: string): Promise<void>
 
   /**
    * Begin a sitting: a new id, and nothing said yet.

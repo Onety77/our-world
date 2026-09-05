@@ -45,8 +45,23 @@ import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { useSay } from '@/systems/useSay'
 import { likelyAsleep, localHourIn, localTimeLabel } from '@/systems/time'
-import type { Queued, ScreenLine, UserId, Wanted } from '@/data/types'
+import type { Queued, ScreenLine, UserId, Wanted, Watched } from '@/data/types'
 import { newId } from '@/data/ids'
+import {
+  HIGHEST,
+  LOWEST,
+  NOTE_LIMIT,
+  STARS,
+  alreadyIn,
+  averageOf,
+  byYear,
+  other,
+  scoreAt,
+  standing,
+  starLabel,
+  starsOf,
+  summary,
+} from '@/systems/archive'
 import { ambience } from '@/systems/ambience'
 import { attempt } from '@/systems/trouble'
 import { useListening } from '@/systems/listening'
@@ -56,10 +71,13 @@ import {
   beginnings,
   clock,
   correction,
+  DOUBLE_TAP,
+  spaceIsTheirs,
   positionOf,
   queueItem,
   useWatching,
   videoIdIn,
+  type FieldNow,
 } from '@/systems/watching'
 import {
   ENDED,
@@ -210,6 +228,23 @@ function savedCorner(): Corner {
 const cornerClass = (corner: Corner) => `at-${corner.replace(' ', '-')}`
 
 /**
+ * An element as `spaceIsTheirs` needs to see it.
+ *
+ * The whole of the DOM half of that rule, kept to four lines so the rule
+ * itself can live in `systems/watching` and be checked without a document.
+ * A contenteditable has no `value`, so its text is what is in it.
+ */
+function fieldNow(el: HTMLElement): FieldNow {
+  const input = el as HTMLInputElement
+  return {
+    tag: el.tagName,
+    editable: el.isContentEditable,
+    type: (input.type ?? '').toLowerCase(),
+    value: el.isContentEditable ? (el.textContent ?? '') : (input.value ?? ''),
+  }
+}
+
+/**
  * How much dark the words sit on, over the picture.
  *
  * ---------------------------------------------------------------------------
@@ -340,15 +375,14 @@ export function Together() {
   const immersiveTimer = useRef<number | null>(null)
   const lastImmersiveMove = useRef(0)
   /**
-   * What kind of thing last pressed the film: `'mouse'`, `'touch'`, `'pen'`.
+   * When the picture was last pressed.
    *
-   * Asked of the event rather than of the device, because the two are not the
-   * same question. `matchMedia('(pointer: fine)')` describes what is plugged
-   * in; this describes what was actually used, which is the thing the click
-   * needs to know — and a laptop with a touchscreen answers the first question
-   * "yes" while somebody is using their finger.
+   * One press over a full-screen film shows the controls and two pause it —
+   * see the long note on `together-immersive-wake`. This is the whole of the
+   * machinery for that, because the first press does not have to wait to find
+   * out whether a second is coming: it shows the controls either way.
    */
-  const lastImmersivePress = useRef<string>('mouse')
+  const lastImmersiveTap = useRef(0)
   const [captions, setCaptions] = useState(savedCaptionChoice)
   const captionsRef = useRef(captions)
 
@@ -409,6 +443,28 @@ export function Together() {
   const hunt = useWatching((s) => s.hunt)
   const searching = hunting || hunt.trim() !== ''
 
+  /**
+   * True while the archive is the whole screen.
+   *
+   * ---------------------------------------------------------------------------
+   * **The only tab that does not want the picture.** Everything else beside the
+   * screen is about the rectangle above it — what is on next, which file plays
+   * it, what is being said while it runs. The archive is about evenings that
+   * are over, and on a phone that rectangle is the difference between reading
+   * three films and reading eight.
+   *
+   * So the screen goes and the panel takes the room. It *goes* rather than
+   * unmounts: the iframe is never re-parented and a film that is playing keeps
+   * playing, out of sight and still in your ears, exactly where it was when
+   * you come back to it. See `.together.full.archive`, and the note at the top
+   * of this file about why the layout is CSS rather than React.
+   *
+   * Not while immersed, because immersion has no tabs to have chosen this one
+   * with.
+   * ---------------------------------------------------------------------------
+   */
+  const archive = open && !immersive && tab === 'watched'
+
   /* A folded screen has nobody searching in it, and neither has a dark one. */
   useEffect(() => {
     if (!open) setHunting(false)
@@ -449,6 +505,31 @@ export function Together() {
   */
   const wantedRef = useRef(wanted)
   wantedRef.current = wanted
+  /*
+    The archive: every film the two of you have watched, and what you made of
+    them. See `systems/archive` for the seal, and `Watched` for the shape.
+
+    A collection of its own rather than a field beside the wanted list, because
+    unlike that list this one is never taken off — see `watchWatched`.
+  */
+  const [seen, setSeen] = useState<Watched[]>([])
+  /*
+    The archive as it stands now, not as it stood when a press began. Same
+    argument as `wantedRef`, and read during render for the same reason.
+  */
+  const seenRef = useRef(seen)
+  seenRef.current = seen
+  const [seenTrouble, setSeenTrouble] = useState('')
+  /*
+    How many films are waiting on a rating from *you*.
+
+    In the row of tabs as well as on the tab itself, so the one thing the
+    archive ever asks for is visible from a tab you are not on. It gives away
+    nothing: it counts rows she has rated and you have not, which is exactly
+    what the seal already tells you, and says nothing at all about what she
+    gave them.
+  */
+  const owed = seen.filter((row) => standing(row, me) === 'hidden').length
   /** The row having a file read against it, if any. One at a time. */
   const [marking, setMarking] = useState<string | null>(null)
   const [listTrouble, setListTrouble] = useState('')
@@ -485,6 +566,15 @@ export function Together() {
   useEffect(() => data.watchFilms(setWanted), [data])
 
   /*
+    And the archive, which is neither small nor written whole.
+
+    Subscribed here rather than on the tab that shows it, and deliberately: the
+    row of tabs says how many films are in it, and a count that only appears
+    once you have already gone and looked is a count that has told you nothing.
+  */
+  useEffect(() => data.watchWatched(setSeen), [data])
+
+  /*
     A video and a song are two things in one pair of ears.
 
     The corner player is stopped rather than ducked, exactly as a road stops it
@@ -502,9 +592,18 @@ export function Together() {
     Opening a dark screen on the conversation is opening it on the one thing
     that cannot start a film. Only on the way *in* — once something is on, the
     tab is yours and switching to talk should stick.
+
+    Only from `talk`, and that is the correction the archive forced. This used
+    to move you off whatever tab you were on, which was harmless while every
+    other tab could start a film — and then one arrived that deliberately
+    cannot. Ending a film while reading the archive would have thrown you back
+    to the search, which is a screen changing its mind about what you were
+    doing.
   */
   useEffect(() => {
-    if (open && !live) useWatching.getState().setTab('queue')
+    if (open && !live && useWatching.getState().tab === 'talk') {
+      useWatching.getState().setTab('queue')
+    }
   }, [open, live])
 
   useEffect(() => {
@@ -1177,6 +1276,82 @@ export function Together() {
   const forgetWanted = (id: string) =>
     saveList(wantedRef.current.filter((f) => f.id !== id))
 
+  /* --- the archive ---------------------------------------------------------
+
+     Four one-line hand-offs, and every one of them is a single document write
+     rather than a rewrite of a list. That is the whole difference between this
+     and the wanted list above it: the archive is long, it is only ever added
+     to, and two people editing different rows of it must never be able to
+     overwrite each other. See `watchWatched` in `data/firebase`.
+  */
+
+  /*
+    The same film twice is an archive nobody trusts, and the two of you will
+    absolutely both put it in — that is what a shared list *is*. Matched
+    loosely, exactly as the wanted list matches: "Dune Part Two" and "dune
+    part two" are one evening.
+
+    Refused here rather than in the data layer, because here is the only place
+    that holds the list: the real layer writes one document and never reads the
+    collection, which is the whole reason the archive can grow for years.
+  */
+  const addSeen = (title: string): boolean => {
+    const already = alreadyIn(seenRef.current, title)
+    if (already !== null) {
+      /*
+        Refused, and the name stays in the field. Clearing it would be taking
+        away the only thing on screen you might want to correct — the film that
+        is already here may be the same one spelt differently, and the answer
+        to that is usually to look rather than to type it again.
+      */
+      setSeenTrouble(`${already.title} is already in here.`)
+      return false
+    }
+    setSeenTrouble('')
+    void attempt(say('that didn’t reach the archive'), () => data.addWatched(title))
+    return true
+  }
+
+  const rateSeen = (id: string, score: number) =>
+    void attempt(say('that rating didn’t save'), async () => {
+      setSeenTrouble('')
+      await data.rateWatched(id, score)
+    })
+
+  const noteSeen = (id: string, note: string) =>
+    void attempt(say('that note didn’t save'), async () => {
+      setSeenTrouble('')
+      await data.noteWatched(id, note)
+    })
+
+  const forgetSeen = (id: string) =>
+    void attempt(say('that didn’t come out of the archive'), async () => {
+      setSeenTrouble('')
+      await data.forgetWatched(id)
+    })
+
+  /*
+    A film moving from what you mean to watch to what you have watched.
+
+    The one journey this pair of lists actually makes, and it was two errands
+    before: take it off one, type the same name into the other, hope you spelt
+    it the same way. It is one press, and it is on the wanted row rather than
+    on the archive because that is the row you are looking at when the film
+    ends.
+
+    The archive first, and the wanted list only if that landed. The other order
+    loses the film entirely on a phone that drops out between the two writes.
+  */
+  const nowSeen = (row: Wanted) =>
+    void attempt(say('that didn’t reach the archive'), async () => {
+      setSeenTrouble('')
+      // Already in the archive, so this is only taking it off the other list.
+      if (alreadyIn(seenRef.current, row.title) === null) {
+        await data.addWatched(row.title)
+      }
+      await data.setFilms(wantedRef.current.filter((f) => f.id !== row.id))
+    })
+
   /** This person's fingerprint on a row, whichever side they are. */
   const myPrintOn = (row: Wanted) => (me === 'warm' ? row.warm : row.cool)
 
@@ -1320,18 +1495,38 @@ export function Together() {
 
   /*
     ---------------------------------------------------------------------------
-    **Space is play and pause, unless somebody is writing.**
+    **Space is play and pause, unless somebody is actually writing.**
 
     One key, two jobs, and they never overlap because they are never wanted at
     the same moment: in front of a film a space is the oldest gesture there is,
     and inside a sentence it is a space. What separates them is simply where
     the keyboard is pointing.
 
-    Three things it stands aside for, and the third is the one worth writing
+    **Where the keyboard is pointing turned out to be the wrong question, and
+    that is this note's correction.** It stood aside for any field that had the
+    focus — which sounds right and is wrong in the one arrangement this screen
+    is built around: the chat sits open beside the film all evening, so the
+    composer holds the keyboard almost the whole time you are watching, and
+    every space you pressed went into an empty box instead of stopping the
+    film. The two jobs did not overlap; one of them had simply taken the key
+    and was not using it.
+
+    So the test is not *is there a field* but **is there anything in it**. An
+    empty box is somebody watching a film with a cursor in a box; a box with a
+    word in it is somebody writing, and a space in the middle of a sentence
+    must always be a space. Which means the moment you type a single letter
+    the key is hers again, and the moment you send the line it comes back —
+    with no mode to remember and nothing to press first.
+
+    Four things it stands aside for, and the last is the one worth writing
     down:
 
-    - **A field.** Anything being typed into keeps its own spaces, ours and
-      anybody else's, including the film chat's composer.
+    - **A field with something in it.** Anything being typed into keeps its own
+      spaces, ours and anybody else's — but only while something has been
+      typed. See `writingIn`.
+    - **A field that is not for words.** A checkbox, a radio, a select: a space
+      on those is what operates them, and they are empty by nature rather than
+      by not having been written in yet.
     - **A key somebody else has already handled**, which is what
       `defaultPrevented` means, and a modifier held down, which is a shortcut
       rather than a gesture.
@@ -1412,7 +1607,22 @@ export function Together() {
       if (event.defaultPrevented) return
       if (event.metaKey || event.altKey) return
       const at = event.target as HTMLElement | null
-      if (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return
+      const space = event.key === ' ' || event.code === 'Space'
+      /*
+        A space is the one key an empty field does not get to keep.
+
+        Everything else here still stands aside for any field at all: the
+        arrows move a caret, and taking them would break typing outright. It is
+        only the space that is claimed back, and only from a word-shaped field
+        with no words in it — see the long note above, and `spaceIsTheirs`.
+      */
+      if (at && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) {
+        if (!space || event.ctrlKey || spaceIsTheirs(fieldNow(at))) return
+        // Held, so the empty field does not also receive the space.
+        event.preventDefault()
+        playPauseRef.current()
+        return
+      }
       /*
         A focused control keeps its own keys — arrows move a slider, space
         presses a button — with the one exception of the clear sheet over the
@@ -1428,7 +1638,6 @@ export function Together() {
         return
       }
 
-      const space = event.key === ' ' || event.code === 'Space'
       if (space && !event.ctrlKey) {
         // Held, so the page does not also scroll and the sheet is not pressed.
         event.preventDefault()
@@ -1483,16 +1692,6 @@ export function Together() {
       setImmersiveControls(false)
       immersiveTimer.current = null
     }, 3200)
-  }
-
-  const toggleImmersiveControls = () => {
-    if (!immersiveControls) {
-      revealImmersiveControls()
-      return
-    }
-    if (!shared.playing) return
-    clearImmersiveTimer()
-    setImmersiveControls(false)
   }
 
   /*
@@ -1850,7 +2049,7 @@ export function Together() {
         in, belong here rather than on the picture.
       */
       ref={paneRef}
-      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${searching ? ' searching' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
+      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${searching ? ' searching' : ''}${archive ? ' archive' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
@@ -1944,26 +2143,74 @@ export function Together() {
               answers.
               ---------------------------------------------------------------
             */
-            onPointerDown={(event) => {
-              lastImmersivePress.current = event.pointerType
-            }}
             onClick={(event) => {
               /*
-                A mouse pauses; a finger and the keyboard reveal the controls.
+                ---------------------------------------------------------------
+                **One tap shows the controls. Two pause it.**
 
-                `detail` is 0 only when the activation came from a key, and a
-                key has no cursor to have aimed with — pausing on it would be
-                acting on a press nobody made at anything. It gets the safe
-                half, which is also the half the transport does not already
-                offer from the keyboard.
+                This used to be split by pointer type — a mouse paused on a
+                single click, a finger revealed the controls — on the reasoning
+                that a mouse has movement to reveal things with and a finger has
+                not, so each should get the gesture it could spare. Both halves
+                of that were true and the conclusion was still wrong, because it
+                meant the same tap did two different things depending on what you
+                happened to be touching the screen with, and neither of you can
+                see which one the other is holding.
+
+                So both get the same rule, and it is the one every player on a
+                phone already uses: one press is *look at this*, two are *stop*.
+                Pausing reaches across to her screen; showing your own controls
+                does not. The gesture that costs nothing is the easy one to make
+                by accident, which is the right way round — a film paused in
+                Kano by a sleeve brushing a phone in Shanghai is the failure
+                this ordering prevents.
+
+                **And the first press does not wait to find out.** The obvious
+                way to build this is to hold the reveal for the length of the
+                double-press window in case a second one is coming — and that
+                buys nothing and costs a third of a second of nothing happening
+                on every single press. It is unnecessary because the two
+                gestures do not conflict: showing the controls and then pausing
+                is the correct outcome of a double press anyway, so the first
+                press can simply do its half immediately and the second adds
+                the pause on top.
+
+                Which is why this *shows* rather than toggles. A press that
+                hid them would be a press the second one could not build on —
+                it would have to be taken back — and hiding them early is a job
+                nothing needs: they take themselves away three seconds after
+                you stop touching anything, and while the film is paused they
+                are the only thing on the screen worth having.
+
+                A key gets the same reveal: `detail` is 0 only for a keyboard
+                activation, which has no cursor to have aimed with, and the
+                transport already carries play and pause for the keyboard.
+                ---------------------------------------------------------------
               */
-              const byMouse = event.detail !== 0 && lastImmersivePress.current === 'mouse'
-              if (!byMouse) {
-                toggleImmersiveControls()
-                return
-              }
-              playPause()
               revealImmersiveControls()
+              if (event.detail === 0) return
+              /*
+                The event's own time, not the clock as this handler reads it.
+
+                `timeStamp` is when the browser made the event; `performance.now()`
+                here is when React got round to running us. They are the same
+                number on an idle machine and a long way apart on a busy one —
+                and a film is exactly a busy one: decoding, buffering, a
+                subtitle track being redrawn. Measured the second way, a
+                perfectly good double press on a phone that is working hard
+                becomes two single ones, which is the failure this control can
+                least afford, because the thing it fails to do is stop.
+
+                Found by measuring: in a headless browser doing software
+                rendering, two presses sent back to back were arriving at this
+                handler up to a second apart.
+              */
+              const now = event.timeStamp || performance.now()
+              const again = now - lastImmersiveTap.current < DOUBLE_TAP
+              // Reset rather than kept, so three presses are one double and one
+              // single rather than two overlapping doubles.
+              lastImmersiveTap.current = again ? 0 : now
+              if (again) playPause()
             }}
             onPointerMove={(event) => {
               if (event.pointerType !== 'mouse') return
@@ -1972,15 +2219,14 @@ export function Together() {
               lastImmersiveMove.current = now
               revealImmersiveControls()
             }}
-            aria-label={
-              /*
-                Named for what the *keyboard* gets, which is the controls —
-                see `detail === 0` above. Naming it "pause" would be describing
-                the mouse's half of this button to the one person who cannot
-                reach it.
-              */
-              immersiveControls ? 'hide viewing controls' : 'show viewing controls'
-            }
+            /*
+              Named for what the *keyboard* gets, which is the controls — see
+              `detail === 0` above. Naming it "pause" would be describing a
+              gesture nobody on a keyboard can make to the one person who
+              cannot make it, and the transport already carries play and pause
+              for them a tab away.
+            */
+            aria-label="show viewing controls"
           />
         )}
         {!live && open && (
@@ -2212,6 +2458,15 @@ export function Together() {
         <aside className="together-room" aria-label={immersive ? 'conversation beside the screen' : 'shared screen controls'}>
           {!immersive && (
             <>
+              {/*
+                No transport on the archive, and that is the tab keeping its
+                promise. It says it takes the whole screen; a title, a scrubber
+                and five buttons for a film that is not on screen would be two
+                hundred pixels of a phone spent contradicting it. The film keeps
+                playing and its controls are one tap away — the same argument
+                the search makes one block down, in `.searching`.
+              */}
+              {!archive && (
               <Transport
                 live={live}
                 onStop={endSession}
@@ -2236,22 +2491,57 @@ export function Together() {
                 onToggleCaptions={toggleCaptions}
                 onTuck={fold}
               />
+              )}
 
               <div className="together-tabs" role="tablist" aria-label="beside the screen">
-                {(['talk', 'queue', 'film'] as const).map((which) => (
+                {(['talk', 'queue', 'film', 'watched'] as const).map((which) => (
                   <button
                     key={which}
                     type="button"
                     role="tab"
                     aria-selected={tab === which}
                     className={`together-tab${tab === which ? ' on' : ''}`}
+                    /*
+                      The dot beside `watched` is a mark on a screen and says
+                      nothing out loud, so what it means is said here instead.
+                    */
+                    aria-label={
+                      which === 'watched' && owed > 0
+                        ? `watched · ${seen.length} · ${owed} waiting for your rating`
+                        : undefined
+                    }
                     onClick={() => setTab(which)}
                   >
                     {which === 'talk'
                       ? 'talk'
                       : which === 'film'
                         ? 'our film'
-                        : `find & queue${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
+                        : which === 'watched'
+                          ? (
+                              <>
+                                watched{seen.length > 0 ? ` · ${seen.length}` : ''}
+                                {/*
+                                  A mark rather than words, and that is a
+                                  measurement rather than a taste. Four tabs at
+                                  three hundred and ninety pixels is already the
+                                  whole width of the row; "· 3 to rate" is
+                                  another eighty and pushes the fourth one off
+                                  the end of a panel that clips — which is a tab
+                                  you cannot reach in order to be told you have
+                                  something to do.
+
+                                  So the number stays the archive's size, which
+                                  is what you glance at, and the one thing that
+                                  is *asking* for something becomes a dot. It
+                                  gives nothing away: how many are waiting on
+                                  you is already something you could count by
+                                  scrolling, and it says nothing at all about
+                                  what she gave them.
+                                */}
+                                {owed > 0 && <i className="together-tab-owed" aria-hidden="true" />}
+                              </>
+                            )
+                          : `find & queue${shared.queue.length > 0 ? ` · ${shared.queue.length}` : ''}`}
                   </button>
                 ))}
               </div>
@@ -2260,6 +2550,18 @@ export function Together() {
 
           {immersive || tab === 'talk' ? (
             <Talk session={shared.session} theirName={them.name} />
+          ) : tab === 'watched' ? (
+            <Archive
+              rows={seen}
+              me={me}
+              theirName={them.name}
+              trouble={seenTrouble}
+              onAdd={addSeen}
+              onRate={rateSeen}
+              onNote={noteSeen}
+              onForget={forgetSeen}
+              onTyping={setHunting}
+            />
           ) : tab === 'film' ? (
             <OurFilm
               wanted={wanted}
@@ -2273,6 +2575,7 @@ export function Together() {
               onMarkKeeping={canRemember() ? (row) => void markAndKeep(row) : undefined}
               onPutOnWanted={(row) => void putOnWanted(row)}
               onForgetWanted={forgetWanted}
+              onWatchedWanted={nowSeen}
               onTyping={setHunting}
               mine={mine}
               subs={subs}
@@ -3458,6 +3761,7 @@ function FilmList({
   onMarkKeeping,
   onPutOn,
   onForget,
+  onWatched,
   onTyping,
 }: {
   films: Wanted[]
@@ -3471,6 +3775,8 @@ function FilmList({
   onMarkKeeping?: (row: Wanted) => void
   onPutOn(row: Wanted): void
   onForget(id: string): void
+  /** Off this list and into the archive, in one press. See `nowSeen`. */
+  onWatched(row: Wanted): void
   onTyping(typing: boolean): void
 }) {
   const [adding, setAdding] = useState("")
@@ -3599,6 +3905,24 @@ function FilmList({
                     onFile={(file) => onMark(row, file)}
                     keeping={onMarkKeeping ? () => onMarkKeeping(row) : undefined}
                   />
+                  {/*
+                    The one journey this list actually makes.
+
+                    Off here and into the archive, in one press, on the row you
+                    are already looking at when the film ends. It was two
+                    errands before — take it off, type the same name into the
+                    other tab, hope you spelt it the same way — and the second
+                    errand is the one nobody does.
+                  */}
+                  <button
+                    type="button"
+                    className="film-quiet wanted-seen"
+                    disabled={busy}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => onWatched(row)}
+                  >
+                    we watched it
+                  </button>
                   <button
                     type="button"
                     className="film-quiet wanted-drop"
@@ -3631,6 +3955,7 @@ function OurFilm({
   onMarkKeeping,
   onPutOnWanted,
   onForgetWanted,
+  onWatchedWanted,
   onTyping,
   mine,
   subs,
@@ -3660,6 +3985,8 @@ function OurFilm({
   onMarkKeeping?: (row: Wanted) => void
   onPutOnWanted(row: Wanted): void
   onForgetWanted(id: string): void
+  /** Off the list and into the archive, in one press. */
+  onWatchedWanted(row: Wanted): void
   /** Whether somebody has the keyboard in here. See `searching`. */
   onTyping(typing: boolean): void
   mine: Film | null
@@ -3699,6 +4026,7 @@ function OurFilm({
         onMarkKeeping={onMarkKeeping}
         onPutOn={onPutOnWanted}
         onForget={onForgetWanted}
+        onWatched={onWatchedWanted}
         onTyping={onTyping}
       />
 
@@ -3753,6 +4081,549 @@ function OurFilm({
           {subTrouble !== '' && <p className="film-trouble">{subTrouble}</p>}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ---- the archive ---------------------------------------------------------
+
+   Everything below is the fourth tab: what the two of you have watched, kept
+   for good. The reasoning for the seal lives in `systems/archive`; this is
+   only its face.
+*/
+
+/**
+ * Five stars, filled to a score, and optionally something you can move.
+ *
+ * ---------------------------------------------------------------------------
+ * **Two glyphs would have been the obvious way and it is a trap.** ★ and ☆
+ * are different characters with, in a good many fonts, different advance
+ * widths — so a row of four filled and one empty is a row that is very
+ * slightly the wrong length, and a half is impossible. This draws the *same*
+ * glyph twice, once dim and once bright over it, and clips the bright one to
+ * a width. Identical metrics by construction, any fraction at all, and it
+ * costs one span.
+ *
+ * Interactive, it is a slider rather than five buttons. Five buttons cannot
+ * express a half without becoming ten buttons, and ten targets across a phone
+ * is thirty pixels each — under every thumb-size guideline there is. One bar
+ * you drag along is bigger than any of its parts.
+ * ---------------------------------------------------------------------------
+ */
+function Stars({
+  score,
+  tone = 'both',
+  onPick,
+  label,
+}: {
+  /** In half-stars, 1 to 10. Zero draws an empty row. */
+  score: number
+  /** Whose it is, which is the only thing that colours it. */
+  tone?: 'mine' | 'theirs' | 'both'
+  /** Given, the row can be moved. Left out, it is a reading of a number. */
+  onPick?: (score: number) => void
+  label: string
+}) {
+  const row = useRef<HTMLDivElement>(null)
+  /*
+    What the finger is currently over, which is not yet what has been chosen.
+
+    A rating is a shared, sealed thing and picking one is a write — so it
+    happens on release, and everything before that is a preview. Dragging
+    across the row and taking your finger off the edge leaves the score you
+    had, which is the closest thing this control has to an undo.
+  */
+  const [preview, setPreview] = useState<number | null>(null)
+  /*
+    And the same thing again in a ref, which is what the release reads.
+
+    A very quick tap can put `pointerdown` and `pointerup` close enough together
+    that the handler which runs on release is still the one built before the
+    press re-rendered — and that one sees no preview and picks nothing. A tap
+    that does nothing at all, on the one control this tab exists for. The state
+    is what draws; the ref is what is acted on.
+  */
+  const held = useRef<number | null>(null)
+  const shown = preview ?? score
+
+  const from = (clientX: number): number => {
+    const box = row.current?.getBoundingClientRect()
+    if (!box || box.width === 0) return score
+    return scoreAt((clientX - box.left) / box.width)
+  }
+
+  const stars = []
+  for (let i = 0; i < STARS; i++) {
+    const fill = Math.max(0, Math.min(1, (shown - i * 2) / 2))
+    stars.push(
+      <span key={i} className="seen-star">
+        <span className="seen-star-dim" aria-hidden="true">★</span>
+        <span
+          className="seen-star-lit"
+          aria-hidden="true"
+          style={{ width: `${fill * 100}%` }}
+        >
+          ★
+        </span>
+      </span>,
+    )
+  }
+
+  if (!onPick) {
+    return (
+      <span className={`seen-stars tone-${tone}`} role="img" aria-label={label}>
+        {stars}
+      </span>
+    )
+  }
+
+  return (
+    <div
+      ref={row}
+      className={`seen-stars seen-pick tone-${tone}${preview !== null ? ' moving' : ''}`}
+      role="slider"
+      tabIndex={0}
+      aria-label={label}
+      aria-valuemin={LOWEST}
+      aria-valuemax={HIGHEST}
+      aria-valuenow={score === 0 ? undefined : score}
+      aria-valuetext={score === 0 ? 'not rated' : `${starLabel(score)} of ${STARS}`}
+      /*
+        The press stops here, twice over. The row this sits in is a button that
+        opens the film, and the pane underneath is the thing you drag — see the
+        long note in `onPaneUp`. Rating something must not do either.
+      */
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        held.current = from(event.clientX)
+        setPreview(held.current)
+      }}
+      onPointerMove={(event) => {
+        if (held.current === null) return
+        held.current = from(event.clientX)
+        setPreview(held.current)
+      }}
+      onPointerUp={(event) => {
+        event.stopPropagation()
+        const picked = held.current
+        held.current = null
+        setPreview(null)
+        if (picked !== null && picked !== score) onPick(picked)
+      }}
+      onPointerCancel={() => {
+        held.current = null
+        setPreview(null)
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        /*
+          Nothing here travels further. The night screen reads the arrows off
+          the window to seek the film, and a keyboard on this control is
+          somebody choosing a number rather than looking for a scene.
+        */
+        const now = score === 0 ? 0 : score
+        let next: number | null = null
+        if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next = now + 1
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next = now - 1
+        else if (event.key === 'Home') next = LOWEST
+        else if (event.key === 'End') next = HIGHEST
+        if (next === null) return
+        event.stopPropagation()
+        event.preventDefault()
+        const held = Math.max(LOWEST, Math.min(HIGHEST, next))
+        if (held !== score) onPick(held)
+      }}
+    >
+      {stars}
+    </div>
+  )
+}
+
+/**
+ * One film in the archive, closed or open.
+ *
+ * Closed it is a title and a verdict; open it is the two scores, the two
+ * notes, and the way to take it out. In place rather than over the top,
+ * deliberately — a sheet over a list is a thing you have to close before you
+ * can compare it with the row above it, and comparing is most of what an
+ * archive is for.
+ */
+function Seen({
+  row,
+  me,
+  theirName,
+  open,
+  onOpen,
+  onRate,
+  onNote,
+  onForget,
+  onTyping,
+}: {
+  row: Watched
+  me: UserId
+  theirName: string
+  open: boolean
+  onOpen(): void
+  onRate(score: number): void
+  onNote(note: string): void
+  onForget(): void
+  onTyping(typing: boolean): void
+}) {
+  const them = other(me)
+  const state = standing(row, me)
+  const average = averageOf(row, me)
+  const mine = row.scores[me]?.score ?? 0
+  const hers = row.scores[them]?.score ?? 0
+
+  const [note, setNote] = useState(row.notes[me])
+  const [writing, setWriting] = useState(false)
+  /*
+    Hers, and mine when I am not the one holding the pen.
+
+    A note is not sealed — it may be rewritten from her phone at any moment —
+    so the field has to follow the wire while nobody is typing in it, and must
+    not while somebody is. Without the second half a save landing mid-sentence
+    would replace the sentence with what the server last heard.
+  */
+  useEffect(() => {
+    if (!writing) setNote(row.notes[me])
+  }, [row.notes, me, writing])
+
+  /* A field that is unmounted never blurs. The same cure as everywhere here. */
+  useEffect(() => () => onTyping(false), [onTyping])
+
+  const verdict = () => {
+    /*
+      Both flags up and a score not here yet is a row half-way through
+      arriving: the flag lands with the score, but two devices and one network
+      mean this one may have read the film before it was allowed to read the
+      number. It lasts a moment. Without this line that moment reads as
+      "neither of you yet" on a row you have both rated, which is the one wrong
+      thing this tab could say.
+    */
+    if (state === 'shown' && average === null) {
+      return (
+        <span className="seen-verdict">
+          <em>opening…</em>
+        </span>
+      )
+    }
+    if (state === 'shown' && average !== null) {
+      return (
+        <span className="seen-verdict">
+          <Stars
+            score={average}
+            label={`${starsOf(average).toFixed(1)} of ${STARS} between you`}
+          />
+          <b className="seen-score">{starsOf(average).toFixed(1)}</b>
+        </span>
+      )
+    }
+    if (state === 'waiting') {
+      return (
+        <span className="seen-verdict waiting">
+          <Stars score={mine} tone="mine" label={`yours, ${starLabel(mine)} of ${STARS}`} />
+          <em>sealed · waiting for {theirName}</em>
+        </span>
+      )
+    }
+    if (state === 'hidden') {
+      return (
+        <span className="seen-verdict yours">
+          <em>
+            <i aria-hidden="true">◇</i> {theirName} has rated it — yours opens both
+          </em>
+        </span>
+      )
+    }
+    return (
+      <span className="seen-verdict yours">
+        <em>neither of you yet</em>
+      </span>
+    )
+  }
+
+  return (
+    /* The id is on the element so the browser checks can find one row. */
+    <li className={`seen-row${open ? ' open' : ''}`} data-id={row.id}>
+      <button
+        type="button"
+        className="seen-head"
+        aria-expanded={open}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={onOpen}
+      >
+        <span className="seen-title">{row.title}</span>
+        {verdict()}
+      </button>
+
+      {/*
+        Until you have rated, the stars are on the closed row rather than
+        behind the tap.
+
+        Putting them inside the fold would mean two gestures to do the one
+        thing this tab is asking for, and the person who has not rated is
+        exactly the person the seal is waiting on. Once yours is in, the row
+        already shows it up beside the title and the changeable copy moves into
+        the fold — one control, in the place that matches what it is for: given
+        a score, the interesting thing is no longer giving one.
+      */}
+      {(state === 'open' || state === 'hidden' || (state === 'waiting' && open)) && (
+        <div className="seen-yours">
+          <span className="seen-yours-label">{mine === 0 ? 'your rating' : 'yours'}</span>
+          <Stars
+            score={mine}
+            tone="mine"
+            onPick={onRate}
+            label={`your rating of ${row.title}`}
+          />
+          {mine > 0 && <span className="seen-yours-said">{starLabel(mine)}</span>}
+        </div>
+      )}
+
+      {open && (
+        <div className="seen-more">
+          {/*
+            The two of you, side by side, and only once both are in.
+
+            Before that there is nothing honest to draw here: one number under
+            a heading that promises two is the seal leaking, and a blank beside
+            it would say "she has not rated" on a row where she has.
+          */}
+          {state === 'shown' ? (
+            <p className="seen-two">
+              <span className="seen-one mine">
+                <i className="together-presence warm online" aria-hidden="true" />
+                you
+                <Stars score={mine} tone="mine" label={`yours, ${starLabel(mine)}`} />
+                <b className="seen-score">{starLabel(mine)}</b>
+              </span>
+              <span className="seen-one theirs">
+                <i className="together-presence cool online" aria-hidden="true" />
+                {theirName}
+                <Stars score={hers} tone="theirs" label={`${theirName}, ${starLabel(hers)}`} />
+                <b className="seen-score">{starLabel(hers)}</b>
+              </span>
+            </p>
+          ) : (
+            <p className="seen-sealed">
+              {state === 'waiting'
+                ? `Yours is in and ${theirName} cannot see it. It opens — both of them at once — the moment ${theirName} gives one, and you can still change it until then.`
+                : state === 'hidden'
+                  ? `${theirName} has already rated this one. Neither of you sees the other's until you have both given one.`
+                  : 'Neither of you has rated it yet. Whichever of you goes first, the other cannot see it until they have said too.'}
+            </p>
+          )}
+
+          <div className="seen-notes">
+            <label className="seen-note-mine">
+              <span className="together-list-label">your note</span>
+              <textarea
+                className="together-field seen-note-field"
+                value={note}
+                rows={2}
+                maxLength={NOTE_LIMIT}
+                placeholder="the line you would have said walking out"
+                onFocus={() => {
+                  setWriting(true)
+                  onTyping(true)
+                }}
+                onBlur={() => {
+                  setWriting(false)
+                  onTyping(false)
+                  if (note.trim() !== row.notes[me]) onNote(note)
+                }}
+                onChange={(event) => setNote(event.currentTarget.value)}
+                /*
+                  Nothing typed in here reaches the film. A space in the middle
+                  of a sentence must never be a pause — see the long note on
+                  the space key.
+                */
+                onKeyDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+              />
+            </label>
+            {row.notes[them].trim() !== '' && (
+              <p className="seen-note-theirs">
+                <span className="together-list-label">{theirName}</span>
+                {row.notes[them]}
+              </p>
+            )}
+          </div>
+
+          <p className="seen-doing">
+            <span className="seen-when">
+              {row.by === me ? 'you put it here' : `${theirName} put it here`} ·{' '}
+              {new Date(row.at).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </span>
+            <button
+              type="button"
+              className="film-quiet seen-drop"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={onForget}
+            >
+              take out of the archive
+            </button>
+          </p>
+        </div>
+      )}
+    </li>
+  )
+}
+
+/**
+ * Everything the two of you have watched.
+ *
+ * ---------------------------------------------------------------------------
+ * **The one tab that takes the whole screen.** Every other half of this panel
+ * is about the rectangle above it — what is on next, which file plays it, what
+ * is being said while it runs. This is about evenings that are over, it has
+ * nothing to do with the picture, and on a phone that picture is the
+ * difference between seeing three films and seeing eight. So the screen gets
+ * out of the way; see `.together.full.archive` and the note on `Tab`.
+ *
+ * It is deliberately the *plainest* thing in the night screen. A list read
+ * with a thumb once a week for years wants to be legible before it wants to be
+ * anything else, and the one flourish it has — the stars — is carrying real
+ * information.
+ * ---------------------------------------------------------------------------
+ */
+function Archive({
+  rows,
+  me,
+  theirName,
+  trouble,
+  onAdd,
+  onRate,
+  onNote,
+  onForget,
+  onTyping,
+}: {
+  rows: Watched[]
+  me: UserId
+  theirName: string
+  trouble: string
+  /** False when it was refused, and the field keeps what was typed. */
+  onAdd(title: string): boolean
+  onRate(id: string, score: number): void
+  onNote(id: string, note: string): void
+  onForget(id: string): void
+  onTyping(typing: boolean): void
+}) {
+  const [adding, setAdding] = useState('')
+  const [opened, setOpened] = useState<string | null>(null)
+
+  useEffect(() => () => onTyping(false), [onTyping])
+
+  const put = () => {
+    if (onAdd(adding)) setAdding('')
+  }
+
+  const count = summary(rows, me)
+  const years = byYear(rows)
+  /*
+    Whoever is still owed a rating, counted where it can be acted on.
+
+    This is the only number on the tab that asks for something, so it is the
+    only one that gets said in the line at the top. Nothing about it leaks the
+    seal: it says how many are waiting on *you*, which you could work out by
+    scrolling anyway.
+  */
+  const owed = rows.filter((row) => standing(row, me) === 'hidden').length
+
+  return (
+    <div className="together-queue seen">
+      <p className="together-list-label">
+        what we have watched
+        {count.seen > 0 && <span className="seen-count"> · {count.seen}</span>}
+      </p>
+      <p className="film-way-note">
+        {count.seen === 0
+          ? 'Everything the two of you sit through, kept. Rate one and it stays sealed until the other of you has rated it too — then both open at once.'
+          : owed > 0
+            ? `${owed === 1 ? 'One is' : `${owed} are`} waiting on you. ${theirName} cannot see what you give until you have given it.`
+            : count.average !== null
+              ? `Between the two of you, ${starsOf(count.average).toFixed(1)} out of ${STARS} across ${count.rated} of them.`
+              : 'Rate one and it stays sealed until the other of you has rated it too — then both open at once.'}
+      </p>
+
+      <div className="together-hunt seen-add">
+        <input
+          type="text"
+          className="together-field"
+          value={adding}
+          placeholder="a film we watched"
+          maxLength={120}
+          enterKeyHint="done"
+          aria-label="put a film in the archive"
+          onFocus={() => onTyping(true)}
+          onBlur={() => onTyping(false)}
+          onChange={(event) => setAdding(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            // Nothing typed in here reaches the film. See `FilmList`.
+            event.stopPropagation()
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              put()
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="film-quiet"
+          disabled={adding.trim() === ''}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={put}
+        >
+          add
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="wanted-none">
+          Nothing in it yet. Put the last thing the two of you watched in, even
+          if it was months ago — this only becomes what it is meant to be by
+          being old.
+        </p>
+      ) : (
+        years.map((year) => (
+          <div key={year.year} className="seen-year">
+            {/*
+              A year standing in the list is the whole difference between a
+              scroll and a record of two people's years. It appears only where
+              the year changes, so a first month has no heading at all.
+            */}
+            {years.length > 1 && <p className="seen-year-label">{year.year}</p>}
+            <ul className="seen-rows">
+              {year.rows.map((row) => (
+                <Seen
+                  key={row.id}
+                  row={row}
+                  me={me}
+                  theirName={theirName}
+                  open={opened === row.id}
+                  onOpen={() => setOpened((was) => (was === row.id ? null : row.id))}
+                  onRate={(score) => onRate(row.id, score)}
+                  onNote={(note) => onNote(row.id, note)}
+                  onForget={() => {
+                    setOpened(null)
+                    onForget(row.id)
+                  }}
+                  onTyping={onTyping}
+                />
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
+
+      {trouble !== '' && <p className="film-trouble wanted-trouble">{trouble}</p>}
     </div>
   )
 }

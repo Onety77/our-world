@@ -1291,6 +1291,84 @@ the river.**
   itself and the list is only for finding out *which*. That means the watchers
   belong to the Hollow rather than to the rows — which is also why there is one
   hook for all the games instead of one per game.
+- **The night screen's fourth tab: what the two of you have watched.** A
+  `Wanted` row is what is coming; a `Watched` row is what happened, and it is
+  kept for good. It is the first thing in the garden that grows without limit,
+  so it is the first thing to get a **collection of its own** rather than a
+  field on `world/ours` — the queue, the wanted list and the car's dials all
+  ride on that document precisely because they are short and are read whole,
+  and an archive is neither. See `systems/archive` for the arithmetic and
+  `firestore.rules` for the seal.
+- **Two people rating the same film have to commit blind, and that is the whole
+  design rather than a flourish.** A number you can see before you choose your
+  own is a number you cannot un-see: she says nine, and the honest six you were
+  about to give becomes a seven, every time, without anybody deciding to be
+  dishonest. So the shape is the question vine's, exactly — the film is public
+  and carries two boolean flags, each score is a *separate document* named for
+  whose it is, and the rules refuse hers to him until both flags are true.
+  Which means a sealed row does not arrive censored, it arrives with a **gap**,
+  and the flags are what tell the screen the difference between "she has not
+  rated it" and "she has, and it is not yours yet". Nothing above the seam ever
+  has to guess; nothing above the seam could be trusted to keep the secret if
+  it did.
+- **A score is an integer, because a rule can check an integer.** Half-stars
+  stored as one to ten rather than 0.5 to 5.0. The gap between a seven and an
+  eight is real and five boxes cannot hold it, and a float is a thing
+  `firestore.rules` cannot pin down. Everything user-facing divides by two on
+  the way out.
+- **A revealed score is the one genuinely immutable thing in the garden**, and
+  that is worth spending. It cannot change once both of you have given one —
+  the rules say so — so `data/firebase` keeps revealed scores in
+  `localStorage` for good. Without that, opening the archive with two hundred
+  films in it is four hundred document reads before a single star appears,
+  every session, for ever. The unsealed ones are deliberately *not* kept: while
+  she has not rated, yours is still yours to revise.
+- **A note is not a score and must not be sealed with one.** It is not a
+  judgement competing with hers, it is the line you would say walking out of
+  the cinema, and half its worth is that she can find it there tomorrow. So it
+  lives on the public row beside the flags, each of you writing only your own.
+- **One tab does not want the picture, and it leaves rather than unmounts.**
+  Everything else beside the shared screen is about the rectangle above it; the
+  archive is about evenings that are over, and on a phone that rectangle is the
+  difference between reading three films and reading eight. So `.together.full.archive`
+  moves the screen to `left: -200vw` — **never `display: none`**, which is a
+  re-layout the embedded document can see and which YouTube's player is
+  entitled to stop for. A pause here is a pause on her phone too, so a list
+  opening must not be able to end the film. Overflow past the *left* edge has
+  never made a scrollbar; this costs nothing and the film keeps playing in your
+  ears while you read.
+- **In front of a film, one press looks and two press stop.** It used to be
+  split by pointer type — a mouse paused on a single click, a finger revealed
+  the controls — which meant the same tap did two different things depending on
+  what you were touching the screen with, and neither of you can see what the
+  other is holding. Both get the same rule now, and the ordering is the
+  argument: pausing reaches across to her screen and showing your own controls
+  does not, so the gesture that costs nothing is the one that is easy to make
+  by accident. A film paused in Kano by a sleeve brushing a phone in Shanghai
+  is the failure this prevents. The first press does not wait to find out
+  whether a second is coming — it shows the controls either way, and the second
+  adds the pause on top, so there is no window of nothing happening.
+- **A double press is measured by `event.timeStamp`, not by the clock inside
+  the handler.** One is when the browser made the event; the other is when
+  React got round to running you, and on a busy machine they are a long way
+  apart. A film *is* a busy machine — decoding, buffering, a subtitle track
+  being redrawn — so measured the second way a perfectly good double press
+  becomes two single ones, which is the failure this control can least afford,
+  because the thing it fails to do is stop. Measured: two presses sent back to
+  back reached the handler up to a second apart under software rendering.
+- **"Is a field focused" is the wrong question for the space bar; "is there
+  anything in it" is the right one.** Space is play and pause in front of a
+  film and a space inside a sentence, and the two were told apart by where the
+  keyboard was pointing — which is right in principle and wrong in the one
+  arrangement this screen is built around. The chat sits open beside the film
+  all evening, so the composer holds the keyboard almost the whole time you are
+  watching, and every space went into an empty box instead of stopping the
+  film. An empty word-shaped field is somebody watching a film with a cursor in
+  a box. One letter typed and the key is theirs again; the line sent and it
+  comes back — no mode, nothing to press first. `spaceIsTheirs` in
+  `systems/watching` is the rule, kept away from the DOM so `npm run archive`
+  can check it; a `<select>` and the inputs a space *operates* rather than
+  types into are the exceptions, and they keep it whatever is in them.
 
 ## How to verify (do not skip)
 
@@ -1538,13 +1616,30 @@ handling changed.
       `Water.tsx` was worth two deletions: it also differed from the live
       `water.ts` only in case, which is fine on this machine and breaks on any
       Linux host
+- [x] **The archive: what the two of you have watched.** A fourth tab on the
+      night screen, and the only one that does not want the picture — the
+      screen moves off to the side and the list takes the whole width, with the
+      film still playing in your ears. Either of you puts a film in, or moves
+      one across from the wanted list in one press. **Ratings are sealed:**
+      neither of you sees the other's until you have both given one, and then
+      both open at once with the average between them — the question vine's
+      shape, a public pair of flags on the film and each score in a document of
+      its own that the rules refuse. Half-stars, dragged rather than tapped;
+      a note each, never sealed, on the back of the tap; the years standing in
+      the list. `systems/archive` holds the arithmetic and `npm run archive`
+      checks it, including the seal, which cannot be seen from one device
 - [ ] Full regression + screenshot sweep, update the in-world guide
 
 ## After that
 
 1. **Go live** — owner does the console steps in `FIREBASE.md`, then a real
-   two-device test. The Stars has a `messages` collection and the Glasshouse a
-   `memories` one, so both rule blocks go up with the rest.
+   two-device test. The Stars has a `messages` collection, the Glasshouse a
+   `memories` one and the archive a `watched` one with a `scores` subcollection
+   under it, so all three rule blocks go up with the rest.
+   **The archive will not work at all until they do**, and it will fail in the
+   one way that is easy to misread: the film appears, and the rating is
+   silently refused. It is the second sealed thing in the file after the
+   question vine — see `firestore.rules`.
    **And Storage now has to be turned on**, which it never did before: the
    Glasshouse is the first thing here that stores bytes. `npm run rules` writes
    `rules-out/storage.rules` alongside the other two; it goes into

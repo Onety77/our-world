@@ -75,6 +75,81 @@ export const LURCH = 2.5
 export const NUDGE = 0.06
 
 /**
+ * How long a second press has to arrive to count as a double one.
+ *
+ * ---------------------------------------------------------------------------
+ * Over a full-screen film, one press shows the controls and two pause it — so
+ * the first press has to wait this long before it does anything, in case a
+ * second is coming. That makes this a delay somebody feels, and it is the only
+ * reason it is a named number rather than a literal.
+ *
+ * Three hundred milliseconds is what browsers themselves used for the same
+ * judgement, and it is comfortably above the two hundred a deliberate double
+ * tap actually takes. Shorter and the second press starts missing; longer and
+ * the controls appear late enough that a single press feels ignored.
+ * ---------------------------------------------------------------------------
+ */
+export const DOUBLE_TAP = 300
+
+/**
+ * A field as the space key needs to see it.
+ *
+ * Four facts and no element, so the rule below can be read and checked without
+ * a document — the same reason nothing else in this file touches an iframe.
+ */
+export interface FieldNow {
+  /** Uppercase tag name: `INPUT`, `TEXTAREA`, `SELECT`, or whatever it is. */
+  tag: string
+  /** Whether the browser considers it editable text. */
+  editable: boolean
+  /** An `<input>`'s type, lowercased. Empty for everything else. */
+  type: string
+  /** What is in it now. */
+  value: string
+}
+
+/**
+ * Whether a space pressed in this field belongs to the field.
+ *
+ * ---------------------------------------------------------------------------
+ * **The rule the night screen's spacebar turns on.** In front of a film a
+ * space is play and pause; inside a sentence it is a space. The obvious test —
+ * *is a field focused* — is the wrong one, because the chat sits open beside
+ * the film all evening and holds the keyboard the whole time you are watching.
+ * Every space went into an empty box instead of stopping the film.
+ *
+ * So: an empty word-shaped field is somebody watching a film with a cursor in
+ * a box, and the space goes to the film. One letter typed and it is a sentence
+ * being written, and the space is a space again — no mode, nothing to press
+ * first, and it swaps back the moment the line is sent.
+ *
+ * Two things are *not* word-shaped and keep the key whatever is in them: a
+ * `<select>`, where a space opens the list, and the inputs a space operates
+ * rather than types into — a checkbox, a radio, a button. They are empty by
+ * nature rather than by not having been written in yet, and taking their space
+ * would break them for anybody using a keyboard.
+ * ---------------------------------------------------------------------------
+ */
+const PRESSED = new Set([
+  'checkbox',
+  'radio',
+  'button',
+  'submit',
+  'reset',
+  'file',
+  'range',
+  'color',
+  'image',
+])
+
+export function spaceIsTheirs(field: FieldNow): boolean {
+  if (field.tag === 'SELECT') return true
+  if (field.tag === 'INPUT' && PRESSED.has(field.type)) return true
+  if (!field.editable && field.tag !== 'INPUT' && field.tag !== 'TEXTAREA') return true
+  return field.value.trim() !== ''
+}
+
+/**
  * Which half — third, now — of the panel beside the screen is showing.
  *
  * `film` is its own place rather than a section inside `queue`, and that is a
@@ -83,7 +158,18 @@ export const NUDGE = 0.06
  * and read as something that had been fitted in wherever there was room. It is
  * not that: it is one of the two ways to put something on.
  */
-export type Tab = 'talk' | 'queue' | 'film'
+/**
+ * `watched` is the fourth, and the only one that does not want the picture.
+ *
+ * Everything else beside the screen is *about* what is on it — what is on
+ * next, which file plays it, what the two of you are saying while it runs. The
+ * archive is about evenings that are over. It is a long list read with a
+ * thumb, it has nothing to do with the rectangle above it, and on a phone that
+ * rectangle is the difference between seeing three films and seeing eight. So
+ * it takes the whole screen, and it is the only tab that does — see
+ * `.together.full.archive`.
+ */
+export type Tab = 'talk' | 'queue' | 'film' | 'watched'
 
 interface WatchingState {
   /** The shared truth, straight off the wire. */

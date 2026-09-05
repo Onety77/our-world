@@ -105,6 +105,8 @@ import {
   type RallyStreamInput,
   type VoiceLight,
   type Wanted,
+  type Watched,
+  type Score,
 } from './types'
 import {
   activeQuestion,
@@ -115,6 +117,7 @@ import { AMBIENCE_KEYS } from './types'
 import { presenceBody, readPresence } from './presence'
 import { markPatch, readMessage } from './messages'
 import { newId } from './ids'
+import { NOTE_LIMIT, isScore, other, tidyTitle } from '@/systems/archive'
 import {
   RALLY_STREAM_INTERVAL,
   RallyStreamMeter,
@@ -175,6 +178,8 @@ const RALLY_TUNING = 'rallyTuning'
 const AMBIENCE_TUNING = 'ambienceTuning'
 /** Which games and roads are shut, and to whom. One document: `ours`. */
 const LOCKS = 'locks'
+const WATCHED = 'watched'
+const WATCHED_SCORES = 'scores'
 
 /** Presence is per person, under a path only that person may write. */
 const presencePath = (id: UserId) => `presence/${id}`
@@ -406,6 +411,96 @@ function toQuestionRound(id: string, d: Record<string, unknown>): QuestionRound 
   }
 }
 
+
+/** One person's score off the wire, rebuilt rather than trusted. */
+function toScore(d: Record<string, unknown> | undefined): Score | null {
+  if (!d) return null
+  const score = d.score
+  if (!isScore(score)) return null
+  return { by: userId(d.by), score, at: num(d.at, 0) }
+}
+
+const WATCHED_SCORES_KEY = 'garden:watched-scores:v1'
+
+/**
+ * Scores this device has already been allowed to read, kept between sessions.
+ *
+ * ---------------------------------------------------------------------------
+ * **Safe to remember because it can never change.** A score is sealed until
+ * both of you have given one and frozen the moment you have — the rules refuse
+ * an update once the other side is in — so a revealed score is the one thing
+ * in the garden that is genuinely immutable. Anything still unsealed is *not*
+ * kept: while she has not rated, mine is still mine to revise, and a cache of
+ * it would be a second device showing a number that had already been changed.
+ *
+ * The saving is real rather than theoretical: without it, opening the archive
+ * with two hundred films in it is four hundred document reads before a single
+ * star appears, every time, for ever. With it, it is four hundred once.
+ *
+ * A browser with no storage — private windows, storage blocked — gets the
+ * in-memory half and simply fetches again next session. Nothing here is the
+ * truth; it is only a shortcut to it.
+ * ---------------------------------------------------------------------------
+ */
+function openScores() {
+  const held = new Map<string, Score>()
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = JSON.parse(localStorage.getItem(WATCHED_SCORES_KEY) ?? '{}') as unknown
+      if (raw && typeof raw === 'object') {
+        for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+          const score = toScore(value as Record<string, unknown>)
+          if (score) held.set(key, score)
+        }
+      }
+    }
+  } catch {
+    /* an empty cache is a slow first read, not a broken one */
+  }
+
+  let saving: number | null = null
+  const save = () => {
+    if (typeof localStorage === 'undefined' || saving !== null) return
+    // Coalesced: a first load fills this a few hundred times in a few hundred
+    // milliseconds, and each write is a full serialise of the whole map.
+    saving = setTimeout(() => {
+      saving = null
+      try {
+        localStorage.setItem(
+          WATCHED_SCORES_KEY,
+          JSON.stringify(Object.fromEntries(held)),
+        )
+      } catch {
+        /* it still holds for this session */
+      }
+    }, 400) as unknown as number
+  }
+
+  return {
+    has: (key: string) => held.has(key),
+    get: (key: string) => held.get(key),
+    set(key: string, score: Score, keep: boolean) {
+      held.set(key, score)
+      if (keep) save()
+    },
+    /**
+     * Forget everything belonging to a film that is no longer in the archive.
+     *
+     * Taking one out is rare and permanent, and without this its two scores
+     * would sit in this device's storage for the rest of the garden's life.
+     * The snapshot is the whole collection, so what is not in it is gone.
+     */
+    keepOnly(ids: Set<string>) {
+      let went = false
+      for (const key of [...held.keys()]) {
+        if (ids.has(key.slice(0, key.lastIndexOf('/')))) continue
+        held.delete(key)
+        went = true
+      }
+      if (went) save()
+    },
+  }
+}
 function toQuestionAnswer(d: Record<string, unknown> | undefined): QuestionAnswer | null {
   if (!d) return null
   const body = str(d.body, '')
@@ -1454,6 +1549,199 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       )
     },
 
+
+    /*
+      The archive, and the only sealed thing in the garden besides the question
+      vine.
+
+      -----------------------------------------------------------------------
+      **A collection, not a field on the world document.** Everything else the
+      night screen owns is short and finite — a queue of six, a wanted list of
+      a dozen — and rides on `world/ours` for exactly that reason. This one
+      only grows, for as long as the two of you keep watching things, and it is
+      read on a tab nobody is looking at while a film plays. It gets its own
+      collection, ordered by the server.
+
+      **The seal is the subcollection.** Each score is a document named for
+      whose it is, and `firestore.rules` refuses `scores/cool` to warm until
+      both public flags on the parent are true. So a sealed row does not arrive
+      censored — it arrives with a *gap*, because the read was denied, and the
+      flag on the parent is what tells this device the difference between "she
+      has not rated it" and "she has, and it is not yours yet". Exactly the
+      shape the question vine uses; see `refreshQuestions` above.
+
+      **Scores that are open are cached on the device, permanently.** Once both
+      of you have rated, neither score can change again — the rules say so —
+      which makes a revealed score the rare thing that is safe to remember for
+      ever. Without this, opening the night screen with two hundred films in
+      the archive is four hundred document reads before a single star appears.
+      With it, it is four hundred once and then none.
+      -----------------------------------------------------------------------
+    */
+    watchWatched(listener) {
+      const kept = openScores()
+      let alive = true
+      let revision = 0
+
+      const key = (id: string, who: UserId) => `${id}/${who}`
+
+      /** A row wearing whatever scores this device is allowed to have. */
+      const dressed = (row: Watched): Watched => {
+        const both = row.rated.warm && row.rated.cool
+        const scores: Watched['scores'] = {}
+        for (const who of USER_IDS) {
+          if (!row.rated[who]) continue
+          if (!both && who !== me) continue
+          const score = kept.get(key(row.id, who))
+          if (score) scores[who] = score
+        }
+        return { ...row, scores }
+      }
+
+      const off = onSnapshot(
+        query(collection(db, WATCHED), orderBy('at', 'desc')),
+        (snap) => {
+          const rows: Watched[] = []
+          for (const d of snap.docs) {
+            const raw = d.data() as Record<string, unknown>
+            const title = str(raw.title, '').trim()
+            // Rebuilt field by field rather than trusted, like everything else
+            // read off the wire here — including the version of her phone that
+            // was running last month.
+            if (title === '') continue
+            rows.push({
+              id: d.id,
+              title: title.slice(0, 120),
+              by: userId(raw.by),
+              at: num(raw.at, 0),
+              rated: { warm: raw.ratedWarm === true, cool: raw.ratedCool === true },
+              notes: {
+                warm: str(raw.noteWarm, '').slice(0, NOTE_LIMIT),
+                cool: str(raw.noteCool, '').slice(0, NOTE_LIMIT),
+              },
+              scores: {},
+            })
+          }
+
+          /*
+            Twice, and the first one matters as much as the second: the titles
+            are here now, and the archive should be on the screen now. Holding
+            it back until every score had been fetched would mean a list that
+            appears a second late on the one tab whose whole job is to be a
+            list.
+          */
+          listener(rows.map(dressed))
+          kept.keepOnly(new Set(rows.map((row) => row.id)))
+
+          const mine = ++revision
+          void (async () => {
+            let found = false
+            await Promise.all(
+              rows.flatMap((row) => {
+                const both = row.rated.warm && row.rated.cool
+                const wanted = USER_IDS.filter(
+                  (who) =>
+                    row.rated[who] &&
+                    (both || who === me) &&
+                    !kept.has(key(row.id, who)),
+                )
+                return wanted.map(async (who) => {
+                  try {
+                    const snap = await getDoc(
+                      doc(db, WATCHED, row.id, WATCHED_SCORES, who),
+                    )
+                    const score = toScore(snap.data() as Record<string, unknown> | undefined)
+                    if (!score) return
+                    /*
+                      Remembered only once it can never change again. While she
+                      has not rated, mine is still mine to revise — caching it
+                      would mean a second device showing a score that had been
+                      changed on the first.
+                    */
+                    kept.set(key(row.id, who), score, both)
+                    found = true
+                  } catch {
+                    // Before both have rated, hers is expected to be denied.
+                    // An empty slot is the sealed state, and it is correct.
+                  }
+                })
+              }),
+            )
+            if (!alive || mine !== revision || !found) return
+            listener(rows.map(dressed))
+          })()
+        },
+      )
+
+      return () => {
+        alive = false
+        off()
+      }
+    },
+
+    async addWatched(title) {
+      const name = tidyTitle(title)
+      if (name === '') return
+      await setDoc(doc(db, WATCHED, newId()), {
+        title: name,
+        by: me,
+        at: now(),
+        ratedWarm: false,
+        ratedCool: false,
+        noteWarm: '',
+        noteCool: '',
+      })
+    },
+
+    /*
+      The score and the flag that unseals it land together or not at all.
+
+      A flag raised without its score is a row that says "both of you have
+      rated" over an average that cannot be computed; a score written without
+      its flag is a number nobody may ever read. The rules require the pair —
+      `getAfter` on the parent — so this is a transaction rather than two
+      writes, and the rules are what make that non-negotiable rather than
+      merely tidy.
+    */
+    async rateWatched(id, score) {
+      if (!isScore(score)) return
+      const filmRef = doc(db, WATCHED, id)
+      const scoreRef = doc(db, WATCHED, id, WATCHED_SCORES, me)
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(filmRef)
+        if (!snap.exists()) return
+        const raw = snap.data() as Record<string, unknown>
+        const hers = raw[other(me) === 'warm' ? 'ratedWarm' : 'ratedCool'] === true
+        // Once hers is in, both are on the table and neither moves again.
+        if (hers && raw[me === 'warm' ? 'ratedWarm' : 'ratedCool'] === true) return
+        transaction.set(scoreRef, { by: me, score, at: now() })
+        transaction.update(filmRef, { [me === 'warm' ? 'ratedWarm' : 'ratedCool']: true })
+      })
+    },
+
+    async noteWatched(id, note) {
+      await updateDoc(doc(db, WATCHED, id), {
+        [me === 'warm' ? 'noteWarm' : 'noteCool']: note.trim().slice(0, NOTE_LIMIT),
+      })
+    },
+
+    /*
+      The scores go with it, in one batch.
+
+      A parent deleted on its own leaves two documents in a subcollection under
+      a path with nothing at it — invisible, unreachable, and readable for ever
+      by anything that knows the id. The rules only allow a score to be deleted
+      when its film is going in the same write, which makes this the one shape
+      that works rather than merely the tidy one.
+    */
+    async forgetWatched(id) {
+      const batch = writeBatch(db)
+      batch.delete(doc(db, WATCHED, id))
+      for (const who of USER_IDS) {
+        batch.delete(doc(db, WATCHED, id, WATCHED_SCORES, who))
+      }
+      await batch.commit()
+    },
     watchWatching(listener) {
       return onSnapshot(doc(db, ...WORLD_DOC), (snap) => {
         const d = ((snap.data() ?? {}).watching ?? {}) as Record<string, unknown>

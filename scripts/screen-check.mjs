@@ -205,6 +205,48 @@ const main = async () => {
     await wait(40)
     await mouse('mouseReleased', x, y)
   }
+  /**
+   * Two presses inside the window that makes them one gesture.
+   *
+   * Stripped to four dispatches with nothing between them, and it has to be:
+   * the window is three hundred milliseconds, `mouseClick` above spends a
+   * quarter of that on a settling wait it does not need here, and every
+   * dispatch is a round trip to a browser doing software rendering. Built out
+   * of `mouseClick` this was reliably *just* too slow, and reported as the
+   * double press not working at all. The elapsed time is returned so a future
+   * failure says which of the two it was.
+   */
+  const mouseDoubleClick = async (x, y) => {
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, buttons: 0 }, S)
+    const began = Date.now()
+    /*
+      Sent, not awaited one at a time — and that is the difference between this
+      check working and not.
+
+      A round trip to this browser is about three hundred milliseconds under
+      software rendering, so four awaited dispatches put a second and a half
+      between the two presses and the app was quite right to call them two
+      single ones. The socket preserves order, and Chrome queues input in the
+      order it arrives, so writing all four and then waiting for the replies
+      delivers them back to back — a pair the app sees as a pair.
+
+      What is returned is how long the four *acknowledgements* took, which is
+      not the gap between the presses and is only worth printing: a run where
+      this is small and the check still fails is a different problem from one
+      where it is large.
+    */
+    const all = []
+    for (const clickCount of [1, 2]) {
+      all.push(send('Input.dispatchMouseEvent', {
+        type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount, pointerType: 'mouse',
+      }, S))
+      all.push(send('Input.dispatchMouseEvent', {
+        type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount, pointerType: 'mouse',
+      }, S))
+    }
+    await Promise.all(all)
+    return Date.now() - began
+  }
   const touchTap = async (x, y) => {
     await send('Input.dispatchTouchEvent',
       { type: 'touchStart', touchPoints: [{ x, y }] }, S)
@@ -696,12 +738,19 @@ const main = async () => {
   check(before === after, 'and an empty line sends nothing', `${before} → ${after}`)
 
   // =========================================================================
-  console.log('\nand the film answers a click again\n')
+  console.log('\none press looks, two press stop\n')
 
   /*
     YouTube's own button is under our sheet and always will be — an iframe
     swallows the pointer, and the sheet is what lets a mouse reach the film at
     all. What changed is what the sheet does with the click.
+
+    It used to pause on a single one. It does not any more, and *that is the
+    thing being checked*: a single press over a full-screen film shows the
+    controls and leaves the film alone, and only a double press pauses — see
+    the long note on `together-immersive-wake`. Pausing reaches across to her
+    screen; showing your own controls does not, so the gesture that costs
+    nothing is the one that is easy to make by accident.
   */
   const playing = () => ev(`window.__watching.read().playing`)
   const filmMiddle = await middleOf('.together-immersive-wake')
@@ -776,16 +825,49 @@ const main = async () => {
     return { settled: (await playing()) === want, seen }
   }
 
+  /*
+    One press, and then long enough for the reveal it schedules to have run.
+
+    The first press cannot act immediately — a second one might be coming, and
+    it has to be able to take the first one back — so this waits past the
+    window before deciding nothing happened. Under it, "the film did not pause"
+    would be true of a build where the press had simply not landed at all.
+  */
   await mouseClick(filmMiddle.x, filmMiddle.y)
-  const one = await traceTo(!was)
-  console.log('    after one:', JSON.stringify(one), JSON.stringify(await atPoint()))
-  needsYouTube(one.settled, 'clicking the film plays and pauses it', `saw ${JSON.stringify(one.seen)}`)
-  await mouseClick(filmMiddle.x, filmMiddle.y)
-  const two = await traceTo(was)
-  console.log('    after two:', JSON.stringify(two), JSON.stringify(await atPoint()))
-  needsYouTube(two.settled, 'and clicking it again puts it back', `saw ${JSON.stringify(two.seen)}`)
+  await wait(900)
+  const afterOne = await playing()
+  console.log('    after one:', JSON.stringify(await atPoint()))
+  needsYouTube(afterOne === was, 'one press leaves the film alone', `it went to ${afterOne}`)
+
+  /* And two inside the window stop it. */
+  const pairMs = await mouseDoubleClick(filmMiddle.x, filmMiddle.y)
+  const two = await traceTo(!was)
+  console.log('    after two:', pairMs + 'ms to acknowledge,', JSON.stringify(two), JSON.stringify(await atPoint()))
+  needsYouTube(two.settled, 'two of them play and pause it',
+    `saw ${JSON.stringify(two.seen)}; the four events took ${pairMs}ms to acknowledge`)
   needsYouTube(await ev(`!!document.querySelector('.together.immersive-awake')`),
     'and the controls come up with it, which is when you want them', 'controls stayed hidden')
+
+  /* And two more put it back, so the gesture is not one-way. */
+  await mouseDoubleClick(filmMiddle.x, filmMiddle.y)
+  const undone = await traceTo(was)
+  console.log('    and back:', JSON.stringify(undone), JSON.stringify(await atPoint()))
+  needsYouTube(undone.settled, 'and two more put it back', `saw ${JSON.stringify(undone.seen)}`)
+
+  /*
+    A slow pair is two single presses, not a double one.
+
+    The window is what separates "look at this" from "stop", so a check that
+    only ever pressed quickly would pass against a build with no window at all
+    — which is precisely the build this replaced.
+  */
+  const slow = await playing()
+  await mouseClick(filmMiddle.x, filmMiddle.y)
+  await wait(900)
+  await mouseClick(filmMiddle.x, filmMiddle.y)
+  await wait(900)
+  needsYouTube((await playing()) === slow,
+    'two presses a second apart are still two single ones', `it went to ${await playing()}`)
 
   // ---- the arrows --------------------------------------------------------
   /*
@@ -2015,6 +2097,47 @@ const main = async () => {
   check(typed.playing === heldAt,
     'and does not touch the film', `${heldAt} → ${typed.playing}`)
 
+  /*
+    ---------------------------------------------------------------------------
+    **And an empty field gives the key back, which is the correction.**
+
+    The composer sits open beside the film for the whole evening, so it holds
+    the keyboard almost the entire time you are watching — which meant every
+    space went into an empty box instead of stopping the film. The test is not
+    *is a field focused* but *is there anything in it*: an empty box is
+    somebody watching with a cursor in a box.
+
+    Emptied here rather than blurred, deliberately. Blurring would be checking
+    the old rule again from a different angle; the caret has to still be in the
+    field for this to mean anything.
+    ---------------------------------------------------------------------------
+  */
+  await ev(`(() => {
+    const f = document.querySelector('.together-field')
+    if (!f) return false
+    const set = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype, 'value',
+    ) || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+    set.set.call(f, '')
+    f.dispatchEvent(new Event('input', { bubbles: true }))
+    f.focus()
+    return true
+  })()`)
+  await wait(500)
+  const emptyAt = await ev(`(() => ({
+    value: document.querySelector('.together-field').value,
+    focused: document.activeElement === document.querySelector('.together-field'),
+    playing: window.__watching.read().playing,
+  }))()`)
+  console.log('    empty field:', JSON.stringify(emptyAt))
+  check(emptyAt.value === '' && emptyAt.focused,
+    'the caret is in an empty field', JSON.stringify(emptyAt))
+  await pressSpace()
+  check(await settledPlaying(!emptyAt.playing),
+    'a space in an empty field still plays and pauses', `still ${emptyAt.playing}`)
+  const stillEmpty = await ev(`document.querySelector('.together-field').value`)
+  check(stillEmpty === '', 'and does not leave a space behind in it', JSON.stringify(stillEmpty))
+
   // ---- a film handed over through the queue ------------------------------
   /*
     Queueing a film and letting it come up is the one path into the invitation
@@ -2495,6 +2618,154 @@ const main = async () => {
   console.log('    now offering:', JSON.stringify(stillOffered))
   check(Array.isArray(stillOffered) && !stillOffered.some((t) => /open .*again/i.test(t)),
     'and stops offering it', JSON.stringify(stillOffered))
+
+  // =========================================================================
+  console.log('\nthe archive, and the seal on it\n')
+
+  /*
+    ---------------------------------------------------------------------------
+    **Two things nobody can check by looking at one screen.**
+
+    The first is the seal: alone on one device there is never anybody to leak a
+    score to, so a build that showed her rating the moment she gave it would
+    look perfect all the way to the night it mattered. The mock's `rateAs` is
+    what makes the other side exist — the same handle the dev panel uses to say
+    something as her.
+
+    The second is that the picture actually leaves. It has to *leave* rather
+    than unmount, because the iframe must never be re-parented — so this asks
+    where it is, not whether it is there, and then asks whether a film that was
+    playing is still playing after it has gone.
+    ---------------------------------------------------------------------------
+  */
+  await phone()
+  /* An archive left over from an earlier run measures that run, not this one. */
+  await send('Page.navigate', { url: url() }, S)
+  await wait(2500)
+  await ev(`(() => { localStorage.removeItem('garden:watched:v1'); return 1 })()`)
+  await openWithAFilm()
+  await ev(`(() => { window.__watching.show(); return 1 })()`)
+  await wait(1600)
+
+  const toArchive = async () => {
+    await ev(`(() => {
+      const b = [...document.querySelectorAll('.together-tab')]
+        .find((x) => /^watched/i.test(x.textContent.trim()))
+      if (b) b.click()
+      return !!b
+    })()`)
+    await wait(700)
+  }
+
+  check(await ev(`[...document.querySelectorAll('.together-tab')]
+    .some((b) => /^watched/i.test(b.textContent.trim()))`),
+    'there is a fourth tab beside the film', 'no watched tab')
+
+  await toArchive()
+  check(await ev(`!!document.querySelector('.together.archive .seen')`),
+    'and it opens on the archive', 'the tab did not switch')
+
+  /*
+    The picture is gone from the screen and still in the document.
+
+    Both halves matter and they are different assertions: a film that had been
+    unmounted would also be "off screen", and would have stopped playing for
+    both of you — which is what opening a list must never do.
+  */
+  const room = await ev(`(() => {
+    const film = document.querySelector('.together-screen').getBoundingClientRect()
+    const panel = document.querySelector('.together-room').getBoundingClientRect()
+    return {
+      film: { x: Math.round(film.left), w: Math.round(film.width) },
+      panel: { x: Math.round(panel.left), y: Math.round(panel.top), w: Math.round(panel.width) },
+      page: { w: window.innerWidth, h: window.innerHeight },
+      stage: !!document.querySelector('.together-stage iframe, .together-stage video'),
+      transport: !!document.querySelector('.together-transport'),
+    }
+  })()`)
+  console.log('    laid out:', JSON.stringify(room))
+  check(room.film.x + room.film.w <= 0, 'the picture is off the screen', JSON.stringify(room.film))
+  check(room.film.w > 0, 'but still laid out at its full size, so it keeps playing', String(room.film.w))
+  needsYouTube(room.stage, 'and the iframe was never taken out of the document', 'no stage child')
+  check(room.panel.w > room.page.w * 0.8, 'the list has the whole width', `${room.panel.w} of ${room.page.w}`)
+  check(room.panel.y < room.page.h * 0.2, 'and starts under the header', String(room.panel.y))
+  check(!room.transport, 'with no transport standing in front of it', 'the transport is still there')
+
+  /* Put something in it, the way a person would. */
+  await ev(`(() => {
+    const f = document.querySelector('.seen-add .together-field')
+    if (!f) return false
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+    set.set.call(f, 'Past Lives')
+    f.dispatchEvent(new Event('input', { bubbles: true }))
+    const b = [...document.querySelectorAll('.seen-add button')].find((x) => /add/i.test(x.textContent))
+    if (b) b.click()
+    return true
+  })()`)
+  await wait(900)
+  const put = await ev(`(() => {
+    const rows = [...document.querySelectorAll('.seen-row')]
+    return { rows: rows.length, title: rows[0] ? rows[0].querySelector('.seen-title').textContent : null }
+  })()`)
+  console.log('    in the archive:', JSON.stringify(put))
+  check(put.rows === 1 && put.title === 'Past Lives', 'a film typed in lands in it', JSON.stringify(put))
+
+  /* Rated by dragging the stars, which is the only way in on a phone. */
+  const starRow = await middleOf('.seen-yours .seen-pick')
+  check(starRow !== null, 'and it offers a rating straight away', 'no stars on the row')
+  if (starRow) {
+    const box = await ev(`(() => {
+      const b = document.querySelector('.seen-yours .seen-pick').getBoundingClientRect()
+      return { left: b.left, width: b.width, y: Math.round(b.top + b.height / 2) }
+    })()`)
+    // Four stars: eight tenths along, landing inside the fourth star's right half.
+    const x = Math.round(box.left + box.width * 0.79)
+    await touchTap(x, box.y)
+    await wait(900)
+  }
+  const mineNow = await ev(`(() => {
+    const row = document.querySelector('.seen-row')
+    return {
+      said: (row.querySelector('.seen-verdict em') || {}).textContent || '',
+      number: (row.querySelector('.seen-score') || {}).textContent || '',
+    }
+  })()`)
+  console.log('    once rated:', JSON.stringify(mineNow))
+  check(/waiting/i.test(mineNow.said), 'giving one seals it and says who it is waiting for', JSON.stringify(mineNow))
+  check(mineNow.number === '', 'and no average is claimed from one score', mineNow.number)
+  await shot('screen-archive-sealed')
+
+  /*
+    Her side, played for her. This is the whole of what cannot be seen from one
+    device: until this line runs there is no second score anywhere, and after it
+    there is one that this device was not allowed to read a moment ago.
+  */
+  const unsealed = await (async () => {
+    await ev(`(() => {
+      const id = document.querySelector('.seen-row').getAttribute('data-id')
+      window.__local.rateAs('cool', id, 6)
+      return 1
+    })()`)
+    for (let i = 0; i < 20; i++) {
+      const n = await ev(`(document.querySelector('.seen-score') || {}).textContent || ''`)
+      if (n !== '') return n
+      await wait(250)
+    }
+    return ''
+  })()
+  console.log('    both in:', JSON.stringify(unsealed))
+  check(unsealed === '3.5', 'the second score opens both and averages them', unsealed || 'nothing')
+
+  /* And the two of them, individually, behind the tap. */
+  await ev(`(() => { document.querySelector('.seen-head').click(); return 1 })()`)
+  await wait(700)
+  const both = await ev(`(() => [...document.querySelectorAll('.seen-one')]
+    .map((s) => s.querySelector('.seen-score').textContent.trim()))()`)
+  console.log('    each of you:', JSON.stringify(both))
+  check(both.length === 2, 'tapping it shows what each of you gave', JSON.stringify(both))
+  check(both.includes('4') && both.includes('3'),
+    'and they are the two numbers that were given', JSON.stringify(both))
+  await shot('screen-archive-open')
 
   console.log(faults.length === 0 ? '\nthe screen holds' : `\n${faults.length} wrong`)
   done(faults.length === 0 ? 0 : 1)

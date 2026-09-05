@@ -16344,3 +16344,457 @@ body.on-the-road .broke-what {
   border-radius: 1px;
   opacity: 0.55;
 }
+
+/* ===========================================================================
+   The archive
+
+   What the two of you have watched, and the only tab that does not want the
+   picture. Everything else beside the screen is about the rectangle above it;
+   this is about evenings that are over, and on a phone that rectangle is the
+   difference between reading three films and reading eight.
+
+   So the screen goes and the panel takes the room — and it *goes* rather than
+   unmounts. The iframe is never re-parented, so a film that is playing keeps
+   playing, out of sight and still in your ears, and is exactly where you left
+   it when you come back. See the note at the top of `ui/Together` about why
+   the layout here is CSS and never React.
+   =========================================================================== */
+
+.together.full.archive .together-screen {
+  /*
+    Off to the side rather than hidden, and the difference is the whole point.
+
+    `display: none` on an ancestor of an iframe is a re-layout the embedded
+    document can see, and YouTube's player is entitled to stop for it — which
+    would mean opening the archive silently ended the film for the person who
+    opened it, from her side as well as yours, because a pause here is a pause
+    there. Moved off the left edge it is laid out exactly as it was, at exactly
+    the same size, still playing, and costs nothing: overflow past the *left*
+    edge has never made a scrollbar.
+  */
+  left: -200vw;
+  right: auto;
+  pointer-events: none;
+}
+
+/*
+  And the panel starts under the header instead of under a rectangle that is
+  no longer there, at the same figure the screen's own top edge uses — so
+  nothing moves except the room that has been given back.
+
+  Capped and centred rather than edge to edge. A list of film titles is
+  reading, and a line of reading that runs the width of a desktop is a line you
+  lose your place in; the phone, where the cap never binds, gets the whole
+  width it asked for.
+*/
+.together.full.archive .together-room {
+  top: max(7rem, calc(env(safe-area-inset-top) + 6.2rem));
+  left: max(var(--night-edge), calc((100% - 52rem) / 2));
+  right: max(var(--night-edge), calc((100% - 52rem) / 2));
+  width: auto;
+}
+
+@media (max-width: 390px), (max-width: 719px) and (max-height: 700px) {
+  .together.full.archive .together-room {
+    top: max(5.5rem, calc(env(safe-area-inset-top) + 4.8rem));
+  }
+}
+
+/* ---- the list ----------------------------------------------------------- */
+
+.seen-count { color: rgba(242, 239, 230, 0.28); }
+
+.seen-add { margin-top: 0.15rem; }
+.seen-add .together-field {
+  font-size: 0.82rem;
+  max-height: none;
+  overflow-y: hidden;
+}
+
+/*
+  A year standing in the list, and the difference between a scroll and a record
+  of two people's years.
+
+  Set as a rule with the number sitting on it, because a bare number in the
+  same size as everything else is a row you have to read to discover is not a
+  film.
+*/
+.seen-year-label {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 1.6rem 0 0.2rem;
+  font: 0.56rem var(--sans);
+  letter-spacing: 0.22em;
+  color: rgba(242, 239, 230, 0.3);
+}
+
+.seen-year-label::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: rgba(240, 216, 178, 0.09);
+}
+
+.seen-rows {
+  margin: 0.55rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.seen-row + .seen-row { border-top: 1px solid rgba(240, 216, 178, 0.06); }
+
+.seen-row.open {
+  border-radius: 0.4rem;
+  background: rgba(255, 246, 233, 0.028);
+  box-shadow: inset 0 0 0 1px rgba(240, 216, 178, 0.05);
+}
+
+/*
+  The whole row is the way in, so there is nothing to aim at.
+
+  A chevron or a word would be a target the width of a thumbnail on the one
+  screen this is mostly read on; a row that is itself the button is four
+  hundred pixels wide and cannot be missed.
+*/
+.seen-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.2rem 0.9rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.7rem 0.55rem 0.5rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.seen-head:hover .seen-title,
+.seen-head:focus-visible .seen-title { color: #fff6e9; }
+.seen-head:focus-visible { outline: none; }
+.seen-head:focus-visible .seen-title {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  text-decoration-color: rgba(255, 217, 168, 0.4);
+}
+
+.seen-title {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font: 0.95rem/1.35 var(--serif);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  transition: color 140ms ease;
+}
+
+.seen-verdict {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* The average, and the only number on the row that is worth a numeral. */
+.seen-score {
+  font: 0.72rem var(--sans);
+  letter-spacing: 0.06em;
+  color: rgba(255, 217, 168, 0.85);
+}
+
+.seen-verdict em {
+  font-style: normal;
+  font: 0.54rem var(--sans);
+  letter-spacing: 0.08em;
+  color: rgba(242, 239, 230, 0.34);
+}
+
+.seen-verdict.yours em { color: rgba(255, 217, 168, 0.55); }
+.seen-verdict em > i { font-style: normal; color: #d8a776; }
+
+/* ---- the stars ---------------------------------------------------------- */
+
+/*
+  One glyph drawn twice, dim and bright, the bright one clipped to a width.
+
+  ★ and ☆ are different characters with, in a good many fonts, different
+  advance widths — so four filled and one empty is a row that is slightly the
+  wrong length, and a half is impossible. Two copies of the same glyph have
+  identical metrics by construction and take any fraction at all.
+*/
+.seen-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.08em;
+  font-size: 0.86rem;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.seen-star {
+  position: relative;
+  display: inline-block;
+}
+
+.seen-star-dim { color: rgba(242, 239, 230, 0.16); }
+
+/*
+  Brighter on the row you are meant to press than on the ones that are only
+  reporting a number. An unrated row is five almost-invisible stars, which is
+  the one place this control has to look like a control.
+*/
+.seen-pick .seen-star-dim { color: rgba(242, 239, 230, 0.26); }
+
+.seen-star-lit {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+  color: #ffd9a8;
+  text-shadow: 0 0 10px rgba(255, 190, 120, 0.35);
+}
+
+.seen-stars.tone-mine .seen-star-lit {
+  color: #f0b878;
+  text-shadow: 0 0 10px rgba(228, 165, 98, 0.4);
+}
+
+.seen-stars.tone-theirs .seen-star-lit {
+  color: #a9c1ff;
+  text-shadow: 0 0 10px rgba(158, 186, 255, 0.35);
+}
+
+/*
+  Given, it is a slider rather than five buttons.
+
+  Five buttons cannot express a half without becoming ten, and ten targets
+  across a phone is thirty pixels each — under every thumb-size guideline
+  there is. One bar you drag along is bigger than any of its parts, so it is
+  sized for a thumb and told not to let the page scroll out from under one.
+*/
+.seen-pick {
+  font-size: 1.32rem;
+  gap: 0.14em;
+  padding: 0.42rem 0.2rem;
+  margin: -0.42rem -0.2rem;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 0.3rem;
+}
+
+.seen-pick:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(255, 217, 168, 0.4);
+}
+
+.seen-pick:hover .seen-star-dim,
+.seen-pick.moving .seen-star-dim { color: rgba(242, 239, 230, 0.4); }
+
+/* ---- your own rating, on the closed row --------------------------------- */
+
+.seen-yours {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.1rem 0.55rem 0.75rem;
+}
+
+.seen-yours-label {
+  font: 0.5rem var(--sans);
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.35);
+}
+
+.seen-yours-said {
+  font: 0.66rem var(--sans);
+  letter-spacing: 0.06em;
+  color: rgba(240, 184, 120, 0.8);
+}
+
+/* ---- what is behind the tap --------------------------------------------- */
+
+.seen-more {
+  padding: 0.15rem 0.55rem 0.85rem;
+  animation: seen-open 220ms cubic-bezier(0.3, 0.75, 0.25, 1) both;
+}
+
+@keyframes seen-open {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seen-more { animation: none; }
+}
+
+/* The two of you, side by side, and only once both are in. */
+.seen-two {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.6rem;
+  margin: 0 0 0.85rem;
+  padding: 0 0 0.85rem;
+  border-bottom: 1px solid rgba(240, 216, 178, 0.07);
+}
+
+.seen-one {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  font: 0.6rem var(--sans);
+  letter-spacing: 0.09em;
+  color: rgba(242, 239, 230, 0.55);
+}
+
+.seen-one .seen-score {
+  font: 0.68rem var(--sans);
+  letter-spacing: 0.05em;
+}
+
+.seen-one.mine .seen-score { color: rgba(240, 184, 120, 0.9); }
+.seen-one.theirs .seen-score { color: rgba(169, 193, 255, 0.9); }
+
+/*
+  What the seal is doing, in words, on the row it is doing it to.
+
+  It says the same thing three ways depending on which side of it you are, and
+  that is not padding: "waiting for her", "waiting for you" and "neither of you
+  yet" are three completely different situations, and a single line saying
+  "sealed" would leave you working out which one every time.
+*/
+.seen-sealed {
+  margin: 0 0 0.85rem;
+  padding: 0 0 0.85rem;
+  max-width: 34rem;
+  border-bottom: 1px solid rgba(240, 216, 178, 0.07);
+  font: 0.66rem/1.55 var(--serif);
+  color: rgba(242, 239, 230, 0.44);
+}
+
+/* ---- the notes ---------------------------------------------------------- */
+
+.seen-notes { display: flex; flex-direction: column; gap: 0.7rem; }
+
+.seen-note-mine { display: block; }
+.seen-note-mine .together-list-label { display: block; margin-bottom: 0.25rem; }
+
+.seen-note-field {
+  width: 100%;
+  min-height: 2.6rem;
+  max-height: 9rem;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/*
+  Hers, and it is quoted rather than repeated in a second field.
+
+  One line about a film, from the other person, is the nearest thing this tab
+  has to something somebody said — so it is set like speech and not like a
+  value in a form.
+*/
+.seen-note-theirs {
+  margin: 0;
+  padding-left: 0.7rem;
+  border-left: 1px solid rgba(158, 186, 255, 0.22);
+  font: 0.76rem/1.55 var(--serif);
+  color: rgba(230, 236, 250, 0.72);
+  overflow-wrap: anywhere;
+}
+
+.seen-note-theirs .together-list-label {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: rgba(158, 186, 255, 0.5);
+}
+
+.seen-doing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin: 0.9rem 0 0;
+}
+
+.seen-when {
+  font: 0.52rem var(--sans);
+  letter-spacing: 0.09em;
+  color: rgba(242, 239, 230, 0.28);
+}
+
+/* Taking something out is not the same colour as putting something in. */
+.seen-drop {
+  color: rgba(255, 185, 160, 0.72);
+  text-decoration-color: rgba(255, 185, 160, 0.3);
+}
+
+.seen-drop:hover,
+.seen-drop:focus-visible {
+  color: #ffc4ae;
+  text-decoration-color: rgba(255, 185, 160, 0.7);
+}
+
+/* ---- off the wanted list and into the archive --------------------------- */
+
+.wanted-seen { color: #cfe0b8; text-decoration-color: rgba(207, 224, 184, 0.35); }
+.wanted-seen:hover,
+.wanted-seen:focus-visible {
+  color: #e6f3d6;
+  text-decoration-color: rgba(207, 224, 184, 0.75);
+}
+
+@media (max-width: 719px) {
+  /*
+    The verdict goes under the title rather than beside it.
+
+    Two of these lines are sentences — "waiting for Tife", "Tife has rated it"
+    — and a sentence sharing a line with a film's name on a phone is two things
+    each getting half a column and neither fitting.
+  */
+  .seen-head { flex-direction: column; align-items: flex-start; gap: 0.32rem; }
+  .seen-title { flex: 0 0 auto; }
+  .seen-verdict { max-width: 100%; }
+  .seen-verdict em { white-space: normal; }
+  .seen-two { gap: 0.5rem 1.1rem; }
+}
+
+/* ---- four tabs on a phone ------------------------------------------------
+
+   Three fitted comfortably and four do not: at three hundred and ninety pixels
+   the row was already the full width of the panel, and a panel that clips
+   would have hidden the last one. So the row gives back what it can afford —
+   a little tracking and a little size — rather than losing a tab, and wraps
+   rather than clipping if a name ever grows.
+*/
+@media (max-width: 719px) {
+  .together-tabs { gap: .9rem; flex-wrap: wrap; row-gap: 0; }
+  .together-tab { font-size: .56rem; letter-spacing: .11em; }
+}
+
+@media (max-width: 360px) {
+  .together-tabs { gap: .7rem; }
+  .together-tab { font-size: .53rem; letter-spacing: .08em; }
+}
+
+/*
+  Something is waiting on you, said without words.
+
+  It is on the tab beside the count rather than instead of it — the count is
+  what you glance at, and this is the only thing on the night screen that is
+  asking rather than telling.
+*/
+.together-tab-owed {
+  display: inline-block;
+  width: .3rem;
+  height: .3rem;
+  margin-left: .38rem;
+  vertical-align: .12em;
+  border-radius: 50%;
+  background: #e9b675;
+  box-shadow: 0 0 7px rgba(233, 182, 117, .8);
+}

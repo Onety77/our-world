@@ -40,6 +40,101 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 5 Sep · Claude · The archive, and two things about the film's own keys
+
+> *"we will be writing the movies we watched, so more like we can have this
+> archive of our watched movies […] the other person cant see the rate untill
+> he/she rates it […] the tab of watched, if we are in it, it will fill the
+> whole screen"*
+
+**A fourth tab on the night screen: `watched`.** Either of you puts a film in,
+or moves one across from the wanted list with the new *we watched it* on its
+row. Half-star ratings, dragged rather than tapped. A note each. The years
+standing in the list. It is the first thing in the garden that grows without
+limit, so it is the first thing with a Firestore **collection** of its own
+rather than a field on `world/ours`.
+
+**The ratings are sealed, and the shape is the question vine's.** The film is
+public and carries `ratedWarm`/`ratedCool`; each score is a separate document
+named for whose it is, and the rules refuse hers until both flags are true. A
+sealed row therefore arrives with a **gap** rather than censored, and the flags
+are what tell the screen the difference between *she has not rated it* and
+*she has, and it is not yours yet*. Nothing above the seam has to guess and
+nothing above the seam could be trusted to keep it. Scores are stored as
+integers 1–10 (half-stars) because `firestore.rules` can pin an integer down
+and cannot pin a float.
+
+**Measured:** a revealed score can never change again — the rules refuse an
+update once the other side is in — so `data/firebase` keeps revealed ones in
+`localStorage` for good. Without it, opening the archive with 200 films in it
+is 400 document reads before a single star appears, every session. Unsealed
+ones are deliberately not kept: while she has not rated, yours is still yours
+to revise.
+
+**The tab takes the whole screen, and the picture *leaves* rather than
+unmounts.** `.together.full.archive` puts `.together-screen` at `left: -200vw`.
+Not `display: none`: that is a re-layout the embedded document can see and
+YouTube's player is entitled to stop for — and a pause here is a pause on her
+phone, so opening a list must not be able to end the film. Overflow past the
+left edge never makes a scrollbar. Measured in the browser: the screen sits at
+x −780 at its full 302 px width with the iframe still in the document, and the
+panel takes 358 of 390 px.
+
+`systems/archive` holds all of it that is arithmetic — the seal's four states,
+the average, the year grouping — so `npm run archive` can check it without a
+browser. 55 checks. The seal is the exact thing that cannot be seen from one
+device: alone there is nobody to leak to, so a build that showed her rating the
+moment she gave it would look perfect until the night it mattered. The mock
+grew `rateAs(who, id, score)` beside `sayAs` for the same reason, and
+`npm run screen` now drives the whole round trip through the real UI.
+
+---
+
+### And two corrections to the film's own controls, both reported
+
+**One press over a full-screen film looks; two press stop.** It used to be
+split by pointer type — a mouse paused on a single click, a finger revealed the
+controls — which meant the same tap did two different things depending on what
+you were touching the screen with. Both get the same rule now. The ordering is
+the argument: pausing reaches across to her screen and showing your own
+controls does not, so the gesture that costs nothing is the one that is easy to
+make by accident. The first press does not wait to find out whether a second is
+coming — it shows the controls either way and the second adds the pause on top,
+so there is no window of nothing happening.
+
+**Measured, and worth keeping:** the window is read off `event.timeStamp`, not
+`performance.now()` inside the handler. One is when the browser made the event,
+the other is when React got round to running you, and under software rendering
+two presses sent back to back reached the handler **up to a second apart** —
+which the app quite correctly called two single presses. A film is exactly the
+busy machine this fails on. The same slowness is why `mouseDoubleClick` in
+`screen-check` writes its four events without awaiting each acknowledgement:
+built out of `mouseClick` the pair was reliably just too slow, and read as the
+feature not working at all.
+
+**Space plays and pauses whenever your field is empty, even with the chat up.**
+The old rule stood aside for any focused field, which is right in principle and
+wrong in the one arrangement this screen is built around: the composer sits open
+beside the film all evening, so it holds the keyboard almost the whole time you
+are watching, and every space went into an empty box instead of stopping the
+film. The test is now *is there anything in it*. One letter typed and the key is
+hers again; the line sent and it comes back. `spaceIsTheirs` in
+`systems/watching` is the rule, kept away from the DOM so it can be checked; a
+`<select>` and the inputs a space *operates* rather than types into keep it
+whatever is in them.
+
+**Also:** the tab row was already the full width of the panel at 390 px with
+three tabs, so a fourth needed the row to give back a little tracking and size
+rather than clip. The count on `watched` is the archive's size; the films
+waiting on a rating from *you* are a dot, because "· 3 to rate" is another
+eighty pixels and pushes the tab off the end of a panel that clips.
+
+**`firestore.rules` has a new block and nothing works until it is published** —
+the failure is quiet: the film appears and the rating is silently refused. Run
+`npm run rules` and paste. `npm run screen` is green at 179; the two runs where
+the film half failed were the check's own MediaRecorder fixture coming out at
+1 KB instead of 3, which is an old flake and not this work.
+
 ## 5 Sep · Claude · Four attempts at a keyboard, all removed
 
 > *"it kinda almost worked once, and i saw the screen literally while my

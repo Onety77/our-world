@@ -37,6 +37,7 @@ import type { ScreenTalk,
   VoiceLight,
   VoiceLightGarden,
   Wanted,
+  Watched,
 } from './types'
 import {
   activeQuestion,
@@ -52,6 +53,13 @@ import {
   voiceClipFromStore,
 } from './voiceClips'
 import { newId } from './ids'
+import {
+  NOTE_LIMIT,
+  alreadyIn,
+  isScore,
+  other,
+  tidyTitle,
+} from '@/systems/archive'
 import { AMBIENCE_KEYS, GROWN_DAYS, HEART, USER_IDS } from './types'
 import { localDateKey } from '@/systems/time'
 import {
@@ -194,12 +202,22 @@ export interface LocalDataLayer extends DataLayer {
    * first thing she ever reads.
    */
   sayAs(id: UserId, body: string): void
+  /**
+   * Dev-panel only: give her score for her, so the seal can be seen opening.
+   *
+   * Alone on one device the archive can never reach its interesting state —
+   * every film would sit sealed for ever, waiting on somebody who is not here.
+   * That is not a thing to leave untestable: the whole point of the archive is
+   * what happens when the second score lands.
+   */
+  rateAs(id: UserId, filmId: string, score: number): void
   reset(): void
 }
 
 const LISTENING_KEY = 'garden:listening:v1'
 const WATCHING_KEY = 'garden:watching:v1'
 const FILMS_KEY = 'garden:films:v1'
+const WATCHED_KEY = 'garden:watched:v1'
 const TRACKS_KEY = 'garden:tracks:v1'
 /*
   Which IndexedDB key each track's audio is under.
@@ -684,6 +702,75 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
     }
   })()
   const filmWatchers = new Set<(f: Wanted[]) => void>()
+
+  /*
+    The archive, and the one place this layer has to do real work.
+
+    On the real backend the seal is the *rules*: her score is a document this
+    device is refused, so a sealed row simply arrives with a gap in it. Here
+    there is nothing to refuse anything — one browser holds both sides — so
+    the seal has to be applied on the way out instead. `sealed()` below is
+    what does it, and it is deliberately the last thing every read goes
+    through: a layer that quietly handed the screen both scores would mean the
+    whole feature was only ever tested in the one configuration where it
+    cannot fail.
+  */
+  type StoredScore = { by: UserId; score: number; at: number }
+  interface StoredWatched {
+    id: string
+    title: string
+    by: UserId
+    at: number
+    notes: Record<UserId, string>
+    scores: Partial<Record<UserId, StoredScore>>
+  }
+
+  let watched: StoredWatched[] = (() => {
+    if (typeof localStorage === 'undefined') return []
+    try {
+      const raw = JSON.parse(localStorage.getItem(WATCHED_KEY) ?? '[]') as unknown
+      return Array.isArray(raw) ? (raw as StoredWatched[]) : []
+    } catch {
+      return []
+    }
+  })()
+  const watchedWatchers = new Set<(rows: Watched[]) => void>()
+
+  /** One stored row as this device is allowed to see it. See above. */
+  function sealed(row: StoredWatched): Watched {
+    const rated = {
+      warm: row.scores.warm !== undefined,
+      cool: row.scores.cool !== undefined,
+    }
+    const both = rated.warm && rated.cool
+    const scores: Watched['scores'] = {}
+    for (const who of USER_IDS) {
+      const score = row.scores[who]
+      if (score && (both || who === me)) scores[who] = { ...score }
+    }
+    return {
+      id: row.id,
+      title: row.title,
+      by: row.by,
+      at: row.at,
+      rated,
+      notes: { warm: row.notes?.warm ?? '', cool: row.notes?.cool ?? '' },
+      scores,
+    }
+  }
+
+  function saveWatched() {
+    watched = [...watched].sort((a, b) => b.at - a.at)
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(WATCHED_KEY, JSON.stringify(watched))
+      } catch {
+        /* it still holds for this sitting */
+      }
+    }
+    const rows = watched.map(sealed)
+    for (const w of watchedWatchers) w(rows)
+  }
 
   function saveWatching() {
     if (typeof localStorage === 'undefined') return
@@ -1256,6 +1343,54 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       for (const w of filmWatchers) w(films)
     },
 
+    watchWatched(listener) {
+      watchedWatchers.add(listener)
+      listener(watched.map(sealed))
+      return () => {
+        watchedWatchers.delete(listener)
+      }
+    },
+
+    async addWatched(title) {
+      const name = tidyTitle(title)
+      if (name === '') return
+      // The same film twice is an archive nobody trusts, and two people
+      // keeping one list will absolutely both put it in.
+      if (alreadyIn(watched.map(sealed), name)) return
+      watched = [
+        { id: newId(), title: name, by: me, at: Date.now(), notes: { warm: '', cool: '' }, scores: {} },
+        ...watched,
+      ]
+      saveWatched()
+    },
+
+    async rateWatched(id, score) {
+      if (!isScore(score)) return
+      const row = watched.find((r) => r.id === id)
+      if (!row) return
+      /*
+        Changeable only while it is still secret. Once she has given hers the
+        two are both on the table, and a score revised in the light of the
+        other one is not the thing this was built to keep. The rules say the
+        same, in the same words — see `firestore.rules`.
+      */
+      if (row.scores[me] !== undefined && row.scores[other(me)] !== undefined) return
+      row.scores = { ...row.scores, [me]: { by: me, score, at: Date.now() } }
+      saveWatched()
+    },
+
+    async noteWatched(id, note) {
+      const row = watched.find((r) => r.id === id)
+      if (!row) return
+      row.notes = { ...row.notes, [me]: note.trim().slice(0, NOTE_LIMIT) }
+      saveWatched()
+    },
+
+    async forgetWatched(id) {
+      watched = watched.filter((r) => r.id !== id)
+      saveWatched()
+    },
+
     watchScreenTalk(listener) {
       screenTalkWatchers.add(listener)
       listener(screenTalk)
@@ -1574,6 +1709,14 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       tellWatchers(roundId)
     },
 
+    rateAs(id, filmId, score) {
+      if (!isScore(score)) return
+      const row = watched.find((r) => r.id === filmId)
+      if (!row) return
+      row.scores = { ...row.scores, [id]: { by: id, score, at: Date.now() } }
+      saveWatched()
+    },
+
     reset() {
       try {
         localStorage.removeItem(STORAGE_KEY)
@@ -1620,11 +1763,14 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       for (const w of listeningWatchers) w(listening)
       try {
         localStorage.removeItem(WATCHING_KEY)
+        localStorage.removeItem(WATCHED_KEY)
       } catch {
         /* nothing was saved anyway */
       }
       watching = nothingOn()
       for (const w of watchingWatchers) w(watching)
+      watched = []
+      saveWatched()
       screenTalk = { session: '', said: [] }
       for (const w of screenTalkWatchers) w(screenTalk)
       questions = { rounds: [], seeds: [], activeRoundId: null }

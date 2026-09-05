@@ -819,6 +819,167 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---- what the two of you have watched -------------------------------
+    /*
+      The archive, and the second sealed thing in this file.
+
+      A film is shared and public between the two of you; the *scores* are two
+      separate documents, and that shape is the seal. Neither of you can read
+      the other's until both public flags on the parent say a score exists —
+      which is the question vine's arrangement exactly, for the same reason: a
+      number you can see before you choose your own is a number you cannot
+      un-see, and the honest six becomes a seven every time without anybody
+      deciding to be dishonest.
+
+      A note is deliberately *not* sealed. It is not a judgement competing with
+      hers; it is the line you would say walking out of the cinema, and half
+      its worth is that she can find it there tomorrow.
+
+      Either of you may take a film out. This is furniture rather than
+      something somebody said — the same argument `tracks` makes above — and an
+      archive only its adder may correct is an archive with a typo in it for
+      ever.
+    */
+    match /watched/{id} {
+      allow read: if isOneOfUs();
+
+      allow create: if isOneOfUs()
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.by == me()
+        && request.resource.data.at is number
+        && request.resource.data.ratedWarm == false
+        && request.resource.data.ratedCool == false
+        && request.resource.data.noteWarm == ''
+        && request.resource.data.noteCool == ''
+        && request.resource.data.keys().hasOnly([
+          'title', 'by', 'at', 'ratedWarm', 'ratedCool', 'noteWarm', 'noteCool'
+        ]);
+
+      /*
+        Three mutations, and no fourth. Raising your own rated flag — which
+        must land with the score itself, or the row would claim a number
+        nobody may read; writing your own note; and fixing the title, which
+        either of you may do because a name typed at midnight is a name typed
+        at midnight.
+
+        Nobody may lower a flag. Un-rating would put a score back under a seal
+        the other person has already seen through, and there is no honest state
+        on the far side of that.
+      */
+      allow update: if isOneOfUs() && (
+        (
+          me() == 'warm'
+          && resource.data.ratedWarm == false
+          && request.resource.data.ratedWarm == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratedWarm'])
+          && existsAfter(/databases/$(database)/documents/watched/$(id)/scores/warm)
+        )
+        ||
+        (
+          me() == 'cool'
+          && resource.data.ratedCool == false
+          && request.resource.data.ratedCool == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratedCool'])
+          && existsAfter(/databases/$(database)/documents/watched/$(id)/scores/cool)
+        )
+        ||
+        (
+          me() == 'warm'
+          && request.resource.data.noteWarm is string
+          && request.resource.data.noteWarm.size() <= 600
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['noteWarm'])
+        )
+        ||
+        (
+          me() == 'cool'
+          && request.resource.data.noteCool is string
+          && request.resource.data.noteCool.size() <= 600
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['noteCool'])
+        )
+        ||
+        (
+          request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title'])
+        )
+      );
+
+      allow delete: if isOneOfUs();
+
+      /*
+        One document per person, named for whose it is. Half-stars as integers,
+        1 to 10 — a whole number is something this file can check exactly, and
+        a float is not.
+      */
+      match /scores/{who} {
+        // Mine is readable while it waits. Hers exists and is server-sealed
+        // until the two public flags on the parent are both true.
+        allow read: if isOneOfUs() && (
+          who == me()
+          || (
+            get(/databases/$(database)/documents/watched/$(id)).data.ratedWarm == true
+            && get(/databases/$(database)/documents/watched/$(id)).data.ratedCool == true
+          )
+        );
+
+        allow create: if isOneOfUs()
+          && who == me()
+          && request.resource.data.by == me()
+          && request.resource.data.score is int
+          && request.resource.data.score >= 1
+          && request.resource.data.score <= 10
+          && request.resource.data.at is number
+          && request.resource.data.keys().hasOnly(['by', 'score', 'at'])
+          // The score and its public flag must land atomically.
+          && (
+            (me() == 'warm'
+              && getAfter(/databases/$(database)/documents/watched/$(id)).data.ratedWarm == true)
+            ||
+            (me() == 'cool'
+              && getAfter(/databases/$(database)/documents/watched/$(id)).data.ratedCool == true)
+          );
+
+        /*
+          Changeable only while it is still secret.
+
+          Until she has given hers, nobody has seen this and changing your mind
+          costs nothing. The moment she has, both are on the table, and a score
+          revised in the light of the other one is not the thing the archive was
+          built to keep — so it is fixed, here, where it cannot be argued with.
+        */
+        allow update: if isOneOfUs()
+          && who == me()
+          && request.resource.data.by == me()
+          && request.resource.data.score is int
+          && request.resource.data.score >= 1
+          && request.resource.data.score <= 10
+          && request.resource.data.at is number
+          && request.resource.data.keys().hasOnly(['by', 'score', 'at'])
+          && (
+            (me() == 'warm'
+              && get(/databases/$(database)/documents/watched/$(id)).data.ratedCool == false)
+            ||
+            (me() == 'cool'
+              && get(/databases/$(database)/documents/watched/$(id)).data.ratedWarm == false)
+          );
+
+        /*
+          A score only goes when its film goes, in the same write.
+
+          On its own it would leave a row claiming a rating it cannot show —
+          and deleting yours after she had seen it would be un-saying something
+          she has already read. Tying it to the parent's own deletion makes
+          "take it out of the archive" the only door, which is the only one
+          that leaves nothing behind.
+        */
+        allow delete: if isOneOfUs()
+          && !existsAfter(/databases/$(database)/documents/watched/$(id));
+      }
+    }
+
     // ---- everything else ------------------------------------------------
     // Whatever comes next is closed rather than open-by-omission.
     match /{document=**} {
