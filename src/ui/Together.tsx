@@ -104,7 +104,6 @@ import {
 import { Ink } from './Ink'
 import { Scrub } from './Scrub'
 import { gainOf, useVolume } from '@/systems/volume'
-import { watchTheView } from '@/systems/viewport'
 
 /** How often the two screens are compared. See `DRIFT` for why not per frame. */
 const CHECK_MS = 900
@@ -406,39 +405,13 @@ export function Together() {
    * clears the field.
    * ---------------------------------------------------------------------------
    */
-  /**
-   * True while somebody has the keyboard in the conversation beside the film.
-   *
-   * ---------------------------------------------------------------------------
-   * **The film must not move when the keyboard comes up, and it was not the
-   * film that was moving it.**
-   *
-   * Measured on a 390-wide phone: the picture sits at 88 to 289 and stays
-   * exactly there when a keyboard takes a third of the screen —
-   * `interactive-widget=resizes-content` in the viewport tag sees to that. What
-   * happens instead is that the panel below it is left with about a hundred and
-   * ninety pixels, the transport takes half of them, and **the field being
-   * typed into ends up below the bottom of the screen**. The browser then does
-   * the only sensible thing and scrolls to reveal it — dragging the film up
-   * with it, which is what this looked like from the outside.
-   *
-   * So the transport gets out of the way while somebody is writing, for the
-   * same reason the dark screen does while somebody is searching: it is not
-   * what you are doing. The picture is what matters and the picture does not
-   * move.
-   * ---------------------------------------------------------------------------
-   */
-  const [writing, setWriting] = useState(false)
   const [hunting, setHunting] = useState(false)
   const hunt = useWatching((s) => s.hunt)
   const searching = hunting || hunt.trim() !== ''
 
-  /* A folded screen has no keyboard in it, and neither has a dark one. */
+  /* A folded screen has nobody searching in it, and neither has a dark one. */
   useEffect(() => {
-    if (!open) {
-      setWriting(false)
-      setHunting(false)
-    }
+    if (!open) setHunting(false)
   }, [open])
   /**
    * Films this device has opened before — see `systems/filmShelf`.
@@ -501,14 +474,6 @@ export function Together() {
   const offsetRef = useRef(offset)
   offsetRef.current = offset
 
-  /*
-    Where the visible part of the page is, for as long as this screen exists.
-
-    Only the night screen needs it — it is the one place with a film that must
-    not move and a keyboard that wants to move it — so it is watched here
-    rather than for the whole garden, and stops when the screen does.
-  */
-  useEffect(watchTheView, [])
 
   // --- the feed -------------------------------------------------------------
   useEffect(
@@ -1885,7 +1850,7 @@ export function Together() {
         in, belong here rather than on the picture.
       */
       ref={paneRef}
-      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${searching ? ' searching' : ''}${writing ? ' writing-here' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
+      className={`together ${open ? 'full' : 'tucked'}${immersive ? ' immersive' : ''}${filling ? ' filling' : ''}${searching ? ' searching' : ''}${immersive && immersiveControls ? ' immersive-awake' : ''}${miniControls ? ' mini-awake' : ''}${!open && spot !== null ? ' placed' : ''}${overGround ? ' over-ground' : ''}`}
       onPointerDown={onPaneDown}
       onPointerMove={onPaneMove}
       onPointerUp={onPaneUp}
@@ -2294,7 +2259,7 @@ export function Together() {
           )}
 
           {immersive || tab === 'talk' ? (
-            <Talk session={shared.session} theirName={them.name} onWriting={setWriting} />
+            <Talk session={shared.session} theirName={them.name} />
           ) : tab === 'film' ? (
             <OurFilm
               wanted={wanted}
@@ -2949,12 +2914,9 @@ function useScreenTalk(session: string) {
 function Talk({
   session,
   theirName,
-  onWriting,
 }: {
   session: string
   theirName: string
-  /** Whether this field has the keyboard, so the screen can make room for it. */
-  onWriting(writing: boolean): void
 }) {
   const [draft, setDraft] = useState('')
   const { shown, say: send, me } = useScreenTalk(session)
@@ -2980,12 +2942,6 @@ function Talk({
 
   const writing = useTheyAreTyping()
 
-  /*
-    A field that is unmounted never blurs — see the same note in `Queue`. This
-    half goes away when you switch tabs or fold the screen, and without this
-    the screen would go on believing the keyboard was up.
-  */
-  useEffect(() => () => onWriting(false), [onWriting])
 
   return (
     <div className="together-talk">
@@ -3014,8 +2970,6 @@ function Talk({
             className="ink together-field"
             value={draft}
             onChange={setDraft}
-            onFocus={() => onWriting(true)}
-            onBlur={() => onWriting(false)}
             placeholder={session === '' ? 'nothing on yet' : `to ${theirName}`}
             label={`say something to ${theirName} about what is on`}
             onKeyDown={(event) => {

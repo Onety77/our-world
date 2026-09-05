@@ -40,6 +40,59 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 5 Sep · Claude · Four attempts at a keyboard, all removed
+
+> *"it kinda almost worked once, and i saw the screen literally while my
+> keyboard was up, but then it never stayed again […] now even tho it goes up,
+> the chat thinks that you are shrinking it, and i dont get to see the current
+> last text im replying to […] if i cant get the screen, why give up my current
+> text"*
+
+Everything below is gone. This entry exists so nobody builds a fifth.
+
+**What was tried, in order.**
+
+1. `interactive-widget=resizes-content` in the viewport tag. Chrome honours it
+   and shortens the layout viewport; Safari does not support it at all. *(This
+   one stays — it predates this work and the Stars is built on it.)*
+2. Hiding the transport while the composer had focus, to give the field room
+   so the browser would have no reason to scroll.
+3. `systems/viewport` — reading `visualViewport` and sizing the whole night
+   screen to the visible area, so there was nothing above or below it to
+   scroll to.
+4. Reversing `.together-talk` so the composer sat directly *under the picture*
+   at about 310 of 844 instead of 789, where no keyboard could cover it — and
+   reversing `.together-said` with it so the newest line stayed on screen.
+
+**Why they are all gone.** The first three never reliably held the film in
+view; it worked once and then did not. The fourth held the film and took
+something worse in exchange: with the conversation moved below the composer
+and reversed, the message you were answering was no longer where you could
+read it. Giving up the thing you cannot write without, in return for something
+that only sometimes works, is not a trade.
+
+**The measurement that made every attempt look right.** On a 390-wide phone
+the film sits at 88–289 and stays there under Chrome with a keyboard up. That
+is true, it is repeatable, and it is worthless: it is Chrome describing its own
+viewport tag back to me. Every one of these was verified in an emulator on the
+engine that already behaved, and the engine that misbehaves was never in the
+room. Three separate NOTES entries say a version of this. It is the same
+mistake each time.
+
+**What the night screen does now:** nothing. A keyboard does whatever that
+browser does with it. The conversation reads oldest to newest downward, the
+composer is at the bottom, and the last thing said is directly above it —
+measured at 744, with the composer at 775 and the field at 789. Focus changes
+no geometry at all.
+
+**If anyone picks this up again:** the Stars already solves its own version,
+and solves it differently — `--talking-top` in `ui/Talking` positions against
+`visualViewport.offsetTop` as it *reports* rather than predicting what the
+browser is about to do. That is the shape that has held. And it should be
+checked on the actual phone before it is called fixed, because none of this
+was.
+
+---
 ## 5 Sep · Claude · The seven-timezone batch
 
 > *"dont do watching apart but together thing, dont do a date to look
@@ -102,6 +155,10 @@ having been said.
 
 ---
 ## 4 Sep · Claude · Safari's keyboard, and up rather than across
+
+> **Superseded.** Everything this entry describes was removed on 5 Sep — see
+> *Four attempts at a keyboard, all removed*, above. It did not hold on the
+> phone. Read it as a record of what was tried, not of what is there.
 
 > *"the last fix you said you did about the movie screen staying fixed in view
 > even when the keyboard is up didnt really work"*

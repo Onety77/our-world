@@ -16257,25 +16257,6 @@ body.on-the-road .broke-what {
   outline: none;
 }
 
-/*
-  The transport steps aside while somebody is writing.
-
-  Same argument as the dark screen while somebody is searching, and the same
-  rule: **the picture never moves.** Measured on a 390-wide phone, the film
-  sits at 88–289 and stays there when a keyboard takes a third of the screen;
-  what was going wrong is that the panel below was left with about a hundred
-  and ninety pixels, the transport took half of them, and the field being typed
-  into ended up past the bottom edge. The browser then scrolled to reveal it
-  and dragged the film up — which is what this looked like from the outside.
-
-  A scrubber is not what you are doing while you are writing, and it is one tap
-  away again the moment you are finished.
-*/
-@media (max-width: 719px) {
-  .together.full.writing-here .together-transport {
-    display: none;
-  }
-}
 
 /*
   A word over the picture, for a key that has nothing else to show for itself.
@@ -16317,93 +16298,32 @@ body.on-the-road .broke-what {
 }
 
 /* ===========================================================================
-   A keyboard that cannot take the film with it
+   A keyboard on the night screen: nothing here compensates for it
 
-   Chrome honours `interactive-widget=resizes-content` in the viewport tag and
-   simply makes the layout viewport shorter, which needs nothing from here.
-   **Safari does not support it.** It leaves the layout viewport at full height,
-   shrinks the visible part, and then scrolls the page to reveal the field —
-   dragging every `position: fixed` element up with it. The film slid off the
-   top of the screen, which is what this block is for.
+   ---------------------------------------------------------------------------
+   **Four attempts lived here, and all four were worse than the browser.**
 
-   `systems/viewport` publishes where the visible area actually is. Sized to
-   exactly that, the night screen cannot be scrolled off, because there is
-   nothing above or below it to scroll to.
+   They were: hiding the transport while writing; sizing the whole screen to
+   `visualViewport` so it could not be scrolled off; putting the composer
+   directly under the picture so a keyboard had nothing to reveal; and
+   reversing the conversation so the newest line stayed above the keyboard.
+
+   The first three never reliably kept the film on screen. The fourth did
+   something worse — it took away the message you were replying to, which is
+   the one thing you cannot write without. Trading the thing you need for a
+   thing that only sometimes works is not a trade.
+
+   So the night screen now lets a keyboard do whatever that browser does. If
+   the film scrolls away while you type, it scrolls away; the conversation
+   keeps its ordinary shape, the composer stays at the bottom where a
+   composer belongs, and the last thing said stays directly above it.
+
+   **Do not add a fifth.** Every one of these modelled what a browser was
+   about to do, and the model has to be right on two engines that disagree.
+   The Stars solves its own version of this differently — see `--talking-top`
+   in `ui/Talking` — and that one is measured rather than predicted.
+   ---------------------------------------------------------------------------
    =========================================================================== */
-
-/*
-  Absolute inside the screen rather than fixed to the window.
-
-  Identical geometry today — `.together.full` is `position: fixed; inset: 0`,
-  so an absolutely positioned child of it resolves against the same rectangle
-  the window would have given. What it buys is that the two of them now follow
-  their parent, so moving the parent to sit over the visible area moves the
-  film and the panel with it. Fixed children would have stayed behind.
-*/
-.together.full .together-screen,
-.together.full .together-room {
-  position: absolute;
-}
-
-html.keyboard-up .together.full {
-  top: var(--view-top, 0px);
-  height: var(--view-tall, 100%);
-  bottom: auto;
-}
-
-/* ===========================================================================
-   The field comes to the film, rather than the film going to the field
-
-   Three attempts at this compensated for what a keyboard does — a viewport
-   tag, then hiding the transport, then reading `visualViewport` and moving the
-   whole screen to match. Every one of them is a model of what the browser is
-   about to do, and the model has to be right on two browsers that behave
-   differently. On Safari it was not.
-
-   This removes the cause instead. **A keyboard only moves the page when the
-   focused field is underneath it.** On a 390-wide phone the composer sat at
-   about 789 of 844 — deep under any keyboard — so Safari scrolled to reveal
-   it and took the film with it. Put the field directly beneath the picture, at
-   about 310, and there is nothing to reveal: no scroll, no pan, and the film
-   does not move because nothing asked it to.
-
-   The conversation goes below the field while this is true. That is the trade,
-   and it is the one to make: you are writing, so the line you are writing is
-   the thing that has to be on screen, and the last few things said sit under
-   it in whatever room is left. It reverts the moment the keyboard goes.
-   =========================================================================== */
-
-@media (max-width: 719px) {
-  .together.full.writing-here .together-talk {
-    flex-direction: column-reverse;
-    justify-content: flex-end;
-  }
-
-  /*
-    The conversation keeps its scroll and gives up its greed.
-
-    `.together-said` is `flex: 1 1 auto` so it fills the panel, which is right
-    when it is above the field and wrong when it is below one: it would push
-    itself down into the keyboard and take the last thing said with it. It
-    takes what is left instead.
-  */
-  .together.full.writing-here .together-said {
-    flex: 0 1 auto;
-    min-height: 0;
-    /*
-      And the newest line comes to the top, next to the field.
-
-      Reversing the panel put the conversation *below* what you are writing,
-      and a conversation that still reads oldest-to-newest downward puts the
-      thing she just said at the far bottom — under the keyboard, which is the
-      one place this whole block exists to keep things out of. Reversed, the
-      newest sits directly under your own line and it reads outward from the
-      present, which is what you want while answering.
-    */
-    flex-direction: column-reverse;
-    justify-content: flex-end;
-  }
-}
 
 /*
   Asleep is not away, and the corner should not say them the same way.
