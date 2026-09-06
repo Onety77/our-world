@@ -129,6 +129,9 @@ function seedLetters(): Letter[] {
     at: now - daysAgo * DAY,
     // the newest of hers is still unread, so its flower glows
     readAt: index === drafts.length - 1 ? null : now - daysAgo * DAY,
+    // None of the seeds is sealed. A mock garden that opens with a thought
+    // somebody cannot read yet would look like something had gone wrong.
+    openAt: null,
   }))
 }
 
@@ -229,6 +232,21 @@ const TRACKS_KEY = 'garden:tracks:v1'
   download link and lasts.
 */
 const SONG_PATHS_KEY = 'garden:song-paths:v1'
+/*
+  The words of every sealed thought, kept where nothing else can reach them.
+
+  Deliberately *not* in the persisted world state and deliberately not on the
+  `Letter`: the whole point of a seal is that the words are somewhere the
+  reading path cannot accidentally pick them up. On the real backend that
+  somewhere is a subcollection the rules refuse; here it is this map, and
+  `readSealedLetter` is the only door to it.
+
+  It lives for the session rather than in `localStorage`, which is the one
+  honest difference from Firestore. The mock has always been a garden that
+  stores nothing anywhere and says so in the corner.
+*/
+const sealedWords = new Map<string, string>()
+
 const MESSAGES_KEY = 'garden:messages:v1'
 const QUESTIONS_KEY = 'garden:questions:v1'
 const VOICE_LIGHTS_KEY = 'garden:voice-lights:v1'
@@ -966,20 +984,47 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       })
     },
 
-    async writeLetter({ body, placeId, position }) {
+    async writeLetter({ body, placeId, position, openAt = null }) {
       const trimmed = body.trim()
       if (trimmed === '') return
+      const sealed = openAt !== null && openAt > Date.now()
       const letter: Letter = {
         id: newId(),
         by: me,
-        body: trimmed,
+        /*
+          Empty while sealed, exactly as it is on the real backend.
+
+          **The mock has to keep the seal too, and keep it the same way.** It
+          is what every check in this repo runs against, and a mock that hands
+          out the words while Firestore's rules refuse them is a mock that
+          proves the opposite of what it was run to prove. The words go in
+          `sealedWords` below, which nothing reads except `readSealedLetter`.
+        */
+        body: sealed ? '' : trimmed,
         placeId,
         position,
         at: Date.now(),
         // Your own letters are never unread. Only theirs glow.
         readAt: Date.now(),
+        openAt: sealed ? openAt : null,
       }
+      if (sealed) sealedWords.set(letter.id, trimmed)
       commit({ ...state, letters: [...state.letters, letter] })
+    },
+
+    async readSealedLetter(id) {
+      const letter = state.letters.find((l) => l.id === id)
+      if (!letter || letter.openAt === null) return null
+      /*
+        The same two conditions the rule uses, in the same order: yours
+        whenever you like, hers once the day has come. Written out here rather
+        than shared with `stillSealed` on purpose — that one is the interface
+        deciding what to draw, and this one is standing in for a server. A
+        seam that borrows the client's opinion of whether it may see something
+        is not a seam.
+      */
+      if (letter.by !== me && Date.now() < letter.openAt) return null
+      return sealedWords.get(id) ?? null
     },
 
     async markLetterRead(id) {

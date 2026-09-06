@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
+import { knock } from '@/systems/haptics'
 import {
   Color,
   CylinderGeometry,
@@ -2089,6 +2090,12 @@ class Driving {
     if (car.slam > 0.02 || car.hitStone) {
       const force = car.hitStone ? 0.7 : car.slam
       this.engine?.hit(force)
+      // The same event on the one channel that is not sound or light. Here
+      // rather than in `physics`, which is pure and runs headless under
+      // `npm run rally` — a tyre model that reaches for a vibration motor is a
+      // tyre model that cannot be measured. `knock` weighs it and ignores the
+      // brushes, so a kerb and a wall do not arrive as the same buzz.
+      knock(force)
       this.chase.jolt(0.35)
       const many = 8 + Math.round(force * 14)
       for (let i = 0; i < many; i++) {

@@ -32,6 +32,7 @@ import { Together } from '@/ui/Together'
 import { useWatching } from '@/systems/watching'
 import { SaidMenu } from '@/ui/Said'
 import { Trouble } from '@/ui/Trouble'
+import { Renewal } from '@/ui/Renewal'
 import { Arrival } from '@/ui/Arrival'
 import { Player } from '@/ui/Player'
 import { watchForTrouble } from '@/systems/trouble'
@@ -63,6 +64,12 @@ import { later } from '@/systems/later'
 import { useWatchLocks } from '@/systems/locks'
 import { usePublishedOutdoors } from '@/systems/outdoorsSync'
 import { useNotify } from '@/systems/notify'
+import { rememberWhereYouWere, whereYouWere } from '@/systems/whereYouWere'
+import {
+  cameFromASharedPicture,
+  forgetTheShareAddress,
+  takeTheSharedPicture,
+} from '@/systems/shared'
 
 /**
  * `?hour=18.6` pins the clock, `?section=river` opens straight into a place,
@@ -91,6 +98,18 @@ if (startSection || startBrowse) {
     index: sectionIndexById(startSection ?? startBrowse ?? ''),
     entered: Boolean(startSection),
   })
+} else if (fromUrl('shot') === null) {
+  /*
+    Nothing was asked for, so open where this device was last standing — see
+    `systems/whereYouWere` for the hour it stops being true after.
+
+    Behind the same first-frame rule as the direct links above, and behind
+    `shot` as well: a screenshot must be the same picture every time it is
+    taken, and a garden that remembers is a garden that would quietly make
+    every check depend on the run before it.
+  */
+  const back = whereYouWere()
+  if (back) useSections.setState({ index: back.index, entered: back.entered })
 }
 
 if (startGame) {
@@ -215,6 +234,42 @@ function Garden() {
     const wanted = startSection ?? startBrowse
     if (wanted) go(sectionIndexById(wanted))
   }, [setCount, go])
+
+  // And keep writing down where that is, so a phone that discards the world
+  // while you answer a message gives it back rather than starting it over.
+  useEffect(() => rememberWhereYouWere(), [])
+
+  /*
+    A photograph sent to the garden from the phone's own share sheet.
+
+    The worker took the file out of the operating system's POST and left it
+    where this can reach it — see `systems/shared` and `takeTheShare` in
+    `sw/worker.js`. All that is left is to stand in the Glasshouse and put the
+    picture in her hands.
+
+    Deliberately *not* gated on the door being open: the Arrival still covers
+    the world and still has to be pressed, exactly as on any other opening, and
+    the hanging screen is waiting underneath when it is. A share that skipped
+    the door would be a garden with no wind in it — same reason as
+    `systems/whereYouWere`.
+  */
+  useEffect(() => {
+    if (!cameFromASharedPicture()) return
+    let dropped = false
+    void takeTheSharedPicture().then((picture) => {
+      forgetTheShareAddress()
+      if (dropped || !picture) return
+      const glasshouse = sectionIndexById('glasshouse')
+      if (glasshouse < 0) return
+      const sections = useSections.getState()
+      sections.go(glasshouse)
+      sections.enter()
+      void useMemories.getState().hangThis(picture)
+    })
+    return () => {
+      dropped = true
+    }
+  }, [])
 
   /**
    * The gestures live on a transparent sheet over the whole window rather than
@@ -468,6 +523,7 @@ function Garden() {
       {/* One menu for whichever message was right-clicked — see ui/Said. */}
       <SaidMenu />
       <Trouble />
+      <Renewal />
       {/* Over everything, until it is opened. Last so it is last in the
           stacking order as well as in the file. */}
       <Arrival name={profiles[me === 'warm' ? 'cool' : 'warm'].name} />

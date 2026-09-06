@@ -60,6 +60,9 @@ function hungFrom(letter: Letter, index: number): Hung {
     id: letter.id,
     by: letter.by,
     readAt: letter.readAt,
+    // Carried through so the glow can leave a sealed thought dark until its
+    // day — see the filter in `world/Letters`.
+    openAt: letter.openAt,
     knot: hangSpot(index),
     drop: hangDrop(index),
   }

@@ -16,7 +16,18 @@ import type { UserId } from './types'
 import { firebase } from './firebase'
 
 const DEVICE_KEY = 'garden:push-device:v1'
-const WORKER = '/firebase-messaging-sw.js'
+/*
+  `/push/`, not the root, and the folder is the point — being served from there
+  is what gives this worker `/push/` as its scope, leaving `/` to the one that
+  caches the garden. Two workers cannot share a scope; the second registration
+  replaces the first rather than joining it. The full reasoning is at the top
+  of the worker itself.
+
+  It costs this file nothing: a push reaches the worker whose registration was
+  handed to `getToken` below, wherever that worker happens to live.
+*/
+const WORKER = '/push/firebase-messaging-sw.js'
+const WORKER_SCOPE = '/push/'
 let stopForegroundMessages: (() => void) | null = null
 
 function deviceId(): string {
@@ -77,7 +88,7 @@ export async function registerPushDevice(me: UserId): Promise<void> {
     throw new PushUnavailable('This browser does not support Web Push here.')
   }
 
-  const registration = await navigator.serviceWorker.register(workerUrl(), { scope: '/' })
+  const registration = await navigator.serviceWorker.register(workerUrl(), { scope: WORKER_SCOPE })
   await registration.update().catch(() => {})
   const messaging = getMessaging(firebase().app)
   /*

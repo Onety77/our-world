@@ -35,7 +35,9 @@ import {
   doc,
   getDoc,
   getDocs,
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   onSnapshot,
   deleteDoc,
   deleteField,
@@ -156,6 +158,17 @@ const SCREEN_TALK_DOC = ['world', 'screen'] as const
 const SCREEN_TALK_KEEP = 200
 const PROFILES = 'profiles'
 const LETTERS = 'letters'
+/*
+  Where a sealed thought keeps its words: `letters/{id}/sealed/words`.
+
+  A subcollection rather than a field, because a rule can refuse a *document*
+  and cannot refuse a field — so the only way for the words to be genuinely
+  unreadable, rather than merely un-rendered, is for them to live somewhere of
+  their own. One document, always the same name, because there is only ever one
+  set of words per thought.
+*/
+const SEALED = 'sealed'
+const WORDS = 'words'
 const CONTRIBUTIONS = 'contributions'
 /** One document per round; one document per move underneath it. See below. */
 const TRACKS = 'tracks'
@@ -349,7 +362,14 @@ function toProfile(id: UserId, data: Record<string, unknown> | undefined): Profi
 
 function toLetter(id: string, d: Record<string, unknown>): Letter | null {
   const body = typeof d.body === 'string' ? d.body.trim() : ''
-  if (body === '') return null
+  const openAt = typeof d.openAt === 'number' && Number.isFinite(d.openAt) ? d.openAt : null
+  /*
+    An empty body used to be the only way a letter could be malformed, so it
+    was the test for one. A sealed thought is deliberately empty here — its
+    words are in `sealed/words`, where the rules can refuse them — so the test
+    had to learn the difference. Still nothing: still not a letter.
+  */
+  if (body === '' && openAt === null) return null
   return {
     id,
     by: userId(d.by),
@@ -358,6 +378,7 @@ function toLetter(id: string, d: Record<string, unknown>): Letter | null {
     position: vec3(d.position),
     at: num(d.at, 0),
     readAt: typeof d.readAt === 'number' ? d.readAt : null,
+    openAt,
   }
 }
 
@@ -522,6 +543,46 @@ export interface FirebaseHandles {
 
 let handles: FirebaseHandles | null = null
 
+/**
+ * Firestore, with the garden kept on the device.
+ *
+ * ---------------------------------------------------------------------------
+ * **Two people, seven timezones apart, on the two networks this world actually
+ * runs on.** Without a local cache every open of the garden is a cold read of
+ * the conversation, the memories, the archive, the pot and the thoughts, over
+ * whichever connection Kano or China is having that morning — and until it
+ * finishes there is nothing on the screen but a world with no one in it.
+ *
+ * With one, all of it comes back off the disk in the first frame and the
+ * network's job is reduced to saying what changed. The garden opens at the
+ * speed of the phone rather than the speed of the link, and it opens with no
+ * link at all.
+ *
+ * **The writes matter as much as the reads.** A queued write survives the app
+ * being closed, so a thought hung under the tree with no signal is not lost
+ * and is not a lie either: it is genuinely sent, later, by itself. That is the
+ * honest version of the thing the interface has always implied.
+ *
+ * `persistentMultipleTabManager` because the desktop opens this in tabs and
+ * the single-tab manager would leave the second one silently uncached.
+ *
+ * **Nothing sealed can leak into it.** The cache only ever holds documents the
+ * rules already allowed this device to read — her rating before you have
+ * given yours was refused at the server and was never in the response, so it
+ * is not in the cache either. The seal lives in `firestore.rules`, which is
+ * the only place it has ever lived.
+ *
+ * If the browser has no IndexedDB — private windows on some of them — Firestore
+ * falls back to holding the cache in memory for the session. That is a quieter
+ * garden rather than a broken one, and it is why nothing here throws.
+ * ---------------------------------------------------------------------------
+ */
+function startFirestore(app: FirebaseApp): Firestore {
+  return initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  })
+}
+
 /** Started once, on demand. Sign-in needs these before the layer exists. */
 export function firebase(): FirebaseHandles {
   if (handles) return handles
@@ -529,7 +590,7 @@ export function firebase(): FirebaseHandles {
   handles = {
     app,
     auth: getAuth(app),
-    db: getFirestore(app),
+    db: startFirestore(app),
     rtdb: getDatabase(app),
     store: getStorage(app),
   }
@@ -1094,20 +1155,64 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       }
     },
 
-    async writeLetter({ body, placeId, position }) {
+    async writeLetter({ body, placeId, position, openAt = null }) {
       const trimmed = body.trim()
       if (trimmed === '') return
       const id = newId()
+      /*
+        Sealed only if the day is genuinely still ahead. A date already gone —
+        picked by mistake, or reached while the sheet sat open — is a thought
+        that opens now, written the ordinary way, rather than one that arrives
+        sealed and instantly unsealed with its words in a second document
+        forever.
+      */
+      const sealed = openAt !== null && openAt > now()
+
       await setDoc(doc(db, LETTERS, id), {
         by: me,
-        body: trimmed,
+        // The words go to `sealed/words` instead when this one is waiting, so
+        // that what the other one's device receives cannot contain them.
+        body: sealed ? '' : trimmed,
         placeId,
         position,
         at: now(),
         // Your own letters are never unread. Only theirs glow.
         readAt: now(),
+        openAt: sealed ? openAt : null,
         writtenAt: serverTimestamp(),
       })
+
+      if (!sealed) return
+      /*
+        `by` and `openAt` are written again here rather than looked up.
+
+        A rule that had to `get()` the parent to find out whether this one may
+        be read would spend a document read on every attempt and count against
+        the ten a request is allowed. Repeating two fields makes the seal a
+        property of the sealed document itself — and they cannot drift, because
+        neither document may ever be updated.
+      */
+      await setDoc(doc(db, LETTERS, id, SEALED, WORDS), {
+        by: me,
+        body: trimmed,
+        openAt,
+      })
+    },
+
+    async readSealedLetter(id) {
+      try {
+        const held = await getDoc(doc(db, LETTERS, id, SEALED, WORDS))
+        if (!held.exists()) return null
+        const body = (held.data() as Record<string, unknown>).body
+        return typeof body === 'string' && body.trim() !== '' ? body.trim() : null
+      } catch {
+        /*
+          The rules refused, which is what they are for. Asking before the day
+          is not a fault and must not reach `trouble` — the reader turns a null
+          into the date it opens on, which is the true thing to say.
+        */
+        return null
+      }
     },
 
     async markLetterRead(id) {

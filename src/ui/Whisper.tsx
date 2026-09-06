@@ -47,6 +47,7 @@ import { heartedBy, useTalking } from '@/systems/talking'
 import type { Message, UserId } from '@/data/types'
 import { useSections } from '@/systems/sections'
 import { SECTIONS, sectionIndexById } from '@/sections/registry'
+import { useBadge } from '@/systems/badge'
 import { useDismissOutside } from './useDismissOutside'
 import { Ink } from './Ink'
 
@@ -157,6 +158,17 @@ export function Whisper() {
     () => messages.filter((m) => m.by !== me && m.at > (lastReadAt?.[me] ?? 0)).length,
     [messages, me, lastReadAt],
   )
+
+  /*
+    The same number, on the home-screen icon.
+
+    Here rather than anywhere else because this component is mounted in every
+    corner of the world and has already worked the count out — so the mark
+    outside the garden and the fold inside it are the same fact and cannot
+    drift apart. On a garden that is not installed there is no icon and this
+    does nothing at all; see `systems/badge`.
+  */
+  useBadge(unread)
 
   /*
     The unread mark already breathes while something is waiting. Give the

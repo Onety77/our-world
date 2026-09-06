@@ -5,23 +5,29 @@
 > first two-device pass, and what still will not work.
 >
 > This file is kept for the two things at the bottom that are worth knowing and
-> are not steps: the China problem, and what it costs to run. The table below
-> was true before the Glasshouse and is now wrong in one row, corrected there.
+> are not steps: the China problem, and what it costs to run.
 
 ## Where this actually stands
 
-Checked against the live project, not from memory:
+**This table has been wrong before, and being wrong here is expensive** — it is
+the file people check before deciding whether something is worth debugging. It
+said Cloud Storage did not exist for weeks after it did, which sends the next
+reader looking for a console step that was already taken. If you find a row
+here that no longer matches the console, correcting it is part of whatever job
+made it untrue.
 
-| | |
-|---|---|
-| Email/password sign-in | **done** — switched on |
-| Firestore | **done** — created, and locked (denying everything, which is correct until the rules go up) |
-| Realtime Database | **done** — created at `https://our-world-c9a07-default-rtdb.firebaseio.com`, locked |
-| Cloud Storage | **not created — and it now has to be.** Glasshouse photographs and the brief Stars voice-lights are the two things here that store bytes. They share the locked-down `storage.rules`; `npm run rules` fills and emits it alongside the other two. See `STEPS.md` 1.2. |
-| The two accounts | **not done** |
-| The rules | **not published** |
+| | | last checked |
+|---|---|---|
+| Email/password sign-in | **done** — switched on | Aug 2026 |
+| Firestore | **done** — created | Aug 2026 |
+| Realtime Database | **done** — created at `https://our-world-c9a07-default-rtdb.firebaseio.com` | Aug 2026 |
+| Cloud Storage | **done** — created, bucket `our-world-c9a07.firebasestorage.app`. Glasshouse photographs and the brief Stars voice-lights are the two things here that store bytes; they share `storage.rules`, which `npm run rules` fills and emits alongside the other two. | Sep 2026 |
+| `notifyNewMessage` | **deployed** — `us-central1`, nodejs22 | 1 Sep 2026 |
+| The two accounts | unverified from the repo — check the console | — |
+| The rules | unverified from the repo — check the console | — |
 
-So: three things left — the accounts, Storage, and the rules. Walked through in **STEPS.md**.
+**`STEPS.md` is the authority, not this table.** It covers the whole job in
+order; this is only a summary of where the console got to.
 
 ---
 

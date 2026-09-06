@@ -10,6 +10,9 @@ import { roadKey, useDoorman } from '@/systems/locks'
 import { useMenuKeys } from '@/ui/useMenuKeys'
 import { useChoiceSwipe } from '@/ui/useChoiceSwipe'
 import { useLobby } from '@/systems/useLobby'
+import { useStayAwake } from '@/systems/awake'
+import { useHoldOrientation } from '@/systems/orientation'
+import { FEEL, feel } from '@/systems/haptics'
 import { useSay } from '@/systems/useSay'
 import { usePlaying } from '@/systems/playing'
 import { useData, useWorldSlice } from '@/data/provider'
@@ -1182,6 +1185,18 @@ function Road({
   cargo.current = { ghost, ghostName }
   const road = `${attempt}:${track.stage}:${wheelToWheel}:${grid}`
 
+  /*
+    The two things a phone does to a race that have nothing to do with racing.
+
+    It dims and locks after about thirty seconds of a thumb held still on a
+    long straight, and it turns the screen over when the phone is tilted —
+    which is how this car is steered. Both are held for as long as the road is
+    on screen and released with it. Neither is announced, and on a device that
+    refuses either one the race is exactly what it was.
+  */
+  useStayAwake(true)
+  useHoldOrientation(true)
+
   useEffect(() => {
     useGameStage.getState().take(true)
     useRace.getState().open({
@@ -1205,6 +1220,9 @@ function Road({
           driftMs: run.driftMs,
           at: Date.now(),
         })
+        // Across the line. The last thing the car does to your hand, and the
+        // bookend to the one on `go`.
+        feel(FEEL.finish)
         finish.current(run)
       },
     })
@@ -1254,6 +1272,22 @@ function Road({
 function StartLights() {
   const phase = useRace((state) => state.phase)
   const paused = useRace((state) => state.paused)
+
+  /*
+    One buzz, on go, and deliberately not one per light.
+
+    The three ambers are three fixed beats in CSS precisely so that no per-frame
+    state enters the interface — see the note above. Feeling each of them would
+    mean writing those three beats down a second time, in JavaScript, where
+    they could drift out of step with both the stylesheet and `COUNTDOWN` in
+    the 3D machine, and a countdown you feel a beat late is worse than one you
+    do not feel at all. The moment worth having is the release, and that one
+    React already knows about exactly.
+  */
+  useEffect(() => {
+    if (phase === 'running') feel(FEEL.away)
+  }, [phase])
+
   if (phase !== 'ready' && phase !== 'running') return null
 
   const touch =

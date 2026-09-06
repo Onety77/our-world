@@ -1587,6 +1587,99 @@ canvas {
   text-shadow: 0 0 1px rgba(64, 44, 22, 0.28);
 }
 
+/*
+  A thought that is not open yet.
+
+  Lighter and italic — the hand of somebody noting something down rather than
+  saying it — and the day itself is the only part at full strength, because the
+  day is the entire content of this sheet. There is nothing here pretending to
+  be hidden words: no blur, no redaction bars, no placeholder the length of the
+  real thing. The words are not on this device at all (`firestore.rules`
+  refuses them), and drawing a shape where they will be would be the interface
+  inventing something the server deliberately did not send.
+*/
+.ink.sealed {
+  font-style: italic;
+  color: rgba(47, 36, 24, 0.62);
+}
+
+.ink.sealed em {
+  font-style: normal;
+  color: #2f2418;
+}
+
+/*
+  When it opens — one line under the writing, and the last thing on the sheet
+  before the two buttons.
+
+  Set in the small sans the rest of the paper's marginalia uses (`.addressed`,
+  `.dated`) rather than in ink, because it is not part of the thought. It is a
+  note about the thought, in the margin, the way a date is.
+*/
+.sealing {
+  margin: 1.5rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  line-height: 1.9;
+  color: rgba(74, 58, 38, 0.6);
+}
+
+.sealing p {
+  margin: 0;
+}
+
+/* A word on the paper that answers. No box — same rule as `.renewal`. */
+.sealing button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: rgba(74, 58, 38, 0.92);
+  border-bottom: 1px solid rgba(74, 58, 38, 0.32);
+  cursor: pointer;
+}
+
+.sealing button:hover,
+.sealing button:focus-visible {
+  color: #2f2418;
+  border-bottom-color: rgba(47, 36, 24, 0.7);
+}
+
+.sealing button.chosen {
+  font-style: italic;
+  color: #2f2418;
+}
+
+/*
+  The phone's own calendar, and the one control in this garden that is allowed
+  to look like itself.
+
+  It appears only after somebody has asked for a day, and a date field is the
+  single place where the platform's widget is genuinely better than anything
+  that could be drawn here — it knows the month lengths, the person's own
+  locale and how they expect to scroll a year. Toned down to sit on paper
+  rather than dressed up as something it is not.
+*/
+.sealing-day {
+  appearance: none;
+  margin-top: 0.5rem;
+  background: rgba(74, 58, 38, 0.06);
+  border: 0;
+  border-bottom: 1px solid rgba(74, 58, 38, 0.34);
+  border-radius: 0;
+  padding: 0.3rem 0.4rem;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: #2f2418;
+}
+
 .signature {
   margin: auto 0 0;
   padding-top: 2.4rem;
@@ -5081,6 +5174,63 @@ body:has(.talking) .leave-place {
   line-height: 1.5;
   color: #f3d9c0;
   text-shadow: var(--lift);
+}
+
+/*
+  A newer garden is waiting.
+
+  Sits exactly where `Trouble` sits — the two can never be on screen at once in
+  any way that matters, and the place low and central is already the world's
+  one spot for a sentence that is about the garden rather than in it.
+
+  Cooler than the trouble line on purpose. That one is warm because it is an
+  apology; this is not an apology, and a matching colour would make an ordinary
+  piece of news look like something had gone wrong.
+
+  The whole line is quiet and only the two words that do something are lit,
+  which is the same rule the rest of the world follows: everything touchable
+  announces itself, and nothing else pretends to.
+*/
+.renewal {
+  position: fixed;
+  left: 50%;
+  bottom: max(6.5rem, calc(env(safe-area-inset-bottom) + 6rem));
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: min(28rem, 86vw);
+  text-align: center;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  color: #b9c8c0;
+  text-shadow: var(--lift);
+  /* The sentence is not in the way of anything; only the word is touchable. */
+  pointer-events: none;
+}
+
+.renewal button {
+  pointer-events: auto;
+  /* No box. It is a word on the world that happens to answer. */
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: #f0e3cd;
+  text-shadow: var(--lift);
+  cursor: pointer;
+  /* Enough of a target for a thumb without drawing anything. */
+  padding-inline: 0.15em;
+  border-bottom: 1px solid rgb(240 227 205 / 0.34);
+}
+
+.renewal button:hover,
+.renewal button:focus-visible {
+  color: #fff6e6;
+  border-bottom-color: rgb(255 246 230 / 0.7);
 }
 
 /* ---------------------------------------------------------------------------

@@ -89,6 +89,8 @@ export interface Hung {
   id: string
   by: UserId
   readAt: number | null
+  /** The day it opens, or null. See the glow filter below for why it is here. */
+  openAt: number | null
   /** Where the thread is tied, on the branch. */
   knot: [number, number, number]
   /** Metres of thread between the knot and the top of the sheet. */
@@ -365,10 +367,28 @@ export function Letters({
   const { papers, glows, glowColor } = useMemo(() => {
     const built = {
       papers: papersGeometry(hung),
-      // hers, unopened — the only thing in the tree that glows, and it glows
-      // around the *paper* rather than around the knot it hangs from
+      /*
+        Hers, unopened — the only thing in the tree that glows, and it glows
+        around the *paper* rather than around the knot it hangs from.
+
+        **A sealed thought does not glow, and this is an honesty rule rather
+        than a taste one.** The glow means *there is something here for you to
+        read*, and for a thought still waiting for its day that is not true:
+        the words are not on this device and the server will refuse them. A
+        light that draws somebody across the meadow to a paper that cannot say
+        anything is the world making a promise it has to break — the same
+        failure as a notification switch that implies more than a page can do.
+        The day it opens, it lights like anything else she left.
+      */
       glows: glowsGeometry(
-        hung.filter((l) => l.by !== me && l.readAt === null).map(paperCentre),
+        hung
+          .filter(
+            (l) =>
+              l.by !== me &&
+              l.readAt === null &&
+              (l.openAt === null || Date.now() >= l.openAt),
+          )
+          .map(paperCentre),
       ),
       glowColor: LIGHT_COLORS[me === 'warm' ? 'cool' : 'warm'],
     }

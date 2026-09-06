@@ -71,6 +71,16 @@ interface MemoriesState {
    * behind the operating system's own picker is a second dialog over the first.
    */
   leaveOne(): Promise<void>
+  /**
+   * The same thing, for a photograph that arrived already chosen.
+   *
+   * The phone's share sheet hands the garden a file rather than opening a
+   * picker — see `systems/shared` — so everything after the choosing has to be
+   * reachable without it. This is that half, and `leaveOne` is now the picker
+   * plus this, which is what keeps a shared picture and a picked one from
+   * being two subtly different ways of hanging the same glass.
+   */
+  hangThis(file: Blob): Promise<void>
   forming(id: string | null): void
 }
 
@@ -92,6 +102,10 @@ export const useMemories = create<MemoriesState>((set) => ({
     // time; this one call may not.
     const file = await pickPicture()
     if (!file) return
+    await useMemories.getState().hangThis(file)
+  },
+
+  hangThis: async (file) => {
     set({ hanging: true, picked: null })
     try {
       set({ picked: await prepare(file) })

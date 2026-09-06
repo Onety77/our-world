@@ -194,6 +194,15 @@ get it wrong.
 
 If it says `VITE_WARM_EMAIL is empty in .env.local`, go back to step 2.2.
 
+> **If you have published these before, publish them again anyway.** The
+> Firestore file gained a block — `letters/{id}/sealed/words`, which is what
+> holds a thought left for a future day and refuses it until then. Until that
+> block is live, sealing a thought fails in the one way that is easy to
+> misread: the thought appears under the tree, carrying its date, and the words
+> are refused on the way in and never stored. It looks like it worked. There is
+> nothing to recover afterwards, so this goes up **before** the first sealed
+> thought is written, not after somebody notices.
+
 ## 3.2 Paste all three
 
 In the console, one at a time:
@@ -333,16 +342,37 @@ and `/dev7731` out of the URL. Vercel serves `dist` as static files, so
 anything that is not `/` is a file that does not exist — and `/dev7731`, the
 control room, is exactly that.
 
-Add `vercel.json` in the repo root:
+`vercel.json` in the repo root does that, and one more thing beside it:
 
 ```json
 {
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }]
+    },
+    {
+      "source": "/push/firebase-messaging-sw.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }]
+    }
+  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
 ```
 
-That is the whole file. Commit it. Without it the site works until the first
-time you open the control room or send her a link to a place.
+Commit it. Without the **rewrite** the site works until the first time you open
+the control room or send her a link to a place.
+
+Without the **headers**, the two service workers can be served from a cache,
+and the one thing a worker must never be is stale: `/sw.js` is what decides
+whether a new garden is ever noticed, so a cached copy of an old one is a phone
+that stops receiving updates and cannot say so. Browsers cap this at a day by
+themselves; the header makes it immediate. JSON takes no comments, which is why
+the reason is written here.
+
+The filesystem is checked before the rewrites, so both workers are served as
+themselves rather than becoming `index.html`. **Never let anything move
+`/push/firebase-messaging-sw.js` back to the root** — see §5.2c.
 
 ### Every time after that
 
@@ -366,6 +396,36 @@ Hosting and data are separate things here, and only the hosting has moved:
   voice-lights fail to load with a CORS error once you are on Vercel, that is
   the bucket refusing an origin it does not know. Fix with the `gsutil` CORS
   config, or from the Google Cloud console for the same bucket.
+
+## 5.2c The two service workers, and the one rule about them
+
+The garden runs **two**, and they are not interchangeable:
+
+| | Where | What it does |
+|---|---|---|
+| `/sw.js` | generated into `dist` by the build | Keeps the garden on the device: the world opens instantly, and opens with no signal at all. |
+| `/push/firebase-messaging-sw.js` | `public/push/` | Wakes up when she leaves something, while the garden is closed. |
+
+**A scope can be held by exactly one worker, and registering a second script
+for the same scope does not run both — it replaces the first.** The push worker
+used to sit at the root, which was free while it was the only one. It is in
+`push/` now, and being *served* from there is what gives it `/push/` as its
+scope, so no header is involved and there is nothing for a host to get wrong.
+
+**If anything ever moves that file back to the repo root, the cache dies
+silently.** No error, no failed build — the world simply stops opening offline,
+and the first anybody hears of it is somebody on a bad connection looking at
+nothing. Nothing about the notification worker needs a scope: a push reaches
+the worker whose registration was handed to `getToken`, wherever it lives.
+
+Both are excluded from Vercel's caching in §5.2 for the same reason.
+
+**Neither runs on `npm run dev`.** The worker is registered only in a
+production build — a cached shell in front of Vite is a morning lost — and the
+dev server actively unregisters any it finds, because `npm run preview` serves
+a real build on the same localhost. To see the offline behaviour, run
+`npm run offline`, which builds it, opens it in a real browser, kills the
+server and asks for the world again.
 
 ## 5.3 A real warning about China
 

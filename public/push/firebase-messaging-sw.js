@@ -4,6 +4,32 @@
  * This file deliberately has no private configuration. Firebase's web config
  * is public and arrives in the registration URL; the only authority lives in
  * Firestore rules and in the server function's Admin credentials.
+ *
+ * ---------------------------------------------------------------------------
+ * **It lives in `/push/` rather than at the root, and that is the whole reason
+ * this folder exists.**
+ *
+ * A scope can be held by exactly one service worker. This one used to claim
+ * `/` — which was free while it was the only worker in the garden, and became
+ * a collision the moment the world got one that caches (`sw.js`). Registering
+ * a second script for the same scope does not run both: it *replaces* the
+ * first. Whichever registered last would have won, the other would have gone
+ * silently dark, and the two candidates for going dark were "the garden opens
+ * offline" and "she is told at all".
+ *
+ * So the caching worker takes `/`, because it must — only the worker
+ * controlling a page's scope can answer that page's fetches. This one needs no
+ * scope at all: it never intercepts a request. A worker is handed its push
+ * events because `getToken` was given *its* registration, not because of where
+ * it sits, and `showNotification`, `notificationclick`, `clients.matchAll`
+ * with `includeUncontrolled` and `openWindow` all reach the whole origin from
+ * anywhere. Sitting in a folder nothing navigates to costs it nothing.
+ *
+ * Being served from `/push/` is what makes `/push/` its default scope, so no
+ * `Service-Worker-Allowed` header is needed and there is nothing for a host to
+ * get wrong. Moving this file back to the root would silently disable the
+ * cache. See `systems/serviceWorker.ts` for the other half.
+ * ---------------------------------------------------------------------------
  */
 
 /* global firebase */

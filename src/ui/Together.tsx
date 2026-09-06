@@ -122,6 +122,7 @@ import {
 import { Ink } from './Ink'
 import { Scrub } from './Scrub'
 import { gainOf, useVolume } from '@/systems/volume'
+import { useStayAwake } from '@/systems/awake'
 
 /** How often the two screens are compared. See `DRIFT` for why not per frame. */
 const CHECK_MS = 900
@@ -609,6 +610,20 @@ export function Together() {
   useEffect(() => {
     if (!live) setTrouble('')
   }, [live])
+
+  /*
+    The screen stays lit while the film runs.
+
+    A film is the longest either of you goes without touching the phone, so it
+    is the place the screen dimming hurts most — and on the night screen it
+    hurts asymmetrically: whoever is not driving does nothing at all for two
+    hours and watches their own phone go dark every thirty seconds.
+
+    Tied to the film actually running rather than to the screen being open. A
+    queue somebody is browsing at two in the morning is a page of text, and a
+    world that never lets a phone sleep is a world that flattens a battery.
+  */
+  useStayAwake(shared.playing && joined && trouble === '')
 
   /*
     The picture is the switch once the room is quiet. Controls stay present

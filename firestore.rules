@@ -126,14 +126,24 @@ service cloud.firestore {
     match /letters/{id} {
       allow read: if isOneOfUs();
 
+      // A thought is either open — words here, openAt null — or sealed, with
+      // nothing here and its words in `sealed/words` below. Never both, and
+      // never neither: an empty body with no date is not a thought at all.
       allow create: if isOneOfUs()
         && request.resource.data.by == me()
         && request.resource.data.body is string
-        && request.resource.data.body.size() > 0
         && request.resource.data.body.size() <= 8000
         && request.resource.data.placeId is string
         && request.resource.data.position is list
-        && request.resource.data.position.size() == 3;
+        && request.resource.data.position.size() == 3
+        && (
+             (request.resource.data.openAt == null
+               && request.resource.data.body.size() > 0)
+             ||
+             (request.resource.data.openAt is number
+               && request.resource.data.openAt > request.time.toMillis()
+               && request.resource.data.body.size() == 0)
+           );
 
       allow update: if isOneOfUs()
         // only theirs, and only the first time
@@ -144,6 +154,40 @@ service cloud.firestore {
         && request.resource.data.readAt is number;
 
       allow delete: if false;
+
+      // ---- the words of a sealed thought ---------------------------------
+      //
+      // The seal itself, and the only place it exists.
+      //
+      // A rule can refuse a *document* and cannot refuse a field, so the words
+      // of a thought that is still waiting have to live somewhere of their own
+      // — otherwise "sealed" would only ever mean "the other one's app chose
+      // not to draw it", which is not a seal, it is a request. Same shape as
+      // the question vine and the archive's ratings.
+      //
+      // `by` and `openAt` are repeated here rather than read from the parent.
+      // A `get()` would cost a document read on every attempt and count
+      // against the ten a request is allowed; and because neither document may
+      // ever be updated, the copies cannot drift from the originals.
+      //
+      // Yours is never sealed to you: you wrote it, and a lock with nobody on
+      // the other side of it is not protecting anything.
+      match /sealed/words {
+        allow read: if isOneOfUs()
+          && (resource.data.by == me() || request.time.toMillis() >= resource.data.openAt);
+
+        allow create: if isOneOfUs()
+          && request.resource.data.by == me()
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 8000
+          && request.resource.data.openAt is number
+          && request.resource.data.openAt > request.time.toMillis();
+
+        // Written once. A day that could be moved afterwards is not a day, and
+        // words that could be swapped after the seal opened were never sealed.
+        allow update, delete: if false;
+      }
     }
 
     // ---- the pot --------------------------------------------------------

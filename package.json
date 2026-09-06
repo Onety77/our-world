@@ -37,7 +37,9 @@
     "door": "npx --yes tsx scripts/door-check.ts",
     "screen": "node scripts/screen-check.mjs",
     "film": "npx --yes tsx scripts/film-check.ts",
-    "archive": "npx --yes tsx scripts/archive-check.ts"
+    "archive": "npx --yes tsx scripts/archive-check.ts",
+    "offline": "node scripts/offline-check.mjs",
+    "sealed": "npx --yes tsx scripts/sealed-check.ts"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",

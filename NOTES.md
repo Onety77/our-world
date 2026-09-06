@@ -40,6 +40,98 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 6 Sep · Claude · The garden keeps itself, and a thought can wait for a day
+
+> *"we are only doing 1,2,3 and 7 from the upgrade.md file"*
+
+Four things, from `UPGRADE.md` — which is the ranked list this came out of and
+also records what was turned down, so nobody proposes the two suns again.
+
+**Firestore now keeps a local copy.** `getFirestore(app)` was bare, so every
+open of the garden was a cold read of the conversation, the memories, the
+archive, the pot and the thoughts over whichever connection Kano was having.
+It is `persistentLocalCache` with the multi-tab manager now. Writes queue
+offline and send themselves, so a thought written with no signal genuinely
+lands rather than appearing to. **Measured:** the lazy `firebase` chunk went
+701 KB → 778 KB raw for the persistence code — it is behind the dynamic
+boundary and not in front of the first frame.
+
+**And there is a service worker.** `sw/worker.js`, generated into `dist/sw.js`
+by `gardenWorker()` in `vite.config.ts`, which walks the entry's *static*
+import graph — never `dynamicImports` — so the shell is exactly what the app
+already loads and the places, games, admin and Firebase SDK stay lazy. 42
+files, 692 KB gzipped, and install costs almost no network because everything
+under `/assets/` is content-hashed and fetched with `cache: 'default'`, so the
+browser hands back what the page just downloaded.
+
+> **The one that would have been a silent disaster:** `firebase-messaging-sw.js`
+> claimed scope `/`, and **two workers cannot share a scope** — registering the
+> second does not run both, it *replaces* the first. Whichever registered last
+> would have won and the other would have gone dark, with the two candidates
+> being "the garden opens offline" and "she is told at all". The push worker
+> now lives in `public/push/`, which is what makes `/push/` its scope; a worker
+> is handed its push events because `getToken` was given its registration, not
+> because of where it sits. **If it is ever moved back to the root the cache
+> silently dies.**
+
+Media is never cached — `<audio>` uses ranged requests and a cache that answers
+one with a whole body is a stall with no error attached. That is also twelve of
+the twenty megabytes in `dist` staying out of it.
+
+**`npm run offline`** builds, serves, opens it in a real browser, waits for the
+worker, then **kills the server** and asks for the world again. Nothing is
+emulated. It also asserts no media got cached. It caught two of my own bugs
+before it caught anything else: it held a reference to `#root` from before the
+parser had made one, and it read the page too early.
+
+**Coming back where you were** — `systems/whereYouWere`. iOS discards a
+backgrounded home-screen app in seconds, and the world was starting over every
+time. The place is written down as you move and read back on the way in, and it
+**forgets after an hour**: a resume is for an interruption, not for a visit.
+The door still opens, because `ui/Arrival` is the gesture the browser needs
+before it will make a sound.
+
+**Five things the browser already had.** Wake Lock (the screen dimming
+mid-race was a defect), the home-screen badge driven off the count `Whisper`
+already computes, vibration on go/impacts/finish — `knock` weighs the hit, and
+it is in `Race.tsx` rather than `physics.ts`, which is pure and runs headless —
+orientation held during a race, and a **share target**: she can send a
+photograph from her camera roll straight into the Glasshouse. Orientation locks
+*whichever way the phone is already held* rather than forcing landscape; this
+world is portrait-first and seizing the phone would be overriding a design
+decision rather than protecting one.
+
+**A thought can be sealed until a day.** `letters/{id}/sealed/words`, refused by
+`firestore.rules` until `request.time.toMillis() >= openAt`. The parent keeps
+`body: ''` and the date, so what her device receives is a **gap** rather than
+something censored on the way past — the question vine's shape, and the
+archive's. `by` and `openAt` are repeated on the sealed document so the rule
+needs no `get()`. Yours is never sealed to you.
+
+**Measured / decided:**
+- A sealed thought of hers **does not glow**. The glow means *there is
+  something here to read*, and that is not true yet — a light that walks you
+  across the meadow to a paper that cannot say anything is the world making a
+  promise it has to break.
+- Opening one does **not** mark it read. `readAt` can only be set once, and
+  spending it on a paper that said nothing would waste the one visit its
+  flower is lit.
+- The words are fetched when the paper is opened, not with the tree.
+- `sealUntil` returns the **first instant of that day in the writer's zone**.
+  Not `now + n days` — "it opens on her birthday" must not mean "at twenty past
+  four, because that is when I wrote it". It refuses the 31st of February
+  rather than letting the calendar roll it into March.
+
+**`npm run sealed`** proves it above the wire, with both people in one process
+— so the words are sitting in a map hers can reach and she still cannot have
+them. `firestore.rules` is the half it cannot run; same standing as the
+archive's seal.
+
+**`FIREBASE.md` was wrong and is fixed.** It said Cloud Storage did not exist;
+the deployed function's own config names a live bucket. The table now carries a
+*last checked* column, because being wrong there sends the next reader hunting
+for a console step that was taken weeks ago.
+
 ## 5 Sep · Claude · The archive, and two things about the film's own keys
 
 > *"we will be writing the movies we watched, so more like we can have this

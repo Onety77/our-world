@@ -299,12 +299,76 @@ export interface Pollen {
 export interface Letter {
   id: string
   by: UserId
+  /**
+   * The words — **empty while this one is still sealed.**
+   *
+   * A sealed thought keeps its words in a document of its own that the rules
+   * refuse until the day comes, so what arrives on a device that may not read
+   * it yet is a *gap* rather than something censored on the way past. Same
+   * shape as the question vine and the archive's ratings: the seal lives in
+   * `firestore.rules` and nowhere else, because nothing above that line could
+   * be trusted to keep it.
+   */
   body: string
   /** Where in the world it was left, so reading it means going there. */
   placeId: string
   position: [number, number, number]
   at: number
   readAt: number | null
+  /**
+   * The day it opens, or null for a thought that was never sealed.
+   *
+   * epoch ms, and it is a *day* rather than a moment: `sealUntil` puts it at
+   * the first instant of that day in the writer's own zone, because "it opens
+   * on her birthday" should not mean "at twenty past four in the afternoon,
+   * because that is when I happened to write it".
+   */
+  openAt: number | null
+}
+
+/**
+ * Whether this thought is still waiting, for the person looking at it.
+ *
+ * **Your own sealed thought is never sealed to you.** You wrote it; being
+ * unable to reread what you left for somebody would be a lock with nobody on
+ * the other side of it. The rules say exactly the same thing, and this is the
+ * interface agreeing with them rather than deciding anything.
+ */
+export function stillSealed(letter: Letter, me: UserId, now: number): boolean {
+  if (letter.openAt === null) return false
+  if (letter.by === me) return false
+  return now < letter.openAt
+}
+
+/**
+ * A day, as the moment a thought sealed for it stops being sealed.
+ *
+ * Takes `YYYY-MM-DD` — what a date field gives you — and returns the *first
+ * instant of that day where the writer is standing*. Midnight and not the hour
+ * it happens to be: "it opens on her birthday" must not quietly mean "at
+ * twenty past four in the afternoon, because that is when I wrote it", which
+ * is what storing `now + n days` would have meant.
+ *
+ * The two of them are seven timezones apart and about to be more, so *whose*
+ * midnight is a real question with no clean answer. It is the writer's,
+ * because the writer is the one who picked the day and is the only one who can
+ * be asked what they meant by it — and because the alternative, her midnight,
+ * moves the moment if either of them ever changes city.
+ *
+ * Null for anything that is not a day: a malformed value must never fall
+ * through as "opens now", which is the one wrong answer that cannot be undone.
+ */
+export function sealUntil(day: string): number | null {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day.trim())
+  if (!parts) return null
+  const [, year, month, date] = parts
+  const at = new Date(Number(year), Number(month) - 1, Number(date), 0, 0, 0, 0)
+  if (Number.isNaN(at.getTime())) return null
+  // A round trip through the calendar, because `new Date(2026, 1, 31)` is
+  // cheerfully the third of March and would seal a thought for a day nobody
+  // chose.
+  if (at.getMonth() !== Number(month) - 1 || at.getDate() !== Number(date)) return null
+  return at.getTime()
 }
 
 // ---------------------------------------------------------------------------
@@ -1068,7 +1132,26 @@ export interface DataLayer {
     body: string
     placeId: string
     position: [number, number, number]
+    /**
+     * Seal it until this day. Null, or absent, is a thought that opens now —
+     * which is every thought written before this existed, and most since.
+     */
+    openAt?: number | null
   }): Promise<void>
+
+  /**
+   * The words of a sealed thought, once the day has come.
+   *
+   * Fetched when the paper is actually opened rather than with the rest of the
+   * tree: a sealed thought is one document more than an ordinary one, and
+   * paying for that on every load of a garden that may have a hundred of them
+   * — to show words nobody has asked to read — is the wrong way round.
+   *
+   * Null when the seal still holds. **That is not an error and must not be
+   * reported as one**: it is the correct answer to asking early, and the
+   * server refusing is the whole mechanism working.
+   */
+  readSealedLetter(id: string): Promise<string | null>
 
   /** Stops it glowing. Never removes it; letters don't come down. */
   markLetterRead(id: string): Promise<void>
