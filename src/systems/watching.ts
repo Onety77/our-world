@@ -28,6 +28,16 @@
 
 import { create } from 'zustand'
 import type { Queued, UserId, Watching } from '@/data/types'
+/*
+  The player's own vocabulary, from the one place it is written down.
+
+  `systems/youtube` imports nothing at all, so there is no cycle in taking the
+  four state numbers from it — and `systems/film`, the other implementation of
+  `Screen`, already speaks them. Writing `1` and `3` again here would be the
+  third copy, and the one most likely to drift, because `BUFFERING` is exactly
+  the number this file's reasoning turns on.
+*/
+import { BUFFERING, PLAYING } from './youtube'
 
 /** A dark screen with nothing lined up. */
 export function darkScreen(): Watching {
@@ -312,6 +322,74 @@ export function correction(off: number): { do: 'hold' | 'drift' | 'seek'; rate: 
   if (size < DRIFT) return { do: 'hold', rate: 1 }
   if (size < LURCH) return { do: 'drift', rate: off > 0 ? 1 - NUDGE : 1 + NUDGE }
   return { do: 'seek', rate: 1 }
+}
+
+/** One thing to tell the player, in the order it must be told. */
+export type Instruction =
+  | { do: 'pause' }
+  | { do: 'seek'; to: number }
+  | { do: 'rate'; rate: number }
+  | { do: 'play' }
+
+/**
+ * Everything to do to this device's player on one tick, **in order**.
+ *
+ * ---------------------------------------------------------------------------
+ * Returned rather than done, for the same reason `correction` is: the decision
+ * can then be read and argued with without an iframe in the room. This one
+ * exists because the *order* turned out to be the whole thing, and an ordering
+ * bug living inside a React effect is a bug nothing can be pointed at.
+ *
+ * **The bug it was extracted from.** She pauses. Nine hundred milliseconds
+ * later this device is nine tenths of a second past her — which falls between
+ * `DRIFT` and `LURCH`, so the answer is *drift*, and a drift on a stopped film
+ * has to become a seek because a playback rate cannot close a gap on something
+ * that is not moving. The seek was done first; a seek puts the player into
+ * `BUFFERING`; the pause that came after was gated on `PLAYING` and so never
+ * happened. The player carried on from where it had been sent, drifted nine
+ * tenths of a second again, and was sent back again — a one-second loop, for
+ * as long as anybody watched it.
+ *
+ * Hence the two rules this function exists to hold:
+ *
+ * 1. **Stop it before moving it.** A seek on a running player is a seek that
+ *    keeps running. A seek on a stopped one stays stopped.
+ * 2. **Judge it on the state it was in before this tick touched it**, and
+ *    count buffering as running.
+ * ---------------------------------------------------------------------------
+ */
+export function settle(input: {
+  /** The shared truth: is the film running? */
+  playing: boolean
+  /** Where the anchor says this device should be, in seconds. */
+  want: number
+  /** Where this device's player actually is, in seconds. */
+  at: number
+  /** What the player was doing *before* anything on this tick touched it. */
+  state: number
+}): Instruction[] {
+  const { playing, want, at, state } = input
+  const running = state === PLAYING || state === BUFFERING
+  const { do: how, rate } = correction(at - want)
+
+  /*
+    A paused film cannot drift, so a paused film seeks.
+
+    Nudging the rate by a few per cent is the right answer while a film is
+    running and is not an answer at all while it is stopped: nothing moves, the
+    gap is measured again on the next tick, found to be identical, and drifted
+    at for ever. Reachable in the ordinary way — pause, and one of you moves
+    the scrubber a second — and it ends with the two of you pressing play out
+    of step, which is the one thing this whole loop exists to prevent.
+  */
+  const move = how === 'drift' && !playing ? 'seek' : how
+
+  const orders: Instruction[] = []
+  if (!playing && running) orders.push({ do: 'pause' })
+  if (move === 'seek') orders.push({ do: 'seek', to: want })
+  orders.push({ do: 'rate', rate: move === 'drift' ? rate : 1 })
+  if (playing && state !== PLAYING) orders.push({ do: 'play' })
+  return orders
 }
 
 // ---------------------------------------------------------------------------

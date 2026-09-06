@@ -24,11 +24,13 @@ import {
   beginnings,
   clock,
   correction,
+  settle,
   darkScreen,
   positionOf,
   queueItem,
   videoIdIn,
 } from '../src/systems/watching'
+import { BUFFERING, PAUSED, PLAYING } from '../src/systems/youtube'
 import type { Queued } from '../src/data/types'
 
 let failed = 0
@@ -89,6 +91,83 @@ console.log('\nwhat to do about being out of step\n')
       const { rate } = correction(off)
       return Number.isFinite(rate) && rate >= 0.5 && rate <= 2
     }))
+}
+
+console.log('\nand in what order to do it\n')
+
+/*
+  The order is the whole thing, and it is here because getting it wrong once
+  cost an evening of a film that would not stop.
+
+  **What it looked like:** she pauses, and instead of pausing, his screen
+  replays the same second over and over — about once a second, playing and
+  stopping inside it, until he pauses by hand as well.
+
+  **What it was:** nine hundred milliseconds after her pause this device is
+  nine tenths of a second past her. That falls between `DRIFT` and `LURCH`, so
+  the answer is *drift*; a rate nudge cannot close a gap on a film that is not
+  moving, so a drift on a stopped film becomes a seek. The seek was performed
+  first. A seek puts the player into `BUFFERING`. The pause that came next was
+  gated on `PLAYING`, saw `BUFFERING`, and did nothing — so the film carried on
+  from where it had been sent, drifted nine tenths of a second again, and was
+  sent back again.
+
+  Every assertion below is one half of that.
+*/
+{
+  const doing = (orders: ReturnType<typeof settle>) => orders.map((o) => o.do).join(' → ')
+
+  // The bug, exactly: her pause, one tick of drift, and a player still running.
+  const herPause = settle({ playing: false, want: 90, at: 90.9, state: PLAYING })
+  ok('she pauses and this player is told to stop at all',
+    herPause.some((o) => o.do === 'pause'), doing(herPause))
+  ok('and told to stop *before* it is told to move',
+    herPause.findIndex((o) => o.do === 'pause') < herPause.findIndex((o) => o.do === 'seek'),
+    doing(herPause))
+  ok('and it does get moved back to where she left it',
+    herPause.some((o) => o.do === 'seek' && o.to === 90), doing(herPause))
+  ok('and is never told to play', !herPause.some((o) => o.do === 'play'), doing(herPause))
+
+  /*
+    The same tick, one seek later. This is the state the old code read *after*
+    seeking and mistook for "not playing", which is how the pause was skipped
+    and the loop closed.
+  */
+  const midSeek = settle({ playing: false, want: 90, at: 90.9, state: BUFFERING })
+  ok('a buffering player is still a running player, and is stopped',
+    midSeek.some((o) => o.do === 'pause'), doing(midSeek))
+
+  // Already stopped and already in the right place: say nothing that moves it.
+  const settled = settle({ playing: false, want: 90, at: 90, state: PAUSED })
+  ok('a film already stopped where it should be is left alone',
+    !settled.some((o) => o.do === 'pause' || o.do === 'seek' || o.do === 'play'),
+    doing(settled))
+
+  /*
+    Stopped, in the wrong place, and stopped is *why* it seeks: a rate nudge
+    cannot close a gap on something that is not moving, so this is the case
+    that would otherwise be measured, drifted at, and measured again for ever.
+  */
+  const nudged = settle({ playing: false, want: 90, at: 91, state: PAUSED })
+  ok('a stopped film a second out is seeked, never drifted',
+    nudged.some((o) => o.do === 'seek') && nudged.every((o) => o.do !== 'rate' || o.rate === 1),
+    doing(nudged))
+
+  // And the ordinary running case is untouched by all of the above.
+  const running = settle({ playing: true, want: 90, at: 90.9, state: PLAYING })
+  ok('a running film a second out is drifted, not seeked',
+    !running.some((o) => o.do === 'seek') && running.some((o) => o.do === 'rate' && o.rate !== 1),
+    doing(running))
+  ok('and is not stopped', !running.some((o) => o.do === 'pause'), doing(running))
+
+  const starting = settle({ playing: true, want: 90, at: 90, state: PAUSED })
+  ok('she presses play and this player is told to play', starting.some((o) => o.do === 'play'),
+    doing(starting))
+
+  const far = settle({ playing: true, want: 90, at: 400, state: PLAYING })
+  ok('a running film far out of step is seeked and left running',
+    far.some((o) => o.do === 'seek' && o.to === 90) && !far.some((o) => o.do === 'pause'),
+    doing(far))
 }
 
 console.log('\nwhat counts as a link\n')

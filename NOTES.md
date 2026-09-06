@@ -40,6 +40,67 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 6 Sep · Claude · The Harmattan gets people, and the film stops looping
+
+> *"when she pauses from her end […] instead of pausing, it does this weird
+> thing of like continues replaying the last second"*
+
+**The film bug first, because it had a real cause.** She pauses; nine hundred
+milliseconds later this device is nine tenths of a second past her; that falls
+between `DRIFT` and `LURCH` so `correction` says *drift*; a rate nudge cannot
+close a gap on a stopped film so a drift on a paused one becomes a **seek**.
+The seek was performed first — and **a seek puts YouTube into `BUFFERING`**.
+The state was then read, found to be `3`, and the line that pauses was gated on
+`PLAYING`, so it never fired. The player carried on from where it had been
+sent, drifted nine tenths of a second again, and was sent back again. A
+one-second loop, for as long as anybody watched it.
+
+Two rules now, and neither is enough alone: **read the state before this tick
+touches it**, and **stop the film before moving it**. Both live in `settle` in
+`systems/watching` — returned rather than done, the same way `correction`
+already was, because an ordering bug inside a React effect is a bug nothing can
+be pointed at. `npm run watch` has eleven new assertions and the two that
+matter are *told to stop before it is told to move* and *a buffering player is
+still a running player*.
+
+---
+
+**The Harmattan was a landscape with nobody on it.** Every named stretch was
+geology and the one built thing — the town — was a curtain wall with nothing
+behind it. So the second half of `Harmattan.tsx` is now architecture: farms on
+the red mile, a ruin in the termite country, palms and wells in the wadi, a
+gated street of horned Hausa rooflines with a minaret in its own square, the
+dyers outside the wall, grain stored in the face of the scarp, and the farms
+again coming home. The header table says which is where.
+
+> **The lesson worth keeping, because it had already cost this file three
+> times: a face built from separate tapers is a picket fence.** A taper is
+> narrower at the top, so however much the feet overlap the crowns do not, and
+> you get daylight between every slab. The wadi banks had been rewritten once
+> already to fix it by regularising the heights — right about erosion, and the
+> heights were never the problem. `sweepFace` sweeps one continuous surface
+> the way the road itself is built, and the banks, the escarpment and the city
+> wall all go through it now.
+>
+> It survived its own fix once: after the wall became a sweep, `addWall` was
+> still drawing tapers *on top of* it and the picket line came back standing
+> proud of a perfectly good wall. That function is `dressWall` now and draws
+> only the buttresses and beams, so the mass and the dressing cannot be
+> confused again.
+
+**Measured:** 72,485 → 93,681 triangles over 3,366 m, worst chunk 3,908 →
+3,820 (the town's continuous wall was *more* expensive than the street that
+replaced it). Five chunks are drawn at once, so this is about 19k triangles a
+frame — the garden draws 306k on a phone.
+
+**Everything was looked at rather than reasoned about**, over CDP at
+`?game=ember-rally&solo=1&stage=harmattan&rally=ride&from=<m>` — see
+`NOTES.md` 31 Aug for the route. Six things were only wrong on screen: the town
+read as a slot canyon, the torons as black bars, the palms as insects on
+sticks, the stalk screens as packing crates, the dyers' frames as litter
+scattered over a field, and the ruin was invisible among the mounds it was
+meant to explain.
+
 ## 6 Sep · Claude · The garden keeps itself, and a thought can wait for a day
 
 > *"we are only doing 1,2,3 and 7 from the upgrade.md file"*

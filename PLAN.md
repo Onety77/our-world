@@ -1664,6 +1664,25 @@ handling changed.
       Yours is never sealed to you. A sealed thought does not glow and opening
       it does not spend its `readAt`. `npm run sealed` proves everything above
       the wire
+- [x] **The Harmattan is lived on.** The road was a landscape with nobody in
+      it — every named stretch geology, and the one built thing a curtain wall
+      with nothing behind it, which rendered as a slot canyon. Now: millet
+      farms and field boundaries on the red mile, a ruined compound with a
+      mound coming up through the yard in the termite country, doum palms and
+      wells in the wadi, bastions at both gates and a street of horned Hausa
+      rooflines with a toron-covered minaret in its own square, the dyers'
+      frames outside the wall where the indigo finally arrives in quantity,
+      grain stored in the face of the scarp, and the farms again coming home.
+      **`sweepFace` is the lesson**: a cliff or a wall built from separate
+      tapers is a picket fence, because a taper is narrower at the top —
+      it had already cost the wadi banks two rewrites. 72k → 94k triangles
+      over 3.4 km, worst chunk unchanged
+- [x] **The film stops looping when she pauses.** A seek puts the player into
+      `BUFFERING`, and the pause after it was gated on `PLAYING`, so it never
+      fired and the last second replayed for ever. `settle` in
+      `systems/watching` now returns the whole tick's orders in sequence —
+      stop before moving, and judge the state before touching it — and
+      `npm run watch` asserts the order
 - [ ] Full regression + screenshot sweep, update the in-world guide
 
 ## After that

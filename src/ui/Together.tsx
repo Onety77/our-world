@@ -70,16 +70,17 @@ import {
   advance,
   beginnings,
   clock,
-  correction,
   DOUBLE_TAP,
   spaceIsTheirs,
   positionOf,
   queueItem,
+  settle,
   useWatching,
   videoIdIn,
   type FieldNow,
 } from '@/systems/watching'
 import {
+  BUFFERING,
   ENDED,
   PAUSED,
   PLAYING,
@@ -965,40 +966,28 @@ export function Together() {
       if (player.length() <= 0) return
 
       applying.current = true
-      const gap = at - want
-      const { do: how, rate } = correction(gap)
+
       /*
-        ======================================================================
-        **A paused film cannot drift, so a paused film seeks.**
+        **The state is read once, before anything on this tick touches it.**
 
-        `correction` answers with one of three things, and the middle one —
-        nudge the playback rate by a few per cent and let the gap close on its
-        own — is the right answer *while a film is running* and is not an
-        answer at all while it is stopped. A rate change on a paused video
-        does nothing, so the gap is measured again nine hundred milliseconds
-        later, found to be exactly the same, and drifted at again, for ever.
-
-        It is reachable in the ordinary way: pause, and one of you nudges the
-        scrubber by a second. Both screens are stopped, they are a second
-        apart, and neither of them ever closes it — you press play together and
-        start out of step, which is the one thing this whole loop exists to
-        prevent.
-
-        A seek is free here for the same reason it is expensive while playing:
-        nothing is running, so there is no picture to stall and no sound to
-        cut. The threshold that decides *whether* to correct is left where it
-        is; only the method changes.
-        ======================================================================
+        That is not tidiness. A seek puts the player into `BUFFERING`, so a
+        state read *after* one describes what this loop just did rather than
+        what the film was doing — and a decision made on it pauses nothing,
+        because it is no longer looking at a playing film. See `settle`, which
+        is where that reasoning and the ordering now live: what to do is worked
+        out with no iframe in the room, and this only carries it out.
       */
-      const settle = how === 'drift' && !anchor.playing ? 'seek' : how
-      // Told in its own timeline, compared in the shared one.
-      if (settle === 'seek') player.seek(toHere(want))
-      player.rate(settle === 'drift' ? rate : 1)
-
       const state = player.state()
       const shouldPlay = anchor.playing
-      if (shouldPlay && state !== 1) player.play()
-      if (!shouldPlay && state === 1) player.pause()
+      const running = state === PLAYING || state === BUFFERING
+
+      for (const order of settle({ playing: shouldPlay, want, at, state })) {
+        if (order.do === 'pause') player.pause()
+        // Told in its own timeline, compared in the shared one.
+        else if (order.do === 'seek') player.seek(toHere(order.to))
+        else if (order.do === 'rate') player.rate(order.rate)
+        else player.play()
+      }
       /*
         A browser that will not start on its own.
 
@@ -1006,7 +995,7 @@ export function Together() {
         screen she started can sit here paused with no explanation. Asking again
         every second would not help; saying so, once, does.
       */
-      setJoined(!shouldPlay || state === 1 || state === 3)
+      setJoined(!shouldPlay || running)
       /*
         Asked here rather than pushed from the screen, because this loop is
         already running at exactly the right cadence and a film needs a few
