@@ -6038,103 +6038,142 @@ body:has(.talking) .leave-place {
 /* ---- the ways in ---- */
 
 /*
-  One invitation and two alternatives, rather than three labels in a row.
+  ---------------------------------------------------------------------------
+  Three ways in, and they are one list.
 
-  It was three words in small capitals at one size, which is a toolbar: nothing
-  about it said which one you probably wanted, and "vs cool" sat at the same
-  weight as "one player" as though they were the same kind of choice. The
-  garden's other thresholds are a serif verb — "plant a thought", "add to
-  ours" — and this is the Hollow's.
+  Two rewrites got here. First it was three words in small capitals at one
+  size, which is a toolbar: nothing said which one you probably wanted. Then
+  the invitation became a serif verb and the other two stayed in small
+  capitals — which fixed the ranking and left a worse problem behind it, that
+  the two quiet ones were now visibly *lesser* versions of a choice rather
+  than choices, and none of the three said what it did. The line explaining
+  each was already written and was being handed to a `title` attribute, which
+  is a tooltip, which a phone does not have.
+
+  So: one column, one row per way, every row the same two parts — the verb,
+  and one line of what happens. The first keeps the serif and the light,
+  because it is still the one to reach for. The other two are the same as each
+  other, which is the honest shape: they are alternatives, not afterthoughts.
+
+  Left-aligned, and that is the part that does the work. Three centred blocks
+  of two lines read as three unrelated captions; flushed to one edge they read
+  as a list you are choosing from, and the eye can run down the verbs without
+  crossing the notes.
+  ---------------------------------------------------------------------------
 */
 .game-ways {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.55rem;
-  margin-top: 1.15rem;
+  align-items: stretch;
+  gap: 0.1rem;
+  margin-top: 1.05rem;
+  width: min(20rem, 82vw);
+  margin-inline: auto;
 }
 
-.game-go {
+.game-way {
+  display: block;
+  width: 100%;
+  text-align: left;
   background: none;
   border: 0;
+  border-top: 1px solid rgb(240 216 178 / 0.09);
   cursor: pointer;
-  padding: 0.3rem 0.6rem;
-  font-family: var(--serif);
-  font-size: clamp(1.08rem, 3.4vw, 1.28rem);
+  padding: 0.72rem 0.1rem 0.78rem;
   color: var(--ink);
+}
+
+/* The first has no rule above it: the label already closes that gap. */
+.game-way.is-first {
+  border-top: 0;
+}
+
+.game-way-name {
+  display: block;
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  line-height: 1.2;
+  color: var(--ink-dim);
   text-shadow: var(--lift);
 }
 
-/* The same beam of light every other way-in in the garden is underlined with. */
-.game-go::after {
-  content: '';
-  display: block;
-  height: 1px;
-  width: 100%;
-  margin-top: 0.4rem;
-  background: linear-gradient(90deg, transparent, currentColor, transparent);
-  opacity: 0.55;
-  transition: opacity 0.4s ease;
+/*
+  The one you probably want, and the only thing on the screen with the light
+  on it. Bigger and warmer than its two alternatives rather than a different
+  kind of object from them.
+*/
+.game-way.is-first .game-way-name {
+  font-size: clamp(1.16rem, 3.7vw, 1.34rem);
+  color: var(--ink);
 }
 
-.game-go:hover,
-.game-go:focus-visible {
+/*
+  What actually happens, which is the half that was missing.
+
+  Sentence case in the sans, one line, and deliberately not in small capitals:
+  small capitals read as a label, and this is a sentence about consequences.
+*/
+.game-way-note {
+  display: block;
+  margin-top: 0.22rem;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: rgb(240 216 178 / 0.42);
+  text-shadow: var(--lift);
+}
+
+.game-way:hover .game-way-name,
+.game-way:focus-visible .game-way-name,
+.game-way.is-selected .game-way-name {
   color: var(--warm);
   outline: none;
 }
 
-.game-go:hover::after,
-.game-go:focus-visible::after {
-  opacity: 1;
+.game-way:hover .game-way-note,
+.game-way:focus-visible .game-way-note,
+.game-way.is-selected .game-way-note {
+  color: rgb(240 216 178 / 0.62);
 }
 
-.game-else {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 1.5rem;
-  flex-wrap: wrap;
+.game-way:focus-visible {
+  outline: none;
 }
 
 /*
-  The two alternatives, and only them.
+  Whether she is actually here, on the only way in that depends on it.
 
-  Scoped to `.game-else` rather than to every button in the row: written as
-  `.game-ways button` it also matched the serif invitation above — which comes
-  earlier in this file — and quietly turned it back into a word in small
-  capitals, identical to the two things it is supposed to be louder than.
+  The other two are answered entirely by this screen. This one is not, and a
+  door that is shut should say so rather than being tapped to find out.
 */
-.game-else button {
-  background: none;
-  border: 0;
-  cursor: pointer;
-  padding: 0.35rem 0.1rem;
+.game-way-now {
+  display: block;
+  margin-top: 0.3rem;
   font-family: var(--sans);
-  font-size: 0.66rem;
-  letter-spacing: 0.15em;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-dim);
+  color: rgb(240 216 178 / 0.3);
   text-shadow: var(--lift);
 }
 
-
-.game-else button.quiet {
-  color: var(--ink-dim);
+.game-way-now.is-here {
+  color: rgb(198 232 198 / 0.66);
 }
 
-.game-else button:hover,
-.game-else button:focus-visible {
-  color: var(--warm);
+.game-way:disabled {
+  cursor: default;
 }
 
-.game-else button::after {
-  content: '';
-  display: block;
-  height: 1px;
-  margin-top: 0.34rem;
-  background: linear-gradient(90deg, transparent, currentColor, transparent);
-  opacity: 0.5;
+.game-way:disabled .game-way-name {
+  color: rgb(240 216 178 / 0.26);
 }
+
+.game-way:disabled .game-way-note {
+  color: rgb(240 216 178 / 0.2);
+}
+
 
 .game-soon {
   margin: 0.9rem 0 0;
@@ -6472,19 +6511,30 @@ body:has(.talking) .leave-place {
 
 .hollow-selector .game-step:disabled { opacity: 0.16; cursor: default; scale: 1; }
 
+/*
+  A column, where it used to be a grid of two.
+
+  The grid existed to stand one invitation beside two small alternatives. The
+  three ways are one list now — see `.game-way` — so the layout that arranged
+  them as a headline plus a footnote has nothing left to arrange, and the only
+  thing kept from it is the framing: a darkened band with a rule top and
+  bottom, which is what separates the choosing from the game above it.
+*/
 .hollow-selector .game-ways {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(10rem, auto) auto;
-  grid-template-rows: auto auto;
-  align-items: center;
-  justify-content: center;
-  gap: 0.28rem 1.2rem;
-  min-width: min(31rem, 90vw);
+  display: flex;
+  flex-direction: column;
+  width: min(23rem, 86vw);
   margin-top: 0.15rem;
-  padding: 0.65rem 1.2rem 0.7rem;
+  margin-inline: auto;
+  padding: 0.6rem 1.1rem 0.5rem;
   border-block: 1px solid rgba(242, 239, 230, 0.1);
   background: linear-gradient(90deg, transparent, rgba(8, 6, 5, 0.46), transparent);
+}
+
+/* The label heads the list rather than sitting in a cell of a grid. */
+.hollow-selector .game-way-label {
+  margin-bottom: 0.15rem;
 }
 
 .game-way-label {
@@ -6496,110 +6546,74 @@ body:has(.talking) .leave-place {
   color: rgba(242, 239, 230, 0.34);
 }
 
-.hollow-selector .game-go {
+/*
+  The keyboard's mark, in the Hollow's own light.
+
+  One glow behind whichever row the arrows are on, rather than two rules for
+  two kinds of button — there is only one kind now. It sits behind the row and
+  is the only thing here that moves, so following ↑ ↓ down the list reads as
+  carrying a light along it rather than as text changing colour.
+*/
+.hollow-selector .game-way {
   position: relative;
-  justify-self: end;
-  min-width: 10rem;
-  padding: 0.34rem 0.8rem;
-  font-size: clamp(1.02rem, 2vw, 1.25rem);
-  transition: color 0.25s ease, text-shadow 0.25s ease;
+  transition: color 0.25s ease;
 }
 
-.hollow-selector .game-go::before,
-.hollow-selector .game-else button::before {
+.hollow-selector .game-way::before {
   content: '';
   position: absolute;
-  inset: 50% -0.55rem auto;
+  inset: 0.2rem -0.7rem 0.2rem -0.7rem;
   z-index: -1;
-  height: 1.9rem;
-  translate: 0 -50%;
-  background: radial-gradient(ellipse, rgba(255, 137, 49, 0.2), transparent 70%);
+  background: radial-gradient(ellipse at left, rgba(255, 137, 49, 0.17), transparent 72%);
   opacity: 0;
   transition: opacity 0.25s ease;
 }
 
-.hollow-selector .game-go.is-selected,
-.hollow-selector .game-else button.is-selected {
+.hollow-selector .game-way.is-selected::before { opacity: 1; }
+
+.hollow-selector .game-way.is-selected .game-way-name {
   color: #ffd49f;
-  text-shadow: 0 0 1rem rgba(255, 137, 49, 0.5), var(--lift);
+  text-shadow: 0 0 1rem rgba(255, 137, 49, 0.45), var(--lift);
 }
-
-.hollow-selector .game-go.is-selected::before,
-.hollow-selector .game-else button.is-selected::before { opacity: 1; }
-
-.hollow-selector .game-else {
-  justify-content: flex-start;
-  gap: 1.1rem;
-}
-
-.hollow-selector .game-else button { position: relative; }
-
 /* --------------------------------------------------------------------------
    One way in
 
-   `.game-ways` is a grid built to hold a primary invitation on one side and
-   the two quieter ones on the other, and it is reshaped again at two widths.
-   A game played only together has none of that to arrange — one label and one
-   button — so this is its own small column rather than that grid with most of
-   its cells empty and the single button pinned to an edge of a row it no
-   longer shares with anything.
-
-   The button is `.game-live`, the same one that is a quiet third option
-   elsewhere, so it is given the weight the primary way in usually carries. It
-   keeps its own two behaviours untouched: the small print underneath, and
-   going dim and unpressable until she is actually here.
+   A game played only together has nothing to arrange: one label and one row.
+   So this is the same list as `.game-ways`, one item long — the row builds
+   itself out of `.game-way` like the other three do, keeps its note and its
+   line about whether she is here, and needs nothing of its own beyond the
+   framing and a little more weight on the verb, because here it is not the
+   third option, it is the only one.
    -------------------------------------------------------------------------- */
 .game-ways-one {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 1.15rem;
-  padding-block: 0.6rem;
+  width: min(23rem, 86vw);
+  margin: 1.05rem auto 0;
+  padding: 0.6rem 1.1rem 0.5rem;
+  border-block: 1px solid rgba(242, 239, 230, 0.1);
+  background: linear-gradient(90deg, transparent, rgba(8, 6, 5, 0.46), transparent);
 }
 
-.game-ways-one .game-live {
-  position: relative;
-  padding: 0.34rem 0.9rem;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  font-family: var(--serif);
-  font-size: clamp(1.02rem, 2vw, 1.25rem);
+.game-ways-one .game-way-label {
+  margin-bottom: 0.15rem;
+}
+
+/* The only way in, so it carries the weight the invitation carries elsewhere. */
+.game-ways-one .game-way-name {
+  font-size: clamp(1.16rem, 3.7vw, 1.34rem);
   color: var(--ink);
-  text-shadow: var(--lift);
-  transition: color 0.25s ease, text-shadow 0.25s ease;
 }
-
-/* The same beam of light every other way-in in the garden is underlined with. */
-.game-ways-one .game-live::after {
-  content: '';
-  display: block;
-  height: 1px;
-  width: 100%;
-  margin-top: 0.4rem;
-  background: linear-gradient(90deg, transparent, currentColor, transparent);
-  opacity: 0.55;
-  transition: opacity 0.4s ease;
-}
-
-.game-ways-one .game-live.is-selected,
-.game-ways-one .game-live:enabled:hover,
-.game-ways-one .game-live:focus-visible {
-  color: #ffd49f;
-  text-shadow: 0 0 1rem rgba(255, 137, 49, 0.5), var(--lift);
-  outline: none;
-}
-
-.game-ways-one .game-live.is-selected::after,
-.game-ways-one .game-live:enabled:hover::after { opacity: 1; }
 
 /* Room for a thumb, like every other way in on a phone. */
 @media (max-width: 680px) {
-  .game-ways-one .game-live {
-    min-height: 2.9rem;
-    justify-content: center;
-    padding: 0.5rem 0.9rem;
+  .game-ways-one {
+    width: min(88vw, 24rem);
+  }
+
+  .game-ways-one .game-way {
+    min-height: 3.1rem;
+    padding-block: 0.6rem 0.65rem;
   }
 }
 
@@ -6748,15 +6762,10 @@ body:has(.talking) .leave-place {
   }
 
   .hollow-selector .game-ways {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-    width: min(88vw, 28rem);
+    width: min(88vw, 24rem);
     padding-block: 0.5rem;
   }
 
-  .game-way-label { grid-column: 1; }
-  .hollow-selector .game-go { justify-self: center; }
-  .hollow-selector .game-else { justify-content: center; }
   .game-key-guide { display: none; }
   .hollow-selector .to-waiting { margin-top: 0.25rem; }
 }
@@ -10821,39 +10830,16 @@ body:has(.rally-running) .player {
   }
 
   .hollow-way-threshold .game-ways {
-    width: min(27rem, 91vw);
-    min-width: 0;
+    width: min(24rem, 91vw);
     margin-top: 0.35rem;
-    padding: 0.5rem 0 0;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-    gap: 0.15rem;
+    padding: 0.5rem 0.2rem 0;
     border-bottom: 0;
   }
 
-  .hollow-way-threshold .game-way-label {
-    grid-column: 1;
-    margin-bottom: 0.1rem;
-  }
-
-  .hollow-way-threshold .game-go {
-    justify-self: stretch;
-    min-width: 0;
-    min-height: 2.9rem;
-    padding: 0.55rem 0.7rem;
-  }
-
-  .hollow-way-threshold .game-else {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: stretch;
-    gap: 0.35rem;
-    width: 100%;
-  }
-
-  .hollow-way-threshold .game-else button {
-    min-height: 2.75rem;
-    padding: 0.55rem 0.35rem;
+  /* A thumb's worth of row, without spreading the two lines apart. */
+  .hollow-way-threshold .game-way {
+    min-height: 3.1rem;
+    padding-block: 0.6rem 0.65rem;
   }
 
   /* Word Duel is one instrument. The board no longer floats in a stretchy

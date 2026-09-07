@@ -40,6 +40,45 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 7 Sep · Claude · The Hollow says what each way in actually does
+
+> *"i had to tell her how to play the race for her to […] a cleaner more
+> organised way of representing and showing things, for all the games"*
+
+**The explanations were already written. They were in `title` attributes.**
+`invite.tip` and `live.tip` have always carried one line saying what each way
+in does — and both were handed to the browser as a tooltip, which a phone does
+not have. So the screen offered three unlabelled verbs and the only way to
+learn what they meant was to be told by somebody who already knew, which is
+exactly what happened.
+
+**The shape was the other half.** One serif invitation with two words in small
+capitals under it: the two alternatives read as a toolbar, and nothing
+distinguished *playing alone* from *playing at the same moment as her* — which
+is the only one of the three that depends on anything outside the screen.
+
+Every way in is now the same row: the verb, and one line of what happens.
+Left-aligned as a list, because three centred two-line blocks read as three
+unrelated captions. The first keeps the serif and the light — it is still the
+one to reach for, and that part was right. Scattergories' live-only screen is
+the same list, one item long.
+
+**And the live one says whether she is there**, in its own line — *Tife is
+here now* against *only when Tife is here* — instead of being a door you tap
+to find out about. It was already correctly disabled; it just never said so
+where anybody would look.
+
+**Two smaller things found while in here.** The card in front of you said
+"enter to choose" — a keyboard instruction, on a phone — while the cards you
+could *not* reach said "bring to the fire", the actual verb. The invitation was
+sitting on the neighbours. And the coming-soon card said "the Hallow has
+space".
+
+`npm run hollow` was asserting the old wording and so failed on the fix. It
+asserts the *intent* now — the card in front of you is the one asking to be
+opened, and none of the others are — which is the thing that was ever worth
+holding and survives the next change of verb.
+
 ## 7 Sep · Claude · The garden would not open, and why
 
 > *"it just shows that first loading screen with opening.. and it stays"*

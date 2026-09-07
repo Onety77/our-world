@@ -47,6 +47,7 @@ export default {
     A clock is what makes this one different, so a clock is what it is called.
     See `live` on GameDefinition for why the shell no longer names it.
   */
+  alone: 'Against the word list. Nothing is sent.',
   invite: {
     name: 'leave {them} a word',
     tip: '{She} picks yours apart whenever {she} next comes down here',

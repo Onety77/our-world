@@ -19,6 +19,7 @@ export default {
     recorded. Naming it after somebody else's mechanic told the player
     something untrue about their own game.
   */
+  alone: 'A road to yourself. Nothing is sent.',
   invite: {
     name: 'set a line for {them}',
     tip: '{She} chases it whenever {she} next comes down here',

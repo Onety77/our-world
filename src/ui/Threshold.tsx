@@ -341,18 +341,38 @@ function LiveWayIn({
     )
   }
 
+  /*
+    Built like the other two ways, and carrying one line they do not need.
+
+    Every way in says what it does. This is the only one whose answer depends
+    on something that is not on this screen — she has to actually be here — so
+    it says that too, and says which of the two it is right now instead of
+    leaving somebody to tap and find out. A door that is shut is allowed to be
+    shut; a door that does not say so is the thing worth avoiding.
+
+    `join {them}` when she is already sitting in a round, because then this is
+    not an invitation any more, it is an answer to one.
+  */
   return (
     <button
       ref={buttonRef}
       type="button"
-      className={`quiet game-live${selected ? ' is-selected' : ''}`}
+      className={`game-way game-live${selected ? ' is-selected' : ''}`}
       onFocus={onFocus}
       onClick={start}
       disabled={!bothHere}
-      title={bothHere ? say(live.tip) : them + ' is not here right now'}
     >
-      {waiting ? `join ${them}` : say(live.name)}
-      {!bothHere && <small>only when you are both here</small>}
+      <span className="game-way-name">
+        {waiting ? `join ${them}` : say(live.name)}
+      </span>
+      <span className="game-way-note">{say(live.tip)}</span>
+      <span className={`game-way-now${bothHere ? ' is-here' : ''}`}>
+        {waiting
+          ? `${them} is waiting in one`
+          : bothHere
+            ? `${them} is here now`
+            : `only when ${them} is here`}
+      </span>
     </button>
   )
 }
@@ -977,40 +997,73 @@ function TheHollow() {
             />
           </div>
         ) : (
+          /*
+            ==================================================================
+            **Three ways in, all built the same, each saying what it does.**
+
+            This was one serif invitation with two words in small capitals
+            under it, and the shape was the problem rather than the wording.
+            The two alternatives looked like a toolbar, nothing distinguished
+            *playing alone* from *playing at the same moment as her*, and the
+            line explaining each — which was already written, in `tip` — was
+            attached as a `title`, which is a tooltip, which on a phone is
+            nothing at all. So the screen offered three unlabelled verbs and
+            the only way to learn what they meant was to be told by somebody
+            who already knew.
+
+            Now every way is a row of exactly two things: the verb, and one
+            line saying what happens. The first still carries the weight,
+            because it is still the one you probably want — that part was
+            right. What changed is that the other two are no longer *smaller
+            versions of a choice*, they are the same kind of thing, and each
+            of them answers the question it was previously leaving open.
+
+            The live one is last and set apart, because it is the only one
+            that depends on something outside this screen: she has to be here.
+            ==================================================================
+          */
           <div className="game-ways" role="group" aria-label={`ways to enter ${game.name}`}>
-            <span className="game-way-label">now choose how you enter</span>
+            <span className="game-way-label">how you play</span>
+
             <button
               ref={(node) => { ways.current[0] = node }}
               type="button"
-              className={`game-go${way === 0 ? ' is-selected' : ''}`}
+              className={`game-way is-first${way === 0 ? ' is-selected' : ''}`}
               onFocus={() => setWay(0)}
               onClick={() => begin(game.id, false)}
-              title={game.invite ? say(game.invite.tip) : undefined}
             >
-              {game.invite ? say(game.invite.name) : `play with ${them.name}`}
-            </button>
-            <div className="game-else">
-              <button
-                ref={(node) => { ways.current[1] = node }}
-                type="button"
-                className={`quiet${way === 1 ? ' is-selected' : ''}`}
-                onFocus={() => setWay(1)}
-                onClick={() => begin(game.id, true)}
-              >
-                on your own
-              </button>
-              {game.live ? (
-                <LiveWayIn
-                  game={game.id}
-                  them={them.name}
-                  live={game.live}
-                  selected={way === 2}
-                  buttonRef={(node) => { ways.current[2] = node }}
-                  onFocus={() => setWay(2)}
-                  onChoosing={setChoosingLiveRoad}
-                />
+              <span className="game-way-name">
+                {game.invite ? say(game.invite.name) : `play with ${them.name}`}
+              </span>
+              {game.invite ? (
+                <span className="game-way-note">{say(game.invite.tip)}</span>
               ) : null}
-            </div>
+            </button>
+
+            <button
+              ref={(node) => { ways.current[1] = node }}
+              type="button"
+              className={`game-way${way === 1 ? ' is-selected' : ''}`}
+              onFocus={() => setWay(1)}
+              onClick={() => begin(game.id, true)}
+            >
+              <span className="game-way-name">on your own</span>
+              <span className="game-way-note">
+                {game.alone ? say(game.alone) : say('Nothing reaches {them}.')}
+              </span>
+            </button>
+
+            {game.live ? (
+              <LiveWayIn
+                game={game.id}
+                them={them.name}
+                live={game.live}
+                selected={way === 2}
+                buttonRef={(node) => { ways.current[2] = node }}
+                onFocus={() => setWay(2)}
+                onChoosing={setChoosingLiveRoad}
+              />
+            ) : null}
           </div>
         )}
         <p className="game-key-guide">
@@ -1073,15 +1126,26 @@ function TheHollow() {
               can say so. It sits where the invitation would have been, because
               it is standing in for exactly that.
             */}
+            {/*
+              The action goes on the card you can act on.
+
+              These were the wrong way round: the card in front of you said
+              "enter to choose" — which is a keyboard instruction, and on a
+              phone is not one — while the cards you could not reach said
+              "bring to the fire", which is the actual verb. So the one thing
+              on screen that was supposed to say *press this* was the one
+              sentence nobody could act on, and the invitation was sitting on
+              the neighbours.
+            */}
             <span className="game-card-command">
               {locked ? (
                 <span className="game-card-locked">
                   <i aria-hidden="true" /> being worked on
                 </span>
               ) : index === at ? (
-                'enter to choose'
+                'bring it to the fire'
               ) : (
-                'bring to the fire'
+                ''
               )}
             </span>
           </button>
@@ -1112,7 +1176,7 @@ function TheHollow() {
             Ultimate noughts and crosses, hidden fleet, dots and boxes. One
             folder each — the fire has room.
           </small>
-          <span className="game-card-command">the Hallow has space</span>
+          <span className="game-card-command">the Hollow has space</span>
         </button>
         </div>
         <button

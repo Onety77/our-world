@@ -204,9 +204,19 @@ const main = async () => {
   const after = await ev(`(() => {
     const cards = [...document.querySelectorAll('.game-card')]
     const at = cards.findIndex((c) => c.classList.contains('is-selected'))
+    const words = (card) => ((card.querySelector('.game-card-command') || {}).textContent || '').trim()
     return {
       selected: at,
-      command: at < 0 ? '' : (cards[at].querySelector('.game-card-command') || {}).textContent || '',
+      command: at < 0 ? '' : words(cards[at]),
+      /* Whether anything you cannot reach is still offering itself. */
+      /*
+        The coming-soon card is not a game, and its line describes an empty
+        place rather than inviting you into one — so it is not a neighbour
+        that can steal the ask.
+      */
+      neighbours: cards.filter(
+        (c, i) => i !== at && !c.classList.contains('game-card-coming') && words(c) !== '',
+      ).length,
     }
   })()`)
   check(
@@ -214,10 +224,18 @@ const main = async () => {
     'the card you swiped to is the selected one',
     `swiped to ${target}, selected ${after.selected}`,
   )
+  /*
+    Asserted as *which card is asking* rather than by its wording, which is
+    what this used to do and what made it fail the day the wording was fixed.
+
+    The bug it was written for is that the card in front of you was labelled
+    as a neighbour, so the invitation sat on the cards you could not reach.
+    That is the thing worth holding, and it survives whatever the verb is.
+  */
   check(
-    /enter to choose/i.test(after.command),
-    'and it offers to be entered, not to be brought over',
-    JSON.stringify(after.command),
+    after.command !== '' && after.neighbours === 0,
+    'the card in front of you is the one asking to be opened',
+    JSON.stringify(after),
   )
 
   // One tap. If the row had not been read back this would only have selected.

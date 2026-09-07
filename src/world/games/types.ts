@@ -165,7 +165,7 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
   invite?: {
     /** The verb. Lower case; `{them}` is replaced with her name. */
     name: string
-    /** One line, on hover, saying what happens next. */
+    /** One line saying what happens next. Shown under the verb, not on hover. */
     tip: string
   }
   /**
@@ -183,7 +183,7 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
   live?: {
     /** The verb on the button. Lower case; the row sets its own case. */
     name: string
-    /** One line, on hover, saying what it actually is. */
+    /** One line saying what it actually is. Shown under the verb, not on hover. */
     tip: string
     /**
      * Asked before the invitation is sent, and folded into the round key.
@@ -193,6 +193,16 @@ export interface GameDefinition<Setup = unknown, MoveData = unknown> {
      */
     choose?: { prompt: string; options: readonly LiveChoice[] }
   }
+  /**
+   * What playing on your own actually means *here*, in one line.
+   *
+   * The third way in is the only one the shell names for itself — "on your
+   * own" is true of every game — but what it *costs* is not the same
+   * everywhere, and that is the half somebody is actually deciding on. Left
+   * out, the row says the one thing that is true of all of them: nothing
+   * reaches her.
+   */
+  alone?: string
   /** Position around the Hollow's fire. Lower appears first. */
   order?: number
 
