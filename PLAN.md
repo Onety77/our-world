@@ -1292,12 +1292,12 @@ the river.**
   belong to the Hollow rather than to the rows — which is also why there is one
   hook for all the games instead of one per game.
 - **The night screen's fourth tab: what the two of you have watched.** A
-  `Wanted` row is what is coming; a `Watched` row is what happened, and it is
-  kept for good. It is the first thing in the garden that grows without limit,
-  so it is the first thing to get a **collection of its own** rather than a
-  field on `world/ours` — the queue, the wanted list and the car's dials all
-  ride on that document precisely because they are short and are read whole,
-  and an archive is neither. See `systems/archive` for the arithmetic and
+  `Watched` row is an evening that happened, and it is kept for good. It is the
+  first thing in the garden that grows without limit, so it is the first thing
+  to get a **collection of its own** rather than a
+  field on `world/ours` — the queue and the car's dials ride on that document
+  precisely because they are short and are read whole, and an archive is
+  neither. See `systems/archive` for the arithmetic and
   `firestore.rules` for the seal.
 - **Two people rating the same film have to commit blind, and that is the whole
   design rather than a flourish.** A number you can see before you choose your
@@ -1619,8 +1619,8 @@ handling changed.
 - [x] **The archive: what the two of you have watched.** A fourth tab on the
       night screen, and the only one that does not want the picture — the
       screen moves off to the side and the list takes the whole width, with the
-      film still playing in your ears. Either of you puts a film in, or moves
-      one across from the wanted list in one press. **Ratings are sealed:**
+      film still playing in your ears. Either of you puts a film in.
+      **Ratings are sealed:**
       neither of you sees the other's until you have both given one, and then
       both open at once with the average between them — the question vine's
       shape, a public pair of flags on the film and each score in a document of

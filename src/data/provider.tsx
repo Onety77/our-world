@@ -192,6 +192,41 @@ function RealProvider({
         stop()
         stop = null
       }
+    }).catch((error) => {
+      /*
+        ======================================================================
+        **Without this the garden simply stopped at "opening…", for ever.**
+
+        Everything below this point in the boot is guarded — a bad sign-in, a
+        third address, a refused rule — and the one step that was not was the
+        step that fetches the code to do any of it. An `import()` that rejects
+        left this promise rejected, nothing ever called `setConnection`, and
+        the door sat on `connecting` with no message, no error and nothing to
+        press. It is the worst shape a failure can have here: the honesty law
+        says a thing that fails must say it failed, and this one could not even
+        say it had.
+
+        It is reachable, and it was reached. A deploy renames every chunk whose
+        contents changed and stops serving the old names, so a device holding a
+        cached shell from the deploy before asks for a module that is no longer
+        anywhere. `sw/worker.js` and `gardenWorker` in `vite.config.ts` are why
+        that cannot happen again — this is what makes it *visible* if some
+        other reason for it ever turns up.
+
+        The wording is aimed at the person holding the phone rather than at
+        whoever is debugging: what has happened is that the app is stale, and
+        the fix is to load it again.
+        ======================================================================
+      */
+      console.error('[garden] the data layer could not be loaded', error)
+      if (!live) return
+      setConnection({
+        status: 'refused',
+        error: new Error(
+          'This copy of the garden is out of date and could not finish opening.\n\n' +
+            'Close it and open it again — it will fetch the new one.',
+        ),
+      })
     })
 
     return () => {

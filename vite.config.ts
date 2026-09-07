@@ -28,13 +28,34 @@ const SHELL_FROM_PUBLIC = [
 /**
  * Writes `dist/sw.js` from `src/sw/worker.js`, with the shell filled in.
  *
- * **The shell is exactly the static import graph of the entry, and nothing
- * else.** Vite already splits the places, the games, the admin page and the
- * Firebase SDK behind dynamic imports so they are not in front of the first
- * frame; walking `imports` and never `dynamicImports` is what keeps that true
- * on this side too. If somebody makes a section eager, this list grows by
- * itself and the precache grows with it — which is the correct failure, and
- * visible in the line the build prints.
+ * ---------------------------------------------------------------------------
+ * **The shell is every piece of code in the build, and that is a correction
+ * that cost the garden a day of not opening at all.**
+ *
+ * It used to be the *static* import graph of the entry and nothing else — the
+ * argument being that the places, the games and the Firebase SDK are
+ * deliberately lazy, so precaching them would put every one of those kilobytes
+ * back in front of the first frame. The argument was about the wrong thing.
+ * Precaching happens after `load`, in the background; it was never in front of
+ * anything. And leaving the lazy chunks out had a consequence nobody looked
+ * for:
+ *
+ * 1. A device caches the shell from one deploy.
+ * 2. The next deploy renames every chunk whose contents changed, and **the old
+ *    names stop being served** — a deployment is a whole new build, not a
+ *    patch on the last one.
+ * 3. That device opens the world. The worker hands it the cached shell, which
+ *    is perfectly intact, and the shell asks for a chunk that no longer
+ *    exists anywhere.
+ * 4. `import()` rejects. The garden stops at *opening…* and stays there.
+ *
+ * A shell and the chunks it names are **one thing**. Splitting them across a
+ * cache boundary meant a deploy could tear them apart, and the tear was
+ * invisible until somebody in another country could not open the door.
+ *
+ * Media is still excluded — see rule 2 in the worker — and so is anything from
+ * `public/` that is not in `SHELL_FROM_PUBLIC`.
+ * ---------------------------------------------------------------------------
  */
 function gardenWorker(): Plugin {
   const source = fileURLToPath(new URL('./src/sw/worker.js', import.meta.url))
@@ -54,37 +75,26 @@ function gardenWorker(): Plugin {
         return
       }
 
-      const scripts = new Set<string>()
-      const styles = new Set<string>()
-
-      const walk = (fileName: string) => {
-        if (scripts.has(fileName)) return
-        const chunk = bundle[fileName]
-        if (!chunk || chunk.type !== 'chunk') return
-        scripts.add(fileName)
-        for (const css of chunk.viteMetadata?.importedCss ?? []) styles.add(css)
-        // `imports` only. A dynamic import is a thing the garden fetches when
-        // somebody walks into it, and it is cached then.
-        for (const next of chunk.imports) walk(next)
-      }
-      walk(entry.fileName)
-
       /*
-        The two typefaces, in the one format worth shipping twice.
+        Every chunk, static or dynamic, plus the stylesheets — and the *only*
+        exclusion is media.
 
-        `@fontsource` emits `.woff` beside every `.woff2` for browsers that
-        have not needed it in years. Both are in the bundle and only one is
-        ever fetched, so caching both would double this for nothing.
+        The list is taken from the whole bundle rather than walked from the
+        entry, because walking is what let a chunk be left out: any module the
+        entry does not statically reach is a module a cached shell could name
+        and not have. There is no walk to get wrong now.
+
+        `.woff2` and not `.woff`: `@fontsource` emits both, only one is ever
+        fetched, and caching the pair would double the typefaces for nothing.
       */
-      const fonts = Object.keys(bundle).filter((name) => name.endsWith('.woff2'))
+      const code = Object.keys(bundle).filter(
+        (name) =>
+          name.endsWith('.js') ||
+          name.endsWith('.css') ||
+          name.endsWith('.woff2'),
+      )
 
-      const shell = [
-        '/index.html',
-        ...[...scripts].sort().map((name) => `/${name}`),
-        ...[...styles].sort().map((name) => `/${name}`),
-        ...fonts.sort().map((name) => `/${name}`),
-        ...SHELL_FROM_PUBLIC,
-      ]
+      const shell = ['/index.html', ...code.sort().map((name) => `/${name}`), ...SHELL_FROM_PUBLIC]
 
       /*
         The version is the shell.

@@ -20,5 +20,63 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      /*
+        The watchdog, and the only code in this world that can rescue a garden
+        which never started.
+
+        ---------------------------------------------------------------------
+        **Everything else that recovers from a bad load is inside the app, and
+        the failure worth guarding against is the one where the app never
+        runs.** A deploy replaces every file it changed; a device holding a
+        cached copy of this page can ask for a script belonging to the build
+        before it; and if that script does not arrive, nothing further happens
+        — no React, no error boundary, no `provider` to report it. The garden
+        sits on its loading line for ever. That is exactly how it broke, and
+        the person it broke for could only tell us "it says opening and stays
+        there".
+
+        So: if nothing has been drawn after a quarter of a minute, this page is
+        built out of something that is no longer there, and the fix is to ask
+        for the page again — by then the replacement worker has installed and
+        the reload gets a set of files that agree with each other.
+
+        **Once. Ever.** `sessionStorage` is what makes this safe: a garden that
+        is slow, or offline, or genuinely broken must not reload itself in a
+        loop, which would be worse than the thing it is fixing. One attempt,
+        and if that does not do it the honest failure is left on the screen.
+
+        Fifteen seconds because this is a 3D world booting on a phone: it is
+        far past a slow load and far short of anybody's patience with a blank
+        screen. Cleared the moment anything is drawn.
+        ---------------------------------------------------------------------
+      */
+      (function () {
+        var KEY = 'garden:healed-once'
+        var timer = setTimeout(function () {
+          var root = document.getElementById('root')
+          if (root && root.children.length > 0) return
+          try {
+            if (sessionStorage.getItem(KEY)) return
+            sessionStorage.setItem(KEY, '1')
+          } catch (e) {
+            /* No storage means no way to promise "once", so do not try. */
+            return
+          }
+          location.reload()
+        }, 15000)
+        var watch = setInterval(function () {
+          var root = document.getElementById('root')
+          if (!root || root.children.length === 0) return
+          clearTimeout(timer)
+          clearInterval(watch)
+          try {
+            sessionStorage.removeItem(KEY)
+          } catch (e) {
+            /* It opened, which is the only thing this was protecting. */
+          }
+        }, 500)
+      })()
+    </script>
   </body>
 </html>

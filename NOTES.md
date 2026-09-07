@@ -40,6 +40,96 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 7 Sep · Claude · The garden would not open, and why
+
+> *"it just shows that first loading screen with opening.. and it stays"*
+
+**My fault, from the service worker two days ago.** The garden was unopenable
+on a device that had it cached. Written out because every step of it is a trap
+that will be walked into again.
+
+**The chain.** The worker precached only the *static* import graph of the
+entry. The app dynamically imports `data/firebase`, the places and the games,
+so those chunks were not in the shell. A deploy is a whole new build: every
+chunk whose contents changed gets a new name and **the old names stop being
+served**. A device holding a cached shell from the deploy before therefore
+asks for a module that is nowhere — and `provider.tsx` fetched it with
+`import(...).then(...)` and **no `.catch`**, so the rejection went nowhere,
+`setConnection` was never called, and the door sat on `connecting` for ever.
+Every other failure on that path was handled. The one that fetched the code to
+handle anything was not.
+
+> **The nastiest part, and the reason it was invisible: a missing asset did not
+> come back missing.** `vercel.json` rewrote every unmatched path to
+> `index.html`, so `/assets/index-OLD.js` answered **200, `text/html`**. The
+> browser tried to run a document as a module and failed without a word — and
+> the worker, seeing a same-origin 200, **cached the front page under the name
+> of a script**. A fetch of the script's own URL from the console is what
+> finally showed it. The rewrite now leaves `/assets/` alone so a missing file
+> 404s honestly, and `keepable` refuses to store HTML where code was asked for.
+
+**Five things changed.** The shell is now **every** chunk, not the walked graph
+— a shell and the chunks it names are one thing, and splitting them across a
+cache boundary let a deploy tear them apart. `install` calls `skipWaiting`,
+because a broken cached shell never renders the renewal line, so the
+replacement could never be asked for and the world could not be reopened at
+all. `activate` keeps **one generation back** and `theRest` searches every
+cache it kept, because a replacement worker takes over while pages are still
+running the previous build and asking for its chunks by name. `provider` has
+its `.catch`. And `index.html` carries a watchdog: nothing drawn after fifteen
+seconds means this page is built out of something that is gone, so ask for it
+again — **once**, guarded by `sessionStorage`, because a reload loop would be
+worse than the thing it fixes.
+
+**Measured, on a real two-deploy sequence** (`dist` served under Vercel's own
+rewrite rules, a lazily-imported chunk genuinely renamed): before, the second
+visit was a blank page and no console output at all; after, it heals itself and
+opens. Shell 42 → 66 files, 1.11 MB gzipped, still no media in it.
+
+**Two false starts worth keeping.** A comment appended to a source file to
+force a "second deploy" changes nothing — minification strips it, the chunk
+keeps its hash, and the harness proves nothing while looking like it passed.
+And `npm run offline` had been printing *opening…* for an afternoon and passing,
+because its only assertion was that something had been painted, and the shell
+painting is not the garden opening. It asserts getting past the loading line
+now, which is the one thing that would have caught this on the day.
+
+## 7 Sep · Claude · The list came out
+
+> *"i feel like thats useless, cause we would communicate and know about the
+> movies we have anyways"*
+
+**"The list" is gone** — the top half of the *our film* tab, where either of
+you wrote down a film you meant to watch and then marked whether you had a
+copy, and the row said in advance whether the two files were the same file.
+
+It was built to answer a real question — *two different rips is a thing you
+discover at nine in the evening* — and the owner's answer is that the two of
+them already answer it by talking to each other, which is the one argument
+this world always loses to. **Removed rather than hidden.** Nothing here is
+allowed to be a feature nobody uses that still has to be kept working.
+
+What went, in full: `FilmList` and the whole `.wanted` block in `styles.css`;
+`Wanted`, `watchFilms` and `setFilms` off the `DataLayer` and out of both
+implementations; the `films` field on `world/ours`; the `garden:films:v1` key
+in the mock; and the section of `npm run screen` that drove it.
+
+**What deliberately stayed**, because it sits next to it and is a different
+thing: the *our film* tab itself and everything about playing a file off this
+device, the shelf of films this browser can reopen, `fingerprint` in
+`systems/film` — which is how the anchor names a film so both devices know
+which one is on, and has nothing to do with the list — the queue, and the
+archive.
+
+**One thing was lost with it and is worth naming**: the one-press *we watched
+it* that moved a film off the list and into the archive. Films go into the
+archive by being typed in now, which is one more step on the one evening a
+year it matters.
+
+`noUnusedLocals` did most of the work — every orphaned handler and piece of
+state announced itself. `npm run screen` drives the real night screen in a
+browser and still says **the screen holds**.
+
 ## 6 Sep · Claude · The Harmattan gets people, and the film stops looping
 
 > *"when she pauses from her end […] instead of pausing, it does this weird

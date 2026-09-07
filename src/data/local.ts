@@ -36,7 +36,6 @@ import type { ScreenTalk,
   QuestionRound,
   VoiceLight,
   VoiceLightGarden,
-  Wanted,
   Watched,
 } from './types'
 import {
@@ -219,7 +218,6 @@ export interface LocalDataLayer extends DataLayer {
 
 const LISTENING_KEY = 'garden:listening:v1'
 const WATCHING_KEY = 'garden:watching:v1'
-const FILMS_KEY = 'garden:films:v1'
 const WATCHED_KEY = 'garden:watched:v1'
 const TRACKS_KEY = 'garden:tracks:v1'
 /*
@@ -707,19 +705,6 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
   const listeningWatchers = new Set<(l: Listening) => void>()
   let watching = loadWatching()
   const watchingWatchers = new Set<(w: Watching) => void>()
-
-  /* The wanted list, kept like everything else here: in memory, mirrored to
-     storage so a reload is the same evening rather than a fresh one. */
-  let films: Wanted[] = (() => {
-    if (typeof localStorage === 'undefined') return []
-    try {
-      const raw = JSON.parse(localStorage.getItem(FILMS_KEY) ?? '[]') as unknown
-      return Array.isArray(raw) ? (raw as Wanted[]) : []
-    } catch {
-      return []
-    }
-  })()
-  const filmWatchers = new Set<(f: Wanted[]) => void>()
 
   /*
     The archive, and the one place this layer has to do real work.
@@ -1368,24 +1353,6 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       watching = { ...next, by: me, since: Date.now(), seq: watching.seq + 1 }
       saveWatching()
       for (const w of watchingWatchers) w(watching)
-    },
-
-    watchFilms(listener) {
-      filmWatchers.add(listener)
-      listener(films)
-      return () => {
-        filmWatchers.delete(listener)
-      }
-    },
-
-    async setFilms(next) {
-      films = next
-      try {
-        localStorage.setItem(FILMS_KEY, JSON.stringify(films))
-      } catch {
-        /* it still holds for this sitting */
-      }
-      for (const w of filmWatchers) w(films)
     },
 
     watchWatched(listener) {

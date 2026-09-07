@@ -278,6 +278,9 @@ const main = async () => {
         painted: painted(),
         canvas: Boolean(document.querySelector('canvas')),
         controlled: Boolean(navigator.serviceWorker.controller),
+        // The loading line. Still on it means nothing behind the door ever
+        // answered — see the note where this is asserted.
+        waiting: Boolean(document.querySelector('.door-waiting')),
         text: (document.body.innerText || '').slice(0, 100).replace(/\\s+/g, ' ').trim(),
       }
     })()`)
@@ -295,7 +298,26 @@ const main = async () => {
   const online = await look()
   if (!online.controlled) problems.push('the second visit was not controlled by the worker')
   if (!online.painted) problems.push('the garden stopped rendering *with* a network')
-  console.log(`online open  · painted ${online.painted} · canvas ${online.canvas}`)
+  /*
+    **And that it got past the loading line**, which is the assertion this
+    check was missing on the day it mattered.
+
+    It printed *opening…* for a whole afternoon and passed, because `painted`
+    was true — the shell had rendered, and the shell rendering is all `painted`
+    ever meant. Meanwhile the thing behind it had failed to load and the door
+    was waiting on a promise that would never settle, which is precisely the
+    state a person then found in another country.
+
+    `door-waiting` is the loading line. With a network in front of it there is
+    no honest reason to still be on it by now.
+  */
+  if (online.waiting) {
+    problems.push('the garden is still on its loading line with a network in front of it')
+  }
+  console.log(
+    `online open  · painted ${online.painted} · canvas ${online.canvas}` +
+      ` · past the loading line ${!online.waiting}`,
+  )
   for (const line of said) console.log('  page · ' + line)
 
   // --- and now there is nowhere to fetch from -------------------------------

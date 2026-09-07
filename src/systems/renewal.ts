@@ -29,29 +29,34 @@ interface RenewalState {
 }
 
 /*
-  Held outside the store because the reload must happen exactly once.
+  ---------------------------------------------------------------------------
+  **The worker no longer waits to be asked, and this half is now the whole of
+  the promise.**
 
-  `controllerchange` fires when the new worker takes over — but it also fires
-  the first time any worker claims a page that loaded without one, which is
-  every first visit. Reloading on that would turn every first open of the
-  garden into two, and on a slow connection two is very visible.
+  It used to sit in `waiting` until this file posted it a message, which was a
+  tidy arrangement with one fatal property: a garden whose cached shell was
+  broken never rendered this line, so the replacement could never be asked for,
+  and the world could not be opened again at all. `sw/worker.js` explains it
+  where it happened. The worker steps up by itself now.
+
+  So *nothing here reloads the page unless somebody touches the line.* That was
+  always the actual promise — not "the new worker waits", but "the world does
+  not change under you" — and it is kept in one place instead of two.
+  ---------------------------------------------------------------------------
 */
-let asked = false
-let waiting: ServiceWorker | null = null
-
 export const useRenewal = create<RenewalState>((set) => ({
   ready: false,
   take: () => {
-    if (!waiting) return
-    asked = true
     set({ ready: false })
-    waiting.postMessage({ type: 'garden:take-the-new-one' })
+    /*
+      The new worker is already the one answering; all that is left is to ask
+      for the page again so it is built out of what that worker is holding.
+    */
+    window.location.reload()
   },
 }))
 
-function offer(worker: ServiceWorker | null): void {
-  if (!worker) return
-  waiting = worker
+function offer(): void {
   useRenewal.setState({ ready: true })
 }
 
@@ -84,11 +89,6 @@ export function keepTheGarden(): void {
     return
   }
 
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!asked) return
-    window.location.reload()
-  })
-
   /*
     After `load`, deliberately.
 
@@ -102,11 +102,6 @@ export function keepTheGarden(): void {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
-        // Left waiting by an earlier visit that never answered the offer.
-        if (registration.waiting && navigator.serviceWorker.controller) {
-          offer(registration.waiting)
-        }
-
         registration.addEventListener('updatefound', () => {
           const arriving = registration.installing
           if (!arriving) return
@@ -119,10 +114,15 @@ export function keepTheGarden(): void {
               worker is already serving the page the person is looking at.
               Offering a renewal there would be asking somebody to upgrade to
               what they already have.
+
+              `installed` and not `activated`, because the worker steps up on
+              its own the moment its shell is down — so by the time anybody
+              touches the line, reloading is all that is left to do, and the
+              page in front of them is still the one they were using.
             */
             if (arriving.state !== 'installed') return
             if (!navigator.serviceWorker.controller) return
-            offer(arriving)
+            offer()
           })
         })
       })

@@ -645,57 +645,15 @@ export interface Watching {
 }
 
 /**
- * A film the two of you mean to watch, and whether each of you has it yet.
- *
- * ---------------------------------------------------------------------------
- * **The half the night screen left to WhatsApp.**
- *
- * Watching a film off the disk works and is in sync to the frame, and getting
- * to that point is still entirely up to the two of you: one says a name, the
- * other goes and finds it, and neither knows whether it worked until they are
- * both sitting down. Two different rips is a thing you discover at nine in the
- * evening, which is the worst possible moment to discover it.
- *
- * So the list carries the fingerprints. Each of you marks a row by choosing
- * your own copy against it — which costs nothing you were not going to do
- * anyway — and from then on the row knows whether the two files are the same
- * file. At three in the afternoon, when a different download is an errand
- * rather than a ruined evening.
- *
- * Nothing about the files themselves crosses. A fingerprint is a size and
- * sixty-four bits over three megabytes of the middle — see `systems/film` —
- * and it says nothing about the film except which one it is.
- * ---------------------------------------------------------------------------
- */
-export interface Wanted {
-  id: string
-  /** Whatever either of you calls it. Never parsed. */
-  title: string
-  /** Who put it on the list. */
-  by: UserId
-  at: number
-  /**
-   * Each side’s fingerprint of their own copy, or null until they have one.
-   *
-   * Two names rather than a map keyed by person, because the shape is fixed
-   * at exactly two for ever and a fixed shape is one that cannot arrive
-   * malformed off the wire.
-   */
-  warm: string | null
-  cool: string | null
-}
-
-/**
  * One film the two of you have actually watched, and what each of you made of
  * it.
  *
  * ---------------------------------------------------------------------------
- * **The other end of the night screen.** `Wanted` is what is coming; this is
- * what happened. Over years it is the only record either of you will have of
- * the evenings you spent in front of the same thing seven timezones apart, so
- * it is kept for good and it is never trimmed — unlike the wanted list, which
- * is a short standing list, and unlike `ScreenTalk`, which is meant to be
- * thrown away.
+ * **The one thing on the night screen that is kept.** Over years it is the
+ * only record either of you will have of the evenings you spent in front of
+ * the same thing seven timezones apart, so it is kept for good and it is never
+ * trimmed — unlike the queue, which is what happens next, and unlike
+ * `ScreenTalk`, which is meant to be thrown away.
  *
  * **The scores are sealed until both of you have given one, and that is the
  * whole design of this thing rather than a flourish.** A number you can see
@@ -1518,17 +1476,6 @@ export interface DataLayer {
    * the film back to where you were. Two documents, two concerns.
    */
   sayOnScreen(session: string, line: ScreenLine): Promise<void>
-
-  /** The films the two of you mean to watch. See `Wanted`. */
-  watchFilms(listener: (films: Wanted[]) => void): () => void
-  /**
-   * Put the whole list on the wire.
-   *
-   * Written whole, like the queue and the car’s dials, because it is short,
-   * it is read whole, and a partial update of a list two people edit is a
-   * merge nobody asked for.
-   */
-  setFilms(films: Wanted[]): Promise<void>
 
   // ---- the archive ---------------------------------------------------------
 

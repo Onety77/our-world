@@ -84,9 +84,36 @@ const OURS = 'garden:'
 */
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) =>
-      cache.addAll(SHELL.map((path) => new Request(path, { cache: freshness(path) }))),
-    ),
+    caches
+      .open(SHELL_CACHE)
+      .then((cache) =>
+        cache.addAll(SHELL.map((path) => new Request(path, { cache: freshness(path) }))),
+      )
+      /*
+        ====================================================================
+        **Take over as soon as the new shell is safely down, and this is the
+        one lever that can un-break a device.**
+
+        It was deliberately not here at first, on the rule that an update is
+        offered and never taken. That rule is still kept — but it is kept by
+        `systems/renewal`, which is the thing that decides whether the *page*
+        reloads, and it will not reload one until somebody touches the line.
+        This only decides which worker answers the *next* load.
+
+        Leaving it out had a failure with no way out of it. If a cached shell
+        is broken — which is exactly what a deploy used to do to it, see
+        `gardenWorker` in `vite.config.ts` — then the page never mounts, so
+        the renewal line never renders, so there is nothing to touch, so the
+        replacement worker waits for every client to close and the person is
+        looking at a garden that will not open and cannot be told to update.
+        On a phone with the world on its home screen, "close every client"
+        means force-quitting an app, which nobody is going to guess.
+
+        A worker that steps up on its own costs a page nothing it was using.
+        A worker that politely waits can strand somebody for good.
+        ====================================================================
+      */
+      .then(() => self.skipWaiting()),
   )
 })
 
@@ -109,44 +136,97 @@ function freshness(path) {
 // Activating
 // ---------------------------------------------------------------------------
 
+/*
+  Which version was serving the garden before this one.
+
+  One tiny cache holding one word. It exists because of the rule below, and
+  there is nowhere else a worker can leave a note for its successor.
+*/
+const GENERATION = 'garden:generation'
+const GENERATION_KEY = '/which-garden'
+
+async function previousVersion() {
+  try {
+    const cache = await caches.open(GENERATION)
+    const held = await cache.match(GENERATION_KEY)
+    return held ? await held.text() : null
+  } catch {
+    return null
+  }
+}
+
+async function recordThisVersion() {
+  try {
+    const cache = await caches.open(GENERATION)
+    await cache.put(GENERATION_KEY, new Response(VERSION))
+  } catch {
+    /* Then the next worker keeps one generation more than it needed to. */
+  }
+}
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const names = await caches.keys()
-      await Promise.all(
-        names
-          .filter(
-            (name) =>
-              name.startsWith(OURS) &&
-              name !== SHELL_CACHE &&
-              name !== RUNTIME_CACHE &&
-              // A photograph mid-flight from the share sheet. See SHARE_CACHE.
-              name !== SHARE_CACHE,
-          )
-          .map((name) => caches.delete(name)),
-      )
       /*
-        Claim, so the very first visit is controlled without needing a second
-        one. Every later activation is already downstream of a person tapping
-        the renewal line, and `systems/renewal` reloads the page itself when
-        the controller changes — so this never pulls the rug out from under
-        anybody who did not ask for it.
+        ====================================================================
+        **Collect old caches, but never the one still being served from.**
+
+        This is the rule that a blank screen after a deploy was hiding, and it
+        only became reachable once `install` started calling `skipWaiting`.
+
+        A replacement worker activates *while the previous one is still
+        driving every page that is already open* — the spec keeps a page with
+        the worker it started under until it navigates again. So the old
+        worker is alive, answering fetches, and reading from a cache named
+        after **its** version. Deleting that cache out from under it does not
+        make it fall back to the network: `caches.match` with a `cacheName`
+        that no longer exists fails, so the page it is halfway through booting
+        simply stops, with an empty `#root` and nothing in the console.
+
+        One generation back is therefore kept — that is the one that can still
+        be in use — and everything older goes. Storage stays bounded at two
+        builds, which for a garden this size is a few megabytes.
+        ====================================================================
       */
-      await self.clients.claim()
+      const before = await previousVersion()
+      const keep = new Set([
+        SHELL_CACHE,
+        RUNTIME_CACHE,
+        // A photograph mid-flight from the share sheet. See SHARE_CACHE.
+        SHARE_CACHE,
+        GENERATION,
+        ...(before ? [`garden:shell:${before}`, `garden:runtime:${before}`] : []),
+      ])
+
+      const names = await caches.keys()
+      const stale = names.filter((name) => name.startsWith(OURS) && !keep.has(name))
+      await Promise.all(stale.map((name) => caches.delete(name)))
+
+      /*
+        **Claim the first install, and never claim a replacement.**
+
+        On a first install the page that just fetched us came over the network
+        and taking it over costs it nothing. On a replacement it is the same
+        mistake as the deletion above from the other side: the open page is
+        running the previous build's entry and asking for the previous build's
+        chunks by name, and this worker holds neither. A page keeps the worker
+        it started with; the next navigation gets this one, with a shell that
+        matches it.
+      */
+      if (before === null) await self.clients.claim()
+      await recordThisVersion()
     })(),
   )
 })
 
 /*
-  The only thing the page can ask this worker to do.
+  There is deliberately no message channel here any more.
 
-  Named rather than a bare 'skip-waiting' because a service worker receives
-  messages from anything on the origin, and a message channel with one verb on
-  it should say whose verb it is.
+  The page used to ask this worker to step up, because it only stepped up when
+  asked. It steps up on its own now — see `install` — so the ask had nothing
+  left to do, and a listener that answers to a verb nobody says is a thing the
+  next reader has to work out is dead.
 */
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'garden:take-the-new-one') self.skipWaiting()
-})
 
 // ---------------------------------------------------------------------------
 // Answering
@@ -264,6 +344,29 @@ async function theRest(request, url) {
   const shell = await caches.match(request, { cacheName: SHELL_CACHE })
   if (shell) return shell
 
+  /*
+    ==========================================================================
+    **Then every other cache we are still keeping, and this line is the whole
+    reason a deploy used to blank the screen for one visit.**
+
+    A page belongs to the build it was loaded from. When a new worker takes
+    over — see `install` — the pages already open are still running the
+    previous build's entry and asking for the previous build's chunks *by
+    name*, and those names are not in this version's shell. Looking only in
+    our own shell meant answering "no" to a file that was sitting in the cache
+    next door, going to the network for it, and getting the front page back
+    with a `200` on it because that is what the host does with a path it does
+    not recognise. The module then failed to parse, silently, and the garden
+    stopped at *opening…*.
+
+    `caches.match` with no name searches all of them. `activate` keeps exactly
+    one generation back, so what it can find is bounded and is precisely the
+    set of builds that can still have a page open on them.
+    ==========================================================================
+  */
+  const older = await caches.match(request)
+  if (older) return older
+
   const cache = await caches.open(RUNTIME_CACHE)
   const held = await cache.match(request)
 
@@ -278,7 +381,7 @@ async function theRest(request, url) {
 
   const fromNetwork = fetch(request)
     .then((response) => {
-      if (keepable(response)) cache.put(request, response.clone())
+      if (keepable(request, response)) cache.put(request, response.clone())
       return response
     })
     .catch(() => null)
@@ -297,7 +400,35 @@ async function theRest(request, url) {
 }
 
 /**
- * Only a real, whole, same-origin success is worth keeping.
+ * A page where a script should be.
+ *
+ * ---------------------------------------------------------------------------
+ * **The single nastiest thing about hosting an app at one address: a missing
+ * file does not come back missing.**
+ *
+ * Every path that is not a real file is rewritten to `index.html`, because
+ * that is what makes `/dev7731` and a shared link work. So a build that asks
+ * for a chunk which no longer exists is not told *no*: it is handed the front
+ * page, with a cheerful `200` on it. The browser tries to run a document as a
+ * module, fails without a word, and the garden stops at *opening…* — which is
+ * exactly how a stale copy of this app died, and why it took a fetch of the
+ * script's own URL to see it.
+ *
+ * `vercel.json` now leaves `/assets/` out of that rewrite, so the honest 404
+ * comes back. This is the second line: a worker that cached the front page
+ * *under the name of a script* would have made a bad deploy permanent, and no
+ * amount of reloading would have shaken it out.
+ * ---------------------------------------------------------------------------
+ */
+function pageInsteadOfCode(request, response) {
+  const wanted = request.destination
+  if (wanted !== 'script' && wanted !== 'style') return false
+  const got = response.headers.get('content-type') ?? ''
+  return got.includes('text/html')
+}
+
+/**
+ * Only a real, whole, same-origin success of the right kind is worth keeping.
  *
  * `type === 'basic'` excludes opaque cross-origin responses, whose status is
  * always 0 and whose body cannot be inspected — storing one caches a failure
@@ -305,6 +436,8 @@ async function theRest(request, url) {
  * refused for the reason in `notOurs`, and caught here too because a server
  * may answer with one whether or not it was asked.
  */
-function keepable(response) {
-  return Boolean(response) && response.ok && response.status === 200 && response.type === 'basic'
+function keepable(request, response) {
+  if (!response || !response.ok || response.status !== 200) return false
+  if (response.type !== 'basic') return false
+  return !pageInsteadOfCode(request, response)
 }

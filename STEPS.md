@@ -374,6 +374,17 @@ The filesystem is checked before the rewrites, so both workers are served as
 themselves rather than becoming `index.html`. **Never let anything move
 `/push/firebase-messaging-sw.js` back to the root** — see §5.2c.
 
+**And the rewrite deliberately leaves `/assets/` out**, which is the
+`(?!assets/)` in it. That is not tidiness; it is the fix for the worst outage
+this garden has had. Everything in `/assets/` carries a content hash, so a
+request for one that does not exist means the browser is running a stale copy
+of the app. With the plain `/(.*)` rewrite it was answered with `index.html`
+and a cheerful **200**, so a build asking for a chunk that had been replaced
+got the front page instead, tried to run a document as JavaScript, failed
+silently, and the world stopped at *opening…* for ever. Left out of the
+rewrite, it 404s, which is the truth and which everything downstream can act
+on. If you ever simplify this line back to `/(.*)`, you will bring that back.
+
 ### Every time after that
 
 Push to your main branch. Vercel builds and deploys on its own; there is no
