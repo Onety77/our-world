@@ -354,7 +354,7 @@ shared-file changes, measurements, and anything another agent should preserve.
   it on the Garden's opaque `#0d1512` midnight background.
 - Final assets live in `public/icons`: the 1254px master, 512px and 192px install
   icons, 180px Apple touch icon, and 32px browser favicon. The original three
-  transparent proposals remain in `public/logos` as design history.
+  transparent proposals remain in `design/logos` as design history.
 - `index.html` now links only the favicon, Apple touch icon, and manifest; the
   mark is never rendered inside the Garden UI. `site.webmanifest` supplies the
   standalone app identity and maskable install assets.

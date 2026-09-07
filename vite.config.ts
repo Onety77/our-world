@@ -8,12 +8,14 @@ import { fileURLToPath, URL } from 'node:url'
   Files that ship from `public/` and belong in the first-open cache.
 
   Named one at a time rather than swept from the folder, and that is
-  deliberate: `public/` also holds `icons/garden-icon-master.png` at a megabyte
-  and a half, three logo plates at about a megabyte each, and the push worker,
-  which must never be cached by the other worker. A glob would quietly put four
-  megabytes of artwork in front of the first frame the day somebody adds a
-  picture to that folder. Everything not listed here is still cached — just on
-  the first day it is actually wanted.
+  deliberate. `public/` is not a folder of project files: every byte in it is
+  copied into `dist/` and deployed. It used to hold four and a third megabytes
+  of artwork that nothing referenced — the icon master and three logo plates,
+  now in `design/`, which is not part of the build. It still holds the push
+  worker, which must never be cached by the other worker.
+
+  A glob would quietly ship, and precache, whatever somebody drops in there
+  next. A list cannot.
 
   `icon-512.png` is left out for the same reason: four hundred kilobytes that
   only an install prompt ever asks for, at a moment when there is a network.

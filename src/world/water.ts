@@ -479,6 +479,59 @@ const FRAG = /* glsl */ `
     float p1 = rr * 11.0 + aa *  4.0 - vTravel * 10.0;
     float p2 = rr * 17.0 - aa * 13.0 - vTravel * 15.0;
     float p3 = rr *  7.0 + aa * 15.0 - vTravel *  6.5;
+
+    /*
+      ------------------------------------------------------------------------
+      **A ripple the screen cannot resolve is faded out rather than drawn
+      anyway, and this is what finally killed the combing.**
+
+      There is already a distance fade further down, and it was measuring the
+      wrong thing. What decides whether a wave can be drawn is not how far away
+      it is but how fast its phase moves per *pixel* — and at a grazing angle
+      that runs away long before 'vDepth' grows, because a metre of river
+      flattens into almost no screen at all. Which is exactly why the marks were
+      worst across the middle of the channel and not at the far bend, and why
+      pulling the distance fade in never touched them.
+
+      A sinusoid survives sampling while its phase advances less than pi across
+      one pixel. Past that it does not vanish, it *beats*: neighbouring pixels
+      land on unrelated parts of the wave and the eye joins them into long slow
+      diagonals. Those diagonals were the streaks, and they were being drawn
+      with total conviction.
+
+      'fwidth' is that number measured rather than guessed, so this holds at any
+      resolution, any field of view and any camera height instead of being tuned
+      until one screenshot looked acceptable. It also explains why this was so
+      much worse on a phone: same river, narrower view, more metres per pixel.
+
+      Fading to zero leaves the mean, which is flat water — and that is the
+      honest answer rather than a compromise. Past its resolving distance a real
+      river is sheen and colour, not texture.
+      ------------------------------------------------------------------------
+    */
+    float phaseStep = max(fwidth(p1), max(fwidth(p2), fwidth(p3)));
+    float resolved = 1.0 - smoothstep(1.1, 3.0, phaseStep);
+
+    /*
+      The same test for the swell, which is geometry and aliases anyway — and
+      an honest note about how much it actually does.
+
+      The crests are one row every ROW_METRES, and perspective eventually puts a
+      whole wave inside a pixel. Two things ride on them and both come to a
+      point there: the glitter, which is a very tight lobe, and the froth, which
+      is brightest over a crest. No smoothstep can fix that however wide it is
+      made — the froth's comment below is right that wide steps beat tight ones,
+      but width in metres stops helping once the metres are gone.
+
+      **Measured, rather than assumed.** Rendering 'crestStep' straight to the
+      screen shows it crossing this threshold only on thin spikes, not across
+      the broad bands — so this removes the worst individual sparkles and it is
+      *not* what makes the water calmer. The per-pixel fade above is. The
+      remaining bands are the swell itself, drawn correctly, and if they ever
+      want changing that is an amplitude and a wavelength, not an alias.
+    */
+    float crestStep = fwidth(vCrest);
+    float crestResolved = 1.0 - smoothstep(0.35, 1.1, crestStep);
     /*
       The gradient of the three, taken as though the warp were not there.
 
@@ -500,7 +553,7 @@ const FRAG = /* glsl */ `
       surface, and mostly gone by the far bend — which is also what water
       genuinely does, since past a certain distance all you read is the sheen.
     */
-    float ripple = 0.0034 * (1.0 - smoothstep(14.0, 85.0, vDepth) * 0.72);
+    float ripple = 0.0034 * (1.0 - smoothstep(14.0, 85.0, vDepth) * 0.72) * resolved;
     vec3 n = normalize(vNormal + vec3(-rippleAcross * ripple, 0.0, -rippleDown * ripple));
 
     /*
@@ -516,7 +569,7 @@ const FRAG = /* glsl */ `
     // Glitter: a hard specular lobe off the wave normal. Small and sharp, so
     // it scintillates as the crests travel instead of smearing into a sheen.
     float spec = pow(clamp(dot(reflect(-normalize(uSunDir), n), view), 0.0, 1.0), 42.0);
-    col += uSunColor * spec * 1.15 * uSun;
+    col += uSunColor * spec * 1.15 * uSun * crestResolved;
 
     /*
       Froth carried downstream, strongest over the crests.
@@ -527,7 +580,7 @@ const FRAG = /* glsl */ `
       places, never an edge.
     */
     float streak = smoothstep(0.25, 1.0, vStreak) * smoothstep(-0.2, 0.9, vCrest);
-    col += vec3(0.84, 0.88, 0.88) * streak * 0.075;
+    col += vec3(0.84, 0.88, 0.88) * streak * 0.075 * crestResolved;
 
     /*
       The shore: pale, then foam, then the edge — never a cut line.

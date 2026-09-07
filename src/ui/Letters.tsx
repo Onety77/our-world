@@ -92,7 +92,7 @@ export function LetterReader() {
     `null` is the honest answer to asking early and is never reported as a
     failure. It is the seal holding.
   */
-  const [opened, setOpened] = useState<Record<string, string>>({})
+  const [opened, setOpened] = useState<Record<string, string | null>>({})
   const needsWords = Boolean(letter && letter.openAt !== null && letter.body === '' && !waiting)
   const already = letter ? opened[letter.id] : undefined
 
@@ -100,8 +100,14 @@ export function LetterReader() {
     if (!letter || !needsWords || already !== undefined) return
     let dropped = false
     const id = letter.id
+    /*
+      `null` is recorded rather than discarded, so that "not answered yet" and
+      "answered, and there was nothing there" stay different things. They render
+      differently below, and discarding this left the second one showing the
+      first one's ellipsis forever.
+    */
     void data.readSealedLetter(id).then((body) => {
-      if (dropped || body === null) return
+      if (dropped) return
       setOpened((held) => ({ ...held, [id]: body }))
     })
     return () => {
@@ -161,6 +167,21 @@ export function LetterReader() {
                 <span>{author.name} left this for </span>
                 <em>{whenItOpens(letter.openAt ?? 0)}</em>
                 <span>. it is not open yet.</span>
+              </p>
+            ) : needsWords && already === null ? (
+              /*
+                The day has come, the words were asked for, and nothing came
+                back. Rare, and it should now be impossible to create — the two
+                documents are written in one batch — but a thought sealed before
+                that was true could have landed without its words, and they
+                cannot be written again: the rules refuse every update.
+
+                An ellipsis here would say "still coming", which is the one
+                thing that is certainly false.
+              */
+              <p className="ink sealed">
+                <span>{author.name} sealed this for today, but the words did not </span>
+                <span>arrive with it. they cannot be recovered.</span>
               </p>
             ) : (
               <p className="ink">{letter.body || already || '…'}</p>

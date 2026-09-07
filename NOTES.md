@@ -40,6 +40,141 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 7 Sep · Claude · A sweep of the five places, at the size they are used
+
+Photographed all five at 390×844 and 1280×800, hour and weather pinned so two
+runs compare. Three things were wrong; the first was wrong everywhere.
+
+**The music was a card floating over a painting.** Closed, on a phone, the
+player drew its full surface — rounded, bordered, blurred, shadowed — pinned
+across the top of every place. It was the first thing the eye landed on in four
+of the five, sitting on the sky above the Wellspring and straight across the
+Tree's canopy.
+
+The surface is not wrong; the comment above it in `styles.css` earns it
+properly, and the argument is that an **open** list of song titles laid over a
+briefing is two typefaces at right angles and neither readable. That argument is
+about the list. Closed there is no list — one line and three arrows — and the
+panel was being drawn anyway. So the surface now arrives with the list and
+leaves with it, and the line uses `--lift`, which is what every other label in
+the garden uses to stay legible over open sky.
+
+Also: a progress line for a song that does not exist is furniture pretending to
+be information. `.silent` is "no song loaded", which is deliberately not the
+same as paused — a paused song still has a length and a position worth drawing.
+
+**The Wellspring was combing into diagonal streaks**, badly on a phone and
+faintly on a desk. There was already a distance fade on the ripple and it was
+measuring the wrong quantity. What decides whether a wave can be drawn is not
+how far away it is but how fast its phase moves per *pixel*, and at a grazing
+angle that runs away long before depth grows — which is exactly why the marks
+were worst across the middle of the channel and not at the far bend.
+
+A sinusoid survives sampling while its phase advances less than π across one
+pixel; past that it does not vanish, it **beats**, and neighbouring pixels land
+on unrelated parts of the wave. Those beats were the streaks. `fwidth` measures
+it directly, so it holds at any resolution and any field of view rather than
+being tuned until one screenshot looked acceptable — and it explains why a phone
+was so much worse: same river, narrower view, more metres per pixel.
+
+**Rendered the two gradients straight to the screen to check, and it is worth
+knowing what that showed.** The phase gradient behaves exactly as hoped — low
+underfoot, saturating in the mid-distance — so the ripple keeps its texture where
+you can see the surface and relaxes into sheen where it cannot be drawn
+honestly. The *crest* gradient crosses its threshold only on thin spikes, so the
+matching fade on the glitter and the froth removes a few individual sparkles and
+is **not** what makes the water calmer. The comment in the shader says so. The
+broad bands that remain are the swell itself, drawn correctly; if they ever want
+changing that is an amplitude and a wavelength, not an alias.
+
+**The icons were 509 KB of PNG for four small pictures.** Re-encoding at the
+same size changed almost nothing, which said the encoding was fine and the
+weight was in the content. Palette-quantising them took the set to 178 KB —
+**331 KB saved**, of which 35 KB comes off every first open, because
+`icon-192.png` is in the precache shell. Compared side by side at size, the
+palette version is indistinguishable. They are 8-bit colormap PNGs now, so
+anything regenerated from `design/garden-icon-master.png` wants the same
+treatment or it will quietly put the weight back.
+
+Not done, and worth its own round: **the Glasshouse is badly composed** — a
+black pole dead centre, a grey void through the middle third, and half the frame
+given to floor tiles. That is a camera and a room, not a shader, so it wants
+deciding rather than nudging.
+
+The sweep harness is a scratch script, not a checked-in one. It pins
+`?hour=&sky=0,0,0,0` the way `npm run places` does, for the same reason.
+
+## 7 Sep · Claude · Three small debts paid
+
+Three things that had been written down as owed rather than done.
+
+**4.3 MB that shipped to a phone for no reason.** `public/` is not a folder of
+project files — every byte in it is copied into `dist/` and deployed. It held
+the icon master and three logo plates, which nothing in the app has ever
+referenced. They are artwork, and they are now in `design/`, which is outside
+the build. **`dist` went from 20 MB to 16 MB.** The precache list in
+`vite.config.ts` is still a hand-written list rather than a glob, and the
+comment there now says why: a glob would quietly ship and precache whatever
+lands in that folder next.
+
+**`npm run places` was failing on the time of day.** The garden's wind comes
+from the hour *and* from her real weather, fetched live — so the same unchanged
+code read 0.0043 one morning and 0.0062 that afternoon, and the ceiling caught
+the second one. The listening run is now pinned to `?hour=13.5&sky=0,0,0,0`:
+the windiest hour, no weather. That is the worst case, and it is reproducible
+on any machine at any hour.
+
+That fixed the larger half. The other half cannot be pinned — wind *gusts*, and
+this listens for eleven seconds, so it catches different weather each time.
+Measured four times at the pinned worst case the tree came in at 0.0058, 0.0062,
+0.0067. **The old 0.006 ceiling was sitting inside the noise band**, so whether
+the check passed was a coin toss. It is 0.009 now, which is above the band and
+still under a third of what the Hollow was doing the day the file was written.
+A check that fails because it is two o'clock is a check people learn to ignore.
+
+**A sealed thought now looks sealed on the tree.** It used to hang like any
+other paper; you only found out it was waiting by opening it. It is drawn as a
+narrow roll with a cord tied across it and no ink lines — the ink is missing
+because the words genuinely are not on the device, which is the honest state.
+
+The performance constraint from the treeline work applies here too, so this
+costs **nothing**: one `iSealed` instanced attribute, one float per paper, no
+extra draw call and no extra geometry. `float furl = mix(1.0, 0.34, iSealed)`
+narrows the quad in the vertex shader, `vThread` is divided by `furl` so a
+rolled paper keeps a normal-thickness thread, and the fragment shader branches
+to cylinder shading plus a cord band. `stillSealed` was widened to
+`Pick<Letter, 'by' | 'openAt'>` so the glow filter and the geometry ask the same
+question — an unread sealed thought does *not* pull the "new" glow, because
+there is nothing yet to read.
+
+Verified by planting two sealed thoughts of hers and two open ones in the mock
+and photographing the tree at 390×844: the silhouette difference survives being
+small, which is the only distance that matters. `sealed`, `day`, `shaders` and
+`tris` all pass.
+
+**The rules went up the same day**, which armed the refusal path — and made it
+worth reading the write path once more against a live project rather than a
+mock. It had a hole.
+
+`writeLetter` wrote the parent and `sealed/words` as **two awaited `setDoc`
+calls**, and neither document may ever be updated (`allow update, delete: if
+false` — a day that can be moved afterwards is not a day). So a thought whose
+parent landed and whose words did not was *unrecoverable*.
+
+The likely way there is not a network blip, it is a train. With persistence on,
+`setDoc` resolves when the **server** acknowledges the write — so offline the
+first `await` never returns, the second call is never reached, and the parent
+alone sits in the outbox. Close the tab and it syncs the next morning as a
+sealed thought with nothing behind it. Both writes are one `writeBatch` now,
+which queues the pair together and commits all or nothing.
+
+The reader gained the matching honest state, because a thought already in that
+condition cannot be repaired: `readSealedLetter` returning `null` is now
+recorded rather than discarded, so *"still coming"* and *"asked, and there was
+nothing there"* are different things. They rendered identically before — as an
+ellipsis that would sit there for ever, saying the one thing that was certainly
+false.
+
 ## 7 Sep · Claude · The treeline stops being a cut-out
 
 > *"i hope you are not planning to make it look good in a way that increases

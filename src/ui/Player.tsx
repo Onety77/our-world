@@ -412,8 +412,13 @@ export function Player() {
 
   const nothing = tracks.length === 0
 
+  /*
+    `silent` is "there is no song loaded", which is not the same as paused: a
+    paused song still has a length and a position, and a line worth drawing.
+    Only the first has nothing to measure.
+  */
   return (
-    <div ref={panel} className={`player ${open ? 'open' : ''}`}>
+    <div ref={panel} className={`player ${open ? 'open' : ''} ${track ? '' : 'silent'}`}>
       {/* No controls of its own — the anchor drives it. Muted until a real
           file exists, so a missing src can never make a browser complain. */}
       <audio ref={audio} preload="none" />

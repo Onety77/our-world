@@ -5773,6 +5773,43 @@ body:has(.talking) .leave-place {
     display: none;
   }
 
+  /*
+    Closed, on a phone, the music is text on the world — not a panel.
+
+    The surface above earns itself for a good reason, and the reason is written
+    up there: an *open* list of song titles laid straight over a briefing is two
+    typefaces at right angles and neither of them readable. That argument is
+    about the list. Closed, there is no list — there is one short line and three
+    arrows — and the panel was still being drawn: a rounded, bordered, blurred
+    slab pinned across the top of every single place.
+
+    Photographed at 390x844 in all five places, it was the first thing the eye
+    landed on in four of them, sitting on the sky above the Wellspring and
+    across the canopy of the Tree. A card floating over a painting, which is the
+    one thing this world has said everywhere else that it does not do.
+
+    So the surface arrives with the list and leaves with it. `--lift` is what
+    every other label in the garden uses to stay readable over open sky, and it
+    is enough for one line: two shadows, one tight and one wide, which is why it
+    holds over pale sky as well as dark.
+  */
+  .corner:not(.only) .player:not(.open) {
+    background: none;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: 0.1rem 0;
+  }
+
+  /*
+    A progress line for a song that does not exist is furniture pretending to
+    be information. It measures nothing until there is something to measure.
+  */
+  .corner:not(.only) .player.silent:not(.open) .player-beamline {
+    display: none;
+  }
+
   .corner:not(.only) .whisper-fold {
     width: auto;
     min-width: 0;

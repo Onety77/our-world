@@ -50,6 +50,7 @@ import {
 import type { SkyPalette } from '@/systems/palette'
 import { LIGHT_COLORS } from '@/systems/palette'
 import type { UserId } from '@/data/types'
+import { stillSealed } from '@/data/types'
 import { useReading } from '@/systems/reading'
 import { ambientLightLevel } from './forms'
 
@@ -108,6 +109,7 @@ const PAPER_VERT = /* glsl */ `
   attribute float iPhase;
   attribute float iTint;
   attribute float iIndex;
+  attribute float iSealed;
 
   uniform float uTime;
   uniform float uWind;
@@ -119,6 +121,7 @@ const PAPER_VERT = /* glsl */ `
   varying float vDepth;
   varying float vTint;
   varying float vLit;
+  varying float vSealed;
   /** Where the sheet stops and the thread begins, as a uv.y. Per-instance. */
   varying float vPaperTop;
   /** Half the thread's width, in uv.x. Per-instance and per-distance. */
@@ -170,7 +173,23 @@ const PAPER_VERT = /* glsl */ `
     // A long thread swings further at the bottom than a short one, because it
     // is a longer pendulum. Proportional rather than fixed, or the six-metre
     // ones hang dead still next to the one-metre ones twitching.
-    vec3 local = right * (position.x + amount * hang * total * 0.14)
+    vSealed = iSealed;
+    /*
+      A thought that has not opened yet is rolled up, so it is narrower.
+
+      This is the whole of the effect in the geometry: one multiply on the
+      quad's own width, per instance, on a mesh that was already instanced. No
+      second mesh, no second draw call, nothing added to the frame.
+
+      A third of the width is not a subtle difference and is not meant to be —
+      the tree is read from twenty-seven metres, where the fold and the ink and
+      the turned corner are all a few pixels, and the only thing that survives
+      that distance is the *shape*. A narrow paper among wide ones is legible
+      from the path; a differently shaded one is not.
+    */
+    float furl = mix(1.0, 0.34, iSealed);
+
+    vec3 local = right * (position.x * furl + amount * hang * total * 0.14)
                + up * (hang * total - abs(amount * hang) * total * 0.045);
 
     vec4 mv = modelViewMatrix * vec4(local + iKnot, 1.0);
@@ -191,7 +210,13 @@ const PAPER_VERT = /* glsl */ `
       pixels-per-metre at a distance, turned inside out.
     */
     float metrePerPixel = 2.0 * vDepth / max(1.0, projectionMatrix[1][1] * uViewport);
-    vThread = max(0.014, metrePerPixel * 0.75) / ${PAPER.toFixed(3)};
+    /*
+      Divided by the furl as well, because the thread is drawn in this quad's
+      own uv and the quad has just been narrowed. Without it a rolled paper
+      hangs on a thread a third the thickness of everybody else's — the same
+      thread, drawn thinner, for no reason anyone could name.
+    */
+    vThread = max(0.014, metrePerPixel * 0.75) / (${PAPER.toFixed(3)} * furl);
 
     gl_Position = projectionMatrix * mv;
   }
@@ -210,6 +235,7 @@ const PAPER_FRAG = /* glsl */ `
   varying float vDepth;
   varying float vTint;
   varying float vLit;
+  varying float vSealed;
   varying float vPaperTop;
   varying float vThread;
 
@@ -252,6 +278,40 @@ const PAPER_FRAG = /* glsl */ `
       // the crease itself, a dark hairline where the two halves meet
       float crease = 1.0 - (1.0 - smoothstep(0.0, 0.045, across)) * 0.3;
 
+      /*
+        ====================================================================
+        **A thought that has not opened yet is a roll with a cord round it,
+        and there is nothing written on the outside of it.**
+
+        The narrowing is done in the vertex stage; this is what the surface
+        does. Two things change and both of them mean something:
+
+        *It is shaded as a cylinder, not as a fold.* A rolled sheet is bright
+        along its turn and falls away to both edges, where a folded one has
+        two flat halves and a hard crease. That difference is what stops the
+        narrow paper reading as a wide paper seen edge-on.
+
+        *There is no ink on it.* Not hidden, not blurred, not a grey block
+        standing in for words — simply absent. Which is the truth: the words
+        of a sealed thought are not on this device at all, the rules refused
+        them, and drawing lines where they will be would be the tree
+        inventing something the server deliberately did not send. The reader
+        makes the same choice for the same reason.
+
+        The cord is the one thing added rather than removed, and it is what
+        makes the shape read as *closed* rather than merely thin.
+        ====================================================================
+      */
+      if (vSealed > 0.5) {
+        // Bright along the turn of the roll, falling away to both edges.
+        float roll = sqrt(max(0.0, 1.0 - across * across));
+        col = uPaper * (0.58 + roll * 0.5) * (0.92 + vTint * 0.16) * uLight;
+        // The cord, a little above the middle, where a hand would tie it.
+        col *= 1.0 - (1.0 - smoothstep(0.016, 0.05, abs(py - 0.56))) * 0.5;
+        // the ends turn in, the way a rolled sheet does
+        col *= 0.84 + py * 0.22;
+      } else {
+
       col = uPaper * fold * crease * (0.92 + vTint * 0.16) * uLight;
       /*
         Ink. Not letterforms — at this size any real writing is noise — but the
@@ -265,6 +325,7 @@ const PAPER_FRAG = /* glsl */ `
       col *= 1.0 - lines * written * margin * 0.17;
       // the corners turn down slightly — darker toward the bottom edge
       col *= 0.86 + py * 0.2;
+      }
     }
 
     // the one you are pointing at lifts, so it is obvious it can be taken down
@@ -308,7 +369,7 @@ const GLOW_FRAG = /* glsl */ `
 `
 
 /** A quad whose corners carry only their uv — the shape is made in the shader. */
-function papersGeometry(hung: Hung[]): InstancedBufferGeometry {
+function papersGeometry(hung: Hung[], me: UserId): InstancedBufferGeometry {
   const base = new PlaneGeometry(PAPER, 1)
   const geo = new InstancedBufferGeometry()
   geo.setAttribute('position', base.attributes.position)
@@ -322,6 +383,18 @@ function papersGeometry(hung: Hung[]): InstancedBufferGeometry {
   const phase = new Float32Array(count)
   const tint = new Float32Array(count)
   const index = new Float32Array(count)
+  /*
+    Whether this one is still waiting for its day — one float per paper.
+
+    An attribute rather than a second mesh, which is the whole reason a sealed
+    thought can look different at all: the papers are one instanced quad, so
+    this costs a float each and not a draw call. Read once here rather than per
+    frame, exactly like the glow beside it, so a thought that comes due while
+    somebody is standing under the tree arrives on the next visit — which is
+    when they would be there to see it open anyway.
+  */
+  const sealed = new Float32Array(count)
+  const now = Date.now()
 
   hung.forEach((letter, i) => {
     knot.set(letter.knot, i * 3)
@@ -329,6 +402,7 @@ function papersGeometry(hung: Hung[]): InstancedBufferGeometry {
     phase[i] = (i * 2.399) % (Math.PI * 2)
     tint[i] = (i * 0.618) % 1
     index[i] = i
+    sealed[i] = stillSealed(letter, me, now) ? 1 : 0
   })
 
   geo.setAttribute('iKnot', new InstancedBufferAttribute(knot, 3))
@@ -336,6 +410,7 @@ function papersGeometry(hung: Hung[]): InstancedBufferGeometry {
   geo.setAttribute('iPhase', new InstancedBufferAttribute(phase, 1))
   geo.setAttribute('iTint', new InstancedBufferAttribute(tint, 1))
   geo.setAttribute('iIndex', new InstancedBufferAttribute(index, 1))
+  geo.setAttribute('iSealed', new InstancedBufferAttribute(sealed, 1))
   geo.instanceCount = hung.length
   return geo
 }
@@ -366,7 +441,7 @@ export function Letters({
 }) {
   const { papers, glows, glowColor } = useMemo(() => {
     const built = {
-      papers: papersGeometry(hung),
+      papers: papersGeometry(hung, me),
       /*
         Hers, unopened — the only thing in the tree that glows, and it glows
         around the *paper* rather than around the knot it hangs from.
@@ -382,12 +457,7 @@ export function Letters({
       */
       glows: glowsGeometry(
         hung
-          .filter(
-            (l) =>
-              l.by !== me &&
-              l.readAt === null &&
-              (l.openAt === null || Date.now() >= l.openAt),
-          )
+          .filter((l) => l.by !== me && l.readAt === null && !stillSealed(l, me, Date.now()))
           .map(paperCentre),
       ),
       glowColor: LIGHT_COLORS[me === 'warm' ? 'cool' : 'warm'],

@@ -1710,33 +1710,40 @@ handling changed.
 
 ## Known debts
 
-- **`npm run places` has a fixed ceiling on a reading that moves by itself.**
-  It asserts nothing is louder than `0.006` A-weighted, and the tree's
-  ambience rides `palette.wind` — which comes from the hour *and* from her
-  live weather. Measured twice in one afternoon on identical code: 0.0043 at
-  one hour, 0.0062 at another, so it now fails for the second reason and
-  nothing is wrong. The check is right that the *shape* matters and wrong to
-  pin it to an absolute number against a moving input; it wants either a
-  forced sky the way `?sky=` already offers, or a ceiling relative to the
-  other four places. Left rather than quietly raised, because raising a
-  threshold to make a check pass is how a check stops meaning anything.
+- ~~**`npm run places` has a fixed ceiling on a reading that moves by itself.**~~
+  **Done, 7 Sep.** Pinned to `?hour=13.5&sky=0,0,0,0` — the windiest hour with
+  the live weather taken out — so the assertion is against the worst case and
+  is reproducible at any hour on any machine. That removed the larger half of
+  the movement; the rest is gusts inside the eleven-second listening window,
+  measured at 0.0058–0.0067, and **the old 0.006 ceiling was inside that band**,
+  so passing was a coin toss. It is 0.009, which clears the noise and is still
+  under a third of the Hollow's reading the day the file was written. The
+  reasoning is in `scripts/places.mjs`, including why this is not the forbidden
+  kind of threshold-raising: the number was never measuring what it claimed to.
 
-- **A sealed thought hangs like any other one.** The reader says the true thing
-  — *tife left this for 14 March 2027, it is not open yet* — and the flower
-  correctly does not glow, but the paper on the branch is the same paper. Being
-  able to *see* from the meadow that something is waiting is the better version
-  and it wants its own round: `world/Letters` draws the papers as one instanced
-  mesh and a second visual state means a second geometry and material, not a
-  filter. This is the honest half, in the same sense as the Scattergories
-  challenge.
-- **The seal itself has never been refused by a real Firestore.** `npm run
-  sealed` proves everything above the wire, including that the mock keeps the
-  same seal the rules describe — but the rule under
-  `letters/{id}/sealed/words` has not been exercised against the live project.
-  Same standing as the archive's seal and the hearts rule. **It is also a new
-  rule block, so it has to go up before the first sealed thought is written**
-  — until then the sealed document is refused on *create*, and the thought
-  arrives with a date and no words behind it, permanently.
+- ~~**A sealed thought hangs like any other one.**~~ **Done, 7 Sep.** It is a
+  narrow roll with a cord tied across it and no ink lines — the ink is absent
+  because the words are genuinely not on the device.
+  **The prediction in this entry was wrong and is worth correcting**, because
+  it is the reason the work looked expensive enough to defer: a second visual
+  state did *not* need a second geometry and material. It needed one
+  `iSealed` instanced attribute, one float per paper, with `furl` narrowing the
+  quad in the vertex shader and a branch in the fragment shader. Same draw call,
+  same mesh, no measurable cost. "A second state means a second mesh" is not
+  true of an instanced mesh whose states differ only in shading and proportion.
+- **The seal has never been exercised against a live Firestore.** The rules are
+  published now (owner, 7 Sep), so the refusal path is armed — but no sealed
+  thought has actually been written, refused early and opened on the day
+  against the real project. `npm run sealed` proves everything above the wire.
+  Same standing as the archive's seal and the hearts rule.
+  **The create path was also not atomic until 7 Sep**, and that mattered more
+  than the rule: the parent and `sealed/words` were two awaited `setDoc` calls,
+  neither document may ever be updated, and with persistence on the first
+  `await` does not return while offline — so the second call was never reached
+  and the parent alone sat in the outbox. A thought could sync with its words
+  having never existed, permanently. Both writes are one `writeBatch` now. The
+  reader has an honest state for a thought already in that condition, since it
+  cannot be repaired.
 - **A sealed thought sends no notification when its day comes.** It arrives
   quietly, and is found the next time somebody stands under the tree. That may
   well be right — the whole point is a thing that waits — but it was not

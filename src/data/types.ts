@@ -334,7 +334,20 @@ export interface Letter {
  * the other side of it. The rules say exactly the same thing, and this is the
  * interface agreeing with them rather than deciding anything.
  */
-export function stillSealed(letter: Letter, me: UserId, now: number): boolean {
+export function stillSealed(
+  /*
+    The two fields the answer actually depends on, rather than a whole letter.
+
+    The tree asks this as well as the reader does — a sealed thought must not
+    glow and must not be drawn as an open sheet — and what it holds per paper
+    is a `Hung`, not a `Letter`. Narrowing the parameter to what is read means
+    both callers can ask the same function instead of one of them keeping a
+    copy of the rule, which is how the two would eventually disagree.
+  */
+  letter: Pick<Letter, 'by' | 'openAt'>,
+  me: UserId,
+  now: number,
+): boolean {
   if (letter.openAt === null) return false
   if (letter.by === me) return false
   return now < letter.openAt

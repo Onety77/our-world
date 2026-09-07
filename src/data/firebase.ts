@@ -1167,7 +1167,28 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       */
       const sealed = openAt !== null && openAt > now()
 
-      await setDoc(doc(db, LETTERS, id), {
+      /*
+        Both documents in one batch, and that is not tidiness — it is the only
+        thing standing between a sealed thought and losing its words forever.
+
+        These used to be two awaited `setDoc` calls. Neither document may ever
+        be updated (`allow update, delete: if false`, for the good reason that a
+        day which can be moved afterwards is not a day), so a thought whose
+        parent landed and whose words did not is **unrecoverable**: it hangs on
+        the tree as a sealed roll, and on the morning it opens there is nothing
+        behind it.
+
+        Offline is the likely way there, not a network blip. With persistence
+        on, `setDoc` resolves when the *server* acknowledges the write — so on a
+        train the first `await` simply never returns, the second call is never
+        reached, and the parent alone sits in the outbox. Close the tab and the
+        thought syncs the next morning with its words having never existed.
+
+        A batch queues both mutations together and commits all or nothing.
+      */
+      const batch = writeBatch(db)
+
+      batch.set(doc(db, LETTERS, id), {
         by: me,
         // The words go to `sealed/words` instead when this one is waiting, so
         // that what the other one's device receives cannot contain them.
@@ -1181,21 +1202,24 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         writtenAt: serverTimestamp(),
       })
 
-      if (!sealed) return
-      /*
-        `by` and `openAt` are written again here rather than looked up.
+      if (sealed) {
+        /*
+          `by` and `openAt` are written again here rather than looked up.
 
-        A rule that had to `get()` the parent to find out whether this one may
-        be read would spend a document read on every attempt and count against
-        the ten a request is allowed. Repeating two fields makes the seal a
-        property of the sealed document itself — and they cannot drift, because
-        neither document may ever be updated.
-      */
-      await setDoc(doc(db, LETTERS, id, SEALED, WORDS), {
-        by: me,
-        body: trimmed,
-        openAt,
-      })
+          A rule that had to `get()` the parent to find out whether this one may
+          be read would spend a document read on every attempt and count against
+          the ten a request is allowed. Repeating two fields makes the seal a
+          property of the sealed document itself — and they cannot drift,
+          because neither document may ever be updated.
+        */
+        batch.set(doc(db, LETTERS, id, SEALED, WORDS), {
+          by: me,
+          body: trimmed,
+          openAt,
+        })
+      }
+
+      await batch.commit()
     },
 
     async readSealedLetter(id) {
