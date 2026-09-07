@@ -19,7 +19,7 @@ const NAMES: Record<AnyPlace, string> = {
   river: 'the Wellspring',
   hollow: 'the Hollow',
   stars: 'the Stars',
-  glasshouse: 'the Glasshouse',
+  lanterns: 'the Glasshouse',
 }
 
 const HEARD: Record<AnyPlace, string> = {
@@ -28,7 +28,7 @@ const HEARD: Record<AnyPlace, string> = {
   river: 'water, air, leaves and the valley underneath the river',
   hollow: 'the cave fire, its crackles, the rock rumble and the small air leak',
   stars: 'the thin night air, distant room and rare glass-like tones',
-  glasshouse: 'roof wind, wet floor, glass resonance and the room around it',
+  lanterns: 'roof wind, wet floor, glass resonance and the room around it',
 }
 
 export function Outdoors() {

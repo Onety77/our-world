@@ -33,7 +33,7 @@ const CHROME =
   process.env.CHROME ?? 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'
 
 /** Each place, and what it is supposed to be. */
-const PLACES = ['tree', 'river', 'hollow', 'stars', 'glasshouse']
+const PLACES = ['tree', 'river', 'hollow', 'stars', 'lanterns']
 
 /*
   What is being asserted, and why only this much.
@@ -188,7 +188,7 @@ const main = async () => {
     await ev(`(() => {
       const outdoors = window.__outdoors?.getState()
       outdoors?.toDefaults()
-      for (const place of ['tree', 'river', 'hollow', 'stars', 'glasshouse']) {
+      for (const place of ['tree', 'river', 'hollow', 'stars', 'lanterns']) {
         outdoors?.setBleed(place, 1)
       }
       return true
@@ -281,7 +281,7 @@ const main = async () => {
 
     Wind and crackles are random, so two readings of the same place differ by a
     fifth either way and "strictly the quietest" fails on a coin toss — it did,
-    the first time it ran, by a ten-thousandth against the glasshouse. What is
+    the first time it ran, by a ten-thousandth against the lanterns. What is
     true is that a cave is *among* the quiet rooms and is unambiguously the
     darkest one. Brightness is both the steadier measurement and the one that
     caught the original problem: a cave that measured like a hedge.

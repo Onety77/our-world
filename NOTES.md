@@ -40,6 +40,72 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 7 Sep · Claude · The Glasshouse is gone; the Lantern Walk is where memories live
+
+> *"who says it has to be the glass house, like really who says... i want
+> something that feels like memory, that is actually very good and feels like
+> environment, that i go through"*
+
+A lane that wanders through the edge of the wood, a lit photograph hanging along
+it for every memory, and **a path worn exactly as far as the two of you have
+walked**. Full write-up in `src/sections/lanterns/README.md`.
+
+**The diagnosis, which came out of the Glasshouse's own README.** It hung its
+pictures on two walls running parallel to the direction of travel, so they were
+permanently edge-on — its notes record a focused pane at twenty-eight pixels on a
+phone — and the fix was to rotate the whole building twenty-two degrees about the
+viewer, ninety when you opened one. That is a workaround for the shape being
+wrong, and it is exactly what "i dont even like how the camera movement works"
+was describing. It also carried three separate mechanisms to stop the building
+being the subject, which is what a design tells you when it needs enforcing
+against itself.
+
+Out here a lantern is turned, once, to face the piece of path you will be
+standing on when you reach it. Face-on becomes a property of where it was hung
+rather than something the camera arranges, so nothing rotates about anybody and
+the lane is free to wander. `LEAN` and `TURN` were not ported; they had no job
+left.
+
+**The footprints were the user's idea and they reframed the place.** Each memory
+lays a stride of prints in its keeper's own light, warm or cool, so the trodden
+way *is* the record — how far back it goes and who went — and the lane is only
+worn as far as the walking. It also fixes what was backwards: a building starts
+at full size and fills in, so an empty archive was a large dead structure. A path
+starts at nothing.
+
+### Three things that cost time and are worth not rediscovering
+
+**A place that travels has to carry its own ground.** The meadow is one plane
+that follows the *camera*, displaced from world coordinates, while travel here
+slides the place past a camera that never moves. So anything bedded into terrain
+rises and sinks as the lane goes by — the first build had posts hanging a metre
+in the air. `Lane` lays a graded shelf that travels with everything on it and
+`OWN_GROUND` in `World` stops the meadow being drawn over the top. The Glasshouse
+hit the same wall and answered it with a plinth; copying that plinth's *height*
+was the bug, because it was clearing terrain a building actually crossed.
+
+**Colours in these shaders are linear.** Everything exits through
+`colorspace_fragment`, so 0.03 arrives at about 0.19. Written as though already
+sRGB, the dark posts and pressed-earth prints came out as pale sand on a night
+lane.
+
+**Two quads in the same place tear.** The near lantern was stood six millimetres
+proud of its far one; the depth buffer cannot separate that at range and every
+lantern was split down the middle with a hard line. The fix is not a bias, it is
+for the far chain to leave a gap where the near ones are.
+
+Also: the lane was first laid along negative Z, which put every lantern *behind*
+the viewer — you arrived at a walk you had already finished, facing an empty
+meadow with eighteen lights at your back.
+
+### What is not done
+
+Dusk has had far more attention than noon. `ui/Memories.tsx` still speaks of
+panes and glass in about thirty places. The hub landmark is built but has not
+been photographed from the garden, and `npm run places` has the new id but has
+not been re-run, so the walk has no measured soundscape. Nothing here has been
+seen on a real GPU — only SwiftShader.
+
 ## 7 Sep · Claude · A sweep of the five places, at the size they are used
 
 Photographed all five at 390×844 and 1280×800, hour and weather pinned so two

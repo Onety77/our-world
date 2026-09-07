@@ -524,7 +524,7 @@ export interface Memory {
  * they must be kept in step by hand, and `npm run rules` prints them out.
  */
 export const AMBIENCE_KEYS = [
-  'garden', 'tree', 'river', 'hollow', 'stars', 'glasshouse',
+  'garden', 'tree', 'river', 'hollow', 'stars', 'lanterns',
   'bleedTree', 'bleedRiver', 'bleedHollow', 'bleedStars', 'bleedGlasshouse',
 ] as const
 

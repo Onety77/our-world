@@ -9227,7 +9227,7 @@ body:has(.talking) .leave-place {
   font-size: clamp(1.15rem, 3.4vw, 1.5rem);
 }
 
-.glasshouse-walk-guide {
+.lantern-walk-guide {
   display: block;
   margin-top: 0.9rem;
   font-family: var(--sans);
@@ -9238,11 +9238,11 @@ body:has(.talking) .leave-place {
   color: rgba(242, 239, 230, 0.42);
 }
 
-.glasshouse-walk-touch { display: none; }
+.lantern-walk-touch { display: none; }
 
 @media (pointer: coarse) {
-  .glasshouse-walk-pointer { display: none; }
-  .glasshouse-walk-touch { display: inline; }
+  .lantern-walk-pointer { display: none; }
+  .lantern-walk-touch { display: inline; }
 }
 
 @media (max-width: 34rem) {
@@ -10475,7 +10475,7 @@ body:has(.talking) .leave-place {
 }
 
 /* A Glasshouse drag belongs to the aisle, not to browser overscroll. */
-body.in-glasshouse .surface {
+body.on-the-walk .surface {
   touch-action: none;
   overscroll-behavior: none;
 }

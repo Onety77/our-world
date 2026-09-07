@@ -39,7 +39,7 @@ import { watchForTrouble } from '@/systems/trouble'
 import { PotForm } from '@/ui/Pot'
 import { ProfileSheet } from '@/ui/Profile'
 import { LetterReader, Writing } from '@/ui/Letters'
-import { Glasshouse } from '@/ui/Glasshouse'
+import { Glasshouse } from '@/ui/Memories'
 import { Questions, QuestionSeedNotice } from '@/ui/Questions'
 /*
   The control room, fetched only by whoever opens its door.
@@ -259,10 +259,10 @@ function Garden() {
     void takeTheSharedPicture().then((picture) => {
       forgetTheShareAddress()
       if (dropped || !picture) return
-      const glasshouse = sectionIndexById('glasshouse')
-      if (glasshouse < 0) return
+      const lanterns = sectionIndexById('lanterns')
+      if (lanterns < 0) return
       const sections = useSections.getState()
-      sections.go(glasshouse)
+      sections.go(lanterns)
       sections.enter()
       void useMemories.getState().hangThis(picture)
     })

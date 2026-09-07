@@ -1286,7 +1286,7 @@ function alongTheRow(el: HTMLElement, go: (by: 1 | -1) => void): () => void {
  * you have built is the point of the place; nothing else about a memory is
  * counted, rated or totalled anywhere.
  */
-function TheGlasshouse() {
+function TheLanternWalk() {
   const start = useMemories((s) => s.leaveOne)
   const keys = useMenuKeys(1)
   // What is still in the glass. A memory taken out keeps its document, and
@@ -1305,10 +1305,10 @@ function TheGlasshouse() {
         {!loaded
           ? 'one picture, one line'
           : count === 0
-            ? 'nothing in the glass yet — the first one builds the first pane'
+            ? 'nobody has walked here yet — the first one lights the first lantern'
             : count === 1
-              ? 'one pane, so far'
-              : `${count} panes, so far`}
+              ? 'one lantern, so far'
+              : `${count} lanterns, so far`}
       </span>
       {/*
         Straight to the picker, from the tap itself.
@@ -1322,9 +1322,9 @@ function TheGlasshouse() {
         leave a memory here
       </button>
       {count > 0 && (
-        <span className="glasshouse-walk-guide">
-          <span className="glasshouse-walk-touch">swipe up or down</span>
-          <span className="glasshouse-walk-pointer">scroll or use the arrow keys</span>
+        <span className="lantern-walk-guide">
+          <span className="lantern-walk-touch">swipe up or down</span>
+          <span className="lantern-walk-pointer">scroll or use the arrow keys</span>
           {' '}to walk backward through what we kept
         </span>
       )}
@@ -1476,7 +1476,7 @@ export function Threshold() {
 
   if (id === 'hollow') return <TheHollow />
 
-  if (id === 'glasshouse') return <TheGlasshouse />
+  if (id === 'lanterns') return <TheLanternWalk />
 
   /*
     The Stars has no threshold any more.

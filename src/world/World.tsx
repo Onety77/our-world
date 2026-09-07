@@ -290,7 +290,22 @@ function useShownWorld(): { entered: boolean; section: number } {
  * stands in is visible down the whole length of the aisle. A conservatory with
  * no sky above it would be a corridor.
  */
-const OPEN_AIR = new Set(['tree', 'river', 'glasshouse'])
+const OPEN_AIR = new Set(['tree', 'river', 'lanterns'])
+
+/**
+ * Which places lay their own ground, and so do not want the world's.
+ *
+ * The meadow follows the *camera* and is displaced from world coordinates,
+ * while a place travels by sliding past a camera that never moves. For most
+ * places those two never meet: you stand still and look at something. The
+ * Lantern Walk is a walk, so the ground under it has to travel with it, and a
+ * world meadow drawn over the top would be a second, stationary floor
+ * disagreeing with the first about where your feet are.
+ *
+ * It still wants the sky, the clouds and the horizon, which is why this is its
+ * own set rather than an exception inside `OPEN_AIR`.
+ */
+const OWN_GROUND = new Set(['lanterns'])
 
 function Scene({ hourOverride }: { hourOverride: number | null }) {
   const profiles = useWorldSlice((s) => s.profiles)
@@ -348,6 +363,8 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
     : undefined
 
   const openAir = !Stage && (!shown.entered || OPEN_AIR.has(SECTIONS[shown.section].id))
+  const ownGround =
+    !Stage && shown.entered && OWN_GROUND.has(SECTIONS[shown.section].id)
 
   return (
     <>
@@ -369,7 +386,7 @@ function Scene({ hourOverride }: { hourOverride: number | null }) {
             </Surrounds>
             {/* Ground follows the camera on its own, snapping to its vertex
                 spacing so the displaced surface never appears to crawl. */}
-            <Ground palette={palette} />
+            {ownGround ? null : <Ground palette={palette} />}
           </>
         )}
 

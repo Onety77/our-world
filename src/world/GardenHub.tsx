@@ -22,7 +22,7 @@ import { TreeLandmark } from './hub/landmarks/Tree'
 import { RiverLandmark } from './hub/landmarks/River'
 import { HollowLandmark } from './hub/landmarks/Hollow'
 import { StarsLandmark } from './hub/landmarks/Stars'
-import { GlasshouseLandmark } from './hub/landmarks/Glasshouse'
+import { LanternWalkLandmark } from './hub/landmarks/LanternWalk'
 import { Grass } from './Grass'
 import { Flowers } from './Flowers'
 import { Trees } from './Trees'
@@ -66,7 +66,7 @@ const LANDMARKS = [
   RiverLandmark,
   HollowLandmark,
   StarsLandmark,
-  GlasshouseLandmark,
+  LanternWalkLandmark,
 ]
 
 export function GardenHub() {
