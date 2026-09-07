@@ -40,7 +40,14 @@ import { ambientLightLevel } from './forms'
 export interface RibbonOptions {
   /** How far it runs, along +z. */
   length: number
-  /** Rows across that length. More rows, smoother meander and finer swell. */
+  /**
+   * Rows across that length. **Leave it out.**
+   *
+   * The default is derived from the length so the swell is always sampled
+   * finely enough to draw — see `ROW_METRES`. It is still settable for a
+   * ribbon that wants to be coarser than the water needs, and nothing in the
+   * garden currently does.
+   */
   rows?: number
   /** Sideways wander of the centreline, in metres. */
   meander?: number
@@ -87,8 +94,45 @@ function surfaceY(
  * `uv.x` runs 0..1 across the channel and `uv.y` runs 0..1 down it, which is
  * what the shader uses for "how near a bank am I" and "how far downstream".
  */
+/**
+ * How far apart the rows of a water ribbon may be, in metres.
+ *
+ * =============================================================================
+ * **This number belongs to the shader, not to whoever is drawing a river, and
+ * that is the whole lesson of it.**
+ *
+ * The swell in `VERT` is stated in *cycles per metre* — the three waves are
+ * `run * 1.0`, `run * 2.0` and `run * 3.7`, so the shortest of them is about
+ * **1.7 metres** from crest to crest. It is computed per vertex and handed
+ * down as a varying, so the mesh has to have enough rows to *carry* it. Below
+ * roughly two rows per wavelength there is nothing to carry it with, and what
+ * comes out is not a smoother river — it is the wave beating against the row
+ * spacing, drawn as hard, evenly spaced bars marching downstream.
+ *
+ * **It shipped that way and only in one place.** The garden's brook happened
+ * to be dealt 80 rows over 26 metres, which is a third of a metre each and
+ * comfortably fine; the Wellspring was dealt 200 over 240, which is one and a
+ * fifth metres — *one and a half samples* on the shortest wave. Same shader,
+ * same water, and the big one looked like a ladder while the small one looked
+ * like a river. Nobody could have found that by reading either file, because
+ * neither file contains both numbers.
+ *
+ * So the spacing is stated once, here, next to the waves it has to carry, and
+ * every ribbon gets it by default. A third of a metre is five samples on the
+ * shortest wave, and it is what the brook was already proving works.
+ * =============================================================================
+ */
+export const ROW_METRES = 0.32
+
 export function ribbonGeometry(options: RibbonOptions): BufferGeometry {
-  const { length, rows = 48, meander = 1.1, width } = options
+  const { length, meander = 1.1, width } = options
+  /*
+    A ribbon is two vertices wide, so rows are close to free: the Wellspring
+    goes from four hundred triangles to fifteen hundred, on a road that draws
+    a hundred thousand. There is no reason to be careful with this number and
+    every reason not to be.
+  */
+  const rows = options.rows ?? Math.max(8, Math.ceil(length / ROW_METRES))
   const positions: number[] = []
   const uvs: number[] = []
   const normals: number[] = []
@@ -193,6 +237,9 @@ const VERT = /* glsl */ `
   varying vec3 vNormal;
   varying float vCrest;
   varying float vStreak;
+  varying float vTravel;
+  varying float vRunM;
+  varying float vAcrossM;
   /**
    * Where the carried band is, this frame. See uCarrying in the fragment stage.
    *
@@ -252,6 +299,26 @@ const VERT = /* glsl */ `
     vCrest = a;
 
     /*
+      Handed down so the fragment stage can have a surface of its own.
+
+      A ribbon is two vertices wide, so anything computed up here can only ever
+      be a straight line from one bank to the other — the 'uv.x' terms above
+      tilt the crests, they cannot bend them. That is what put a ladder of hard
+      white rungs across the Wellspring: every crest lit along its whole length
+      at once, because every crest *was* a line.
+
+      These three are the ingredients for a second, finer surface worked out per
+      pixel instead: how far down the channel this fragment is, how far across
+      in real metres, and where the current has got to. All varyings, and that
+      is deliberate — see the note below on why the fragment stage may not read
+      a uniform the vertex stage reads.
+    */
+    vTravel = travel;
+    vRunM = run;
+    // vAcrossM waits until 'p' exists, a few lines down — it is the only one of
+    // the three that needs the narrowed position rather than the raw one.
+
+    /*
       Streaks of froth being carried along.
 
       Two frequencies that do not divide into each other. One alone laid down
@@ -270,6 +337,10 @@ const VERT = /* glsl */ `
     // Narrow about the channel's own centreline, not about the origin, so the
     // bends survive at any width.
     p.x = aCentre + (position.x - aCentre) * uWidth;
+    // How far across the channel this vertex actually sits, in metres, *after*
+    // the narrowing — so the per-pixel ripple below keeps its real scale when
+    // the river runs thin instead of stretching with the water.
+    vAcrossM = p.x - aCentre;
     // Runs with the current, one band, slowly. See vCarry.
     vCarry = fract(uv.y - uTime * 0.06);
     p.y += h;
@@ -328,6 +399,9 @@ const FRAG = /* glsl */ `
   varying vec3 vNormal;
   varying float vCrest;
   varying float vStreak;
+  varying float vTravel;
+  varying float vRunM;
+  varying float vAcrossM;
 
   void main() {
     // 0 midstream, 1 at either bank
@@ -336,7 +410,98 @@ const FRAG = /* glsl */ `
     // Deep and cold in the channel, warm and pale where it runs thin.
     vec3 col = mix(uDeep, uShallow, smoothstep(0.18, 0.94, across));
 
-    vec3 n = normalize(vNormal);
+    /*
+      A second surface, finer than the mesh and worked out per pixel.
+
+      ------------------------------------------------------------------------
+      **This is what stops the water reading as a ladder.** The swell comes
+      down from the vertex stage, and a ribbon is two vertices wide — so every
+      crest it can describe is a straight line from one bank to the other. The
+      'uv.x' terms up there tilt those lines; they cannot bend them. Then the
+      specular below, which is a very tight lobe, lights each line along its
+      whole length in the same instant. Straight crest plus sharp highlight is
+      a white rung, and a river's worth of them is a ladder.
+
+      Real water is broken up because its surface varies in *two* directions.
+      So here are two more ripples that do, stated in real metres both down the
+      channel and across it, and given to the normal before anything reflects
+      off it. They cost two sines and two cosines and they are the difference
+      between glitter that scintillates and glitter that stripes.
+
+      **Every input is a varying, and that is not incidental.** The note above
+      this stage explains that a uniform read by both stages at different
+      precisions makes the program fail to link, silently — so the current's
+      position arrives as a varying rather than by reading 'uTime' here.
+      ------------------------------------------------------------------------
+    */
+    /*
+      Three, at angles that do not answer each other.
+
+      **Two was a lattice.** They were aimed at plus and minus thirty-five
+      degrees off the current — symmetric, near enough the same frequency — and
+      two waves like that cross into a diamond grid. On the Wellspring, seen
+      down its length, it passed for chop; on the garden's brook, seen from
+      three metres away, it was unmistakably a net laid over the water. Which
+      is the same failure as the ladder it replaced, one order finer: regular
+      structure where there should be none.
+
+      So: three, spread twenty, minus thirty-seven and sixty-five degrees, at
+      frequencies that are not multiples of each other. Nothing lines up with
+      anything, and nothing repeats inside the length of a river.
+
+      **And the amplitude falls as the frequency rises.** The slope a wave puts
+      on a surface is its height times its frequency, and slope is the whole of
+      what the specular reads — raise one without lowering the other and the
+      glitter does not get finer, it gets *wider*, and the water goes from a
+      ladder to a field of splashes.
+    */
+    /*
+      The ground is bent before the ripples are laid on it.
+
+      Three straight waves at three angles is still three straight waves: they
+      interfere on a fixed grid, and the eye finds a grid however cleverly the
+      angles are chosen — two of them made a diamond net over the brook, and
+      three made a finer one. Adding a fourth would make a finer one again.
+
+      So the coordinates themselves are pushed about first, by two slow waves
+      that are nothing to do with the fast ones. Every crest below then follows
+      a wandering line instead of a straight one, nothing stays in step with
+      anything, and the pattern never closes. This is the cheapest honest way
+      to get irregularity without a texture to sample.
+    */
+    float warpRun    = sin(vAcrossM * 1.10 + vTravel * 1.7) * 0.85
+                     + sin(vRunM    * 0.70 - vTravel * 1.1) * 0.55;
+    float warpAcross = sin(vRunM    * 0.90 + vTravel * 1.3) * 0.85
+                     + sin(vAcrossM * 1.30 - vTravel * 0.9) * 0.55;
+    float rr = vRunM + warpRun;
+    float aa = vAcrossM + warpAcross;
+
+    float p1 = rr * 11.0 + aa *  4.0 - vTravel * 10.0;
+    float p2 = rr * 17.0 - aa * 13.0 - vTravel * 15.0;
+    float p3 = rr *  7.0 + aa * 15.0 - vTravel *  6.5;
+    /*
+      The gradient of the three, taken as though the warp were not there.
+
+      Deliberately approximate: carrying the warp's own derivative through
+      would be exact and would cost four more cosines to place a highlight a
+      few centimetres from where it already is. The swell above is the one that
+      has to be exact — a crest whose glitter lags it reads as wrong — and this
+      is texture riding on top of that.
+    */
+    float rippleAcross = cos(p1) * 4.0 - cos(p2) * 13.0 + cos(p3) * 15.0;
+    float rippleDown   = cos(p1) * 11.0 + cos(p2) * 17.0 + cos(p3) * 7.0;
+    /*
+      Faded with distance, and that is not a saving.
+
+      This is the one thing in the water with no geometry behind it, so there
+      is nothing to average it down: at sixty metres a ripple half a metre wide
+      is a fraction of a pixel, and a fraction of a pixel that moves is a
+      shimmer. It is strongest underfoot, where you can actually see the
+      surface, and mostly gone by the far bend — which is also what water
+      genuinely does, since past a certain distance all you read is the sheen.
+    */
+    float ripple = 0.0034 * (1.0 - smoothstep(14.0, 85.0, vDepth) * 0.72);
+    vec3 n = normalize(vNormal + vec3(-rippleAcross * ripple, 0.0, -rippleDown * ripple));
 
     /*
       Fresnel. Water is nearly a mirror at a grazing angle and nearly clear
@@ -351,7 +516,7 @@ const FRAG = /* glsl */ `
     // Glitter: a hard specular lobe off the wave normal. Small and sharp, so
     // it scintillates as the crests travel instead of smearing into a sheen.
     float spec = pow(clamp(dot(reflect(-normalize(uSunDir), n), view), 0.0, 1.0), 42.0);
-    col += uSunColor * spec * 1.5 * uSun;
+    col += uSunColor * spec * 1.15 * uSun;
 
     /*
       Froth carried downstream, strongest over the crests.

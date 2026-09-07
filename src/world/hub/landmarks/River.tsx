@@ -46,7 +46,8 @@ const HERE = ANCHORS[1]
  */
 const STREAM: RibbonOptions = {
   length: 26,
-  rows: 80,
+  // No `rows`: derived from the length — see `ROW_METRES`. This brook is what
+  // the number was taken from, so it is drawn exactly as densely as before.
   meander: 1.9,
   width: [1.9, 3.1],
   origin: [HERE.x, HERE.z],

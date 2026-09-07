@@ -40,6 +40,94 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 7 Sep · Claude · The treeline stops being a cut-out
+
+> *"i hope you are not planning to make it look good in a way that increases
+> the game size and lag, cause id rather see the white than have the game
+> lagging"*
+
+**Nothing was added.** No geometry, no draw call, no texture, no uniform, no
+allocation. One multiply and one subtract in a fragment shader that was
+already running, and the triangle count is unchanged — `npm run tris` says so.
+
+**Why they were white.** The wood stands between eighty and a hundred and
+thirty metres out and the haze runs from sixteen to a hundred and fifty, so
+the far trees came out about **ninety-four per cent fog** — and the fog colour
+is within a few points of the horizon sky they stand against. Two nearly
+identical pale colours, one in front of the other. They kept their outline and
+lost everything inside it, which is the definition of a paper cut-out.
+
+The haze now stops just short of finishing: `s * (1.0 - 0.30 * s)`, so a wood
+on the skyline keeps about a third of its own colour. **The curve is bent at
+the far end rather than scaled flat**, because the near haze was never the
+problem — twenty metres of air should still soften a rock, and a flat ceiling
+would have taken that with it.
+
+**The mountains are untouched and should be:** `Horizon` carries its own
+shader and never comes through `forms`, so the range still dissolves into the
+sky completely, which is what it is for. Checked at noon, at dusk, and under
+forced heavy overcast — the weather still reads as weather, and the trees are
+legible in all three.
+
+*(Backticks inside a GLSL template literal close the string. That is twice in
+one session — water and now forms. The shader comments in this repo use single
+quotes for identifiers, and that is why.)*
+
+## 7 Sep · Claude · The water stops being a ladder
+
+> *"i wanna improve the quality of some of the places, and how they feel"*
+
+**First, the thing I nearly broke.** Every place looked washed out and grey —
+flat sky, no blue at any hour — and I had a fix half-written for the cloud
+layer before probing it. It was not a bug. `useHerSky` fetches **her real
+weather**, in the mock too, and Kano was genuinely overcast all afternoon. The
+palette was handing the dome the right blue the whole time. `?sky=0,0,0,0`
+forces clear and the garden is bright and blue and completely fine. *If the
+world looks grey, look out of her window before touching the shader.*
+
+**Then the one that was real.** Under a clear sky the Wellspring still had hard
+white bars ruled across it, evenly spaced, like a zip. Two causes, and finding
+the second needed the first fixed to see it.
+
+**One: the mesh could not carry the swell.** The waves are stated in cycles per
+metre and the shortest is about 1.7 m; the Wellspring's ribbon was 200 rows
+over 240 m, which is 1.2 m a row — *one and a half samples on the shortest
+wave*. The garden's brook was 80 over 26, a third of a metre, and comfortably
+fine. Same shader, two tessellations, and only the big one aliased. The
+spacing now lives in `ROW_METRES` next to the waves it has to carry, and both
+callers derive it: a ribbon is two vertices wide, so the Wellspring goes from
+400 triangles to 1500 and there was never a reason to be careful with it.
+
+**Two: every crest was a straight line.** A ribbon is two vertices wide, so the
+'uv.x' terms can only *tilt* a crest, never bend one — and a very tight
+specular then lights each line along its whole length at once. Straight crest
+plus sharp highlight is a white rung. So the fragment stage now has a surface
+of its own: three short ripples in real metres, across the channel as well as
+down it. Every input is a varying, because the note in that file is right that
+a uniform read by both stages at different precisions makes the program fail
+to link **silently** — the water simply stops drawing, which is exactly what I
+did to it once on the way (`p` used a line before it was declared; the console
+had the answer immediately).
+
+> **Two waves make a lattice, and three make a finer one.** At ±35° they
+> crossed into a diamond net — passable on the Wellspring seen down its length,
+> unmistakable on the brook seen from three metres. Three at unrelated angles
+> only made the net finer. What actually worked was warping the coordinates
+> first with two slow waves, so every crest follows a wandering line and
+> nothing stays in step. **And amplitude has to fall as frequency rises**:
+> slope is height times frequency, and slope is all the specular reads, so
+> raising one alone makes the glitter *wider*, not finer — a ladder becomes a
+> field of splashes.
+
+The ripple fades out with distance, which is not a saving: it is the one thing
+in the water with no geometry under it, so at sixty metres it is a fraction of
+a pixel, and a moving fraction of a pixel is a shimmer.
+
+**Measured:** `shaders`, `tris`, `sky` and `day` all pass. `npm run places`
+fails on the tree's loudness — *not this work*: nothing in the three changed
+files touches the audio path, and that check pins a fixed ceiling on a reading
+that moves with the hour and with her weather. Written up under Known debts.
+
 ## 7 Sep · Claude · The Hollow says what each way in actually does
 
 > *"i had to tell her how to play the race for her to […] a cleaner more

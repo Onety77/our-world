@@ -50,7 +50,9 @@ import { riverFullness } from './layout'
  */
 const CHANNEL: RibbonOptions = {
   length: 240,
-  rows: 200,
+  // No `rows`: the spacing that carries the swell belongs to the shader and is
+  // derived from the length. See `ROW_METRES` — this river is where getting it
+  // wrong showed up.
   // Gentle over this distance: five metres of wander across two hundred and
   // forty is a lazy river, not a snake.
   meander: 5.0,

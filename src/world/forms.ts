@@ -179,7 +179,41 @@ export const FORM_FRAG = /* glsl */ `
       col += vColor * uEmberColor * uEmberPower * fall * fall * (0.25 + lambert * 0.75);
     }
 
-    float fog = smoothstep(uFogNear, uFogFar, vDepth);
+    /*
+      Haze, with a floor under how much of a thing it is allowed to take.
+
+      ------------------------------------------------------------------------
+      **The treeline was a white cut-out and this is the whole of why.** The
+      wood stands between eighty and a hundred and thirty metres out; the fog
+      runs from sixteen to a hundred and fifty. So the far trees came out at
+      about ninety-four per cent fog — and the fog colour is within a few
+      points of the horizon sky it is standing against. Two nearly identical
+      pale colours, one in front of the other: the trees kept their outline and
+      lost everything inside it, which is exactly what a paper cut-out is.
+
+      A ceiling costs one multiply in a shader that is already running — no
+      geometry, no draw call, no memory, nothing per frame that was not there
+      before — and it leaves every distant thing a sixth of its own colour.
+      That sixth is the difference between a wood and a stencil: the trunks go
+      a shade darker than the gaps, and the eye reads depth again.
+
+      Not a full fix for the horizon, and deliberately not: the *mountains*
+      should dissolve completely, and they do, because the horizon carries its
+      own shader and never comes through here.
+      ------------------------------------------------------------------------
+    */
+    /*
+      Held back at the far end only, rather than scaled everywhere.
+
+      A flat ceiling works and takes the near haze with it, which is the half
+      that was never wrong — twenty metres of air should still soften a rock.
+      This leaves the near distances almost exactly where they were and bends
+      the top of the curve down, so the wood on the skyline keeps about a third
+      of itself and everything closer is untouched.
+    */
+    const float HAZE_HOLD = 0.30;
+    float s = smoothstep(uFogNear, uFogFar, vDepth);
+    float fog = s * (1.0 - HAZE_HOLD * s);
     col = mix(col, uFogColor, fog);
 
     gl_FragColor = vec4(col, 1.0);

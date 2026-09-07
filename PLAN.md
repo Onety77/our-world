@@ -1710,6 +1710,17 @@ handling changed.
 
 ## Known debts
 
+- **`npm run places` has a fixed ceiling on a reading that moves by itself.**
+  It asserts nothing is louder than `0.006` A-weighted, and the tree's
+  ambience rides `palette.wind` — which comes from the hour *and* from her
+  live weather. Measured twice in one afternoon on identical code: 0.0043 at
+  one hour, 0.0062 at another, so it now fails for the second reason and
+  nothing is wrong. The check is right that the *shape* matters and wrong to
+  pin it to an absolute number against a moving input; it wants either a
+  forced sky the way `?sky=` already offers, or a ceiling relative to the
+  other four places. Left rather than quietly raised, because raising a
+  threshold to make a check pass is how a check stops meaning anything.
+
 - **A sealed thought hangs like any other one.** The reader says the true thing
   — *tife left this for 14 March 2027, it is not open yet* — and the flower
   correctly does not glow, but the paper on the branch is the same paper. Being
