@@ -31,7 +31,12 @@ import {
 import { useMemories } from '@/systems/memories'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { LIGHT_COLORS } from '@/systems/palette'
-import { ambientLightLevel, buildInstanced, useFormMaterial } from '@/world/forms'
+import {
+  ambientLightLevel,
+  buildInstanced,
+  useFormMaterial,
+  type FormInstance,
+} from '@/world/forms'
 
 /**
  * How many lanterns the preview ever draws.
@@ -40,16 +45,84 @@ import { ambientLightLevel, buildInstanced, useFormMaterial } from '@/world/form
  * read as a chain that continues past what you can see, which is the true
  * impression whether there are twenty memories or two hundred.
  */
-const SHOWN = 14
+const SHOWN = 26
 
 /** Metres between lanterns out here — tighter than the real walk, so it reads. */
-const STEP = 1.9
+const STEP = 2.05
 
 /** The little arc the preview lies along. */
 function previewAt(i: number): { x: number; z: number; yaw: number } {
   const s = i * STEP
-  const x = Math.sin(s * 0.075) * 3.4
-  return { x, z: -s, yaw: Math.atan(3.4 * 0.075 * Math.cos(s * 0.075)) }
+  const x = Math.sin(s * 0.055) * 5.6
+  return { x, z: -s, yaw: Math.atan(5.6 * 0.055 * Math.cos(s * 0.055)) }
+}
+
+/**
+ * The way in.
+ *
+ * ---------------------------------------------------------------------------
+ * **A landmark has to be a place, and the first version of this was not one.**
+ *
+ * It was a line of posts with lights on them, which from across the meadow read
+ * as two sticks in the grass — and it was replacing a building a hundred metres
+ * long, so what the garden lost was not detail, it was *presence*. The other
+ * four landmarks are all one strong silhouette you could point at from any
+ * distance: a great tree, a valley with water in it, a cave mouth, a plain
+ * under stars.
+ *
+ * So the lane gets a mouth. Two heavy uprights and a lintel across them, with
+ * the wood closing in either side and the path running out through it — the
+ * shape of a way into somewhere. It is the only piece of built timber in the
+ * whole place, and it earns itself by being the thing that says *this is an
+ * entrance* rather than *this is a fence*.
+ * ---------------------------------------------------------------------------
+ */
+function gateway(): FormInstance[] {
+  const post = (side: number): FormInstance => ({
+    offset: [side * 3.05, 2.25, 1.6],
+    scale: [0.34, 4.5, 0.34],
+    rot: 0,
+    phase: side,
+    color: '#1a140f',
+  })
+  return [
+    post(-1),
+    post(1),
+    // The lintel, sat on top of both, and a little proud of them at each end.
+    {
+      offset: [0, 4.71, 1.6],
+      scale: [6.9, 0.42, 0.44],
+      rot: 0,
+      phase: 2,
+      color: '#1a140f',
+    },
+    // A second, lighter beam under it, so the head of the gate has some depth
+    // instead of being one bar against the sky.
+    {
+      offset: [0, 4.4, 1.6],
+      scale: [6.2, 0.16, 0.3],
+      rot: 0,
+      phase: 3,
+      color: '#241b13',
+    },
+  ]
+}
+
+/** The worn path, as one long dark strip running out under the gate. */
+function track(): FormInstance[] {
+  const out: FormInstance[] = []
+  for (let i = 0; i < 16; i++) {
+    const s = -2 + i * 3.4
+    const x = Math.sin(s * 0.055) * 5.6
+    out.push({
+      offset: [x, 0.02, -s],
+      scale: [2.3, 0.02, 3.5],
+      rot: Math.atan(5.6 * 0.055 * Math.cos(s * 0.055)),
+      phase: i,
+      color: '#2b2318',
+    })
+  }
+  return out
 }
 
 const GLOW_VERT = /* glsl */ `
@@ -101,20 +174,25 @@ export function LanternWalkLandmark() {
 
   const wood = useMemo(() => {
     const base = new BoxGeometry(1, 1, 1)
-    const built = buildInstanced(
-      base,
-      Array.from({ length: posts }, (_, i) => {
+    const built = buildInstanced(base, [
+      ...gateway(),
+      ...track(),
+      ...Array.from({ length: posts }, (_, i) => {
         const at = previewAt(i)
         const side = i % 2 === 0 ? -1 : 1
         return {
-          offset: [at.x + Math.cos(at.yaw) * side * 0.8, 0, at.z + Math.sin(at.yaw) * side * 0.8] as [number, number, number],
-          scale: [0.055, 1.72, 0.055] as [number, number, number],
+          offset: [
+            at.x + Math.cos(at.yaw) * side * 1.15,
+            1.175,
+            at.z + Math.sin(at.yaw) * side * 1.15,
+          ] as [number, number, number],
+          scale: [0.075, 2.35, 0.075] as [number, number, number],
           rot: at.yaw,
           phase: i * 0.7,
           color: '#171310',
         }
       }),
-    )
+    ])
     base.dispose()
     return built
   }, [posts])
@@ -138,14 +216,14 @@ export function LanternWalkLandmark() {
     for (let i = 0; i < count; i++) {
       const spot = previewAt(i)
       const side = i % 2 === 0 ? -1 : 1
-      at[i * 3] = spot.x + Math.cos(spot.yaw) * side * 0.8
-      at[i * 3 + 1] = 1.62
-      at[i * 3 + 2] = spot.z + Math.sin(spot.yaw) * side * 0.8
+      at[i * 3] = spot.x + Math.cos(spot.yaw) * side * 1.15
+      at[i * 3 + 1] = 2.02
+      at[i * 3 + 2] = spot.z + Math.sin(spot.yaw) * side * 1.15
       colour.set(memories[i].tint).lerp(memories[i].by === 'cool' ? cool : warm, 0.5)
       tint[i * 3] = colour.r
       tint[i * 3 + 1] = colour.g
       tint[i * 3 + 2] = colour.b
-      size[i] = 1.5
+      size[i] = 1.9
     }
 
     geo.setAttribute('iAt', new InstancedBufferAttribute(at, 3))

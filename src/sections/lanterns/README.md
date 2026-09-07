@@ -74,11 +74,44 @@ still reads; it arrives as the path swinging across the frame.
 `colorspace_fragment`, so 0.03 arrives at about 0.19. Written as though they were
 already sRGB, the dark posts and pressed-earth footprints came out as pale sand.
 
+## The light belongs to the lanterns
+
+`underTheTrees` in `LanternWalk.tsx` takes the world's palette and gives this
+place a fraction of it — a quarter of the sun, a third of the ambient, and the
+fog pulled in to about sixty metres. The hour is still hers; what changes is that
+you are under a canopy.
+
+This is not decoration. The first build handed the lane full daylight, so
+everything was evenly lit to the far end, nothing on the ground owed anything to
+a lantern, and the chain read as coloured signage over a field. Dimming the place
+is what turns the lanterns into the thing holding the darkness off — and because
+every part of this place reads a palette and brightens against
+`ambientLightLevel`, it is one lever rather than a uniform threaded through six
+shaders.
+
+`Pools.tsx` is the other half: the light each lantern throws down onto the lane.
+A lamp is only read as a lamp when you can see what it is lighting.
+
+## Picking, and the probe
+
+Tapping a lantern you are not standing at **walks you to it**; tapping the one
+you are at opens it. Opening carries the whole lane so the chosen lantern comes
+to a fixed spot just in front of the eye — the camera never moves, because
+`SlideCamera` owns it.
+
+`window.__walk` under `?shot=1` publishes every reachable lantern's screen box.
+A screenshot of this place looks identical whether picking works or not, so that
+probe is the only way to test it — and it immediately found the real bug: hit
+boxes pinned at their eighteen-pixel floor, which is honest and unusable. They
+are a thumb now (44 px on touch, 30 on a mouse).
+
 ## Still owed
 
-- The **day-time look** has had far less attention than dusk. The lanterns are
-  designed to be the only light there is, and at noon they compete with a sun.
-- `ui/Memories.tsx` still speaks of panes and glass in about thirty places.
-- The **hub landmark** is built but has not been photographed from the garden.
+- **Daylight is flatter than dusk.** Honest — it is the afternoon — but the place
+  is clearly designed for the dark and it shows.
+- `ui/Memories.tsx` still speaks of glass in a few places.
 - `npm run places` has the new id but has not been re-run, so the walk's
-  soundscape is unmeasured.
+  soundscape is unmeasured — it is currently the Glasshouse's mix under a new
+  name, which is wrong: a lane outdoors is not a room.
+- Nothing here has been seen on a real GPU, only SwiftShader, so there is no
+  frame cost for it yet.

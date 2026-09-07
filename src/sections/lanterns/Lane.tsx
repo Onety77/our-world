@@ -186,7 +186,7 @@ export function Lane({
           varying vec3 vColor;
           varying float vDepth;
           void main() {
-            vec3 col = vColor * (0.34 + 0.66 * uLight);
+            vec3 col = vColor * (0.62 + 0.38 * uLight);
             float fog = smoothstep(uFogNear, uFogFar, vDepth);
             gl_FragColor = vec4(mix(col, uFogColor, fog), 1.0);
             #include <tonemapping_fragment>

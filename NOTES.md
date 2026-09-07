@@ -40,6 +40,55 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 7 Sep · Claude · The walk gets its darkness, its pictures and its way in
+
+Four things were wrong with the first build, all reported and all correct.
+
+**"The place doesn't look that dark at all."** It was taking the world's full
+daylight, so everything was evenly lit to the far end of the lane, nothing on
+the ground owed anything to a lantern, and the chain read as coloured signage
+over a field. `underTheTrees` now gives the place a quarter of the sun, a third
+of the ambient and fog pulled in to about sixty metres. The hour is still hers —
+this is a canopy, not a different time of day.
+
+One derived palette rather than a uniform threaded through six shaders: every
+part of this place already reads a palette and brightens against
+`ambientLightLevel`, so dimming it turns the lanterns up everywhere at once with
+nothing left to forget. `Pools.tsx` is the other half — the light each lantern
+throws onto the lane, because a lamp is only read as a lamp when you can see
+what it is lighting.
+
+**"I don't know who said the pictures should be blurred."** Nobody did; there
+simply were not any. Only the nearest **five** carried a photograph, copied from
+the room this replaced — where it was right, because an aisle shows you two walls
+at arm's length. A lane shows you the whole chain, so five meant three real
+pictures at your feet and a receding line of flat coloured cards. Sixteen now,
+and the reach is nearly three times what it was.
+
+**"I can't even touch it to make my camera zoom in."** Two faults. Opening
+walked you to the lantern's viewing spot and stopped, which puts you the right
+distance away along the path with the picture still off at the verge — it now
+carries the whole lane so the chosen lantern comes to a fixed spot in front of
+the eye. And the hit boxes were the lantern's own projected size with an
+eighteen-pixel floor, so every lantern past about fifteen metres was a target the
+size of a full stop. **A screenshot cannot see this**, which is why it survived
+the first pass: the place looks identical whether picking works or not. So there
+is a probe now — `window.__walk` under `?shot=1` publishes every reachable
+lantern's screen box — and it found the floor in one run. Targets are a thumb
+now: 44 px on touch, 30 on a mouse.
+
+**"It looks like two lights sticking from the ground."** It did. The landmark was
+a line of posts, replacing a building a hundred metres long, and what the garden
+lost was not detail but *presence* — the other four landmarks are each one strong
+silhouette you can point at from anywhere. The lane has a mouth now: two heavy
+uprights and a lintel, with the track running out under it and the chain of
+lights receding into the dark.
+
+Worth knowing for the next landmark: **`buildInstanced` positions by centre, not
+by foot.** The gateway went up half underground with its lintel floating in the
+air above it. `Posts` in the section does not have this problem because it
+translates its own box geometry so the foot sits at the origin.
+
 ## 7 Sep · Claude · The Glasshouse is gone; the Lantern Walk is where memories live
 
 > *"who says it has to be the glass house, like really who says... i want

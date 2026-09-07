@@ -269,7 +269,7 @@ const POST_FRAG = /* glsl */ `
   void main() {
     // Dark wood, a little paler where the lantern's own light falls on it.
     vec3 wood = vec3(0.022, 0.018, 0.014) * (0.55 + 0.45 * uLight);
-    wood += vec3(0.05, 0.032, 0.014) * smoothstep(0.55, 1.0, vUp) * (1.0 - uLight) * 0.8;
+    wood += vec3(0.020, 0.013, 0.006) * smoothstep(0.62, 1.0, vUp) * (1.0 - uLight) * 0.6;
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
     gl_FragColor = vec4(mix(wood, uFogColor, fog), 1.0);
     #include <tonemapping_fragment>
@@ -389,7 +389,7 @@ const HALO_FRAG = /* glsl */ `
     float d = length(vUv - 0.5) * 2.0;
     float glow = 1.0 - smoothstep(0.0, 1.0, d);
     glow = glow * glow;
-    float a = glow * uNight * 0.55;
+    float a = glow * uNight * 0.85;
     if (a <= 0.003) discard;
     gl_FragColor = vec4(vTint * a, a);
     #include <tonemapping_fragment>
@@ -514,12 +514,12 @@ const NEAR_FRAG = /* glsl */ `
     // Until the real photograph has arrived this is the preview from the
     // document, which is sixteen pixels stretched — so it is crossed towards
     // the average colour rather than shown as a blur nobody asked for.
-    vec3 col = mix(mix(uTint, shot, 0.55), shot, uSharp);
+    vec3 col = mix(mix(uTint, shot, 0.88), shot, uSharp);
 
     float night = 1.0 - uLight;
     col *= 0.72 + 0.62 * night;
     float middle = 1.0 - smoothstep(0.0, 1.25, length(p));
-    col += uTint * middle * (0.10 + 0.34 * night);
+    col += uTint * middle * (0.06 + 0.18 * night);
 
     vec3 iron = vec3(0.016, 0.013, 0.011);
     col = mix(col, iron, frame);
@@ -683,7 +683,7 @@ export function NearLantern({
   useFrame((_, delta) => {
     const u = material.uniforms
     if (u.uMap.value && picture && sharp.current < 1) {
-      sharp.current = Math.min(1, sharp.current + delta * 1.6)
+      sharp.current = Math.min(1, sharp.current + delta * 2.6)
       u.uSharp.value = sharp.current
     }
     form.current = Math.min(1, form.current + delta / 2.2)

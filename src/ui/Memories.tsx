@@ -228,7 +228,7 @@ function MemoryCropEditor({
         <button type="button" onClick={() => rotate(-1)} aria-label="Rotate left 90 degrees">
           <span aria-hidden="true">&#8634;</span> turn left
         </button>
-        <span>drag the photograph to choose what the glass keeps</span>
+        <span>drag the photograph to choose what the lantern keeps</span>
         <button type="button" onClick={() => rotate(1)} aria-label="Rotate right 90 degrees">
           turn right <span aria-hidden="true">&#8635;</span>
         </button>
@@ -385,7 +385,7 @@ export function LeavingAMemory() {
 
           <div className="leaving-ways">
             <button type="button" className="leaving-go" onClick={() => void hang()} disabled={busy}>
-              {busy ? (turns ? 'turning it into glass' : 'putting it in the glass') : 'put it in the glass'}
+              {busy ? (turns ? 'lighting it' : 'hanging it on the walk') : 'hang it on the walk'}
             </button>
             <button type="button" className="put-back quiet" onClick={close} disabled={busy}>
               not this one
@@ -826,7 +826,7 @@ export function OpenMemory() {
           onFocus={() => keys.choose(mainAt + 1)}
           onClick={() => open(null)}
         >
-          back to the glass
+          back to the walk
         </button>
         {/*
           Only yours, and only after asking twice.
