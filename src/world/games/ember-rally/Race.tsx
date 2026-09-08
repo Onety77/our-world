@@ -2112,7 +2112,6 @@ class Driving {
 
     if (car.released > 0) {
       this.engine?.chirp(car.released)
-      this.chase.jolt(0.18 * car.released)
       const many = 12 + car.released * 12
       for (let i = 0; i < many; i++) {
         this.spitOne(

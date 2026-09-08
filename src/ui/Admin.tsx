@@ -41,6 +41,7 @@ import { Hearing } from './Hearing'
 import { Volumes } from './Volumes'
 import { LockedDoors } from './Locks'
 import { Outdoors } from './Outdoors'
+import { LanternLight } from '@/ui/LanternLight'
 import { useSay } from '@/systems/useSay'
 import { AddMusic } from './AddMusic'
 import { useRemembered } from './remember'
@@ -298,6 +299,7 @@ export function Admin() {
       {tab === 'device' && <Volumes />}
       {tab === 'device' && <Hearing />}
       {tab === 'world' && <Outdoors />}
+      {tab === 'world' && <LanternLight />}
       {tab === 'locked' && <LockedDoors />}
 
       {tab === 'device' && (

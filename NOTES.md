@@ -40,6 +40,243 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 7 Sep · Claude · Return sends in the Stars, on a keyboard
+
+> *"why the hell is it that on desktop in the stars section, the enter key
+> doesn’t send a message"*
+
+Because it never did, and the Stars was the only composer in the garden like
+that. The whisper sends on return; all three of the film’s composers send on
+return; the Stars had a note saying the message owns the return key and the
+light does the sending.
+
+That note is right **on a phone** — the on-screen key is a return key, the send
+light is under your thumb, and a conversation is exactly where you want a
+second line. On a laptop it is simply wrong, and the field was quietly
+swallowing sentences and waiting for a mouse.
+
+So it is split by pointer rather than made the same everywhere, because both
+behaviours are correct for the device they are on. Shift-return still makes a
+line, and a return arriving mid-composition is ignored — an input method sends
+one to commit a character, and treating that as a send posts half a word for
+anybody typing in a language that uses one.
+
+**Verified by driving real key events**: four messages on screen became five,
+the draft cleared, and shift-return did not send. The newline that
+shift-return should leave behind is *not* verified — a synthetic key event
+with no text does not trigger the browser’s own insertion, so that half needs
+a person.
+## 7 Sep · Claude · The Stars gets a second sky, and you pull it in from the edge
+
+**The Cloudsea.** The Stars has carried the same blurb since the day it was
+made — *"your night, their morning, and the space in between"* — and it has only
+ever drawn the two ends of that sentence. The plain splits the horizon: deep
+night above, her dawn on the far edge. The space in between has never been
+anywhere you could stand.
+
+So the second sky is that space. Pull from the right edge and the plain sinks
+away under a sea of moonlit cloud: the weather the two of you are on opposite
+sides of, seen from above, with nothing under your feet and the conversation
+still hanging in the air. **One moon rather than two lights** — that is the
+difference the place is for. Above the weather there is no your-side and
+her-side, only the same light on the same cloud, and it is the one thing in this
+garden that is not split in two.
+
+**The crossing is a value, not a toggle**, which is why it feels like anywhere.
+`at` runs 0..1 and everything reads it: the plain sinks, the cloud rises, the
+dome lifts, the bed re-voices. Let go halfway and it settles to the nearer side.
+
+### Four things worth keeping
+
+**The plain sinks rather than fading.** That is the true shape of it — you have
+not switched the plain off, you have gone up, and it is under the cloud now. The
+sea is drawn at a height that swallows it on the way past, so nothing has to
+dissolve and no piece needed a fade uniform adding to it.
+
+**Above cloud the sky gets *paler*, not darker.** Moonlight on an overcast fills
+the whole dome with a cold bounce, which is why a night above one is bright
+enough to walk in. Going darker up there was the first instinct and it is wrong
+for exactly the reason the place is worth drawing.
+
+**The sea's noise was sampled on `position.xy` after the plane had been rotated
+flat**, so it varied along one axis only and the sea came out as long straight
+bands running to the horizon. The give-away was that it looked *ruled*, and
+noise never does. It is `xz`. Its far edge also had to lose its *alpha*, not
+just mix to the sky colour — mixing alone left a flat slab of that colour laid
+over the dome and drew a hard line across the horizon.
+
+**An edge gesture has to be on the window, in the capture phase.** The first
+version listened on `.surface` and never fired once: the conversation lays
+`.talking` over the whole canvas and takes the press first. Anything that wants
+an *edge* is above the page's own layers by construction, or it only works in
+the places that happen not to have covered that edge yet.
+
+### The sound
+
+`ambience.setShade` is new: per-layer multipliers on top of the place's own row,
+cleared whenever the place changes. The Stars' bed is mostly `shimmer` over a
+little `room` — a high sparkle over close, contained air, which is right when
+you are standing on ground. Above the weather there is no floor to be close to
+and nothing near enough to reflect, so crossing turns `air` up, takes `room`
+nearly out, and pulls `shimmer` back. It follows the finger, so a half-pull is a
+half-voicing.
+
+A second `Place` id was the other way to do it, and it would have meant touching
+the ids in six files and every check that walks the places in order to say
+something untrue: it is the same room, in different weather.
+
+### And it is findable
+
+`ui/SkyEdge` — a short soft line on whichever edge the *other* sky is behind,
+faint at rest and leaning with the finger. A gesture nobody can find is a
+gesture that does not exist, and a handle that answers the first millimetre of a
+pull teaches it in one go where a static hint would still need explaining.
+
+`window.__sky` under `?shot=1`, for the same reason `__walk` exists: a
+screenshot of a sky halfway through a crossing looks like a sky.
+
+## 7 Sep · Claude · The music survives a locked screen again
+
+**A regression, and the comment that caused it was the giveaway.** `App.tsx`
+suspended the ambience AudioContext whenever the page was hidden, reasoning —
+in the comment, right there — that "the chosen song is a real `<audio>` element
+and may keep playing with the screen off". True of the element, false of the
+device: on iOS an AudioContext owns the app's *audio session*, and suspending
+it tears the session down with every other output in the page attached. Pocket
+the phone, the music stops; open the app, the context resumes, the song carries
+on. Exactly the shape of the report.
+
+The clock is now only stopped when nothing of ours wants the output — no song
+sounding, no film open. A muted context that is still running costs a timer and
+no audible work, and `setMaster(0)` already takes the world's animation loop
+with it, so the saving that mattered is kept.
+
+Not verified on a real iPhone from here. The mechanism is documented at the
+call site so the next person has something to disprove.
+
+## 7 Sep · Claude · Tap goes to it, hold opens it — and the walk can turn now
+
+**The zoom felt wrong because it could only be a slide.** Choosing a lantern
+translated the lane sideways until the picture was centred, which reads as the
+scenery being dragged past you. It could not rotate, because the world's meadow
+follows the camera and a turning lane would take its trees and footprints away
+from the ground they were measured against.
+
+That constraint died when the walk started carrying its own ground, and nobody
+noticed. It turns now: the lane pivots **about the camera** — two nested groups,
+the outer at the eye carrying the rotation — so it reads as stepping round to
+face something. `-hung.yaw` is exact, not a guess: a lantern is hung facing the
+path, so undoing that angle is square-on.
+
+**Tap and hold are now two things, because they are two intentions.** A tap
+turns you to it and walks you up; the picture is behind a press and hold. A tap
+throwing a full-screen photograph over the world was the interface deciding you
+had finished walking.
+
+**A gesture outlives a render, and the first version did not know that.** The
+press was kept in local variables inside an effect that re-registers every
+render — and tapping starts the lane gliding, which changes which lanterns are
+near, which sets state, which tears the effect down about eighty milliseconds
+in. Every hold silently became a tap. It lives in a ref now and the cleanup only
+removes listeners.
+
+Also: **no more cropping.** The Glasshouse cut every picture to three by two
+because a *wall* of frames in six proportions reads as a noticeboard. On a lane
+the lanterns are metres apart at different angles against trees — there is no
+row of outlines to be distracted by, and a tall photograph on a post is just a
+tall lantern. The width is fixed, the height follows the picture, and the hood
+and post follow the height.
+
+**The pole has a lamp on it.** Every light here came out of a photograph, and a
+photograph is not a lamp — which is most of why the lane read as lit signage. A
+small brass cap on the post head with a flame under it that breathes, in that
+memory's colour, and the picture hangs below it. Which is what a lantern on a
+pole has always been.
+
+**And a canopy, because dimming the palette could never reach the sky.** Sky,
+clouds and horizon belong to the world and carry across every slide — taking
+them off this section would make the walk look like a different game. So at
+three in the afternoon the lane was dark and the enormous bright thing above it
+was not. A dome over the lane fixes that honestly: you cannot see much sky from
+inside a wood. Its first ramp did nothing, because the camera looks *along* the
+lane and the zenith is off screen; it needed a floor as well as a ramp.
+
+**How dark is now a slider**, in the control room under `world` — see
+`systems/lanternLight`. That place is the only one whose whole point is
+contrast, and every value so far was chosen from a headless render on a machine
+in another country, which is the wrong place to decide it from. Device-local, so
+neither of you can make the other's walk too dark to see.
+
+## 7 Sep · Claude · An emoji keyboard for the machines without one
+
+A phone has an emoji key. A laptop has a system panel behind a chord, which
+loses the focus of what you were typing and takes a hand off the keys — worst in
+the place it comes up most, sitting through a film together.
+
+**Alt+E**, in every message field at once, because they all already share `Ink`
+— the Stars, the film's composer, the whisper. Arrows move, Enter puts it in *at
+the caret* (a picker that always lands at the end is one you can only use when
+you have finished typing), Escape leaves, `+` adds, backspace removes.
+
+**A short list that learns, not fifteen hundred in nine categories.** Forty to
+start, counted as they are picked, most-used first — after a fortnight it is
+your list. Anything missing gets pasted in and joins it. Sorted stably, so ties
+keep their places and nothing reshuffles under the cursor.
+
+Never on a touch device: a second emoji keyboard on a phone that has one is
+clutter fighting the native one for the same tap.
+
+## 7 Sep · Claude · The lane gets a floor, and the light gets something to fall on
+
+> *"you only did the fix i wanted you to, rather than actually thinking of
+> making an upgrade"*
+
+Fair, and correct. The four reported faults were fixed and treated as the job,
+when the job was to look at the place cold and raise it. Looking at it cold, the
+three biggest things wrong were not on the list.
+
+**The ground was a coloured plane.** No grass, nothing growing, in a garden
+whose meadow runs twenty-two thousand blades — and that is most of why the rest
+of the world reads as a place rather than a diagram. The lane had none because
+it carries its own graded shelf and the world's grass is wrapped around the
+*camera* using the shared height function, so it cannot sit on one. Nobody had
+noticed the shelf was bare because it was the right colour.
+
+**The light is baked into the blades, and that is the good idea here.** A lantern
+never moves and neither does a blade, so *how much light this blade gets from
+that lamp* is a fact that can be settled once and stored on the vertex. Every
+blade near the lane carries the summed colour of the lamps around it. The grass
+goes golden under a warm lantern and cold blue under hers, with real darkness
+between them — for one float3 per blade and **no runtime cost at all**. The
+alternatives were a forward light per lantern (dozens) or a loop over lamp
+positions in the fragment shader, both of which recompute every frame an answer
+that cannot change.
+
+**The air was empty.** `Air.tsx` — motes that belong to a lantern and drift near
+it in its colour, so they thin out between lamps exactly as the light does. The
+Glasshouse had already written down why this matters: a shaft of light is
+invisible until something is floating in it. It matters more here, because this
+place is now dark on purpose.
+
+**A lantern was a flat board on a stick, which is a sign.** It has a hood and an
+arm now. Those two shapes are most of what makes a hanging lamp read as one, and
+the hood does real work after dark: it is the dark edge along the top that stops
+the pane bleeding into the sky.
+
+Two things worth keeping:
+
+- **Scale is easy to get wrong by an order of magnitude and obvious once
+  rendered.** The first grass was 11 cm wide at 3 blades per square metre —
+  which is not sparse grass, it is scattered shards. Narrow blades and twenty
+  times the density, and the same shader reads as a field.
+- The undergrowth and the motes take their budget from `quality.grassCount`,
+  so a phone already told to draw less grass in the meadow draws less in here.
+  One decision about the machine, made where it is measured.
+
+**And the backtick trap caught me twice more** — `uv.y` and `hangingFor` inside
+GLSL template comments. That is six times now. `npm run shaders` caught both in
+the same second it always does.
+
 ## 7 Sep · Claude · The walk gets its darkness, its pictures and its way in
 
 Four things were wrong with the first build, all reported and all correct.

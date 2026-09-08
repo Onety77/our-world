@@ -23,6 +23,33 @@ import { useEffect,
   useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
 import { writingLine } from '@/systems/typing'
+import { SkyEdge } from '@/ui/SkyEdge'
+
+/**
+ * Whether return should send, rather than making a new line.
+ *
+ * ---------------------------------------------------------------------------
+ * **On a keyboard it sends, and this was the one composer in the garden where
+ * it did not.**
+ *
+ * The whisper sends on return. All three of the film’s composers send on
+ * return. The Stars did not, under a note saying the message owns the return
+ * key and the light does the sending — which is a real decision and the right
+ * one *on a phone*: the on-screen key is a return key, the send light is under
+ * your thumb, and a conversation is where you actually want more than one line.
+ *
+ * On a laptop it is simply wrong. Return sends in every keyboard-driven
+ * conversation anybody has used for thirty years, and shift-return is how you
+ * get a second line — so the field was quietly swallowing sentences and
+ * waiting for a mouse.
+ *
+ * Split by pointer rather than made the same everywhere, because both
+ * behaviours are correct for the device they are on. A coarse pointer is the
+ * same test the rest of the garden uses for "there is no keyboard here".
+ * ---------------------------------------------------------------------------
+ */
+const RETURN_SENDS =
+  typeof window === 'undefined' || !window.matchMedia?.('(pointer: coarse)').matches
 import { useData, useWorldSlice } from '@/data/provider'
 import type { Message, UserId } from '@/data/types'
 import { useSections } from '@/systems/sections'
@@ -1407,6 +1434,9 @@ export function Talking() {
 
   return (
     <div className="talking" ref={surface}>
+      {/* The handle for the second sky. See ui/SkyEdge — it is the only thing
+          that says the crossing is there at all. */}
+      <SkyEdge />
       <div
         className={`stars-presence ${presenceState}`}
         role="status"
@@ -1574,13 +1604,28 @@ export function Talking() {
             already is at the end of a sentence.
           */}
           <div className="saying-row">
-            {/* Return belongs to the message; the visible light sends it. */}
+            {/* On a phone the return key belongs to the message and the light
+                sends it; on a keyboard return sends. See RETURN_SENDS. */}
             <Ink
               innerRef={field}
               className="saying-field ink"
               value={draft}
               onChange={write}
               label={`say something to ${them.name}`}
+              onKeyDown={(e) => {
+                if (!RETURN_SENDS) return
+                /*
+                  Shift-return still makes a line, and so does a return that
+                  arrives mid-composition: an input method assembling a
+                  character sends one to commit it, and treating that as a send
+                  posts half a word for anybody typing in a language that uses
+                  one.
+                */
+                if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
+                e.preventDefault()
+                if (draft.trim() === '') return
+                void say()
+              }}
             />
             <button
               type="button"

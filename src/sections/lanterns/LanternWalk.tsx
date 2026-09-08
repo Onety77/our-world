@@ -26,14 +26,19 @@ import { Color, Group, Vector3 } from 'three'
 import { useData } from '@/data/provider'
 import { useMemories } from '@/systems/memories'
 import { useSceneEnv } from '@/world/SceneEnv'
+import { useQuality } from '@/systems/quality'
+import { useLanternLight } from '@/systems/lanternLight'
 import type { SkyPalette } from '@/systems/palette'
-import { GLASS_H, GLASS_W, SPACING, WALK_X, WALK_Y, hangingFor, headFor, pathAt, sFor } from './layout'
+import { GLASS_H, GLASS_W, SPACING, WALK_X, hangingFor, headFor, pathAt, sFor } from './layout'
 import { alongTheLane, focus, pulling, stepFocus, stepWalk, walk, walkAt, walkTo } from './walk'
-import { FarLanterns, Halos, NearLantern, Posts } from './Lanterns'
+import { FarLanterns, Halos, NearLantern, PoleLamps, Posts } from './Lanterns'
 import { Footprints } from './Footprints'
 import { Verge } from './Verge'
 import { Lane } from './Lane'
 import { Pools } from './Pools'
+import { Undergrowth } from './Undergrowth'
+import { Air } from './Air'
+import { Canopy } from './Canopy'
 import { openPane } from './view'
 
 /**
@@ -110,16 +115,24 @@ const SHOT =
  * everywhere, in one place, with nothing left to forget.
  * ---------------------------------------------------------------------------
  */
-function underTheTrees(palette: SkyPalette): SkyPalette {
+function underTheTrees(palette: SkyPalette, dark: number): SkyPalette {
   const dim = (hex: string, by: number) => '#' + new Color(hex).multiplyScalar(by).getHexString()
+  /*
+    `dark` runs 0..1 and every figure below is that number applied to a range,
+    not a constant with a slider bolted on. At 0 the lane is lit like the meadow
+    outside it; at 1 almost nothing gets through the canopy. The control room
+    sets it — see `systems/lanternLight`, and the note there about why this is
+    the one thing here that cannot be settled from a screenshot.
+  */
+  const keep = (open: number, shut: number) => open + (shut - open) * dark
   return {
     ...palette,
-    sunIntensity: palette.sunIntensity * 0.26,
-    ambientIntensity: palette.ambientIntensity * 0.34,
-    ambientColor: dim(palette.ambientColor, 0.55),
-    sunColor: dim(palette.sunColor, 0.7),
-    grassBase: dim(palette.grassBase, 0.58),
-    grassTip: dim(palette.grassTip, 0.62),
+    sunIntensity: palette.sunIntensity * keep(1, 0.1),
+    ambientIntensity: palette.ambientIntensity * keep(1, 0.16),
+    ambientColor: dim(palette.ambientColor, keep(1, 0.42)),
+    sunColor: dim(palette.sunColor, keep(1, 0.6)),
+    grassBase: dim(palette.grassBase, keep(1, 0.44)),
+    grassTip: dim(palette.grassTip, keep(1, 0.5)),
     /*
       The fog is pulled in hard, and it is doing two jobs.
 
@@ -128,15 +141,27 @@ function underTheTrees(palette: SkyPalette): SkyPalette {
       it is what gives the lanterns something to be *in*: a light in clear air is
       a bright dot, a light in mist has a halo and a reach.
     */
-    fogColor: dim(palette.fogColor, 0.34),
-    fogNear: Math.min(palette.fogNear, 8),
-    fogFar: Math.min(palette.fogFar * 0.5, 62),
+    fogColor: dim(palette.fogColor, keep(1, 0.24)),
+    fogNear: Math.min(palette.fogNear, keep(40, 6)),
+    fogFar: Math.min(palette.fogFar, keep(160, 52)),
   }
 }
 
 export default function LanternWalk() {
   const { palette: world } = useSceneEnv()
-  const palette = useMemo(() => underTheTrees(world), [world])
+  const dark = useLanternLight((s) => s.dark)
+  const palette = useMemo(() => underTheTrees(world, dark), [world, dark])
+
+  /*
+    How much undergrowth and air this device gets.
+
+    Taken off the meadow's own blade budget rather than invented, so a phone
+    that has already been told to draw less grass out in the garden draws less
+    in here too — one decision about what this machine can manage, made once, in
+    the place that measures it.
+  */
+  const grassCount = useQuality((q) => q.grassCount)
+  const grassy = Math.max(0.3, Math.min(1.15, grassCount / 20000))
   const all = useMemories((s) => s.all)
   const openId = useMemories((s) => s.openId)
   const formingId = useMemories((s) => s.formingId)
@@ -177,6 +202,36 @@ export default function LanternWalk() {
   // --- travelling -----------------------------------------------------------
 
   const carrying = useRef<Group>(null)
+  const pivot = useRef<Group>(null)
+  const swing = useMemo(() => new Vector3(), [])
+  const lift = useMemo(() => new Vector3(), [])
+  const UP = useMemo(() => new Vector3(0, 1, 0), [])
+
+  /**
+   * The lantern you have stepped up to, if any.
+   *
+   * ---------------------------------------------------------------------------
+   * **Deliberately not the same thing as the one that is open.**
+   *
+   * Tapping a photograph out here should not throw a full-screen picture over
+   * the world — you are walking somewhere, and what you want is to *go and look
+   * at it*. So a tap turns you to face it and brings you up to it, and that is
+   * the whole of a tap. The picture itself is behind a press and hold, which is
+   * the gesture for "I want to stop and study this one".
+   *
+   * Two states rather than one because they are two different intentions, and
+   * collapsing them is what made the old behaviour feel like it was deciding
+   * for you.
+   * ---------------------------------------------------------------------------
+   */
+  const [focused, setFocused] = useState<number | null>(null)
+
+  /** The live press — see the note by [H[2J[3J in the gesture below. */
+  const press = useRef<{ held: number | null; from: { x: number; y: number } | null; timer: number }>({
+    held: null,
+    from: null,
+    timer: 0,
+  })
 
   /**
    * Where the lane has been carried to, this frame.
@@ -210,10 +265,10 @@ export default function LanternWalk() {
     walkTo(sFor(opened.index) + 6.4)
   }, [opened])
 
-  useFrame((_, rawDelta) => {
+  useFrame(({ camera: eye }, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 20)
     stepWalk(delta)
-    stepFocus(delta, Boolean(opened))
+    stepFocus(delta, focused !== null)
 
     // The point you are standing on comes to the head of the lane, where the
     // camera is; everything else follows it.
@@ -221,43 +276,72 @@ export default function LanternWalk() {
     carried.set(WALK_X - here.x, 0, -here.z)
 
     /*
-      Opening one brings it to you.
+      Choosing one turns you to face it.
 
-      ----------------------------------------------------------------------
-      **This is the "tap a picture and go to it" that was missing, and it is
-      done by moving the lane rather than the camera.**
+      ------------------------------------------------------------------------
+      **This is a real orbit now, and the reason it could not be one before is
+      worth writing down.**
 
-      Walking to the lantern's own viewing spot was not enough on its own: that
-      puts you the right distance away along the *path*, but the lantern is
-      still off at the verge, a third of the way across the frame, at whatever
-      angle the bend left it. What you want when you choose a photograph is to
-      be standing square in front of it.
+      The first version slid the whole lane sideways until the chosen lantern
+      was in the middle of the frame. That is a translation, and translation is
+      all it could be: the world's meadow follows the *camera*, so a lane that
+      rotated would have taken its trees and its footprints away from the ground
+      they were measured against. What it looked like was the scenery being
+      dragged past you — which is exactly the "weird, not so professional"
+      feeling that was reported.
 
-      `SlideCamera` owns the camera and fighting it is the mistake the racer had
-      to stand it down to avoid — so the lane slides that last bit instead. The
-      chosen lantern is carried to a fixed spot just in front of the eye, and
-      everything it is attached to comes with it: the post, the pool of light on
-      the ground, the trees behind. The whole lane leans in, which is what
-      stepping up to something looks like from the inside.
+      Since the walk started carrying its own ground, that constraint is gone.
+      There is no world meadow underneath any more to disagree with, so the lane
+      can turn — and turning is what makes this read as *you* stepping round to
+      face something rather than the set being shoved sideways.
 
-      Eased by `focus.open`, which is the same 0..1 the interface fades the
-      photograph in on, so the two are one movement.
-      ----------------------------------------------------------------------
+      The lane pivots **about the camera**, not about the origin, which is the
+      only pivot that feels like a head turning. Two nested groups do it: the
+      outer one sits at the eye and carries the rotation, the inner one carries
+      the lane's own travel less the eye. Nothing touches the camera, so
+      `SlideCamera` is never fought.
+
+      And the turn is not a guess: `-hung.yaw` brings the pane's own normal to
+      face the eye exactly. A lantern is hung facing the path, so undoing that
+      angle is precisely square-on — which also means the open photograph
+      projects to an axis-aligned rectangle for the interface to grow out of.
+      ------------------------------------------------------------------------
     */
-    if (opened && focus.open > 0.0005) {
-      const hung = opened.hung
+    let turn = 0
+    lift.set(0, 0, 0)
+    if (focused !== null && focus.open > 0.0005) {
+      const hung = hangingFor(focused)
+      const t = focus.open
+      turn = -hung.yaw * t
+
       /*
-        Where a chosen photograph sits: dead centre, at eye level, close enough
-        to fill the middle of a phone and far enough that a lantern a metre wide
-        is not cropped by it.
+        Where the chosen lantern ends up, and how it gets there.
+
+        `swing` is where it would land from the rotation alone; `lift` is the
+        rest of the way to the spot in front of the eye. Multiplying that
+        remainder by the same eased `t` is what makes the whole move one
+        gesture: at nought it is exactly zero and nothing has happened, at one
+        it is exactly the target, and in between the turn and the approach are
+        the same movement rather than two animations of different lengths.
       */
-      const wantZ = -1.35
-      carried.x += (WALK_X - (hung.x + carried.x)) * focus.open
-      carried.y += (WALK_Y + 1.44 - hung.y) * focus.open
-      carried.z += (wantZ - (hung.z + carried.z)) * focus.open
+      swing
+        .set(hung.x + carried.x - eye.position.x, hung.y - eye.position.y, hung.z + carried.z - eye.position.z)
+        .applyAxisAngle(UP, turn)
+        .add(eye.position)
+
+      // Square on, a little below eye line, close enough to read and far
+      // enough that a tall portrait is not cropped by the top of the screen.
+      lift.set(eye.position.x - swing.x, eye.position.y - 0.08 - swing.y, eye.position.z - 2.05 - swing.z)
+      lift.multiplyScalar(t)
     }
 
-    if (carrying.current) carrying.current.position.copy(carried)
+    if (pivot.current) {
+      pivot.current.position.copy(eye.position).add(lift)
+      pivot.current.rotation.y = turn
+    }
+    if (carrying.current) {
+      carrying.current.position.copy(carried).sub(eye.position)
+    }
   })
 
   // --- which ones are close enough to be worth a photograph ------------------
@@ -347,8 +431,18 @@ export default function LanternWalk() {
    */
   const onScreen = (i: number) => {
     const hung = hangingFor(i)
-    // Exactly where the group has carried it — same offset, same frame.
-    point.set(hung.x + carried.x, hung.y + carried.y, hung.z + carried.z)
+    /*
+      Asked of the scene graph rather than worked out again.
+
+      The lane is carried by one group and turned by another, and both of those
+      change every frame. Re-deriving that transform here would be a second
+      expression of where a lantern is — which is exactly how the Tree of
+      Thoughts ended up with papers you could see and targets somewhere else.
+      `localToWorld` asks the objects that actually drew it.
+    */
+    if (!carrying.current) return null
+    point.set(hung.x, hung.y, hung.z)
+    carrying.current.localToWorld(point)
     const depth = point.distanceTo(camera.position)
     if (depth <= 0.4) return null
     point.project(camera)
@@ -364,10 +458,11 @@ export default function LanternWalk() {
       on screen at that depth.
     */
     point.set(
-      hung.x + carried.x + Math.cos(hung.yaw) * (GLASS_W / 2),
-      hung.y + carried.y,
-      hung.z + carried.z - Math.sin(hung.yaw) * (GLASS_W / 2),
+      hung.x + Math.cos(hung.yaw) * (GLASS_W / 2),
+      hung.y,
+      hung.z - Math.sin(hung.yaw) * (GLASS_W / 2),
     )
+    carrying.current.localToWorld(point)
     point.project(camera)
     const edge = (point.x * 0.5 + 0.5) * size.width
     const wide = Math.abs(edge - x)
@@ -438,23 +533,101 @@ export default function LanternWalk() {
   useEffect(() => {
     const surface = document.querySelector<HTMLElement>('.surface')
     if (!surface) return
-    const tap = (e: PointerEvent) => {
-      if (pulling()) return
+    /*
+      A tap goes to it. A press and hold opens it.
+
+      -------------------------------------------------------------------------
+      **Two gestures, because they are two intentions.**
+
+      Out here a photograph is a thing standing further down a lane, and what a
+      tap means is *go and look at that one* — turn, walk up, stand square to
+      it. Throwing a full-screen picture over the world instead is the interface
+      deciding you were finished walking.
+
+      So the hold is the one that opens. It is the gesture people already use
+      for "stop, I want this properly", it cannot be triggered by accident while
+      dragging along the lane, and it leaves the tap free to mean the thing it
+      obviously means.
+      -------------------------------------------------------------------------
+    */
+    const HOLD = 420
+    /** Past this a press is a drag along the lane, and belongs to the walk. */
+    const SLOP = 8
+
+    /*
+      The press lives in a ref, and the cleanup below does not touch it.
+
+      This effect re-registers on every render — it has to, because it closes
+      over the memories and the projection — and the first version kept the
+      press in local variables and cancelled the timer on cleanup. Which meant a
+      hold could never complete: tapping starts the lane gliding, gliding
+      changes which lanterns are near, that sets state, React re-renders, the
+      effect tears down and the pending hold is cancelled about eighty
+      milliseconds in. Every hold silently became a tap.
+
+      A gesture outlives a render. Keeping it in a ref is what says so.
+    */
+    const g = press.current
+
+    const clear = () => {
+      if (g.timer) window.clearTimeout(g.timer)
+      g.timer = 0
+      g.held = null
+      g.from = null
+    }
+
+    const down = (e: PointerEvent) => {
+      if (!e.isPrimary) return
       if ((e.target as HTMLElement | null)?.closest('button, input, textarea, a')) return
       const box = surface.getBoundingClientRect()
       const index = whichLantern(e.clientX - box.left, e.clientY - box.top)
       if (index === null) return
-      const memory = memories[index]
-      if (!memory) return
-      // Standing at it first, opening second — the walk is the transition.
-      if (Math.abs(sFor(index) - walkAt()) > SPACING * 0.9) {
-        walkTo(sFor(index) + 6.4)
+      g.held = index
+      g.from = { x: e.clientX, y: e.clientY }
+      g.timer = window.setTimeout(() => {
+        const memory = g.held !== null ? memories[g.held] : null
+        // Stand at it as well, so letting go leaves you where the picture was.
+        if (memory) {
+          setFocused(g.held)
+          open(memory.id)
+        }
+        clear()
+      }, HOLD)
+    }
+
+    const move = (e: PointerEvent) => {
+      if (!g.from) return
+      if (Math.abs(e.clientX - g.from.x) + Math.abs(e.clientY - g.from.y) > SLOP) clear()
+    }
+
+    const up = () => {
+      if (g.held === null) {
+        // A tap on nothing steps back out of whatever you were looking at.
+        if (!pulling()) setFocused(null)
+        clear()
         return
       }
-      open(memory.id)
+      const index = g.held
+      clear()
+      if (pulling()) return
+      const memory = memories[index]
+      if (!memory) return
+      // Walk to the piece of path this one was hung facing, and turn to it.
+      walkTo(sFor(index) + 6.4)
+      setFocused(index)
     }
-    surface.addEventListener('pointerup', tap)
-    return () => surface.removeEventListener('pointerup', tap)
+
+    surface.addEventListener('pointerdown', down)
+    surface.addEventListener('pointermove', move)
+    surface.addEventListener('pointerup', up)
+    surface.addEventListener('pointercancel', clear)
+    // Listeners only: the press itself lives in a ref and must survive this.
+    return () => {
+      surface.removeEventListener('pointerdown', down)
+      surface.removeEventListener('pointermove', move)
+      surface.removeEventListener('pointerup', up)
+      surface.removeEventListener('pointercancel', clear)
+    }
   })
 
   /*
@@ -501,20 +674,26 @@ export default function LanternWalk() {
   const length = deepest + OVERRUN
 
   return (
-    <group ref={carrying}>
+    <>
+      <Canopy palette={world} dark={dark} />
+      <group ref={pivot}>
+      <group ref={carrying}>
         <Lane length={length} trodden={deepest} palette={palette} />
         <Verge length={length} palette={palette} />
         <Footprints by={walkedBy} palette={palette} />
         <Pools memories={memories} palette={palette} />
+        <Undergrowth memories={memories} length={length} palette={palette} density={grassy} />
+        <Air memories={memories} palette={palette} density={grassy} />
         {/*
           One post more than there are memories: the next one is already up and
           waiting at the head of the lane, with nothing hanging on it yet. That
           is the whole of the empty state, and it needs no words — an empty walk
           is one bare post on a path nobody has worn.
         */}
-        <Posts count={memories.length + 1} palette={palette} />
+        <Posts memories={memories} waiting palette={palette} />
         <FarLanterns memories={memories} hide={hidden} palette={palette} />
         <Halos memories={memories} palette={palette} />
+        <PoleLamps memories={memories} palette={palette} />
         {near.map(({ memory, index }) => (
           <NearLantern
             key={memory.id}
@@ -525,6 +704,8 @@ export default function LanternWalk() {
             forming={memory.id === formingId}
           />
         ))}
-    </group>
+        </group>
+      </group>
+    </>
   )
 }

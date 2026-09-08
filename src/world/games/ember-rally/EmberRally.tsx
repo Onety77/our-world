@@ -109,7 +109,7 @@ const COURSES: Record<StageId, {
     place: 'fire and stone',
     short: 'A close, changing road beneath the garden. Learn it by the lanterns.',
     soloTitle: 'Something is already down there',
-    soloCopy: 'A small fire knows this road and it is quicker than it looks. It leaves a pale line through the tunnel; follow that and you will not be far off. Brake into the bend, hold the slide, and let go at the apex.',
+    soloCopy: 'A small fire knows this road. Brake before the bend, ease into the steering, then feed in the power as the road opens. For a tight turn, tap the handbrake and release it to let the tyres catch. A clean slide earns ember for the next straight.',
     spirit: 'the fire-spirit',
     returnTo: 'return to the fire',
     setTitle: 'Set a line {she} cannot see',
@@ -244,7 +244,7 @@ const SCENES: Record<StageId, ReactNode> = {
  * which are now the brake and the handbrake. A hint that is wrong is worse
  * than none — it teaches the wrong thing once and is then gone.
  */
-const CONTROLS = 'up to go · down to brake · arrows to steer · space to slide · shift for the ember'
+const CONTROLS = '↑ / W accelerate · ↓ / S brake · ← → / A D steer · space handbrake · shift ember'
 
 interface RallyAction {
   label: string

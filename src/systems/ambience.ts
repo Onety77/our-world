@@ -157,6 +157,27 @@ export interface AmbienceHandle {
     bright: number
     bands: Record<string, number>
   }
+  /**
+   * Re-voice the bed a place is already playing, layer by layer.
+   *
+   * -------------------------------------------------------------------------
+   * **For a place that has more than one weather, and only for that.**
+   *
+   * The mix is a table by *place*, which is right: the Hollow sounds like the
+   * Hollow. The Stars now has two skies to stand in — the plain, and the sea of
+   * cloud above the weather — and they should not sound the same. Above an
+   * overcast there is no crickets-and-grass, there is air and a long way down.
+   *
+   * A second Place id would have been the other way to do it, and it would have
+   * meant touching the ids in six files, the rules, and every check that walks
+   * the places, to say something that is not true: it is the same room, in
+   * different weather.
+   *
+   * Multiplied on top of the place's own row and cleared whenever the place
+   * changes, so a section can never leave its voicing behind for the next one.
+   * -------------------------------------------------------------------------
+   */
+  setShade(shade: Record<string, number> | null): void
   /** 0..1, drops when the tab is hidden. */
   setMaster(value: number): void
   /** Suspend synthesis while no page can hear it. Music uses another element. */
@@ -369,6 +390,8 @@ export function createAmbience(): AmbienceHandle {
   let suspendTimer: ReturnType<typeof setTimeout> | null = null
   let sleeping = typeof document === 'undefined' ? false : document.hidden
   let masterLevel = 0.85
+  /** Per-layer multipliers for the place being stood in — see `setShade`. */
+  let shade: Record<string, number> | null = null
   let worldEnabled = levelsNow().world > 0.001
   let worldHasOutput = worldEnabled
   let lastTick = 0
@@ -543,9 +566,18 @@ export function createAmbience(): AmbienceHandle {
       one entirely — see `OF_THE_GARDEN`.
     */
     const bleed = OF_THE_GARDEN.has(name) ? gardenBleedNow() : null
+    /*
+      The shade belongs to where you are *going*, not to where you were.
+
+      It is a property of the place being stood in, so applying it to both ends
+      of the crossfade would re-voice the room you are walking out of on the way
+      out of it. Only the destination side carries it, which means walking into
+      the cloudsea fades the plain's own voice out normally underneath.
+    */
+    const shaded = shade ? (shade[name] ?? 1) : 1
     const at = (which: Place) =>
       row[which] * (levels[which] ?? 1) * (bleed ? (bleed[which] ?? 1) : 1)
-    return at(from) * (1 - blend) + at(place) * blend
+    return at(from) * (1 - blend) + at(place) * shaded * blend
   }
 
   /**
@@ -1127,6 +1159,15 @@ function aWeight(hz: number): number {
       from = blend < 1 ? from : place
       place = next
       blend = 0
+      /*
+        A voicing belongs to the place that set it, and dies with it.
+
+        Without this, walking out of the Stars while it was up in the cloudsea
+        would take that sky's mix into the Hollow — a bug that would look like
+        the cave sounding wrong for no reason, days later, with nothing in the
+        cave to blame.
+      */
+      shade = null
       // A silent room may be opening onto an audible one. Do not make that
       // crossfade wait on the silent two-Hz control cadence.
       worldHasOutput = worldEnabled
@@ -1182,6 +1223,10 @@ function aWeight(hz: number): number {
       worldSoundTelemetry.master = masterLevel
       if (!ctx || !master || sleeping) return
       master.gain.setTargetAtTime(masterLevel, ctx.currentTime, 0.4)
+    },
+
+    setShade(next) {
+      shade = next
     },
 
     setSuspended(suspended) {

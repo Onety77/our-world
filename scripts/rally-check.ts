@@ -1,3 +1,4 @@
+import { flatTrack } from './rally-fixture'
 /**
  * The car, measured.
  *
@@ -47,6 +48,7 @@ import type { StageId } from '../src/world/games/ember-rally/model'
 import { useRace } from '../src/world/games/ember-rally/session'
 
 const DT = 1 / 120
+const NEWLINE = '\n'
 const IDLE: CarInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false }
 /** Flat out, straight ahead. */
 const FLAT: CarInput = { steer: 0, throttle: 1, brake: 0, handbrake: false, boost: false }
@@ -76,50 +78,6 @@ function windUpTo(track: Track, car: CarState, target: number): void {
 
 function fixed(n: number, places = 2): string {
   return Number.isFinite(n) ? n.toFixed(places) : String(n)
-}
-
-/** A road with nothing on it, for measuring the car rather than the track. */
-function flatTrack(length = 3000, curv = 0): Track {
-  const count = length + 1
-  const zeros = () => new Float32Array(count)
-  const filled = (value: number) => {
-    const a = new Float32Array(count)
-    a.fill(value)
-    return a
-  }
-  const x = zeros()
-  const z = zeros()
-  const heading = zeros()
-  // A road of constant curvature, integrated so `roadAt` sees a real bend.
-  let h = 0
-  for (let i = 1; i < count; i++) {
-    h += curv
-    heading[i] = h
-    x[i] = x[i - 1] + Math.sin(h)
-    z[i] = z[i - 1] + Math.cos(h)
-  }
-  return {
-    seed: 0,
-    stage: 'rootway',
-    length,
-    start: 0,
-    x,
-    y: zeros(),
-    z,
-    heading,
-    curv: filled(curv),
-    width: filled(60),
-    ceiling: filled(6),
-    room: filled(1),
-    wet: zeros(),
-    grade: zeros(),
-    bank: zeros(),
-    line: zeros(),
-    finishAt: length - 1,
-    lanterns: [],
-    roots: [],
-    boulders: [],
-  } as Track
 }
 
 function sane(car: CarState): string | null {
@@ -289,7 +247,7 @@ function steeringPulse() {
     const steps = Math.round(2.2 / DT)
     for (let step = 0; step < steps; step++) {
       const steer = step * DT < heldFor ? amount : 0
-      advanceCar(track, car, { steer, brake: 0, handbrake: false, boost: false }, DT)
+      advanceCar(track, car, { ...FLAT, steer }, DT)
       peakN = Math.max(peakN, Math.abs(car.n))
       peakHeading = Math.max(peakHeading, Math.abs(car.psi))
       peakSlip = Math.max(peakSlip, Math.abs(slipOf(car)))
@@ -1012,193 +970,29 @@ function liftOff() {
   ].join('\n')
 }
 
-/**
- * The drift, which is a game rather than a car.
- *
- * Four things have to be true, and the third is the one that matters:
- *
- *   1. pulling the handbrake with lock on puts you in one
- *   2. holding an arrow bends the *path* that way — you go round a corner
- *   3. **flicking the other arrow swaps the car onto its other side and bends
- *      the path back**, without ever leaving the drift. This is what lets one
- *      drift carry through a left and then a right
- *   4. the ember cancels it, and so does two seconds of going straight
- *
- * Measured as heading change, because that is what "did it go round the
- * corner" actually means.
- */
+/** Entry and recovery with the same tyre forces throughout the slide. */
 function driftMode() {
-  const track = flatTrack(9000)
-  const car = createCar(track)
-  windUpTo(track, car, 30)
-
   const rows: string[] = []
-  /** Heading change over a stretch, unwrapped — `psi` lives on a circle. */
-  const swing = (steps: number, input: CarInput) => {
-    let turned = 0
-    let last = car.psi
-    let angle = 0
-    for (let i = 0; i < steps; i++) {
-      advanceCar(track, car, input, DT)
-      let step = car.psi - last
-      if (step > Math.PI) step -= Math.PI * 2
-      else if (step < -Math.PI) step += Math.PI * 2
-      turned += step
-      last = car.psi
-      angle = Math.max(angle, Math.abs(slipOf(car)))
+  for (const held of [0.22, 0.4, 0.65]) {
+    const track = flatTrack(4000)
+    const car = createCar(track)
+    windUpTo(track, car, 25)
+    for (let i = 0; i < 42; i++) advanceCar(track, car, { ...FLAT, steer: 0.65 }, DT)
+    for (let i = 0; i < Math.round(held / DT); i++) {
+      advanceCar(track, car, { ...IDLE, steer: 0.65, handbrake: true }, DT)
     }
-    return { turned, angle, speed: speedOf(car) }
-  }
-
-  // 1. Into it: handbrake with lock on.
-  const entrySpeed = speedOf(car)
-  const enter = swing(
-    Math.round(120 * 0.8),
-    { steer: 1, throttle: 0.6, brake: 0, handbrake: true, boost: false },
-  )
-  rows.push(
-    `  pull it, hold right   swung ${fixed((enter.turned * 180) / Math.PI, 0).padStart(4)}°   ` +
-      `hanging ${fixed((enter.angle * 180) / Math.PI, 0)}°   ` +
-      `${car.drifting ? 'in the drift' : 'NOT IN A DRIFT'}`,
-  )
-
-  // 2. Still holding right, handbrake released: it must keep going round.
-  const held = swing(
-    Math.round(120 * 1.2),
-    { steer: 1, throttle: 0.6, brake: 0, handbrake: false, boost: false },
-  )
-  rows.push(
-    `  let go of the button  swung ${fixed((held.turned * 180) / Math.PI, 0).padStart(4)}°   ` +
-      `${car.drifting ? 'still drifting' : 'DROPPED OUT'}`,
-  )
-
-  // 3. The flick. Now hold left — it has to come back the other way.
-  const flick = swing(
-    Math.round(120 * 1.6),
-    { steer: -1, throttle: 0.6, brake: 0, handbrake: false, boost: false },
-  )
-  const swapped = flick.turned < -0.2
-  rows.push(
-    `  flick to the left     swung ${fixed((flick.turned * 180) / Math.PI, 0).padStart(4)}°   ` +
-      `${car.drifting ? 'still drifting' : 'DROPPED OUT'}   ` +
-      `${swapped ? 'CAME BACK THE OTHER WAY' : 'IGNORED THE ARROW'}   ` +
-      `kept ${fixed((flick.speed / entrySpeed) * 100, 0)}% of ${fixed(entrySpeed, 0)} m/s`,
-  )
-
-  /*
-    5. And now the one that was never measured: **hold it**.
-
-    Everything above is a second or two long, which is exactly how the fault
-    stayed invisible — a drift that decays slowly looks fine for two seconds
-    and is a crawl after eight. The dial calls itself "the speed a drift
-    settles at", so a drift held for eight seconds should be sitting on it.
-  */
-  {
-    const long = createCar(track)
-    windUpTo(track, long, 30)
-    advanceCar(track, long, { steer: 1, throttle: 0.9, brake: 0, handbrake: true, boost: false }, DT)
-    const at: number[] = []
-    for (let second = 0; second < 8; second++) {
-      for (let i = 0; i < Math.round(1 / DT); i++) {
-        advanceCar(track, long, { steer: 1, throttle: 0.9, brake: 0, handbrake: false, boost: false }, DT)
-      }
-      at.push(speedOf(long))
+    const angle = Math.abs(slipOf(car)) * 180 / Math.PI
+    const entry = speedOf(car) * 3.6
+    for (let i = 0; i < 240; i++) {
+      advanceCar(track, car, { ...FLAT, throttle: 0.55, steer: -0.15 }, DT)
     }
-    rows.push(
-      `  hold it for eight     ${at.map((v) => fixed(v * 3.6, 0)).join(' · ')} km/h`,
-    )
-    rows.push(
-      `  the dial says         ${fixed(TUNE.driftTopSpeed * 3.6, 0)} km/h · ` +
-        `${long.drifting ? 'still drifting' : 'DROPPED OUT'}`,
-    )
+    rows.push('  handbrake ' + held.toFixed(2) + 's: ' + angle.toFixed(1) +
+      ' degrees, ' + entry.toFixed(0) + ' km/h; recovered to ' +
+      (Math.abs(slipOf(car)) * 180 / Math.PI).toFixed(1) + ' degrees after 2s')
   }
-
-  // 4a. The ember cancels it.
-  swing(1, { steer: -1, throttle: 0.6, brake: 0, handbrake: false, boost: true })
-  const afterBoost = car.drifting
-  rows.push(`  press the ember       ${afterBoost ? 'STILL DRIFTING' : 'let go, as it should'}`)
-
-  // 4b. And so does going straight.
-  car.drifting = true
-  car.driftStraight = 0
-  swing(Math.round(120 * 1.2), { steer: 0, throttle: 0.6, brake: 0, handbrake: false, boost: false })
-  const earlyOut = !car.drifting
-  swing(Math.round(120 * 1.2), { steer: 0, throttle: 0.6, brake: 0, handbrake: false, boost: false })
-  rows.push(
-    `  hold it straight      ${
-      earlyOut
-        ? 'LET GO TOO SOON (under a second)'
-        : car.drifting
-          ? 'STILL DRIFTING after two seconds'
-          : 'let go after about two seconds'
-    }`,
-  )
-
   return rows.join('\n')
 }
-/** The Rootwake stays worth taking and worth being frightened of. It measures
- * route length, mastered duration, tightest usable width, and spirit clearance
- * from the separately authored ledge on several seeds. */
-const NEWLINE = String.fromCharCode(10)
 
-/**
- * A long drift, held on one side.
- *
- * ---------------------------------------------------------------------------
- * The reported fault, as a measurement: through a corner tighter than a right
- * angle, one that needs the drift carried for several seconds, the car creeps
- * off the line even when the input is right — and it gets worse the longer the
- * corner lasts.
- *
- * What it measures is the gap between what the drift turns and what the corner
- * asks for, second by second, at a constant command. Not where the car ends up
- * — a constant command holds an *arc*, so it can hold a wrong one perfectly,
- * and the angle the entry left behind would swamp the signal. The fault was
- * that the gap itself grew: a command capped in g is a constant force, and the
- * arc a constant force draws opens with the square of the speed. A gap that
- * stays put is a drift you can hold, and no entry timing fixes one that walks,
- * because it accumulates after the entry.
- * ---------------------------------------------------------------------------
- */
-function heldDrift(): string {
-  const rows: string[] = []
-
-  for (const degrees of [95, 130, 170]) {
-    const radius = (120 / (degrees * Math.PI)) * 180
-    const track = flatTrack(20_000, 1 / radius)
-    const car = createCar(track)
-
-    // Settle on the line gripping first, or the drift starts from wherever the
-    // acceleration run happened to leave the car.
-    for (let step = 0; step < 120 * 14; step++) {
-      const steer = Math.max(-1, Math.min(1, -car.n * 0.19 - car.psi * 1.35 - car.yaw * 0.11))
-      const wide = Math.abs(car.n) > 3
-      advanceCar(track, car, { steer, throttle: wide ? 0.35 : 0.9, brake: 0, handbrake: false, boost: false }, DT)
-    }
-    // Flick it, then hold one command and nothing else — a perfect thumb.
-    for (let step = 0; step < 120 * 0.3; step++) {
-      advanceCar(track, car, { steer: 1, throttle: 0.4, brake: 0.25, handbrake: true, boost: false }, DT)
-    }
-
-    const command = Math.min(1, 25 / radius)
-    const gaps: number[] = []
-    for (let second = 1; second <= 4; second++) {
-      for (let step = 0; step < 120; step++) {
-        advanceCar(track, car, { steer: command, throttle: 0.8, brake: 0, handbrake: false, boost: false }, DT)
-      }
-      gaps.push(speedOf(car) / radius - car.yaw)
-    }
-    const walk = Math.abs(gaps[gaps.length - 1] - gaps[0])
-    rows.push(
-      `  ${String(degrees).padStart(3)}° · ${radius.toFixed(0)}m   hold ${command.toFixed(2)}   ` +
-        gaps.map((g, i) => `${i + 1}s ${g >= 0 ? '+' : ''}${g.toFixed(3)}`).join('  ') +
-        `   walked ${walk.toFixed(3)}`,
-    )
-  }
-  rows.push('  (rad/s the corner asks for, less what the drift is giving)')
-  rows.push('  Held steady means the drift keeps up as the car gains speed. It used to walk by 0.16.')
-  return rows.join(NEWLINE)
-}
 
 /**
  * The Drowned Mile is as long as it is supposed to be.
@@ -1391,7 +1185,6 @@ const sections: [string, () => string][] = [
   ['The fire-spirit, on real roads', realRoad],
   ['The ghost, written and read back', ghostRoundTrip],
   ['What a step costs', cost],
-  ['A long drift, held on one side', heldDrift],
   ['The road, and the fork it no longer has', theSplit],
   ['The Drowned Mile', theDrownedMile],
   ['The Stormcrown', theStormcrown],

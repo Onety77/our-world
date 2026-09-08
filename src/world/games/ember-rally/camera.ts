@@ -50,8 +50,8 @@ import { slipOf, speedOf, type CarState } from './physics'
 import { TUNE } from './tuning'
 import { emptyRoad, roadAtRoute, type RoadAt, type Track } from './track'
 
-const FOV_STILL = 60
-const FOV_FLAT_OUT = 82
+const FOV_STILL = 56
+const FOV_FLAT_OUT = 66
 
 /**
  * The screen shape these two numbers were chosen against.
@@ -159,6 +159,9 @@ export class ChaseCamera {
   reset() {
     this.started = false
     this.shake = 0
+    this.surge = 0
+    this.roll = 0
+    this.fov = FOV_STILL
   }
 
   update(
@@ -209,8 +212,9 @@ export class ChaseCamera {
       the car shows you a car that is pointing where it is going, which is the
       one thing a drifting car is not doing.
     */
-    const wantLateral = car.n * 0.72 - slip * TUNE.cameraDriftSway
-    this.lateral += (wantLateral - this.lateral) * ease(4.6)
+    const wantLateral = car.n - slip * TUNE.cameraDriftSway
+    if (!this.started) this.lateral = wantLateral
+    this.lateral += (wantLateral - this.lateral) * ease(7)
 
     /*
       The gap breathes with what the car is doing to you.
@@ -227,14 +231,14 @@ export class ChaseCamera {
       lens through the rock behind you.
     */
     this.surge += (car.accel / 9.81 - this.surge) * ease(3.6 * TUNE.cameraLooseness)
-    const lag = Math.max(-1.5, Math.min(1.5, this.surge * 1.7))
+    const lag = Math.max(-0.5, Math.min(0.65, this.surge * 0.65))
 
     // Far enough back to see the whole car and the road under it. Closer than
     // this and the bonnet is the frame; further and the tunnel stops being
     // tight around you, which is the entire feeling down here.
     const phone = portraitAmount(camera.aspect)
     const wantBack =
-      (7.6 + fast * 2.2 + (car.boostLeft > 0 ? 1 : 0)) *
+      (6.8 + fast * 0.65 + (car.boostLeft > 0 ? 0.35 : 0)) *
         TUNE.cameraDistance *
         (1 - phone * 0.38) *
         (1 + settle * 0.5) +
@@ -242,7 +246,7 @@ export class ChaseCamera {
     // And it settles a little on the springs with the car: down as the nose
     // comes up under power, up as the car dives onto its brakes.
     const wantLift =
-      (2.55 - fast * 0.5) * TUNE.cameraHeight * (1 - phone * 0.2) * (1 + settle * 0.75) -
+      (2.65 + fast * 0.1) * TUNE.cameraHeight * (1 - phone * 0.2) * (1 + settle * 0.75) -
       lag * 0.16
     /*
       Quick enough to follow, slow enough to be behind.
@@ -260,6 +264,10 @@ export class ChaseCamera {
       are composition rather than weight, and loosening them only smears.
     */
     const grip = TUNE.cameraLooseness
+    if (!this.started) {
+      this.back = wantBack
+      this.lift = wantLift
+    }
     this.back += (wantBack - this.back) * ease(5.5 * grip)
     this.lift += (wantLift - this.lift) * ease(4.5 * grip)
 
@@ -272,10 +280,10 @@ export class ChaseCamera {
     // --- what it looks at ----------------------------------------------------
     // Ahead of the car, and biased toward the racing line, so the corner opens
     // up before you arrive at it rather than after.
-    const lookAhead = car.s + 11 + fast * 15
+    const lookAhead = car.s + 10 + fast * 12
     roadAtRoute(track, lookAhead, car.shortcut, this.road)
     const aimBasis = basisAt(this.road)
-    const aimLateral = car.n * 0.45 + this.road.line * 0.4
+    const aimLateral = car.n * 0.75 + this.road.line * 0.25
     // Aimed higher on a phone, which pushes the car down the frame and gives
     // the tall screen the receding tunnel to fill itself with.
     roadPoint(
@@ -309,7 +317,7 @@ export class ChaseCamera {
       More of it than there was, and slower to arrive. Both make it heavier: a
       lens that tips instantly is weightless however far it goes.
     */
-    const wantRoll = -this.road.bank * 0.55 - (car.cornering / 9.81) * 0.055
+    const wantRoll = -car.road.bank * 0.3 - (car.cornering / 9.81) * 0.018
     this.roll += (wantRoll - this.roll) * ease(2.8)
 
     // --- shake ---------------------------------------------------------------
@@ -361,7 +369,7 @@ export class ChaseCamera {
       fitToScreen(
         FOV_STILL +
           (FOV_FLAT_OUT - FOV_STILL) * fast +
-          (car.boostLeft > 0 ? 5 : 0) +
+           (car.boostLeft > 0 ? 3 : 0) +
           // Opened right up on a phone held *upright* to buy back some
           // horizontal view. The race asks you to turn it now, so this is for
           // the car inspector and the studio rather than for driving.

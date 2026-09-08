@@ -129,6 +129,9 @@ export function attachControls(surface: HTMLElement): RallyControls {
   let brake = 0
   let engaged = false
   let last = performance.now()
+  let suspended = false
+  let padDriving = false
+  let padBoostHeld = false
 
   // --- keyboard ------------------------------------------------------------
   const held = new Set<string>()
@@ -139,7 +142,8 @@ export function attachControls(surface: HTMLElement): RallyControls {
     // field in it today, but W and E are letters and this window listener
     // outlives any one screen.
     const focused = document.activeElement
-    if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) return
+    if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement ||
+      focused instanceof HTMLSelectElement || (focused instanceof HTMLElement && focused.isContentEditable)) return
 
     const key = event.key.toLowerCase()
     if (!KEYS.has(key)) return
@@ -154,6 +158,7 @@ export function attachControls(surface: HTMLElement): RallyControls {
     event.preventDefault()
     engaged = true
     // Edge-triggered: holding it is one measure of ember, not all of it.
+    padDriving = false
     if (BOOST_KEYS.has(key) && !held.has(key)) keyBoost = true
     held.add(key)
   }
@@ -163,11 +168,19 @@ export function attachControls(surface: HTMLElement): RallyControls {
     held.clear()
     sides.clear()
     releaseThumbs()
+    steer = throttle = brake = 0
+    keyBoost = touchBoost = false
+    padBoostHeld = false
+    suspended = true
   }
+  const onFocus = () => { suspended = false; last = performance.now() }
+  const onVisibility = () => document.hidden ? onBlur() : onFocus()
 
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   window.addEventListener('blur', onBlur)
+  window.addEventListener('focus', onFocus)
+  document.addEventListener('visibilitychange', onVisibility)
 
   // --- thumbs --------------------------------------------------------------
   /*
@@ -214,6 +227,7 @@ export function attachControls(surface: HTMLElement): RallyControls {
   surface.addEventListener('pointermove', onMove)
   surface.addEventListener('pointerup', onUp)
   surface.addEventListener('pointercancel', onUp)
+  surface.addEventListener('lostpointercapture', onUp)
 
   return {
     get engaged() {
@@ -224,6 +238,24 @@ export function attachControls(surface: HTMLElement): RallyControls {
       const now = performance.now()
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
+      if (suspended) return { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false }
+
+      // Standard controller: left stick, RT throttle, LT brake, A handbrake,
+      // B boost. Analogue steering bypasses the keyboard's virtual hand.
+      const pad = Array.from(navigator.getGamepads?.() ?? [])
+        .find((candidate) => candidate?.connected && candidate.mapping === 'standard')
+      const axis = pad?.axes[0] ?? 0
+      const padSteer = Math.abs(axis) < 0.12 ? 0 :
+        Math.sign(axis) * Math.pow(Math.min(1, (Math.abs(axis) - 0.12) / 0.88), 1.35)
+      const padGas = pad?.buttons[7]?.value ?? 0
+      const padBrake = pad?.buttons[6]?.value ?? 0
+      const padHandbrake = pad?.buttons[0]?.pressed ?? false
+      const padBoost = pad?.buttons[1]?.pressed ?? false
+      if (padSteer || padGas > 0.05 || padBrake > 0.05 || padHandbrake || padBoost) {
+        padDriving = true
+        engaged = true
+      }
+      if (!pad) padDriving = false
 
       const keyed =
         (held.has('arrowleft') || held.has('a') ? -1 : 0) +
@@ -239,7 +271,7 @@ export function attachControls(surface: HTMLElement): RallyControls {
       for (const side of sides.values()) sided += side
       const thumbed = Math.max(-1, Math.min(1, sided))
       thumb.steer = thumbed
-      const wanted = keyed !== 0 ? keyed : thumbed
+      const wanted = keyed !== 0 ? keyed : thumbed !== 0 ? thumbed : padDriving ? padSteer : 0
 
       /*
         Move toward the input at a hand's speed rather than snapping to it.
@@ -251,9 +283,10 @@ export function attachControls(surface: HTMLElement): RallyControls {
       */
       const fast = Math.min(1, speed / 44)
       let rate = DERIVED.steerRate + (DERIVED.steerRateFast - DERIVED.steerRate) * fast
+      if (padDriving && keyed === 0 && thumbed === 0) rate = 24
       // Unwinding is quicker than winding on, which is what makes catching a
       // slide possible at all with a key rather than a wheel.
-      if (Math.abs(wanted) < Math.abs(steer) || Math.sign(wanted) !== Math.sign(steer)) {
+      if (Math.abs(wanted) < Math.abs(steer) || wanted * steer < 0) {
         rate *= RETURN_BONUS
       }
       steer += (wanted - steer) * (1 - Math.exp(-rate * dt))
@@ -276,15 +309,18 @@ export function attachControls(surface: HTMLElement): RallyControls {
         already fully open on the first frame of the race launches on a wheel
         of smoke that nobody asked for.
       */
-      const gas = phone ? 1 : held.has('arrowup') || held.has('w') ? 1 : 0
+      const pedal = Math.max(thumb.brake ? 1 : 0, padDriving ? padBrake : 0,
+        held.has('arrowdown') || held.has('s') ? 1 : 0)
+      const gas = pedal > 0.05 || thumb.handbrake ? 0 :
+        held.has('arrowup') || held.has('w') ? 1 : padDriving ? padGas : phone ? 1 : 0
       throttle += (gas - throttle) * (1 - Math.exp(-(gas > throttle ? GAS_ON : GAS_OFF) * dt))
 
-      const pedal = held.has('arrowdown') || held.has('s') ? 1 : 0
       brake += (pedal - brake) * (1 - Math.exp(-(pedal > brake ? BRAKE_ON : BRAKE_OFF) * dt))
 
-      const handbrake = thumb.handbrake || held.has(' ') || held.has('spacebar')
+      const handbrake = thumb.handbrake || held.has(' ') || held.has('spacebar') || padHandbrake
 
-      const spend = keyBoost || touchBoost || thumb.boost
+      const spend = keyBoost || touchBoost || thumb.boost || (padBoost && !padBoostHeld)
+      padBoostHeld = padBoost
       keyBoost = false
       touchBoost = false
       thumb.boost = false
@@ -295,10 +331,14 @@ export function attachControls(surface: HTMLElement): RallyControls {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
       surface.removeEventListener('pointerdown', onDown)
       surface.removeEventListener('pointermove', onMove)
       surface.removeEventListener('pointerup', onUp)
       surface.removeEventListener('pointercancel', onUp)
+      surface.removeEventListener('lostpointercapture', onUp)
+      onBlur()
     },
   }
 }

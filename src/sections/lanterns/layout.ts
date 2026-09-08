@@ -107,6 +107,37 @@ export const GLASS_W = 0.88
 export const GLASS_H = GLASS_W * (2 / 3)
 
 /**
+ * The size of one lantern's glass, from the shape of the photograph in it.
+ *
+ * ---------------------------------------------------------------------------
+ * **Nothing is cropped any more, and the reason the old room cropped does not
+ * apply out here.**
+ *
+ * A wall of frames in six proportions reads as a noticeboard — the eye spends
+ * its attention on the *outlines* instead of on what is inside them — so the
+ * Glasshouse cut every photograph to three by two and the frames disappeared.
+ * That argument is about a wall. On a lane the lanterns are metres apart, hung
+ * at different angles, seen one or two at a time against trees: there is no row
+ * of outlines to be distracted by, and a tall photograph on a post is just a
+ * tall lantern. Cutting the sides off somebody's picture to make a shape nobody
+ * was going to notice is a real loss for no gain.
+ *
+ * So the width is fixed and the height follows the picture. Fixed width because
+ * that is what keeps the chain reading as a chain, and because the post, the
+ * hood and the arm are all built off it.
+ *
+ * Clamped at both ends, which is not a crop — the picture is never cut, it is
+ * only stopped from becoming a lantern taller than the post that holds it or a
+ * letterbox too thin to see. A panorama and a phone portrait both land inside
+ * this comfortably; it is there for the accident, not the ordinary case.
+ * ---------------------------------------------------------------------------
+ */
+export function paneSize(width: number, height: number): { w: number; h: number } {
+  const shape = Math.max(0.05, height) / Math.max(0.05, width)
+  return { w: GLASS_W, h: Math.min(1.55, Math.max(0.3, GLASS_W * shape)) }
+}
+
+/**
  * The centreline, as a wander rather than a curve with a name.
  *
  * Two harmonics, well apart, so the lane never repeats inside a walk anybody

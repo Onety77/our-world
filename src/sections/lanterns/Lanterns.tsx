@@ -36,16 +36,19 @@ import {
   PlaneGeometry,
   ShaderMaterial,
   Texture,
-  Vector2,
 } from 'three'
 import type { Memory } from '@/data/types'
 import { LIGHT_COLORS, type SkyPalette } from '@/systems/palette'
 import { ambientLightLevel } from '@/world/forms'
-import { GLASS_H, GLASS_W, LANTERN_Y, hangingFor, sideFor } from './layout'
-import { blurTexture, cropFor, paneTexture } from './picture'
+import { useLanternLight } from '@/systems/lanternLight'
+import { GLASS_H, GLASS_W, LANTERN_Y, hangingFor, paneSize, sideFor } from './layout'
+import { blurTexture, paneTexture } from './picture'
 
 /** Longest walk this draws lanterns for. */
 const MOST = 600
+
+/** How far above the hood the lamp on the post head sits, in metres. */
+export const LAMP_UP = 0.34
 
 /* -------------------------------------------------------------------------- */
 /* the glass                                                                   */
@@ -61,6 +64,7 @@ const GLASS_VERT = /* glsl */ `
   attribute float iYaw;
   attribute vec3 iTint;
   attribute float iAge;
+  attribute vec2 iSize;
 
   varying vec2 vUv;
   varying vec3 vTint;
@@ -75,11 +79,10 @@ const GLASS_VERT = /* glsl */ `
     float c = cos(iYaw);
     float s = sin(iYaw);
     // Standing upright, turned about the vertical to its own heading.
-    vec3 local = vec3(
-      position.x * c,
-      position.y,
-      -position.x * s
-    );
+    // The base quad is one metre square; every lantern is its own size, taken
+    // from the shape of the photograph in it — see 'paneSize'.
+    vec2 p2 = position.xy * iSize;
+    vec3 local = vec3(p2.x * c, p2.y, -p2.x * s);
     vec4 world = modelMatrix * vec4(iAt + local, 1.0);
     vec4 eye = viewMatrix * world;
     vDepth = -eye.z;
@@ -166,7 +169,7 @@ export function FarLanterns({
   palette: SkyPalette
 }) {
   const geometry = useMemo(() => {
-    const quad = new PlaneGeometry(GLASS_W, GLASS_H)
+    const quad = new PlaneGeometry(1, 1)
     const geo = new InstancedBufferGeometry()
     geo.setAttribute('position', quad.attributes.position)
     geo.setAttribute('uv', quad.attributes.uv)
@@ -177,6 +180,7 @@ export function FarLanterns({
     const yaw = new Float32Array(Math.max(1, most))
     const tint = new Float32Array(Math.max(1, most) * 3)
     const age = new Float32Array(Math.max(1, most))
+    const size = new Float32Array(Math.max(1, most) * 2)
     const colour = new Color()
 
     let count = 0
@@ -192,6 +196,10 @@ export function FarLanterns({
       tint[count * 3 + 1] = colour.g
       tint[count * 3 + 2] = colour.b
       age[count] = memories.length <= 1 ? 0 : 1 - i / (memories.length - 1)
+      // Its own shape, uncropped — see `paneSize`.
+      const shape = paneSize(memories[i].width, memories[i].height)
+      size[count * 2] = shape.w
+      size[count * 2 + 1] = shape.h
       count++
     }
 
@@ -199,6 +207,7 @@ export function FarLanterns({
     geo.setAttribute('iYaw', new InstancedBufferAttribute(yaw, 1))
     geo.setAttribute('iTint', new InstancedBufferAttribute(tint, 3))
     geo.setAttribute('iAge', new InstancedBufferAttribute(age, 1))
+    geo.setAttribute('iSize', new InstancedBufferAttribute(size, 2))
     geo.instanceCount = count
     quad.dispose()
     return geo
@@ -240,16 +249,35 @@ export function FarLanterns({
 
 const POST_VERT = /* glsl */ `
   attribute vec3 iAt;
+  attribute vec3 iScale;
   attribute float iYaw;
 
   varying float vDepth;
   varying float vUp;
+  varying vec3 vNormalish;
 
   void main() {
     vUp = position.y + 0.5;
+
+    /*
+      Into the lantern's own frame, and the axes have to match the glass.
+
+      A lantern's right is where the picture's width runs, and its normal is the
+      way the picture faces — both decided by 'hangingFor'. Every piece of the
+      ironwork is authored in those terms (the hood is wider than the pane, the
+      arm reaches out along the right), so the same rotation the glass uses is
+      the one that has to be used here. Getting the sign of the z term wrong
+      puts the arm on the far side of the post and the hood behind the picture.
+    */
     float c = cos(iYaw);
     float s = sin(iYaw);
-    vec3 local = vec3(position.x * c - position.z * s, position.y, position.x * s + position.z * c);
+    vec3 p = position * iScale;
+    vec3 local = vec3(p.x * c + p.z * s, p.y, -p.x * s + p.z * c);
+
+    // Which way this face points, roughly, so the top of the hood catches the
+    // sky and its underside stays dark.
+    vNormalish = normalize(vec3(normal.x * c + normal.z * s, normal.y, -normal.x * s + normal.z * c));
+
     vec4 world = modelMatrix * vec4(iAt + local, 1.0);
     vec4 eye = viewMatrix * world;
     vDepth = -eye.z;
@@ -265,10 +293,13 @@ const POST_FRAG = /* glsl */ `
   uniform float uFogFar;
   varying float vDepth;
   varying float vUp;
+  varying vec3 vNormalish;
 
   void main() {
     // Dark wood, a little paler where the lantern's own light falls on it.
     vec3 wood = vec3(0.022, 0.018, 0.014) * (0.55 + 0.45 * uLight);
+    // The top faces catch what is left of the sky; the undersides do not.
+    wood *= 0.72 + 0.55 * max(0.0, vNormalish.y);
     wood += vec3(0.020, 0.013, 0.006) * smoothstep(0.62, 1.0, vUp) * (1.0 - uLight) * 0.6;
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
     gl_FragColor = vec4(mix(wood, uFogColor, fog), 1.0);
@@ -286,46 +317,122 @@ const POST_FRAG = /* glsl */ `
  * the least furniture that can hold a light up, which means the light stays the
  * thing you are looking at.
  */
-export function Posts({ count, palette }: { count: number; palette: SkyPalette }) {
+export function Posts({
+  memories,
+  waiting,
+  palette,
+}: {
+  memories: Memory[]
+  /** Draw one more bare post at the head of the lane, with no lamp on it. */
+  waiting: boolean
+  palette: SkyPalette
+}) {
+  const count = memories.length + (waiting ? 1 : 0)
   const geometry = useMemo(() => {
-    const box = new BoxGeometry(0.05, LANTERN_Y + 0.82, 0.05)
-    box.translate(0, (LANTERN_Y + 0.82) / 2, 0)
+    // A centred unit box, scaled and placed per piece — see POST_VERT.
+    const box = new BoxGeometry(1, 1, 1)
     const geo = new InstancedBufferGeometry()
     geo.setAttribute('position', box.attributes.position)
+    geo.setAttribute('normal', box.attributes.normal)
     geo.setAttribute('uv', box.attributes.uv)
     if (box.index) geo.setIndex(box.index)
 
     const many = Math.min(MOST, count)
-    const at = new Float32Array(Math.max(1, many) * 3)
-    const yaw = new Float32Array(Math.max(1, many))
+    const at: number[] = []
+    const scale: number[] = []
+    const yaw: number[] = []
+
+    const piece = (
+      x: number,
+      y: number,
+      z: number,
+      sx: number,
+      sy: number,
+      sz: number,
+      turn: number,
+    ) => {
+      at.push(x, y, z)
+      scale.push(sx, sy, sz)
+      yaw.push(turn)
+    }
+
     for (let i = 0; i < many; i++) {
       const hung = hangingFor(i)
       /*
-        Beside the light, not through it.
+        Three pieces, and together they are what makes it a lantern rather than
+        a picture nailed to a stick.
 
-        The post used to stand at the lantern's own centre, which is where a
-        signpost stands — and once it was tall enough to read as a lamp standard
-        rather than a stake, it came straight up through the middle of every
-        photograph. A lantern hangs off the side of its post; that is what makes
-        it a lantern and a sign a sign.
+        It was one bare upright, which read as a signpost — a flat board on a
+        pole is a sign, and no amount of glow fixes that. What a hanging lamp
+        has is a *hood* over the light and an *arm* holding it out from whatever
+        it is fixed to, and those two shapes are most of the silhouette. The
+        hood also does real work after dark: it is the dark edge along the top
+        that stops the pane bleeding into the sky behind it.
 
-        Along the pane's own right vector, so it stays on the outside edge
-        however the lantern is turned. `sideFor` puts it on the verge side, away
-        from the path you are walking down.
+        Authored in the lantern's own frame — right along the picture's width,
+        normal the way it faces — so all of this stays true however the lane has
+        turned the lantern.
       */
-      const out = (GLASS_W / 2 + 0.055) * sideFor(i)
-      at[i * 3] = hung.x + Math.cos(hung.yaw) * out
-      // The post stands on the ground; the lantern hangs from it part-way up.
-      at[i * 3 + 1] = hung.y - LANTERN_Y
-      at[i * 3 + 2] = hung.z - Math.sin(hung.yaw) * out
-      yaw[i] = hung.yaw
+      const c = Math.cos(hung.yaw)
+      const s = Math.sin(hung.yaw)
+      // The lantern's right vector, matching the glass — see POST_VERT.
+      const rx = c
+      const rz = -s
+      const side = sideFor(i)
+      const reach = GLASS_W / 2 + 0.055
+
+      const postX = hung.x + rx * reach * side
+      const postZ = hung.z + rz * reach * side
+      // The hood sits on top of *this* picture, which is now its own height.
+      const shape = memories[i] ? paneSize(memories[i].width, memories[i].height) : { h: GLASS_H }
+      const hoodY = hung.y + shape.h / 2 + 0.05
+      const foot = hung.y - LANTERN_Y
+      const top = hoodY + LAMP_UP
+
+      // The upright, from the ground to the lamp on its head.
+      piece(postX, (foot + top) / 2, postZ, 0.05, top - foot, 0.05, hung.yaw)
+      // The arm, reaching in from the post to over the middle of the picture.
+      piece(
+        hung.x + rx * (reach / 2) * side,
+        hoodY + 0.055,
+        hung.z + rz * (reach / 2) * side,
+        reach,
+        0.04,
+        0.04,
+        hung.yaw,
+      )
+      // The hood, a touch wider than the glass and overhanging its face.
+      piece(hung.x, hoodY, hung.z, GLASS_W + 0.15, 0.065, 0.23, hung.yaw)
+
+      /*
+        And the lamp on the head of the post.
+
+        ------------------------------------------------------------------
+        **A post that carries a light should have a light on it.**
+
+        Every lantern here was a lit *picture* and nothing else, which is why
+        the lane read as lit signage: the thing giving out the light was the
+        photograph, and a photograph is not a lamp. This is the small brass
+        cap and the flame under it — the actual source — and it changes what
+        the whole object is. The picture hangs *below the lamp*, which is what
+        a lantern on a pole has always been.
+
+        Only where there is a memory. A bare post at the head of the walk has
+        no lamp on it yet, and that is the honest picture of the next one.
+        ------------------------------------------------------------------
+      */
+      piece(postX, top - 0.055, postZ, 0.115, 0.028, 0.115, hung.yaw)
+      piece(postX, top + 0.055, postZ, 0.135, 0.03, 0.135, hung.yaw)
+      piece(postX, top, postZ, 0.075, 0.09, 0.075, hung.yaw)
     }
-    geo.setAttribute('iAt', new InstancedBufferAttribute(at, 3))
-    geo.setAttribute('iYaw', new InstancedBufferAttribute(yaw, 1))
-    geo.instanceCount = many
+
+    geo.setAttribute('iAt', new InstancedBufferAttribute(new Float32Array(at), 3))
+    geo.setAttribute('iScale', new InstancedBufferAttribute(new Float32Array(scale), 3))
+    geo.setAttribute('iYaw', new InstancedBufferAttribute(new Float32Array(yaw), 1))
+    geo.instanceCount = yaw.length
     box.dispose()
     return geo
-  }, [count])
+  }, [count, memories])
 
   useEffect(() => () => geometry.dispose(), [geometry])
 
@@ -409,6 +516,7 @@ const HALO_FRAG = /* glsl */ `
  * brighter patch rather than cutting each other out.
  */
 export function Halos({ memories, palette }: { memories: Memory[]; palette: SkyPalette }) {
+  const lamps = useLanternLight((s) => s.lamps)
   const geometry = useMemo(() => {
     const quad = new PlaneGeometry(1, 1)
     const geo = new InstancedBufferGeometry()
@@ -467,11 +575,155 @@ export function Halos({ memories, palette }: { memories: Memory[]; palette: SkyP
   useEffect(() => {
     // Never quite nothing, even at noon: a lit pane in daylight still has a
     // little bloom around it, and without any the lanterns look switched off.
-    material.uniforms.uNight.value = 0.22 + 0.78 * (1 - ambientLightLevel(palette))
-  }, [material, palette])
+    material.uniforms.uNight.value = (0.22 + 0.78 * (1 - ambientLightLevel(palette))) * lamps
+  }, [material, palette, lamps])
 
   if (memories.length === 0) return null
   return <mesh geometry={geometry} material={material} frustumCulled={false} renderOrder={4} />
+}
+
+/**
+ * The flame on the head of each post.
+ *
+ * ---------------------------------------------------------------------------
+ * **The source, which the place did not have.**
+ *
+ * Every light out here came *out of a photograph*, and a photograph is not a
+ * lamp — which is most of why the lane read as lit signage rather than as a lit
+ * lane. Now the post carries a small brass lamp above the hood and the picture
+ * hangs below it, which is what a lantern on a pole has always been: the light
+ * is the light, and the memory is what it is shining through.
+ *
+ * It burns in that memory's own colour, so the source and the picture agree —
+ * and it is the one thing here that *moves*. A flame that does not breathe is a
+ * bulb, and a bulb is the wrong century for this garden.
+ * ---------------------------------------------------------------------------
+ */
+const FLAME_VERT = /* glsl */ `
+  attribute vec3 iAt;
+  attribute vec3 iTint;
+  attribute float iSize;
+  attribute float iPhase;
+
+  uniform float uTime;
+
+  varying vec2 vUv;
+  varying vec3 vTint;
+  varying float vLive;
+
+  void main() {
+    vUv = uv;
+    vTint = iTint;
+
+    /*
+      Two slow beats well apart, so no two lamps on the lane are ever in step
+      and none of them repeats on a count anybody could follow.
+    */
+    float beat = sin(uTime * 2.1 + iPhase) * 0.5 + sin(uTime * 3.37 + iPhase * 1.7) * 0.5;
+    vLive = 0.82 + beat * 0.18;
+
+    vec3 right = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
+    vec3 up = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
+    vec3 world = iAt + (right * position.x + up * position.y) * iSize * vLive;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
+  }
+`
+
+const FLAME_FRAG = /* glsl */ `
+  precision mediump float;
+  uniform float uNight;
+  varying vec2 vUv;
+  varying vec3 vTint;
+  varying float vLive;
+
+  void main() {
+    float d = length(vUv - 0.5) * 2.0;
+    // A hard little core inside a soft halo: the core is the flame and the
+    // halo is the air around it. Without the core it is a smudge.
+    float core = 1.0 - smoothstep(0.0, 0.22, d);
+    float halo = 1.0 - smoothstep(0.0, 1.0, d);
+    float a = (core * 0.95 + halo * halo * 0.45) * vLive * (0.34 + 0.66 * uNight);
+    if (a <= 0.003) discard;
+    // Hotter than the picture it lights — a flame is nearly white in the middle.
+    vec3 col = mix(vTint, vec3(1.0, 0.93, 0.82), core * 0.55);
+    gl_FragColor = vec4(col * a, a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`
+
+export function PoleLamps({ memories, palette }: { memories: Memory[]; palette: SkyPalette }) {
+  const lamps = useLanternLight((s) => s.lamps)
+  const geometry = useMemo(() => {
+    const quad = new PlaneGeometry(1, 1)
+    const geo = new InstancedBufferGeometry()
+    geo.setAttribute('position', quad.attributes.position)
+    geo.setAttribute('uv', quad.attributes.uv)
+    if (quad.index) geo.setIndex(quad.index)
+
+    const count = Math.min(MOST, memories.length)
+    const at = new Float32Array(Math.max(1, count) * 3)
+    const tint = new Float32Array(Math.max(1, count) * 3)
+    const size = new Float32Array(Math.max(1, count))
+    const phase = new Float32Array(Math.max(1, count))
+    const colour = new Color()
+    const warm = new Color(LIGHT_COLORS.warm)
+    const cool = new Color(LIGHT_COLORS.cool)
+
+    for (let i = 0; i < count; i++) {
+      const hung = hangingFor(i)
+      const shape = paneSize(memories[i].width, memories[i].height)
+      const side = sideFor(i)
+      const reach = GLASS_W / 2 + 0.055
+      // On the post head — the same place `Posts` builds the brass cap.
+      at[i * 3] = hung.x + Math.cos(hung.yaw) * reach * side
+      at[i * 3 + 1] = hung.y + shape.h / 2 + 0.05 + LAMP_UP
+      at[i * 3 + 2] = hung.z - Math.sin(hung.yaw) * reach * side
+      colour.set(memories[i].tint).lerp(memories[i].by === 'cool' ? cool : warm, 0.68)
+      tint[i * 3] = colour.r
+      tint[i * 3 + 1] = colour.g
+      tint[i * 3 + 2] = colour.b
+      size[i] = 0.62
+      phase[i] = (i * 2.399) % (Math.PI * 2)
+    }
+
+    geo.setAttribute('iAt', new InstancedBufferAttribute(at, 3))
+    geo.setAttribute('iTint', new InstancedBufferAttribute(tint, 3))
+    geo.setAttribute('iSize', new InstancedBufferAttribute(size, 1))
+    geo.setAttribute('iPhase', new InstancedBufferAttribute(phase, 1))
+    geo.instanceCount = count
+    quad.dispose()
+    return geo
+  }, [memories])
+
+  useEffect(() => () => geometry.dispose(), [geometry])
+
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: FLAME_VERT,
+        fragmentShader: FLAME_FRAG,
+        transparent: true,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+        uniforms: { uTime: { value: 0 }, uNight: { value: 0.6 } },
+      }),
+    [],
+  )
+  useEffect(() => () => material.dispose(), [material])
+  useEffect(() => {
+    material.uniforms.uNight.value = (0.2 + 0.8 * (1 - ambientLightLevel(palette))) * lamps
+  }, [material, palette, lamps])
+
+  const t = useRef(0)
+  useFrame((_, delta) => {
+    t.current += delta
+    material.uniforms.uTime.value = t.current
+  })
+
+  if (memories.length === 0) return null
+  return <mesh geometry={geometry} material={material} frustumCulled={false} renderOrder={6} />
 }
 
 /* -------------------------------------------------------------------------- */
@@ -483,8 +735,6 @@ const NEAR_FRAG = /* glsl */ `
 
   uniform sampler2D uMap;
   uniform vec3 uTint;
-  uniform vec2 uCrop;
-  uniform vec2 uCropFocus;
   uniform float uSharp;
   uniform float uForm;
   uniform float uLight;
@@ -502,14 +752,13 @@ const NEAR_FRAG = /* glsl */ `
     float frame = smoothstep(0.86, 0.92, inner) * (1.0 - smoothstep(0.985, 1.0, inner));
 
     /*
-      The photograph, filled to the frame around its authored point.
+      The whole photograph, and nothing taken off it.
 
-      The crop is a scale and an offset on the UVs rather than anything clever:
-      whichever axis is too long is shortened, and the window slides to the part
-      that was chosen when the memory was kept.
+      There is no crop here any more: the lantern is cut to the shape of the
+      picture instead of the picture being cut to the shape of the lantern — see
+      'paneSize'. So the UVs are the UVs.
     */
-    vec2 uv = (vUv - 0.5) * uCrop + uCropFocus;
-    vec3 shot = texture2D(uMap, clamp(uv, 0.001, 0.999)).rgb;
+    vec3 shot = texture2D(uMap, vUv).rgb;
 
     // Until the real photograph has arrived this is the preview from the
     // document, which is sixteen pixels stretched — so it is crossed towards
@@ -550,7 +799,7 @@ export function NearLantern({
   forming: boolean
 }) {
   const geometry = useMemo(() => {
-    const quad = new PlaneGeometry(GLASS_W, GLASS_H)
+    const quad = new PlaneGeometry(1, 1)
     const geo = new InstancedBufferGeometry()
     geo.setAttribute('position', quad.attributes.position)
     geo.setAttribute('uv', quad.attributes.uv)
@@ -579,10 +828,15 @@ export function NearLantern({
     geo.setAttribute('iYaw', new InstancedBufferAttribute(new Float32Array([hung.yaw]), 1))
     geo.setAttribute('iTint', new InstancedBufferAttribute(new Float32Array([0, 0, 0]), 3))
     geo.setAttribute('iAge', new InstancedBufferAttribute(new Float32Array([0]), 1))
+    const shape = paneSize(memory.width, memory.height)
+    geo.setAttribute(
+      'iSize',
+      new InstancedBufferAttribute(new Float32Array([shape.w, shape.h]), 2),
+    )
     geo.instanceCount = 1
     quad.dispose()
     return geo
-  }, [index])
+  }, [index, memory.width, memory.height])
   useEffect(() => () => geometry.dispose(), [geometry])
 
   const material = useMemo(
@@ -595,8 +849,6 @@ export function NearLantern({
         uniforms: {
           uMap: { value: null as Texture | null },
           uTint: { value: new Color(memory.tint) },
-          uCrop: { value: new Vector2(1, 1) },
-          uCropFocus: { value: new Vector2(0.5, 0.5) },
           uSharp: { value: 0 },
           uForm: { value: forming ? 0 : 1 },
           uLight: { value: 1 },
@@ -614,9 +866,7 @@ export function NearLantern({
   useEffect(() => {
     const u = material.uniforms
     ;(u.uTint.value as Color).set(memory.tint)
-    ;(u.uCrop.value as Vector2).set(...cropFor(memory.width, memory.height))
     // Stored top-to-bottom for DOM/CSS; texture UVs rise bottom-to-top.
-    ;(u.uCropFocus.value as Vector2).set(memory.cropX ?? 0.5, 1 - (memory.cropY ?? 0.5))
   }, [material, memory])
 
   useEffect(() => {

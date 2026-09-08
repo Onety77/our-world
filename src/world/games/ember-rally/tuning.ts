@@ -147,18 +147,18 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
 
   weight: 960,
   rotationWeight: 1,
-  topHeaviness: 0.38,
-  balance: 0.62,
+  topHeaviness: 0.34,
+  balance: 0.58,
 
-  grip: 1.78,
-  frontBite: 8.6,
-  rearBite: 11.3,
-  tyreLag: 0.45,
+  grip: 1.52,
+  frontBite: 9.2,
+  rearBite: 12.2,
+  tyreLag: 0.32,
   vergeGrip: 0.62,
 
   topSpeed: 36.4,
   power: 250,
-  engineBraking: 66,
+  engineBraking: 42,
 
   brakes: 4200,
   brakeBalance: 0.63,
@@ -167,7 +167,7 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
   steerLock: 0.55,
   steerSpeed: 1,
   steerWeight: 0.567,
-  turnInBite: 1.7,
+  turnInBite: 1.35,
 
   autoCountersteer: 0.34,
   spinProtection: 0.7,
@@ -194,8 +194,8 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
   cameraAim: 1.35,
   cameraZoom: 1,
   cameraLooseness: 1,
-  cameraDriftSway: 2.1,
-  cameraShake: 1,
+  cameraDriftSway: 1.25,
+  cameraShake: 0.7,
 
   bodyLean: 1,
   leanLimit: 0.12,
@@ -289,16 +289,16 @@ function recompute(): void {
 
   DERIVED.nominalLoad = (TUNE.weight * TUNE.gravity) / 4
 
-  DERIVED.steerRate = 15 * TUNE.steerSpeed
-  DERIVED.steerRateFast = 15 * TUNE.steerSpeed * TUNE.steerWeight
+  DERIVED.steerRate = 7.5 * TUNE.steerSpeed
+  DERIVED.steerRateFast = 7.5 * TUNE.steerSpeed * TUNE.steerWeight
 
   // A float of 1 is the original set. Below 1 everything answers slower and
   // the car reads as heavier; above 1 it snaps and reads as a go-kart.
   const f = Math.max(0.15, TUNE.bodyFloat)
-  DERIVED.bodyRoll = spring(1.35 * f, 0.55)
-  DERIVED.bodyPitch = spring(1.6 * f, 0.6)
-  DERIVED.bodyHeave = spring(1.5 * f, 0.55)
-  DERIVED.wheelSpring = spring(2.4 * f, 0.45)
+  DERIVED.bodyRoll = spring(1.65 * f, 0.76)
+  DERIVED.bodyPitch = spring(1.8 * f, 0.78)
+  DERIVED.bodyHeave = spring(1.8 * f, 0.72)
+  DERIVED.wheelSpring = spring(3.4 * f, 0.68)
 }
 
 /** The wheelbase, for anything that wants to state a radius in car lengths. */
@@ -793,10 +793,10 @@ export const DIALS: readonly Dial[] = [
   {
     key: 'driftHelper',
     group: 'helpers',
-    name: 'Drift helper',
-    note: 'How much of a drift is drawn for you rather than balanced by you. At full, holding a direction holds a clean arc. At zero the handbrake still locks the rears but nothing is helping, and it is very hard.',
+    name: 'Slide recovery',
+    note: 'Damps excess rotation after you release the handbrake. The tyres still decide the path and speed; this gives you time to catch the rear.',
     low: 'raw car',
-    high: 'draws it for you',
+    high: 'steadier recovery',
     min: 0,
     max: 1,
     step: 0.01,
@@ -808,124 +808,13 @@ export const DIALS: readonly Dial[] = [
     key: 'driftAngle',
     group: 'drift',
     name: 'Drift angle',
-    note: 'How far sideways the car hangs at full lock in a drift. Keep it under spin protection or the two will fight each other.',
+    note: 'How much slip the recovery assist allows before damping rotation. More lets you carry the rear further out; less settles it earlier.',
     low: 'a hint',
     high: 'right out',
     min: 0.1,
     max: 1,
     step: 0.01,
     show: deg,
-  },
-  {
-    key: 'driftSwap',
-    group: 'drift',
-    name: 'Drift swap speed',
-    note: 'How quickly it crosses from one side to the other. The most important number for how a drift *feels* — too slow and a chicane is impossible, too fast and the car snaps between poses like a switch.',
-    low: 'lazy',
-    high: 'snaps over',
-    min: 0.8,
-    max: 9,
-    step: 0.05,
-    show: (v) => `${(1 / v).toFixed(2)} s to cross`,
-  },
-  {
-    key: 'driftTightness',
-    group: 'drift',
-    name: 'Drift tightness',
-    note: 'The tightest arc the arrows can ask a slide for. Small darts across the road; large leans across it. It bounds the steering only — a drift always follows the corner it is in, whatever this says, or turning it up would put the car back in the rock.',
-    low: 'darts across',
-    high: 'leans across',
-    min: 8,
-    max: 70,
-    step: 0.5,
-    show: (v) => `${Math.round(v)} m circle`,
-  },
-  {
-    key: 'driftGrip',
-    group: 'drift',
-    name: 'Drift hold',
-    note: 'The most cornering force a drift is allowed to pull. A ceiling rather than a control — it should only bite when you are asking for more than the road can give.',
-    low: 'washes out',
-    high: 'holds anything',
-    min: 0.6,
-    max: 4.5,
-    step: 0.05,
-    show: (v) => `${v.toFixed(2)} g`,
-  },
-  {
-    key: 'driftScrub',
-    group: 'drift',
-    name: 'What a drift costs',
-    note: 'How much speed hanging it right out scrubs off per second. Zero makes drifting free, which quietly makes it the only way to drive.',
-    low: 'free',
-    high: 'expensive',
-    min: 0,
-    max: 0.9,
-    step: 0.01,
-    show: (v) => `${Math.round(v * 100)}% per second`,
-  },
-  {
-    key: 'driftSwingCost',
-    group: 'drift',
-    name: 'What swapping sides costs',
-    note: 'How much speed is scrubbed by *moving* the car through, on top of what hanging it out costs. At zero a chicane taken flick-flick-flick is free, which quietly makes drifting the fastest way down a straight — it was 157 km/h against 115 not drifting at all. This is the number that stops that.',
-    low: 'free',
-    high: 'brutal',
-    min: 0,
-    max: 1.2,
-    step: 0.01,
-    show: (v) => (v <= 0.001 ? 'free' : `${v.toFixed(2)}× the angle`),
-  },
-  {
-    key: 'driftLineHold',
-    group: 'drift',
-    name: 'Does a slide hold its lane',
-    note: 'How hard a sustained drift steers itself back to the line it was sliding on. At zero the drift draws its own arc and walks off the road into the rock, which is what it used to do. Turned up, the car keeps sliding down the tunnel at its angle and the arrows place it rather than rescue it.',
-    low: 'washes wide',
-    high: 'on rails',
-    min: 0,
-    max: 2.5,
-    step: 0.05,
-    show: (v) => (v <= 0.001 ? 'off — free arc' : `back in ${(1 / v).toFixed(2)} s`),
-  },
-  {
-    key: 'driftPlace',
-    group: 'drift',
-    name: 'How far the arrows move it',
-    note: 'How much of the road the arrows can shift a sustained slide across, as a fraction of the width left once the rock has been given its margin. This is what steering *does* in a long drift: it places the car on the road. Wound right up it will aim close enough to the rock that a slide can overshoot into it, which is a thing you may want and is not the default.',
-    low: 'holds the line',
-    high: 'right to the edge',
-    min: 0,
-    max: 1,
-    step: 0.01,
-    show: (v) => `${Math.round(v * 100)}% of the width`,
-  },
-  {
-    key: 'driftHold',
-    group: 'drift',
-    name: 'Does a held slide keep its speed',
-    note: 'A drift you are holding steady stops paying for its angle. Hanging the car out costs speed — that is the entry, and it should — but a slide already settled at its angle is not scrubbing any harder this second than it was last second, and it used to go on being charged as though it were. Measured, holding one direction against a dial reading 72 km/h: it fell to 57 and sat there. Only for a *held* slide: swinging the pose across for a chicane still costs everything it did, because that really is the tyres being dragged bodily across the road.',
-    low: 'bleeds all the way',
-    high: 'keeps it all',
-    min: 0,
-    max: 1,
-    step: 0.01,
-    show: (v) =>
-      v <= 0.005
-        ? 'off — angle always costs'
-        : `keeps ${Math.round(v * 100)}% of it back`,
-  },
-  {
-    key: 'driftTopSpeed',
-    group: 'drift',
-    name: 'How fast a drift goes',
-    note: 'The speed a drift settles at, and will not accelerate past — hanging it right out lands a little under this, a hint of angle a little over. Arriving faster than this is the entry: the car sheds the difference over about a second, which is the moment the drift is worth watching.',
-    low: 'a crawl',
-    high: 'flat out sideways',
-    min: 8,
-    max: 44,
-    step: 0.5,
-    show: (v) => `${Math.round(v * MS_TO_KMH)} km/h`,
   },
   {
     key: 'driftEnterSpeed',

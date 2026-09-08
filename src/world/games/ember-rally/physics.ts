@@ -252,63 +252,8 @@ const SPEED_CEILING = 44
 /** How fast it will go backwards. Slow: reverse is for getting unstuck. */
 const REVERSE_LIMIT = 7
 
-// --- the drift -------------------------------------------------------------
+// --- the ember -------------------------------------------------------------
 
-/** How much lock has to be on before the handbrake will start one. */
-const DRIFT_ENTER_STEER = 0.25
-/** Below this there is nothing to drift. */
-const DRIFT_EXIT_SPEED = 7
-/** Arrows this near centre count as going straight. */
-const DRIFT_HOLD_STEER = 0.2
-/** And this long of it lets the drift go. */
-const DRIFT_STRAIGHT_EXIT = 2
-/** The most yaw the arcade drift will ask for, radians per second. */
-const DRIFT_TURN = 1.3
-/** How fast the arcade model takes over, and hands back. */
-const DRIFT_BLEND_IN = 7
-const DRIFT_BLEND_OUT = 5
-/** How far hanging it right out pulls the ceiling below TUNE.driftTopSpeed. */
-const DRIFT_ANGLE_COST = 0.45
-/**
- * How fast the pose has to be moving to count as *being swung* rather than held.
- *
- * Radians per second. A swap is worth around three of these at its peak and a
- * held slide sits near zero, so there is a wide gap between the two and nothing
- * has to be finely judged.
- */
-const DRIFT_SETTLE_SWING = 0.35
-/** How long a still pose has to be still before the angle stops being charged. */
-const DRIFT_SETTLE_FROM = 0.45
-const DRIFT_SETTLE_TO = 1.5
-/** And how fast being swung takes that back. Quick: a swap is not a held slide. */
-const DRIFT_UNSETTLE = 4
-/** How hard the ceiling pulls, per second. Fast enough to be the entry cost. */
-const DRIFT_CEILING_RATE = 1.3
-/*
-  And how hard it gathers back *up* to it.
-
-  Higher than it looks like it needs to be, because it is not acting alone: the
-  scrub is still taking its cut every frame, and the two of them settle at
-  `ceiling × b / (a + b)` where `a` is the scrub's bite and `b` is this. At
-  0.85 that landed at 53 km/h against a dial reading 72 — better than the crawl
-  it replaced, and still not what the dial says. This is high enough that the
-  scrub is the small term and the dial is the answer.
-*/
-const DRIFT_SETTLE_RATE = 4.2
-/** The most the slide will aim across the road to get back to its line, radians. */
-const DRIFT_AIM = 0.42
-/** How briskly the course is steered onto the aim, per second. */
-const DRIFT_COURSE = 2.6
-/**
- * Metres of rock a slide keeps in hand, beyond half the car's width.
- *
- * Not a safety limit on where the car may *be* — it is a limit on where the
- * car may be *aimed*. A slide overshoots its aim and comes back, so an aim
- * with no margin is a wall with a car arriving at it.
- */
-const DRIFT_ROCK_MARGIN = 1.25
-
-/** Kept so nothing that imported it breaks; any amount is spendable now. */
 export const BOOST_COST = 1
 /**
  * The least that is worth spending.
@@ -412,9 +357,9 @@ export interface CarState {
   driftCharge: number
 
   // --- the drift -----------------------------------------------------------
-  /** In the arcade drift, where the arrows steer the path. See `integrate`. */
+  /** Measured rear slip; never changes the movement model. */
   drifting: boolean
-  /** 0..1, how far that model has taken over. Eased, so entry is not a snap. */
+  /** Smoothed slide intensity for effects. Does not blend movement models. */
   driftBlend: number
   /** The angle it is hanging at, radians. Negative is hung out to the right. */
   driftAngle: number
@@ -691,79 +636,18 @@ function maxSteer(v: number, catching = 0): number {
   return Math.min(TUNE.steerLock, gripping + Math.abs(catching))
 }
 
-/**
- * In, or out, and how far through.
- *
- * The whole state machine, in one place, because "am I drifting" is asked by
- * the physics, the sound, the smoke and the camera and they must never
- * disagree about it.
- *
- * Getting in is a press of the handbrake with some lock on — the same gesture
- * that would start a real one. Getting out is deliberately *not* the same as
- * getting in: releasing the handbrake does nothing, because a drift you have
- * to hold a button through is a drift you cannot steer with both hands.
- */
-function driftMode(car: CarState, input: CarInput, dt: number, v: number) {
-  const lock = Math.abs(input.steer)
-
-  if (!car.drifting) {
-    if (input.handbrake && lock > DRIFT_ENTER_STEER && v > TUNE.driftEnterSpeed) {
-      car.drifting = true
-      car.driftStraight = 0
-      /*
-        And a drift stops a boost.
-
-        The two are opposite ideas — one is a shove in the direction the car is
-        pointing, the other is deliberately not pointing that way — and a car
-        doing both at once is a car doing neither well. Only `boostLeft` is
-        cleared: `ember` keeps whatever the burn had left it at, so going into
-        a corner half way through a boost banks the rest instead of throwing it
-        away. That is what makes spending it a decision.
-      */
-      car.boostLeft = 0
-    }
-  } else if (input.boost) {
-    /*
-      The ember breaks it, and that is the good way out.
-
-      Cancelled on the *press*, whether or not there was any ember to spend —
-      the button means "straighten up and go", and a car that ignored it
-      because a meter was empty would be a car that had stopped listening.
-      Spending is handled further down and is a separate question.
-    */
-    car.drifting = false
-  } else if (v < DRIFT_EXIT_SPEED) {
-    car.drifting = false
-  } else if (lock < DRIFT_HOLD_STEER) {
-    car.driftStraight += dt
-    if (car.driftStraight > DRIFT_STRAIGHT_EXIT) car.drifting = false
-  } else {
-    car.driftStraight = 0
-  }
-
-  const rate = car.drifting ? DRIFT_BLEND_IN : DRIFT_BLEND_OUT
-  /*
-    `TUNE.driftHelper` scales the *target*, not any one consumer.
-
-    Everything that asks how much of a drift is being drawn for you reads
-    `driftBlend` — the arc, the pose, the scrub, and the two anti-spin
-    backstops that stand down while one is happening. Turning the dial down
-    therefore hands all of it back at once: at zero the handbrake still locks
-    the rear wheels and the car still comes round, because that is the tyre
-    model rather than the helper, but nothing is holding the arc for you and
-    the spin protection never steps aside.
-  */
-  const held = (car.drifting ? 1 : 0) * TUNE.driftHelper
-  car.driftBlend += (held - car.driftBlend) * (1 - Math.exp(-rate * dt))
-  if (!car.drifting && car.driftBlend < 0.01) {
-    car.driftBlend = 0
-    car.driftAngle = 0
-    // The next drift starts paying for its own entry. Nothing is inherited.
-    car.driftSettled = 0
-  }
+// A slide is a measured state, never a second movement model.
+function updateSlide(car: CarState, dt: number, v: number) {
+  const angle = slipOf(car)
+  const sliding = v > Math.max(7, TUNE.driftEnterSpeed) && Math.abs(angle) > (car.drifting ? 0.10 : 0.16)
+  car.drifting = sliding
+  car.driftAngle = angle
+  car.driftBlend += ((sliding ? 1 : 0) - car.driftBlend) * (1 - Math.exp(-8 * dt))
+  car.driftStraight = sliding ? 0 : car.driftStraight + dt
+  car.driftSettled = sliding ? car.driftSettled + dt : 0
 }
 
-/** Where each wheel sits, relative to the centre of mass: along, then right. */
+/** Wheel positions in the body frame: forward, right. */
 const WHEEL_AT: [number, number][] = [
   [FRONT, -TRACK_HALF],
   [FRONT, TRACK_HALF],
@@ -831,90 +715,20 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   // --- steering ------------------------------------------------------------
   // The wheels take a moment to get there. Without this the car changes
   // direction the instant a key goes down and feels weightless.
-  /*
-    The steering is the driver's, and nothing else touches it.
 
-    There used to be a stability assist here that steered *for* you whenever
-    your input was near centre — reading the car's heading, its lateral
-    velocity and its yaw rate, and adding up to half a lock of correction. It
-    existed because the car was unstable, and it made the car feel dead: every
-    small input you made was being blended with one the game was making, so
-    the front wheels never quite did what you asked. "The front tyres don't do
-    proper corners" is what that feels like from the outside.
-
-    It is gone. The car is stable now because the *tyres* make it stable — see
-    TUNE.frontBite — and because you can lift off. An assist that exists to hide
-    an unstable car is a sign the car needs fixing, not hiding.
-  */
   const steerCommand = Math.max(-1, Math.min(1, input.steer))
-  /*
-    How sideways the car is, and therefore how much rope the steering gets.
-
-    Turning right gives a positive steer and a *negative* slip angle — the car
-    rotates further than its velocity does — so catching a slide is the case
-    where the two share a sign: the wheel is being turned toward where the car
-    is actually travelling. Ordinary turn-in has them opposite and gets nothing
-    extra, which matters, because handing out lock there would only help the
-    car rotate further into the corner it is already rotating into.
-  */
-  const sliding = slipOf(car)
-  const catching =
-    steerCommand !== 0 && Math.sign(steerCommand) === Math.sign(sliding)
-      ? Math.abs(sliding)
-      : 0
-  const wanted = steerCommand * maxSteer(v, catching)
-  // The rack itself. Quick, because the hand in `controls.ts` is already the
-  // slow part and two lags in series is a car that answers questions late.
-  car.steerAngle += (wanted - car.steerAngle) * (1 - Math.exp(-11.5 * dt))
-
-  /*
-    The hand on the wheel.
-
-    Past `TUNE.spinProtection` a fraction of the correction goes in whether you asked for
-    it or not. See `TUNE.autoCountersteer` — this is a deliberate and stated dishonesty, and
-    the alternative is a game that cannot be played with two arrow keys.
-  */
   const beta = slipOf(car)
-  car.caught = false
-  // Never during a deliberate drift: the hand and the drift would be pulling
-  // in opposite directions, and the player would feel only the argument.
-  if (car.driftBlend < 0.02 && Math.abs(beta) > TUNE.spinProtection * 0.72) {
-    const over = (Math.abs(beta) - TUNE.spinProtection * 0.72) / (TUNE.spinProtection * 0.28)
-    /*
-      ========================================================================
-      The hand stands down in proportion to the hand already on the wheel.
-
-      **This is what made a lift impossible to catch.** Come off the throttle
-      into a corner, the back steps out past forty degrees of slip, and this
-      applies a correction — which is right, and is the only reason the car can
-      be driven with two arrow keys. What it did not do is notice that the
-      driver was *already* correcting. Both hands then pulled the same way, the
-      car whipped through straight and went out the other side: measured, it
-      crossed 6.7 metres of an eleven metre road, which is one wall and then
-      the other. Word for word the complaint — it locks in, will not listen,
-      and hits the far side.
-
-      So the assist asks how much of its own correction is already being
-      supplied. Hold full opposite lock and it adds nothing, because you have
-      it. Do nothing and it does exactly what it always did. In between it
-      makes up the difference, which is the honest version of what it was
-      always claiming to be.
-
-      Deliberately only counts steering that *opposes* the slide. Steering
-      further into it is a decision — usually the beginning of a drift — and
-      this has no business reading that as help and standing down.
-      ========================================================================
-    */
-    const opposing = Math.max(0, Math.min(1, steerCommand * -Math.sign(beta)))
-    const correction =
-      -Math.sign(beta) *
-      Math.min(1, over) *
-      maxSteer(v, Math.abs(beta)) *
-      TUNE.autoCountersteer *
-      (1 - opposing)
-    car.steerAngle += correction * (1 - Math.exp(-9 * dt))
-    car.caught = over > 0.5
-  }
+  const catching = Math.sign(steerCommand) === Math.sign(beta) ? Math.abs(beta) : 0
+  // Align the front tyres with their velocity as the rear steps out. Positive
+  // body slip requires positive lock; the previous assist had this sign reversed.
+  // The driver retains a steering command on top, including opposite lock.
+  const recovery = Math.max(0, Math.min(1, (Math.abs(beta) - 0.07) / 0.24))
+  const assist = input.handbrake ? 0.12 * TUNE.autoCountersteer : Math.min(0.9, TUNE.autoCountersteer * 2)
+  const counter = beta * recovery * assist * Math.min(1, v / 8)
+  const wanted = Math.max(-TUNE.steerLock, Math.min(TUNE.steerLock,
+    steerCommand * maxSteer(v, catching) + counter))
+  car.steerAngle += (wanted - car.steerAngle) * (1 - Math.exp(-18 * dt))
+  car.caught = recovery > 0.5 && !input.handbrake
   const delta = car.steerAngle
 
   // --- load ----------------------------------------------------------------
@@ -1125,8 +939,6 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     rearShare / 2,
   ]
 
-  const cosD = Math.cos(delta)
-  const sinD = Math.sin(delta)
   /*
     The relaxation, with a floor under it.
 
@@ -1147,7 +959,12 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     const wheel = car.wheels[i]
     const [along, across] = WHEEL_AT[i]
     const front = i < 2
-    wheel.steer = front ? delta : 0
+    // Ackermann: the inside front follows a smaller circle than the outside.
+    const radius = WHEELBASE / Math.max(0.001, Math.abs(Math.tan(delta)))
+    wheel.steer = front ? Math.sign(delta) * Math.atan(WHEELBASE /
+      Math.max(0.5, radius - Math.sign(delta) * across)) : 0
+    const cosD = Math.cos(wheel.steer)
+    const sinD = Math.sin(wheel.steer)
     wheel.load = loads[i]
 
     // Velocity of this corner of the car, in the body frame.
@@ -1186,70 +1003,30 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     )
     // Front and rear tyres are deliberately not the same. See TUNE.frontBite.
     const stiffness = front ? TUNE.frontBite : TUNE.rearBite
-    let fx = budget * Math.tanh(STIFF_LONG * wheel.slipRatio)
-    /*
-      During a drift the tyres are not asked to corner, so they are not charged
-      for it either.
-
-      The arcade block below is what moves the car once you are drifting — the
-      pose and the path are both commanded. But the tyres still *see* the huge
-      slip angle that pose implies, and the friction circle then spends their
-      entire budget on a lateral force that is being overridden anyway. The
-      visible result was a car that could not put any power down mid-drift: it
-      would enter at thirty metres a second and come out at twelve, engine
-      screaming, because the rears had nothing left for drive.
-
-      `wheel.slipAngle` itself is left truthful — the tyre marks and the smoke
-      read it, and they should still know the tyre is sliding. Only the force
-      is relieved.
-    */
-    const cornering = wheel.slipAngle * (1 - car.driftBlend * 0.92)
-    let fy = budget * Math.tanh(stiffness * cornering)
-
-    /*
-      The friction circle.
-
-      One budget of grip, and cornering spends it. A rear tyre already at its
-      lateral limit has nothing left to put power down with, so drive falls
-      away exactly when you are asking the most of the corner — brake early,
-      keep the tyres under the limit, and you get the drive back on the exit,
-      which is what racing *is*. It is also what makes a locked wheel stop
-      steering, and therefore what makes the handbrake work.
-    */
-    const total = Math.hypot(fx, fy)
-    wheel.used = Math.min(1, total / budget)
-    if (total > budget) {
-      const scale = budget / total
-      fx *= scale
-      fy *= scale
-    }
+    // Combined slip: braking, drive and cornering deform the same contact
+    // patch. A locked tyre spends its grip sliding along the tread, leaving
+    // little lateral force. The smooth curve avoids a grip/no-grip switch.
+    const qx = STIFF_LONG * wheel.slipRatio
+    const qy = stiffness * wheel.slipAngle
+    const demand = Math.max(1e-6, Math.hypot(qx, qy))
+    const saturation = Math.tanh(demand)
+    const fx = budget * saturation * qx / demand
+    const fy = budget * saturation * qy / demand
+    wheel.used = saturation
 
     // --- the wheel itself --------------------------------------------------
     let drive = 0
     if (!front) {
       drive = axleTorque / 2 + (i === 2 ? diffLock : -diffLock)
     }
-    let stopping = brakeTorque[i] * brakeDemand
-    /*
-      The handbrake starts a drift and then gets out of the way.
-
-      Held down through a long corner it used to stop the car dead: 108 km/h to
-      a standstill in five seconds with the throttle pinned. Two things
-      compounded. The rears are locked, so no drive reaches the road at all —
-      and the drift has just relieved those same tyres of cornering, which
-      hands their entire friction budget to braking. A locked-rear car with
-      nothing else to spend grip on is the most effective brake in this file.
-
-      `driftMode` already promises that releasing the handbrake does not end a
-      drift, because a drift you have to hold a button through is a drift you
-      cannot steer with both hands. This is the other half of that promise:
-      holding it must not end one either.
-
-      Faded on `driftBlend` rather than switched, so the lock is still all
-      there for the instant that breaks the back loose, and so a lower
-      `driftHelper` keeps proportionally more of the real car's behaviour.
-    */
-    if (!front && input.handbrake) stopping += (TUNE.handbrake / 2) * (1 - car.driftBlend)
+    // ABS retains a little rolling speed, so braking still leaves steering
+    // authority. The handbrake bypasses ABS and disconnects the rear drive.
+    const abs = Math.max(0.12, Math.min(1, 1 + (wheel.slipRatio + 0.10) * 5))
+    let stopping = Math.min(brakeTorque[i] * brakeDemand,
+      budget * WHEEL_RADIUS * 0.96) * (v > 2 ? abs : 1)
+    if (!front && input.handbrake) drive = 0
+    // The handbrake keeps acting until the driver releases it.
+    if (!front && input.handbrake) stopping += TUNE.handbrake / 2
 
     const inertia = front
       ? WHEEL_INERTIA
@@ -1266,9 +1043,10 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
       being shaken apart. One Newton step against the tyre's own slope costs a
       divide and makes it unconditionally stable.
     */
-    const slope =
-      ((budget * STIFF_LONG) / Math.cosh(STIFF_LONG * wheel.slipRatio) ** 2 / rolling) *
-      WHEEL_RADIUS
+    const derivative = budget * STIFF_LONG *
+      (saturation * qy * qy / (demand ** 3) +
+        (1 - saturation * saturation) * qx * qx / (demand * demand))
+    const slope = derivative / rolling * WHEEL_RADIUS
     const net = drive - fx * WHEEL_RADIUS - Math.sign(wheel.omega) * stopping
     let omega = wheel.omega + (dt * net) / (inertia + dt * slope * WHEEL_RADIUS)
 
@@ -1276,10 +1054,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     if (stopping > 0 && Math.sign(omega) !== Math.sign(wheel.omega) && wheel.omega !== 0) {
       omega = 0
     }
-    // The same fade, and this is the half that decides whether the car can
-    // drive: a wheel pinned at zero passes no engine torque to the road, however
-    // much of it is being asked for.
-    if (input.handbrake && !front) omega *= Math.exp(-14 * (1 - car.driftBlend) * dt)
+    if (input.handbrake && !front) omega *= Math.exp(-14 * dt)
     wheel.omega = omega
     wheel.spin += omega * dt
 
@@ -1295,22 +1070,6 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     totalX += bodyX
     totalY += bodyY
     moment += along * bodyY - across * bodyX
-  }
-
-  /*
-    Opposite lock, for the look of it.
-
-    A drifting car's front wheels point roughly along the path, which from
-    behind is dramatic opposite lock — and it is the single clearest signal
-    that the car is sideways *on purpose* rather than by accident. Written on
-    top of the steering angle after the forces are done, so it changes nothing
-    about how the car behaves: the tyre model has already had its `delta`, and
-    `wheel.steer` from here on is only ever read by the renderer.
-  */
-  if (car.driftBlend > 0.01) {
-    const show = car.driftAngle * 0.9 * car.driftBlend + delta * (1 - car.driftBlend)
-    car.wheels[0].steer = show
-    car.wheels[1].steer = show
   }
 
   // --- everything else acting on the body ----------------------------------
@@ -1348,354 +1107,15 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   car.yaw *= Math.exp(-(0.9 + v * 0.03) * dt)
   car.yaw = Math.max(-MAX_YAW_RATE, Math.min(MAX_YAW_RATE, car.yaw))
 
-  /*
-    ==========================================================================
-    THE DRIFT
-    ==========================================================================
-
-    **This is a different control model, and it takes over.** Everything above
-    is a car; for as long as you are drifting, this is a *game*. That is a
-    deliberate choice and it is stated here rather than hidden, because it is
-    the one place in the racer where the simulation is switched off.
-
-    Why it has to be. Left to the tyres, pulling the handbrake in a corner does
-    what it does in life: the rear lets go, the car rotates, and it keeps
-    rotating in the direction it was sent until it hits something. Steering has
-    almost no authority once the back is gone, so the drift is not a thing you
-    *do*, it is a thing that happens to you — you press the button and then
-    watch. That is correct physics and it is no fun at all, and this is a
-    present for somebody who likes racing games.
-
-    So: while drifting, the arrows steer the **path**, not the wheels.
-
-      the key you hold      bends the line the car is travelling along
-      the same key          decides which way it hangs, and how far
-      the other key         swings it through and hangs it the other way
-
-    Which means one drift can carry you through a left and then a right without
-    ever hooking up — flick, flick — and staying in it is a thing you are doing
-    with your hands rather than a state you are waiting out.
-
-    Three ways out, and no others:
-
-      the ember     cancels it instantly and leaves you going fast. This is the
-                    one you want, and it is why the boost button is worth
-                    holding on to through a corner
-      going straight   two seconds with the arrows near centre and it lets go
-      running out of speed   below walking pace there is nothing to drift
-
-    It is built on `course = psi + beta` — where the car is *going* is where it
-    is pointing plus how far it is hung out. Commanding those two separately is
-    the whole trick: `turn` bends the course, `driftAngle` sets the pose, and
-    the car's own rotation is whatever is needed to keep both true.
-  */
-  driftMode(car, input, dt, v)
-  if (car.driftBlend > 0.001) {
-    const command = Math.max(-1, Math.min(1, input.steer))
-    const speed = Math.max(1, Math.hypot(car.vs, car.vn))
-
-    /*
-      The angle it hangs at, following the same key that is steering it.
-
-      This is what makes swapping sides work: hold the other arrow and the
-      target crosses through zero to the far side, so the car swings through
-      straight and hangs out the other way without ever leaving the drift.
-
-      **Worked out before anything else in this block now**, because how fast
-      the pose is being moved turns out to be half of what a drift costs, and
-      the cost has to be known before the speed it applies to is spent on the
-      arc.
-    */
-    const want = -command * TUNE.driftAngle * car.driftBlend
-    const was = car.driftAngle
-    car.driftAngle += (want - car.driftAngle) * (1 - Math.exp(-TUNE.driftSwap * dt))
-    const swing = (car.driftAngle - was) / Math.max(dt, 1e-5)
-
-    /*
-      ------------------------------------------------------------------------
-      **What it costs** — the part that decides whether a drift is a way of
-      getting round a corner or a way of cheating the entire course.
-
-      Two terms, and the second is the one that was missing:
-
-        the angle    hanging it out scrubs speed. Squared, so a hint of
-                     opposite lock costs almost nothing and full lock bleeds
-                     properly
-        the swing    *moving* the pose scrubs far more than sitting at it.
-                     This is the tyres being dragged bodily across the road
-                     rather than merely pointing away from it
-
-      Without the swing term the cost was a function of the pose alone — and
-      the pose passes through zero on every side-swap, so a chicane taken
-      flick-flick-flick paid nothing at all. It was not close: 157 km/h down a
-      straight swapping sides against 115 not drifting at all, throttle pinned
-      for both. The drift was strictly quicker than the racing line everywhere,
-      which quietly makes every other number in this file decoration.
-
-      Then a ceiling, stated in km/h on a dial rather than left to emerge from
-      whatever the throttle, the gear and the angle happen to multiply out to.
-      A car that is sideways has two tyres pointing across its own path and no
-      longer accelerates; no combination of dials should be able to say
-      otherwise. Pulled towards rather than clamped, at a rate quick enough
-      that arriving sideways at 140 *is* the entry — a second or so of
-      deceleration you can hear and feel, which is what going sideways is
-      supposed to cost.
-      ------------------------------------------------------------------------
-    */
-    const sideways = Math.abs(Math.sin(car.driftAngle))
-    const slide = sideways * sideways + Math.abs(swing) * TUNE.driftSwingCost
-    let kept = speed * (1 - TUNE.driftScrub * slide * dt * car.driftBlend)
-
-    /*
-      ------------------------------------------------------------------------
-      **And whether the pose is being held or being moved**, which turns out to
-      be the difference between a drift that works and one that dies.
-
-      The angle cost above is right about the *entry*: hanging the car out
-      scrubs speed, and it should. It was wrong about everything after it. Held
-      at full lock the ceiling sat at its lowest for as long as you stayed
-      there, so a long corner taken on one arrow bled away to a crawl — measured
-      at 57 km/h against a dial reading 72, on every seed, with the scrub dial
-      wound to zero. The dial was not lying about the ceiling; the ceiling was
-      simply never the thing that held you.
-
-      A slide already settled at its angle is not scrubbing harder this second
-      than it was last second. It is sliding, which is the whole point of it —
-      the tyres found their equilibrium a second ago and the car is travelling
-      across the road at a steady attitude. What genuinely costs is *moving* the
-      pose, and that is the swing term, and it is untouched: throw it across for
-      a chicane and you pay for every radian, exactly as before.
-
-      So the angle's bite fades once the pose stops moving, and comes straight
-      back the moment it is thrown. `TUNE.driftHold` is how much of it fades —
-      at zero this whole block does nothing and the car behaves as it did.
-      ------------------------------------------------------------------------
-    */
-    if (Math.abs(swing) > DRIFT_SETTLE_SWING) {
-      car.driftSettled = Math.max(0, car.driftSettled - dt * DRIFT_UNSETTLE)
-    } else {
-      car.driftSettled += dt
-    }
-    const settledAt = Math.max(
-      0,
-      Math.min(1, (car.driftSettled - DRIFT_SETTLE_FROM) / (DRIFT_SETTLE_TO - DRIFT_SETTLE_FROM)),
-    )
-    const settled = settledAt * settledAt * (3 - 2 * settledAt)
-    const bite = DRIFT_ANGLE_COST * (1 - TUNE.driftHold * settled)
-    const ceiling = TUNE.driftTopSpeed * (1 - bite * sideways)
-    if (kept > ceiling) {
-      /*
-        The further past it goes the harder it is pulled back, for the same
-        reason the spin backstop further down does it: a constant rate is a
-        spring the engine can simply out-pull, and then the dial says 83 km/h
-        while the car sits at 100 and the number is a lie. Progressive, and
-        the dial is a speed the drift actually reaches.
-      */
-      const over = (kept - ceiling) / Math.max(1, ceiling)
-      const rate = DRIFT_CEILING_RATE * (1 + Math.min(3, over) * 9)
-      kept += (ceiling - kept) * (1 - Math.exp(-rate * dt)) * car.driftBlend
-    } else if (car.throttle > 0.12) {
-      /*
-        ------------------------------------------------------------------------
-        And **up** to it, which the dial has always claimed and the car never did.
-
-        The dial is called "the speed a drift settles at". Only half of that was
-        built: the ceiling caught you coming down and nothing held you there, so
-        `driftScrub` went on eating a held slide all the way to the floor.
-        Measured, holding one direction for eight seconds against a dial reading
-        72 km/h:
-
-          63 · 57 · 54 · 50 · 47 · 50 · 53 · 56
-
-        — decaying to a crawl, and then that rise at the end, which is the
-        engine finally out-pulling the scrub once the car is slow enough. It
-        arrives from nowhere, it is not asked for, and it is worse than simply
-        stopping would have been, because a car that stops is at least telling
-        the truth about what a drift costs.
-
-        A powered slide is not a car coasting sideways. The rear tyres are
-        spinning and driving it, and what settles is the balance between that
-        drive and the scrub — so the honest model is an equilibrium, and the
-        dial is where it sits. Gentler than the fall on purpose: dropping to the
-        ceiling is the *entry*, and should be felt in about a second, while
-        gathering back up to it is the slide finding its feet and wants two.
-
-        Only while the throttle is asking. Lift mid-drift and the scrub has it
-        all its own way again, which is how you slow a drift down on purpose —
-        and without that check this would be a car that speeds up when you let
-        go of the accelerator.
-        ------------------------------------------------------------------------
-      */
-      kept += (ceiling - kept) * (1 - Math.exp(-DRIFT_SETTLE_RATE * dt)) * car.driftBlend
-    }
-    kept = Math.max(1, kept)
-
-    /*
-      ========================================================================
-      **Where the slide goes**, which is a different question from how fast it
-      is going and is the one that was wrong.
-
-      This block used to command a curvature and nothing else: the arrows named
-      an arc, the arc was drawn, and where that arc went relative to the *road*
-      was nobody's problem. Hold one direction through a long corner and the
-      car drew a circle of its own — 25 m by default — which is not the corner
-      you are in. So it walked across the tunnel, pinned itself on the rock and
-      the wall scrub took it to nothing. Measured, holding one direction in a
-      long left:
-
-        n           -5.1 → +6.4 m in two seconds, and stuck there
-        on the rock  77% of the time
-        km/h          108 → 72 → 2, then crawling back to 27
-
-      and that crawl back off the wall is the "boost" it felt like. The
-      speedometer was not lying, either — the car really was doing sixty. None
-      of the sixty was going down the tunnel, because `s` only advances by
-      `speed × cos(course relative to the road)`, and the course had wandered
-      most of the way to sideways-on.
-
-      **What a sustained slide actually does** is keep going where it is
-      already going. The wheels are locked, nothing is driving, and the only
-      reason the car is still moving is that it is sliding — so it holds its
-      line, at its angle, until something changes. That is what is built here,
-      in three terms:
-
-        the road    the course rotates at the rate the road itself turns, so
-                    a held drift follows the corner instead of leaving it.
-                    This is the whole fix
-        the line    a gentle pull back to where it was sliding, so the slide
-                    keeps its lane rather than washing wide
-        the arrows  which now *place* the car across the road rather than
-                    naming a radius — hold a direction and the slide moves
-                    that way across the lane, let go and it holds
-
-      The arc is still capped by what the tyres could pull, which is what stops
-      the line-holding becoming a rail.
-      ========================================================================
-    */
-    // Where the course is pointing relative to the road: heading plus how far
-    // the car is hung out. `car.psi` is already road-relative — see the note
-    // on the road frame further down.
-    const courseRel = car.psi + car.driftAngle
-    const downRoad = kept * Math.cos(courseRel)
-
-    /*
-      What the road is doing under it.
-
-      `psi` integrates `yaw − curv × sDot × metric`, so this is exactly the
-      world rotation rate that leaves the car's angle to the road unchanged.
-      Without this one term a held drift is a circle and the road is not.
-    */
-    const roadRate = road.curv * downRoad
-
-    /*
-      Where across the road to aim.
-
-      Neutral is the racing line rather than the geometric middle, because the
-      middle of a cave is not where a quick car goes and a drift that returns
-      to dead centre reads as an autopilot. The arrows move the aim across the
-      road from there.
-
-      ------------------------------------------------------------------------
-      **The margin is the whole of this, and the first version did not have
-      enough of it.** It left half a metre between the aim at full lock and the
-      rock, which sounds like clearance and is not: a car that is *sliding*
-      does not sit on its aim, it swings past it and comes back. So holding a
-      direction through a long corner walked the car steadily onto the inside
-      wall — measured at 25% of the way to the rock, then 36, then 41, then 54
-      and still climbing, which is exactly what it feels like from the seat:
-      the corner slowly eating the car.
-
-      Two changes, and both are about leaving room:
-
-        the margin   a metre and a bit of rock kept in hand rather than half a
-                     metre, because that gap has to absorb the overshoot of a
-                     car travelling sideways
-        the reach    the arrows move it across less of what is left. Full lock
-                     is a decisive change of line, not a request to park
-                     against the wall
-
-      What is deliberately *not* done here is clamping `car.n`. The wall is
-      allowed to be hit — running wide and clouting the rock is a mistake the
-      road is entitled to punish. This only stops the car steering itself into
-      one while you are holding a perfectly reasonable input.
-      ------------------------------------------------------------------------
-    */
-    const usable = Math.max(1, wallAt(road) - CAR_HALF_WIDTH - DRIFT_ROCK_MARGIN)
-    const aim = Math.max(
-      -usable,
-      Math.min(usable, road.line + command * TUNE.driftPlace * usable),
-    )
-
-    /*
-      And the course that closes on it.
-
-      `dn/dt ≈ speed × courseRel`, so an error of `e` metres closes on a time
-      constant of `1 / driftLineHold` if the course is held at `−e × hold /
-      speed`. Divided by speed rather than fixed, so the correction is an
-      *angle* at any speed instead of a much bigger one when slow. Capped, so a
-      car that has been thrown a long way sideways does not aim itself at the
-      opposite wall trying to get back.
-    */
-    const off = car.n - aim
-    const wantCourse = Math.max(
-      -DRIFT_AIM,
-      Math.min(DRIFT_AIM, (-off * TUNE.driftLineHold) / Math.max(8, kept)),
-    )
-
-    /*
-      The three, added, then held to what the tyres could have pulled.
-
-      The g cap is the same one as before and it still matters: without it the
-      line-holding would be able to ask for a corner no car could take, and a
-      drift that cannot be made to run wide is a slot car.
-    */
-    /*
-      How hard the arrows are allowed to pull it across — and *only* the
-      arrows.
-
-      `TUNE.driftTightness` names the tightest arc a steering input may ask
-      for, as a radius, which is what it has always meant. What is new is that
-      it is applied to the correction alone and never to `roadRate`: following
-      the corner you are in is not steering, it is the floor, and capping it
-      would put the car back in the rock the moment somebody wound this dial
-      towards "long sweep". A tight setting makes the drift dart across the
-      road; a loose one makes it lean across. Neither can stop it following
-      the road.
-    */
-    const steerRate = (wantCourse - courseRel) * DRIFT_COURSE * car.driftBlend
-    const tightest = kept / TUNE.driftTightness
-    const asked = roadRate + Math.sign(steerRate) * Math.min(Math.abs(steerRate), tightest)
-
-    /*
-      And the whole thing held to what the tyres could have pulled.
-
-      Without it the line-holding could ask for a corner no car can take, and a
-      drift that cannot be made to run wide is a slot car.
-    */
-    const most = (TUNE.driftGrip * TUNE.gravity) / Math.max(1, kept)
-    const turn = Math.max(
-      -DRIFT_TURN,
-      Math.min(DRIFT_TURN, Math.sign(asked) * Math.min(Math.abs(asked), most)),
-    )
-
-    // Rebuild the velocity from the pose, and rotate the car by however much
-    // is needed for the *path* to turn at `turn` while the pose is changing.
-    const poseVs = kept * Math.cos(car.driftAngle)
-    const poseVn = kept * Math.sin(car.driftAngle)
-    car.vs += (poseVs - car.vs) * car.driftBlend
-    car.vn += (poseVn - car.vn) * car.driftBlend
-    car.yaw += (turn - swing - car.yaw) * car.driftBlend
-
-    /*
-      What the body leans on.
-
-      Taken from the commanded corner rather than from the tyre forces, which
-      during a drift are enormous and pointing the wrong way — the car is being
-      moved by this block, not by them, so asking them how hard it is cornering
-      gives an answer about a car that is not the one on screen.
-    */
-    car.cornering += (turn * kept - car.cornering) * car.driftBlend
+  // Recovery assistance acts as a bounded yaw damper. It cannot choose a
+  // line, rotate velocity onto the road, or add speed to sustain a slide.
+  if (!input.handbrake && v > 7) {
+    const limit = Math.max(0.14, TUNE.driftAngle * 0.4)
+    const excess = Math.max(0, Math.abs(beta) - limit)
+    const growing = car.yaw * beta < 0
+    if (growing) car.yaw *= Math.exp(-excess * (5 + TUNE.driftHelper * 18) * dt)
   }
+  updateSlide(car, dt, v)
 
   /*
     And a firm hand at the very edge.
@@ -1722,9 +1142,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   */
   const slipLimit = TUNE.spinProtection
   const maxLateral = held * Math.tan(slipLimit)
-  // The drift sets the angle deliberately and stays well inside TUNE.spinProtection, so
-  // this backstop has nothing to say about it — but it must not be *able* to.
-  if (car.driftBlend < 0.02 && Math.abs(car.vn) > maxLateral) {
+  if (Math.abs(car.vn) > maxLateral) {
     const target = Math.sign(car.vn) * maxLateral
     // The further past it goes the harder it is pulled back, so `TUNE.spinProtection` is
     // a limit the car actually reaches rather than a number in a comment. A
@@ -2031,15 +1449,16 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
       driving properly.
     */
     car.hitWall = Math.max(0.14, Math.min(1, into / 9))
+    let retained = 1
     if (into > 0 && !car.touching) {
       // The impact, once, on the step contact begins.
       car.slam = car.hitWall
-      car.vs *= 1 - Math.min(0.42, car.hitWall * 0.48)
+      retained *= 1 - Math.min(0.42, car.hitWall * 0.48)
       car.yaw *= 0.5
     }
     // And the scrape, per second, for as long as it lasts. Never a stop: a
     // wall that ends a run in a game lasting forty seconds ends the game.
-    car.vs *= 1 - Math.min(0.5, (0.6 + car.hitWall * 1.8) * dt)
+    retained *= 1 - Math.min(0.5, (0.6 + car.hitWall * 1.8) * dt)
     // The stone turns the car back along itself rather than letting it grind
     // in at an angle, which is what a wall actually does to a car.
     car.psi -= side * (0.6 + car.hitWall * 1.8) * dt
@@ -2047,8 +1466,8 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     car.driftCharge = 0
 
     // back out of the road frame
-    car.vs = alongRoad * cos + acrossRoad * sin
-    car.vn = -alongRoad * sin + acrossRoad * cos
+    car.vs = alongRoad * retained * cos + acrossRoad * sin
+    car.vn = -alongRoad * retained * sin + acrossRoad * cos
     /*
       No floor here, and that matters more than it looks.
 
@@ -2095,21 +1514,9 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     car.driftCharge += dt
     car.driftMs += dt * 1000
   } else if (car.driftCharge > 0) {
-    /*
-      Letting go is the whole mechanic.
-
-      The car straightens and shoves. Two tiers, because one is a reward and
-      three is a spreadsheet — you can feel the difference between "I got the
-      corner" and "I got the corner *properly*", and that is enough.
-    */
+    // Recovering a slide earns ember; it does not teleport kinetic energy.
     if (car.driftCharge > 0.85) car.released = 2
     else if (car.driftCharge > 0.38) car.released = 1
-    if (car.released > 0) {
-      car.vs += 2.4 + car.released * 2.4
-      // Snap the slip out. This is why it feels like a launch rather than a
-      // gradual recovery: the sideways energy becomes forward energy.
-      car.vn *= 0.35
-    }
     car.driftCharge = 0
   }
 
@@ -2130,24 +1537,11 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     and the whole point of the meter is that it now runs continuously: filling
     through the corner, draining down the straight after it.
   */
-  if (car.drifting) {
+  if (drifting && !car.touching && car.boostLeft <= 0) {
     car.ember = Math.min(1, car.ember + dt / TUNE.emberFillSeconds)
   }
 
-  /*
-    Spending it burns what is in the bar, and the bar drains as it burns.
 
-    `boostLeft` is the seconds remaining and `ember` is that same number drawn
-    as a bar, which is why they are mirrored rather than being two independent
-    facts that can disagree: what you are watching go down *is* the boost. It
-    is also why a drift can stop the burn without stealing the remainder — see
-    `driftMode`, which only zeroes `boostLeft`, leaving `ember` at whatever the
-    last mirror put there.
-
-    Pressing the ember always cancels a drift — again `driftMode` — whether or
-    not there was anything to spend, because the button means "straighten up
-    and go".
-  */
   if (input.boost && car.boostLeft <= 0 && car.ember > BOOST_FLOOR) {
     car.boostLeft = car.ember * TUNE.boostSeconds
   }

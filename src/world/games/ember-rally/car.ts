@@ -53,14 +53,14 @@ export { AXLE_FRONT, AXLE_HALF_TRACK, AXLE_REAR, WHEEL_RADIUS }
 
 // --- the shed ---------------------------------------------------------------
 
-const WOOD = new Color('#5c3d24')
-const WOOD_LIT = new Color('#7d5533')
-const BRASS = new Color('#cfa955')
-const BRASS_DARK = new Color('#9a7a35')
+const WOOD = new Color('#62382f')
+const WOOD_LIT = new Color('#855044')
+const BRASS = new Color('#bca474')
+const BRASS_DARK = new Color('#756044')
 const LEATHER = new Color('#6d4c36')
-const GLASS = new Color('#0f141d')
-const RUBBER = new Color('#191716')
-const RUBBER_LIT = new Color('#26231f')
+const GLASS = new Color('#253b48')
+const RUBBER = new Color('#202123')
+const RUBBER_LIT = new Color('#2a2c2d')
 const IRON = new Color('#3a3a3c')
 const LAMP_GLASS = new Color('#ffdaa4')
 const EMBER_GLASS = new Color('#ff6a24')
@@ -77,7 +77,7 @@ interface Finish {
   lamp?: number
 }
 
-const OILED: Finish = { gloss: 0.16 }
+const OILED: Finish = { gloss: 0.34 }
 const POLISHED: Finish = { gloss: 0.7 }
 const DULL: Finish = { gloss: 0.55 }
 const WORN: Finish = { gloss: 0.2 }
@@ -92,7 +92,7 @@ const MATTE: Finish = { gloss: 0.05 }
  * value the glass keeps its own warm colour and still reads as *on*, which is
  * what a real lamp does to a camera at anything but point blank.
  */
-const LAMP: Finish = { gloss: 0.9, steady: 0.58 }
+const LAMP: Finish = { gloss: 0.9, steady: 0.36 }
 const BRAKE_LAMP: Finish = { gloss: 0.8, lamp: 1 }
 const BRAKE_DISC: Finish = { gloss: 0.45, lamp: 2 }
 const PIPE: Finish = { gloss: 0.7, lamp: 3 }
@@ -151,7 +151,7 @@ interface Station {
   corner?: number
 }
 
-const AROUND = 14
+const AROUND = 24
 
 /**
  * A rounded-rectangle ring.
@@ -239,21 +239,25 @@ function slab(
 ) {
   const [cx, cy, cz] = centre
   const [hx, hy, hz] = [size[0] / 2, size[1] / 2, size[2] / 2]
-  const base = body.count
   const cos = Math.cos(tiltX)
   const sin = Math.sin(tiltX)
   const corners: [number, number, number][] = [
     [-hx, -hy, -hz], [hx, -hy, -hz], [hx, hy, -hz], [-hx, hy, -hz],
     [-hx, -hy, hz], [hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz],
   ]
-  for (const [x, y, z] of corners) {
-    body.vertex(cx + x, cy + y * cos - z * sin, cz + y * sin + z * cos, color, finish)
-  }
   const faces: [number, number, number, number][] = [
     [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4],
     [2, 3, 7, 6], [1, 2, 6, 5], [0, 4, 7, 3],
   ]
-  for (const [a, b, c, d] of faces) body.quad(base + a, base + b, base + c, base + d)
+  // Flat panels have separate normals at their seams.
+  for (const face of faces) {
+    const base = body.count
+    for (const corner of face) {
+      const [x, y, z] = corners[corner]
+      body.vertex(cx + x, cy + y * cos - z * sin, cz + y * sin + z * cos, color, finish)
+    }
+    body.quad(base, base + 1, base + 2, base + 3)
+  }
 }
 
 /** A drum: hubs, lamp bezels, exhausts. Axis along X unless told otherwise. */
@@ -269,6 +273,7 @@ function drum(
   /** Inner radius, for a ring rather than a solid disc. */
   hole = 0,
 ) {
+  const firstIndex = body.index.length
   const base = body.count
   const at = (a: number, r: number, w: number): [number, number, number] => {
     if (axis === 'x') return [centre[0] + w, centre[1] + Math.sin(a) * r, centre[2] + Math.cos(a) * r]
@@ -345,6 +350,12 @@ function drum(
       }
     }
   }
+  // Mapping the axle onto Z reverses handedness.
+  if (axis === 'z') {
+    for (let i = firstIndex; i < body.index.length; i += 3) {
+      [body.index[i + 1], body.index[i + 2]] = [body.index[i + 2], body.index[i + 1]]
+    }
+  }
 }
 
 /**
@@ -409,16 +420,22 @@ export function buildCarShell(): BufferGeometry {
     tunnel lit from the front what you actually read is where the body swells
     out over the wheels.
   */
-  const tub: Station[] = [
-    { z: -1.76, half: 0.66, low: 0.24, high: 0.66, corner: 3.2 },
-    { z: -1.46, half: 0.79, low: 0.19, high: 0.74, corner: 4 },
-    { z: -1.02, half: 0.88, low: 0.17, high: 0.76, corner: 4.8 },
-    { z: -0.34, half: 0.8, low: 0.16, high: 0.74, corner: 4.4 },
-    { z: 0.42, half: 0.79, low: 0.16, high: 0.72, corner: 4.2 },
-    { z: 1.04, half: 0.86, low: 0.18, high: 0.68, corner: 4.6 },
-    { z: 1.5, half: 0.78, low: 0.22, high: 0.63, corner: 4 },
-    { z: 1.76, half: 0.56, low: 0.28, high: 0.57, corner: 3 },
-  ]
+  // The sill has actual wheel openings. A continuous solid loft used to
+  // run through all four tyres, hiding their upper halves and the suspension.
+  const tub: Station[] = []
+  for (let i = 0; i <= 96; i++) {
+    const z = -1.76 + i * 3.52 / 96
+    const nose = Math.max(0, (z - 1.35) / 0.41)
+    const tail = Math.max(0, (-z - 1.48) / 0.28)
+    const waist = Math.exp(-Math.pow((z + 0.05) / 0.65, 2))
+    const half = 0.85 - waist * 0.075 - nose * 0.22 - tail * 0.13
+    const axleDistance = Math.min(Math.abs(z - AXLE_FRONT), Math.abs(z - AXLE_REAR))
+    const arch = axleDistance < 0.43
+      ? WHEEL_RADIUS + Math.sqrt(0.43 ** 2 - axleDistance ** 2) : 0.2
+    tub.push({ z, half, low: Math.max(0.2, arch),
+      high: 0.82 - nose * 0.21 - tail * 0.08, corner: 6 })
+  }
+  slab(body, [0, 0.24, 0], [1.15, 0.14, 3.25], IRON, MATTE)
   loft(body, tub, (_station, point) => {
     // Planks, running the length of the car, the way boards on a hand-built
     // body would actually be laid.
@@ -430,22 +447,38 @@ export function buildCarShell(): BufferGeometry {
   })
 
   // --- the cabin -----------------------------------------------------------
+  // A compact rally coupe: a raked windscreen, painted roof and distinct
+  // rear glass. The greenhouse is taller than the bonnet, with visible pillars.
   const cabin: Station[] = [
-    { z: -1.02, half: 0.52, low: 0.66, high: 0.74, corner: 3 },
-    { z: -0.8, half: 0.63, low: 0.7, high: 1.0, corner: 3.6 },
-    { z: -0.26, half: 0.66, low: 0.72, high: 1.1, corner: 4 },
-    { z: 0.24, half: 0.64, low: 0.72, high: 1.08, corner: 4 },
-    { z: 0.58, half: 0.58, low: 0.7, high: 0.92, corner: 3.4 },
-    { z: 0.8, half: 0.46, low: 0.68, high: 0.78, corner: 3 },
+    { z: -1.05, half: 0.57, low: 0.79, high: 0.83, corner: 5 },
+    { z: -0.61, half: 0.61, low: 0.8, high: 1.24, corner: 6 },
+    { z: 0.12, half: 0.59, low: 0.8, high: 1.27, corner: 6 },
+    { z: 0.64, half: 0.53, low: 0.79, high: 0.84, corner: 5 },
   ]
   loft(body, cabin, (_station, point) => {
-    // Glass is simply what the top of the cabin is made of. A separate loft
-    // for the greenhouse would need its own seam, and this reads identically
-    // at any size a car is ever on screen.
-    if (point.y > 0.84) return [GLASS, GLAZED]
-    const plank = Math.sin(point.z * 8.1 + 1.3) * 0.5 + 0.5
-    return [new Color().copy(WOOD).lerp(WOOD_LIT, plank * 0.4), OILED]
+    if (point.y > 0.865) return [GLASS, GLAZED]
+    return [WOOD, OILED]
   })
+  // Separate glazing keeps the windscreen from interpolating the painted
+  // bonnet colour across its lower half. Front and rear face outward.
+  for (const rear of [false, true]) {
+    const base = body.count
+    const lower = rear ? -1.045 : 0.626
+    const upper = rear ? -0.625 : 0.135
+    const points: [number, number, number][] = [
+      [-0.5, 0.87, lower], [0.5, 0.87, lower],
+      [0.52, rear ? 1.215 : 1.25, upper], [-0.52, rear ? 1.215 : 1.25, upper],
+    ]
+    for (const [x, y, z] of points) body.vertex(x, y, z, GLASS, GLAZED)
+    if (rear) body.quad(base + 3, base + 2, base + 1, base)
+    else body.quad(base, base + 1, base + 2, base + 3)
+  }
+  slab(body, [0, 1.259, -0.245], [1.07, 0.025, 0.72], WOOD_LIT, OILED, -0.04)
+  for (const side of [-1, 1]) {
+    slab(body, [side * 0.603, 1.02, -0.26], [0.035, 0.4, 0.055], WOOD_LIT, OILED)
+    slab(body, [side * 0.63, 0.79, -0.15], [0.035, 0.026, 1.5], BRASS_DARK, DULL)
+    slab(body, [side * 0.791, 0.71, -0.36], [0.025, 0.025, 0.15], BRASS, DULL)
+  }
 
   /*
     Somebody is driving it.
@@ -459,11 +492,6 @@ export function buildCarShell(): BufferGeometry {
   drum(body, [0, 0.96, -0.42], 0.155, 0.13, IRON, DULL, 10, 'z')
   slab(body, [0, 0.99, -0.28], [0.28, 0.16, 0.05], GLASS, GLAZED, -0.3)
   slab(body, [0, 0.79, -0.6], [0.46, 0.3, 0.24], LEATHER, WORN, 0.16)
-  // A roll hoop behind the head, because there is no roof worth the name.
-  for (const side of [-1, 1]) {
-    slab(body, [side * 0.3, 0.92, -0.72], [0.05, 0.42, 0.05], BRASS_DARK, DULL, 0.12)
-  }
-  slab(body, [0, 1.12, -0.68], [0.65, 0.05, 0.05], BRASS_DARK, DULL)
 
   /*
     --- brass over the joints ----------------------------------------------
@@ -474,15 +502,15 @@ export function buildCarShell(): BufferGeometry {
   */
   // The beltline, running the whole length where the tub and the cabin meet.
   for (const side of [-1, 1]) {
-    slab(body, [side * 0.855, 0.7, -0.2], [0.042, 0.05, 2.4], BRASS_DARK, DULL)
+    slab(body, [side * 0.785, 0.76, -0.2], [0.02, 0.025, 1.35], BRASS_DARK, DULL)
   }
   // The windscreen: two raked pillars and a header rail.
   for (const side of [-1, 1]) {
-    slab(body, [side * 0.44, 0.92, 0.47], [0.045, 0.42, 0.05], BRASS_DARK, DULL, -1.02)
+    slab(body, [side * 0.55, 1.025, 0.38], [0.035, 0.66, 0.035], BRASS_DARK, DULL, -0.89)
   }
-  slab(body, [0, 1.09, 0.235], [1.18, 0.05, 0.06], BRASS, POLISHED)
+  slab(body, [0, 1.255, 0.13], [1.1, 0.022, 0.035], BRASS, POLISHED)
   // A rib over the roof, front to back, where the panels are joined.
-  slab(body, [0, 1.11, -0.1], [0.06, 0.045, 0.72], BRASS_DARK, DULL)
+  slab(body, [0, 1.27, -0.24], [0.075, 0.012, 0.68], BRASS_DARK, DULL)
 
   /*
     Mirrors, on stalks off the screen pillars.
@@ -505,13 +533,13 @@ export function buildCarShell(): BufferGeometry {
 
   // Bonnet straps, leather, with a buckle each.
   for (const z of [1.0, 1.34]) {
-    slab(body, [0, 0.665, z], [1.44, 0.03, 0.095], LEATHER, WORN)
-    slab(body, [0.4, 0.685, z], [0.1, 0.045, 0.12], BRASS, POLISHED)
+    slab(body, [0, 0.823, z], [1.44, 0.03, 0.095], LEATHER, WORN)
+    slab(body, [0.4, 0.843, z], [0.1, 0.045, 0.12], BRASS, POLISHED)
   }
   // Louvres let the heat out of the bonnet, and catch a lantern beautifully.
   for (let i = 0; i < 4; i++) {
-    slab(body, [-0.34, 0.685, 1.12 + i * 0.075], [0.34, 0.02, 0.05], BRASS_DARK, DULL, 0.5)
-    slab(body, [0.34, 0.685, 1.12 + i * 0.075], [0.34, 0.02, 0.05], BRASS_DARK, DULL, 0.5)
+    slab(body, [-0.34, 0.823, 1.02 + i * 0.075], [0.34, 0.02, 0.05], BRASS_DARK, DULL, 0.5)
+    slab(body, [0.34, 0.823, 1.02 + i * 0.075], [0.34, 0.02, 0.05], BRASS_DARK, DULL, 0.5)
   }
 
   // --- the nose ------------------------------------------------------------
@@ -584,9 +612,9 @@ export function buildCarShell(): BufferGeometry {
     drum(body, [side, 0.4, -1.77], 0.052, 0.03, BRAKE_GLASS, BRAKE_LAMP, 10, 'z')
   }
   // A small wooden blade on two brass stalks. Low, and no wider than the body.
-  slab(body, [0, 0.87, -1.5], [0.94, 0.045, 0.2], WOOD_LIT, OILED, -0.22)
+  slab(body, [0, 0.94, -1.5], [1.42, 0.045, 0.22], WOOD_LIT, OILED, -0.22)
   for (const side of [-0.38, 0.38]) {
-    slab(body, [side, 0.78, -1.48], [0.04, 0.17, 0.045], BRASS_DARK, DULL)
+    slab(body, [side, 0.85, -1.48], [0.04, 0.17, 0.045], BRASS_DARK, DULL)
   }
   /*
     Two exhausts, out of the back, low.
@@ -617,19 +645,19 @@ export function buildCarShell(): BufferGeometry {
   for (const z of [AXLE_FRONT, AXLE_REAR]) {
     for (const side of [-1, 1]) {
       const base = body.count
-      const steps = 8
-      const from = 0.16 * Math.PI
-      const to = 0.84 * Math.PI
-      const inner = side * 0.72
+      const steps = 24
+      const from = 0.03 * Math.PI
+      const to = 0.97 * Math.PI
+      const inner = side * 0.81
       const outer = side * 0.94
       for (let i = 0; i <= steps; i++) {
         const a = from + ((to - from) * i) / steps
-        const y = 0.2 + Math.sin(a) * 0.5
-        const dz = z - Math.cos(a) * 0.6
+        const y = WHEEL_RADIUS + Math.sin(a) * 0.445
+        const dz = z - Math.cos(a) * 0.445
         // outward along the arch, so the lip has thickness in the direction it
         // needs it rather than simply being taller
-        const ny = Math.sin(a) * 0.035
-        const nz = -Math.cos(a) * 0.035
+        const ny = Math.sin(a) * 0.018
+        const nz = -Math.cos(a) * 0.018
         body.vertex(inner, y + ny, dz + nz, WOOD, OILED)
         body.vertex(outer, y + ny * 0.6, dz + nz * 0.6, BRASS_DARK, DULL)
         body.vertex(outer, y - ny * 0.6, dz - nz * 0.6, BRASS_DARK, DULL)
@@ -709,7 +737,7 @@ export function buildCoilover(): BufferGeometry {
  */
 export function buildWheel(): BufferGeometry {
   const body = new Body()
-  const SIDES = 18
+  const SIDES = 48
 
   /*
     The tyre.
@@ -730,13 +758,13 @@ export function buildWheel(): BufferGeometry {
   for (let k = 0; k < SIDES; k++) {
     const a = (k / SIDES) * Math.PI * 2
     const block = k % 2 === 0
-    const tread = block ? 1 : 0.952
+    const tread = 1
     for (const [x, r] of profile) {
       const shoulder = r > 0.3
       const rr = shoulder ? r * tread : r
       // The blocks are also narrower than the grooves between them.
-      const xx = shoulder && !block ? x * 0.94 : x
-      body.vertex(xx, Math.sin(a) * rr, Math.cos(a) * rr, block ? RUBBER_LIT : RUBBER, MATTE)
+      const xx = x
+      body.vertex(xx, Math.sin(a) * rr, Math.cos(a) * rr, shoulder && !block ? RUBBER_LIT : RUBBER, MATTE)
     }
   }
   for (let k = 0; k < SIDES; k++) {
@@ -744,10 +772,18 @@ export function buildWheel(): BufferGeometry {
     for (let i = 0; i < profile.length - 1; i++) {
       body.quad(
         base + k * profile.length + i,
-        base + k2 * profile.length + i,
-        base + k2 * profile.length + i + 1,
         base + k * profile.length + i + 1,
+        base + k2 * profile.length + i + 1,
+        base + k2 * profile.length + i,
       )
+    }
+  }
+
+  for (let k = 0; k < 40; k++) {
+    for (const side of [-1, 1]) {
+      const a = k / 40 * Math.PI * 2 + side * 0.022
+      slab(body, [side * 0.064, Math.sin(a) * 0.336, Math.cos(a) * 0.336],
+        [0.09, 0.036, 0.008], RUBBER_LIT, MATTE, -a)
     }
   }
 
@@ -765,9 +801,9 @@ export function buildWheel(): BufferGeometry {
     tyre with a wheel in it, which is what a wheel looks like.
   */
   for (const side of [-1, 1]) {
-    drum(body, [side * 0.1, 0, 0], 0.182, 0.018, IRON, DULL, SIDES, 'x', 0.075)
+    drum(body, [side * 0.1, 0, 0], 0.215, 0.012, IRON, DULL, SIDES, 'x', 0.187)
     // A polished lip, and only a lip. This is the part that catches a lantern.
-    drum(body, [side * 0.114, 0, 0], 0.19, 0.012, BRASS, DULL, SIDES, 'x', 0.168)
+    drum(body, [side * 0.114, 0, 0], 0.216, 0.009, BRASS_DARK, DULL, SIDES, 'x', 0.2)
   }
   drum(body, [0, 0, 0], 0.068, 0.096, BRASS, POLISHED, 12, 'x')
 
@@ -779,7 +815,7 @@ export function buildWheel(): BufferGeometry {
     slab(
       body,
       [0, Math.cos(a) * 0.128, Math.sin(a) * 0.128],
-      [0.07, 0.019, 0.16],
+      [0.19, 0.14, 0.025],
       BRASS_DARK,
       DULL,
       a,
@@ -799,8 +835,14 @@ export function buildWheel(): BufferGeometry {
     from something you did rather than something you pressed.
   */
   drum(body, [-0.014, 0, 0], 0.148, 0.012, DISC, BRAKE_DISC, SIDES, 'x', 0.07)
-  slab(body, [-0.034, 0.14, 0.02], [0.055, 0.1, 0.08], IRON, DULL)
 
+
+  return body.build()
+}
+
+export function buildCaliper(): BufferGeometry {
+  const body = new Body()
+  slab(body, [0, 0.115, 0.045], [0.13, 0.11, 0.07], BRASS_DARK, DULL, -0.2)
   return body.build()
 }
 

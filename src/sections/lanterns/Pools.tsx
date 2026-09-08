@@ -33,6 +33,7 @@ import {
 import type { Memory } from '@/data/types'
 import { LIGHT_COLORS, type SkyPalette } from '@/systems/palette'
 import { ambientLightLevel } from '@/world/forms'
+import { useLanternLight } from '@/systems/lanternLight'
 import { WALK_Y, hangingFor } from './layout'
 
 /** Longest walk this lights. */
@@ -107,6 +108,7 @@ const FRAG = /* glsl */ `
 `
 
 export function Pools({ memories, palette }: { memories: Memory[]; palette: SkyPalette }) {
+  const lamps = useLanternLight((s) => s.lamps)
   const geometry = useMemo(() => {
     const quad = new PlaneGeometry(1, 1)
     const geo = new InstancedBufferGeometry()
@@ -168,9 +170,9 @@ export function Pools({ memories, palette }: { memories: Memory[]; palette: SkyP
   useEffect(() => {
     // Never nothing, even at noon under the canopy: a lit lamp still puts a
     // little colour on the ground, and none at all reads as switched off.
-    material.uniforms.uNight.value = 0.3 + 0.7 * (1 - ambientLightLevel(palette))
+    material.uniforms.uNight.value = (0.3 + 0.7 * (1 - ambientLightLevel(palette))) * lamps
     material.uniforms.uFogFar.value = palette.fogFar
-  }, [material, palette])
+  }, [material, palette, lamps])
 
   if (memories.length === 0) return null
   return <mesh geometry={geometry} material={material} frustumCulled={false} renderOrder={1} />

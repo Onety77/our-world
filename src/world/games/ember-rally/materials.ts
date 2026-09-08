@@ -698,6 +698,14 @@ ${LIGHT_BODY}
     vec3 albedo = vColor;
     vec3 col = caveLight(vWorld, normal, albedo, gloss);
 
+    // Broad reflected light describes curved panels and the rubber shoulders.
+    // Glass reflects the sky/ceiling instead of reading as a black solid blob.
+    float sky = smoothstep(-0.35, 0.85, normal.y);
+    col += albedo * mix(vec3(0.09, 0.085, 0.08), vec3(0.28, 0.32, 0.39), sky);
+    float glass = smoothstep(0.88, 0.94, gloss) * (1.0 - step(0.01, vFinish.z));
+    float fresnel = 0.12 + 0.65 * pow(1.0 - max(dot(normal, view), 0.0), 4.0);
+    col += glass * fresnel * mix(vec3(0.045, 0.065, 0.085), vec3(0.27, 0.38, 0.49), sky);
+
     // Light thrown back off the road the lamps are pointed at. Comes from
     // below and in front, which is exactly where a real car's fill comes from
     // at night and is what stops the whole thing being a silhouette.

@@ -299,6 +299,7 @@ export const useTouchLayout = create<LayoutState>((set, get) => {
  * write it on pointerdown and pointerup — a handful of events a lap.
  */
 export const thumb = {
+  brake: false,
   /** Held down right now. */
   handbrake: false,
   /**
@@ -312,8 +313,13 @@ export const thumb = {
   steer: 0,
 }
 
+/** Both brake pedals share one hold, including simultaneous touches. */
+export const brakePointers = new Set<number>()
+
 /** Everything let go of. For losing focus, pausing, and the end of a run. */
 export function releaseThumbs(): void {
+  brakePointers.clear()
+  thumb.brake = false
   thumb.handbrake = false
   thumb.boost = false
   thumb.steer = 0

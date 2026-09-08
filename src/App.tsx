@@ -30,6 +30,7 @@ import { VoiceLights } from '@/ui/VoiceLights'
 import { Whisper } from '@/ui/Whisper'
 import { Together } from '@/ui/Together'
 import { useWatching } from '@/systems/watching'
+import { current, useListening } from '@/systems/listening'
 import { SaidMenu } from '@/ui/Said'
 import { Trouble } from '@/ui/Trouble'
 import { Renewal } from '@/ui/Renewal'
@@ -440,19 +441,53 @@ function Garden() {
     ---------------------------------------------------------------------------
   */
   const watchingOpen = useWatching((s) => s.open)
+  /*
+    Whether anything of ours is *deliberately* still making sound.
+
+    Read here rather than in the player because this is the one place that
+    decides to stop the audio clock, and it has to know what else is on the end
+    of it — see the note in `settle`.
+  */
+  const songPlaying = useListening((s) => current(s).playing && !s.silenced)
   useEffect(() => {
     const settle = () => {
-      // The chosen song is a real <audio> element and may keep playing with
-      // the screen off. The procedural weather is ours, and has no reason to
-      // keep its AudioContext or animation loop alive where nobody can hear it.
       const quiet = document.hidden || watchingOpen
-      ambience.setSuspended(quiet)
+
+      // The world goes to nothing either way: a meadow breathing under a film,
+      // or under a pocket, is a second thing playing.
       ambience.setMaster(quiet ? 0 : 0.85)
+
+      /*
+        -----------------------------------------------------------------------
+        **Stopping the audio clock is not free, and on a phone it stops the
+        song too.**
+
+        This used to suspend the AudioContext whenever the page was hidden, on
+        the reasoning — written right here — that "the chosen song is a real
+        <audio> element and may keep playing with the screen off". That is true
+        of the element and false of the device. On iOS an AudioContext owns the
+        app's *audio session*; suspending it tears the session down, and every
+        other output in the page goes with it, `<audio>` included. Put the phone
+        in a pocket and the music stopped; open the app again, the context
+        resumed, and it carried on — which is exactly the shape of the report.
+
+        So the clock is only stopped when nothing of ours wants the output. A
+        muted context that is still running costs a timer and no audible work,
+        which is a small price for music that survives a locked screen — and
+        the animation loop is already gone, because `setMaster(0)` takes the
+        world's own work with it.
+
+        The film is in here for the same reason: its video element is on the
+        same session.
+        -----------------------------------------------------------------------
+      */
+      const oursIsSounding = songPlaying || watchingOpen
+      ambience.setSuspended(quiet && !oursIsSounding)
     }
     settle()
     document.addEventListener('visibilitychange', settle)
     return () => document.removeEventListener('visibilitychange', settle)
-  }, [watchingOpen])
+  }, [watchingOpen, songPlaying])
 
   /*
     Browsers won't start audio until the person has touched something, and the

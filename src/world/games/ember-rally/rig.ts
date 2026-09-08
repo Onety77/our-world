@@ -19,6 +19,7 @@ import {
   WHEEL_POSITIONS,
   WHEEL_RADIUS,
   buildCarShell,
+  buildCaliper,
   buildCoilover,
   buildWheel,
 } from './car'
@@ -61,11 +62,13 @@ export const MESH_FOR_WHEEL = [1, 0, 3, 2] as const
 let shellGeometry: BufferGeometry | null = null
 let wheelGeometry: BufferGeometry | null = null
 let springGeometry: BufferGeometry | null = null
+let caliperGeometry: BufferGeometry | null = null
 export function carGeometry() {
   shellGeometry ??= buildCarShell()
   wheelGeometry ??= buildWheel()
   springGeometry ??= buildCoilover()
-  return { shell: shellGeometry, wheel: wheelGeometry, spring: springGeometry }
+  caliperGeometry ??= buildCaliper()
+  return { shell: shellGeometry, wheel: wheelGeometry, spring: springGeometry, caliper: caliperGeometry }
 }
 
 /** How long a coilover is at rest, from its top mount to the wheel centre. */
@@ -114,7 +117,7 @@ export function useCarRig(
   boostOuter?: Material,
   boostCore?: Material,
 ): CarRig {
-  const { shell, wheel, spring } = carGeometry()
+  const { shell, wheel, spring, caliper } = carGeometry()
 
   return useMemo<CarRig>(() => {
     const root = new Group()
@@ -157,6 +160,7 @@ export function useCarRig(
       mesh.frustumCulled = false
       spinner.add(mesh)
       camber.add(spinner)
+      camber.add(new Mesh(caliper, wheelMaterials[i] ?? material))
       hub.add(camber)
       ground.add(hub)
       hubs.push(hub)
@@ -253,7 +257,7 @@ export function useCarRig(
     body.add(boostJets)
 
     return { root, ground, body, hubs, cambers, spinners, springs, boostJets, spin: [0, 0, 0, 0] }
-  }, [shell, wheel, spring, material, wheelMaterials, beamGeometry, beamMaterial, boostOuter, boostCore])
+  }, [shell, wheel, spring, caliper, material, wheelMaterials, beamGeometry, beamMaterial, boostOuter, boostCore])
 }
 
 /**
@@ -269,61 +273,23 @@ export function poseWheels(rig: CarRig, car: Posture) {
     const wheel = car.wheels[i]
     // The mesh numbers its wheels on the other side. See `MESH_FOR_WHEEL`.
     const hub = rig.hubs[MESH_FOR_WHEEL[i]]
-    /*
-      --- which way the front wheels point --------------------------------
 
-      **Negated, and it has to be.** The steering angle is *right positive*,
-      and the car is modelled facing +Z — where the right-hand side is −X. So
-      turning the wheel toward the car's right means a *negative* rotation
-      about Y.
+    hub.rotation.y = -wheel.steer
+    // Load compresses the body suspension; the tyre contact stays on the road.
+    hub.position.y = WHEEL_RADIUS
 
-      Without this the front wheels pointed the wrong way: steer right and they
-      turned left. Nothing drove wrong, because the physics never reads this —
-      the car still went where you asked — but you were watching two wheels
-      argue with the corner they were taking, which is exactly as unsettling as
-      it sounds and made reversing near impossible to read.
 
-      The angle is also exaggerated. Now that the steering ratio is derived
-      from what the tyres can use, real lock at speed is two or three degrees:
-      correct, and invisible from behind the car. So the *drawn* angle is
-      nearly twice the real one, clamped to what still fits inside the arch. It
-      changes nothing about how the car drives.
-    */
-    hub.rotation.y = -Math.max(-0.62, Math.min(0.62, wheel.steer * 1.9))
-    // The hub rides on the road, so travel moves it only as a bump would.
-    hub.position.y = WHEEL_RADIUS + wheel.travel * 0.35
-
-    /*
-      Camber, from the body's roll.
-
-      A leaning body pulls the top of each wheel over with it, less than
-      one-for-one because that is what suspension geometry is *for*. It is a
-      small angle and it does a lot: a car whose wheels stay bolt upright
-      while the shell leans looks like a toy on a tilting board.
-    */
-    rig.cambers[MESH_FOR_WHEEL[i]].rotation.z = car.roll * 0.55
+    rig.cambers[MESH_FOR_WHEEL[i]].rotation.z = car.roll * 0.16
 
     // And the rotation, straight off the wheel's own angular velocity — so a
     // locked wheel stops dead and a spinning one outruns the road.
     rig.spinners[MESH_FOR_WHEEL[i]].rotation.x = wheel.spin
 
-    /*
-      The spring covers whatever is left between the body and the wheel.
 
-      The lean is scaled back rather than taken at face value, and it has to
-      be. Roll and pitch are sized to *read* from twenty metres behind the car
-      — nine or ten degrees of body roll, which is more than a real rally car
-      does — and seventy centimetres out from the middle that comes to nearly
-      thirty centimetres of movement at a corner, against a coilover that is
-      thirty-five long. Taken literally the spring spends every hard corner
-      pinned against its own stops, which looks exactly like a spring that has
-      stopped working. Suspension has about ten centimetres of travel; this is
-      the number that says so.
-    */
     const spring = rig.springs[MESH_FOR_WHEEL[i]]
     const [sx, , sz] = SPRING_POSITIONS[MESH_FOR_WHEEL[i]]
-    const lean = (-car.roll * sx - car.pitch * sz) * 0.4
-    const length = SPRING_SPAN + car.heave + lean - wheel.travel * 0.35
+    const lean = car.roll * sx - car.pitch * sz
+    const length = SPRING_SPAN + car.heave + lean
     spring.scale.y = Math.max(0.5, Math.min(1.7, length / SPRING_SPAN))
   }
 }

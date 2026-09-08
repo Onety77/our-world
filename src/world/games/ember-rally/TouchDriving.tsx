@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { hasFinishedARace } from './best'
-import { mirrored, releaseThumbs, thumb, useTouchLayout } from './touch'
+import { brakePointers, mirrored, releaseThumbs, thumb, useTouchLayout } from './touch'
 import { useRace } from './session'
 
 /**
@@ -220,10 +220,42 @@ export function TouchDriving() {
   return (
     <>
       <RallyArrows />
+      <BrakePedal side="left" />
+      <BrakePedal side="right" />
       <Button which="handbrake" side="left" label="handbrake" glyph="✋" />
       <Button which="boost" side="left" label="ember" glyph="✦" />
       <Button which="boost" side="right" label="ember" glyph="✦" />
       <Button which="handbrake" side="right" label="handbrake" glyph="✋" />
     </>
   )
+}
+
+function BrakePedal({ side }: { side: 'left' | 'right' }) {
+  const pointers = useRef(new Set<number>())
+  useEffect(() => {
+    const held = pointers.current
+    return () => {
+      for (const id of held) brakePointers.delete(id)
+      thumb.brake = brakePointers.size > 0
+    }
+  }, [])
+  const release = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    pointers.current.delete(event.pointerId)
+    brakePointers.delete(event.pointerId)
+    thumb.brake = brakePointers.size > 0
+    event.currentTarget.classList.toggle('on', pointers.current.size > 0)
+  }
+  return <button type="button" className={`rally-brake-pedal ${side}`} aria-label={`brake and reverse, ${side} hand`}
+    onPointerDown={(event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      pointers.current.add(event.pointerId)
+      brakePointers.add(event.pointerId)
+      thumb.brake = true
+      event.currentTarget.classList.add('on')
+    }}
+    onPointerUp={release} onPointerCancel={release} onLostPointerCapture={release}
+  >brake</button>
 }

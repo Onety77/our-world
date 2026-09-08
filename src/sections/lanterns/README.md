@@ -41,16 +41,30 @@ The lane is only worn as far as the walking — `Lane` stops its path at
 ## The shape of it
 
 ```
-layout.ts       the wander, where memory n hangs, and which way it faces
-walk.ts         how far along you are, and the gestures that move you
-Lane.tsx        the graded shelf and the worn path down the middle of it
-Footprints.tsx  one stride per memory, in its keeper's colour
-Verge.tsx       the wood either side, so photographs have a dark ground
-Lanterns.tsx    the glass (far, near), the posts and the halos
-picture.ts      crop, downscale and cache a kept photograph
-view.ts         where the open lantern is on screen
-LanternWalk.tsx the scene, the travel and the picking
+layout.ts        the wander, where memory n hangs, and which way it faces
+walk.ts          how far along you are, and the gestures that move you
+Lane.tsx         the graded shelf and the worn path down the middle of it
+Undergrowth.tsx  the grass, with each lantern's light baked into the blades
+Footprints.tsx   one stride per memory, in its keeper's colour
+Pools.tsx        the light each lantern throws down onto the lane
+Air.tsx          motes drifting in each lantern's own colour
+Verge.tsx        the wood either side, so photographs have a dark ground
+Lanterns.tsx     the glass (far, near), the post, arm and hood, and the halos
+picture.ts       crop, downscale and cache a kept photograph
+view.ts          where the open lantern is on screen
+LanternWalk.tsx  the scene, the travel and the picking
 ```
+
+## The light is baked into the grass
+
+`Undergrowth.tsx` is the one piece here worth reading before changing anything.
+A lantern never moves and neither does a blade, so how much light this blade
+gets from that lamp is settled once, at build time, and stored as a colour on
+the instance. The grass goes golden under a warm lantern and cold under hers,
+with real darkness between — for one float3 per blade and no runtime cost.
+
+That is why the whole place can be dark: the lanterns are not glowing rectangles
+over evenly-lit ground, they are lighting the ground.
 
 Plus, outside this folder: `systems/picture.ts`, `systems/memories.ts`,
 `ui/Memories.tsx`, `world/hub/landmarks/LanternWalk.tsx`, `storage.rules`.

@@ -43,6 +43,10 @@ import { LIGHT_COLORS } from '@/systems/palette'
 import { otherHour, useWhoseHour } from '@/systems/whoseHour'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { VoiceComets } from './VoiceComets'
+import { Cloudsea } from './Cloudsea'
+import { pullTheSky, sky, stepSky } from './theme'
+import { ambience } from '@/systems/ambience'
+import { Group } from 'three'
 
 // ---------------------------------------------------------------------------
 // The dome: your night on one side, her morning on the other
@@ -67,6 +71,8 @@ const DOME_FRAG = /* glsl */ `
   uniform vec3 uDawnHigh;
   uniform float uDawnStrength;
   uniform float uTime;
+  /* How far across to the cloudsea, 0..1 — see sections/stars/theme. */
+  uniform float uCross;
 
   varying vec3 vDir;
 
@@ -310,6 +316,16 @@ const DOME_FRAG = /* glsl */ `
     dawn = mix(dawn, uDawnHigh, smoothstep(0.045, 0.15, h));
     col = mix(col, dawn, dawnReach);
 
+    /*
+      Above the weather the sky is not darker, it is *paler*.
+
+      Moonlight on cloud fills the whole dome with a cold bounce, which is why
+      a night above an overcast is bright enough to walk in and a night under
+      one is not. So crossing lifts the sky towards a blue rather than dimming
+      it. Going darker up here was the first instinct and it is wrong for
+      exactly the reason the place is worth drawing.
+    */
+    col = mix(col, col * 1.35 + vec3(0.035, 0.05, 0.085), uCross);
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -349,6 +365,7 @@ function Dome({ herHour }: { herHour: number }) {
           uDawnMid: { value: new Color('#d99356') },
           uDawnHigh: { value: new Color('#5d7f8c') },
           uDawnStrength: { value: 0 },
+          uCross: { value: 0 },
           uTime: { value: 0 },
         },
       }),
@@ -372,6 +389,9 @@ function Dome({ herHour }: { herHour: number }) {
   useFrame((_, delta) => {
     t.current += delta
     material.uniforms.uTime.value = t.current
+    // Read every frame rather than passed as a prop: the crossing changes
+    // sixty times a second under a finger, and this is a sky, not a re-render.
+    material.uniforms.uCross.value = sky.at
   })
 
   return <mesh geometry={geometry} material={material} renderOrder={-1} />
@@ -751,12 +771,85 @@ export default function Stars() {
 
   const strength = Math.pow(Math.max(0, 1 - Math.abs(herHour - 6.5) / 5), 1.6)
 
+  /*
+    The ground of the plain, which falls away when you cross.
+
+    Grouped rather than faded one piece at a time, and *sunk* rather than made
+    transparent, because that is the true shape of what happens: you have not
+    turned the plain off, you have gone up, and it is under the cloud now. The
+    sea is drawn at a height that swallows it on the way past, so nothing has to
+    dissolve.
+  */
+  const ground = useRef<Group>(null)
+
+  // On the window rather than on the canvas — see `pullTheSky`.
+  useEffect(() => pullTheSky(), [])
+
+  /*
+    And it sounds different up there.
+
+    ---------------------------------------------------------------------------
+    **The plain is a room with a floor; the cloudsea is not.**
+
+    The Stars' bed is mostly `shimmer` with a little `room` under it — a high
+    sparkle over a close, contained air, which is right when you are standing on
+    ground under a sky. Above the weather there is no floor to be close to and
+    nothing near enough to reflect: what there is, is a lot of open air moving,
+    and the sparkle thins because the moonlight on the cloud has washed the
+    stars out anyway. So crossing turns `air` up, takes `room` almost out, and
+    pulls `shimmer` back.
+
+    Re-voiced rather than given a Place id of its own — see `setShade`. It is
+    the same room in different weather, and a second id would have had to be
+    added to six files and every check that walks the places in order to say
+    something untrue.
+
+    Written from the frame loop because it follows the finger: pull the sky
+    halfway and the bed is halfway, which is what makes the gesture feel like it
+    is moving you rather than switching something.
+    ---------------------------------------------------------------------------
+  */
+  const voiced = useRef(-1)
+
+  useFrame((_, rawDelta) => {
+    stepSky(Math.min(rawDelta, 1 / 20))
+    const at = sky.at
+
+    /*
+      Only when it has actually moved, and only in steps worth hearing.
+
+      The bed is re-read on a two-hertz control cadence, so writing this sixty
+      times a second is fifty-eight writes nothing reads. A fiftieth is finer
+      than any of these layers can be heard to change.
+    */
+    if (Math.abs(at - voiced.current) > 0.02) {
+      voiced.current = at
+      ambience.setShade({
+        air: 1 + at * 5.5,
+        shimmer: 1 - at * 0.55,
+        room: 1 - at * 0.8,
+      })
+    }
+
+    const g = ground.current
+    if (!g) return
+    g.position.y = at * -16
+    // Nothing to draw once it is well under the cloud.
+    g.visible = at < 0.985
+  })
+
+  // And it hands the voicing back on the way out, so nothing carries.
+  useEffect(() => () => ambience.setShade(null), [])
+
   return (
     <>
       <Dome herHour={herHour} />
-      <Plain strength={strength} />
-      <Horizon />
-      <SkyPath />
+      <group ref={ground}>
+        <Plain strength={strength} />
+        <Horizon />
+        <SkyPath />
+      </group>
+      <Cloudsea />
       <Motes />
       <TwoLights />
       <VoiceComets />
