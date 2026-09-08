@@ -310,6 +310,15 @@ const DRIFT_COURSE = 2.6
  * with no margin is a wall with a car arriving at it.
  */
 const DRIFT_ROCK_MARGIN = 1.25
+/**
+ * How far *past* its path a drifting car's front wheels are drawn, radians.
+ *
+ * Eight degrees, and it is the front tyres' own slip angle — near where a tyre
+ * makes its most lateral force, which is what those two are doing for a living
+ * while the rear is away. Drawn on the path itself they are not working, and a
+ * wheel that is not working does not look like anything.
+ */
+const DRIFT_SHOW_BITE = 0.14
 
 // --- the ember -------------------------------------------------------------
 
@@ -1227,7 +1236,31 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     `wheel.steer` from here on is only ever read by the renderer.
   */
   if (car.driftBlend > 0.01) {
-    const show = car.driftAngle * 0.9 * car.driftBlend + delta * (1 - car.driftBlend)
+    /*
+      ------------------------------------------------------------------------
+      **Past the path, not along it** — and that is the whole of this fix.
+
+      These wheels were drawn at nine tenths of the slide angle, which points
+      them almost exactly where the car is travelling. That is defensible and it
+      looks like nothing, because the chase camera is aligned with the *road*
+      and a sustained drift travels down the road: the body swings out to a
+      visible angle and the wheels, pointing along the path, sit dead ahead in
+      the frame. The car went sideways and its tyres did not, which is the one
+      thing everybody knows a drift looks like.
+
+      A real drifting car's fronts are past its path by their own slip angle.
+      They have to be — they are the only two tyres still making a lateral
+      force, and a tyre makes none at zero slip. So the drawn lock is the slide
+      angle plus that bite, held to the steering the car actually has.
+
+      Measured at two thirds of an arrow: 16.6° before, 26.4° after, against a
+      body hung out at 18.4°. Still only ever `wheel.steer`, which from here on
+      is read by the renderer and by nothing else.
+      ------------------------------------------------------------------------
+    */
+    const past = car.driftAngle + Math.sign(car.driftAngle) * DRIFT_SHOW_BITE
+    const cranked = Math.max(-TUNE.steerLock, Math.min(TUNE.steerLock, past))
+    const show = cranked * car.driftBlend + delta * (1 - car.driftBlend)
     car.wheels[0].steer = show
     car.wheels[1].steer = show
   }

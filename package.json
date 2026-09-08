@@ -16,6 +16,7 @@
     "shaders": "npx --yes tsx scripts/shader-check.ts",
     "tuning": "npx --yes tsx scripts/tuning-check.ts",
     "drift": "npx --yes tsx scripts/drift-check.ts",
+    "memories": "npx --yes tsx scripts/memory-check.ts",
     "lobby": "npx --yes tsx scripts/lobby-check.ts",
     "pronouns": "node scripts/pronouns.mjs",
     "places": "node scripts/places.mjs",

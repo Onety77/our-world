@@ -1413,6 +1413,31 @@ assert a slip-angle window; the angle is `TUNE.driftAngle` scaled by the arrow,
 so it is a dial's business and pinning it is how a tuning change becomes a
 failing test.
 
+### And the wheels, which looked straight
+
+> *"the tire is supposed to kinda bends to the other direction while drifting
+> […] well the tyres just kinda stays looking straight"*
+
+The opposite-lock block was restored with the rest and was doing exactly what
+it said: drawing the fronts at nine tenths of the slide angle, which points
+them along the car’s path. Correct by its own description, and it looks like
+nothing — **because the chase camera is aligned with the road**, and a
+sustained drift travels down the road. So the body swings out to a visible
+angle and the wheels, pointing along the path, sit dead ahead in the frame.
+The car went sideways and its tyres did not.
+
+It is also wrong about a car. A drifting car’s front tyres are the only two
+still making a lateral force, and a tyre makes none at zero slip — so they sit
+*past* the path by their own slip angle, not on it. That is `DRIFT_SHOW_BITE`,
+eight degrees, added and then held to the steering lock the car actually has.
+
+    two thirds of an arrow   16.6° → 26.4°, against a body hung out at 18.4°
+    full arrow               31.5°, on the stops, against a slide of 26.4°
+
+Still only `wheel.steer`, which the tyre model rewrites from `delta` at the top
+of every step before it reads it — so this cannot reach the handling, and the
+lap times say it did not.
+
 ### What was kept
 
 Everything outside the drift. `npm run handling` passes all eleven, the fire

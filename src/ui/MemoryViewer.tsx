@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
@@ -14,7 +14,7 @@ export function MemoryViewer() {
   const all = useMemories(s => s.all)
   const id = useMemories(s => s.openId)
   const open = useMemories(s => s.open)
-  const memories = all.filter(m => !m.removed)
+  const memories = useMemo(() => all.filter(m => !m.removed), [all])
   const index = memories.findIndex(m => m.id === id)
   const memory = memories[index]
   const them = useWorldSlice(s => s.presence[otherUser(data.me)])
@@ -29,6 +29,7 @@ export function MemoryViewer() {
   const dialog = useRef<HTMLDivElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
+  const swipe = useRef<{ x: number; y: number } | null>(null)
   const picture = loaded?.id === id ? loaded.url : null
   const mine = memory?.by === data.me
 
@@ -68,9 +69,13 @@ export function MemoryViewer() {
     returnFocus.current = document.activeElement as HTMLElement | null
     closeButton.current?.focus()
     const previous = document.body.style.overflow
+    const root = document.getElementById('root')
+    const wasInert = root?.inert ?? false
+    if (root) root.inert = true
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = previous
+      if (root) root.inert = wasInert
       returnFocus.current?.focus({ preventScroll: true })
     }
   }, [showing])
@@ -119,7 +124,20 @@ export function MemoryViewer() {
         <div><span className="memory-eyebrow">THE LANTERN WALK</span><span className="memory-number">{index + 1} / {memories.length}</span></div>
         <button ref={closeButton} className="memory-close" onClick={() => open(null)} aria-label="Close photograph">×</button>
       </header>
-      <main className="memory-stage">
+      <main className="memory-stage"
+        onPointerDown={event => {
+          if (!event.isPrimary || back || (event.target as HTMLElement).closest('button, textarea')) return
+          swipe.current = { x: event.clientX, y: event.clientY }
+        }}
+        onPointerCancel={() => { swipe.current = null }}
+        onPointerUp={event => {
+          const start = swipe.current; swipe.current = null
+          if (!start) return
+          const dx = event.clientX - start.x, dy = event.clientY - start.y
+          if (Math.abs(dx) < 55 || Math.abs(dy) > Math.abs(dx) * 0.6) return
+          const next = memories[index + (dx < 0 ? 1 : -1)]
+          if (next) open(next.id)
+        }}>
         {back ? <section className="memory-letter" aria-label="On the back of this photograph">
           <span className="memory-eyebrow">ON THE OTHER SIDE</span>
           {writing !== null ? <>

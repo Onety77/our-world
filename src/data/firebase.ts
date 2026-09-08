@@ -2150,7 +2150,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         pictures.delete(want)
         throw error
       })
-      pictures.set(memory.path, asking)
+      pictures.set(want, asking)
       return asking
     },
 

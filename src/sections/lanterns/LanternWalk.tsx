@@ -39,7 +39,6 @@ import { Pools } from './Pools'
 import { Undergrowth } from './Undergrowth'
 import { Air } from './Air'
 import { Canopy } from './Canopy'
-import { openPane } from './view'
 import { paneTexture } from './picture'
 import { pickMemory } from './lanternGeometry'
 import { MemoryLights } from './MemoryLights'
@@ -65,8 +64,7 @@ const REACH = SPACING * 9
  * a receding line of flat coloured cards — which reads exactly as "the pictures
  * are blurry", because the pictures were not there.
  *
- * Sixteen at six hundred and forty pixels is about twenty-six megabytes of
- * texture at the very worst, on a walk long enough to hold that many in range —
+   * Textures are capped at 1024 pixels along their longest edge —
  * and they are cached and reused, so walking back down the lane decodes
  * nothing. The cache above it holds twenty-six, which is deliberately more than
  * this: the ones just behind you stay warm.
@@ -253,6 +251,15 @@ export default function LanternWalk() {
     from: null,
     timer: 0,
   })
+  useEffect(() => {
+    const state = press.current
+    const cancel = () => {
+      window.clearTimeout(state.timer)
+      state.timer = 0; state.held = null; state.from = null
+    }
+    window.addEventListener('blur', cancel)
+    return () => { cancel(); window.removeEventListener('blur', cancel) }
+  }, [])
 
   /**
    * Where the lane has been carried to, this frame.
@@ -407,6 +414,7 @@ export default function LanternWalk() {
     // work across movement, prioritise the nearest, and decode before revealing.
     const queue = [...near].sort((a, b) =>
       Math.abs(sFor(a.index) - walkAt()) - Math.abs(sFor(b.index) - walkAt()))
+    const retried = new Set<string>()
     const worker = async () => {
       while (!gone && queue.length) {
         const entry = queue.shift()!
@@ -431,6 +439,11 @@ export default function LanternWalk() {
           if (!gone) setUrls(was => was[memory.id] === url ? was : { ...was, [memory.id]: url })
         } catch {
           requests.current.delete(memory.id)
+          if (!gone && !retried.has(memory.id)) {
+            retried.add(memory.id)
+            await new Promise(resolve => window.setTimeout(resolve, 1000))
+            queue.push(entry)
+          }
         }
       }
     }
@@ -438,31 +451,13 @@ export default function LanternWalk() {
     return () => { gone = true }
   }, [near, data])
 
-  // --- picking, and telling the interface where the open one is --------------
+  // --- geometry picking and development telemetry ---------------------------
 
   const { camera, size } = useThree()
   const open = useMemories((s) => s.open)
   const point = useMemo(() => new Vector3(), [])
 
-  /**
-   * Which lantern is under a tap, in screen space.
-   *
-   * Deliberately not a raycast. Every lantern in the chain is drawn by one
-   * instanced mesh with a shader that places it — there is no scene object per
-   * lantern for a ray to hit, and adding invisible ones would be a second
-   * source of truth about where a lantern is, which is exactly how the Tree of
-   * Thoughts ended up with papers you could see and targets somewhere else.
-   *
-   * Projecting the centre and testing a box around it asks the *same* function
-   * the shader asks. It cannot drift.
-   */
-  /**
-   * Where lantern `i` is on screen, in CSS pixels, or null if it is not.
-   *
-   * One function, used by the picking and by the probe below, because two
-   * expressions of "where is that lantern" is exactly how the Tree of Thoughts
-   * ended up with papers you could see and targets somewhere else entirely.
-   */
+  /** Approximate screen bounds for the development probe; never used to pick. */
   const onScreen = (i: number) => {
     const hung = hangingFor(i)
     /*
@@ -568,23 +563,7 @@ export default function LanternWalk() {
   useEffect(() => {
     const surface = document.querySelector<HTMLElement>('.surface')
     if (!surface) return
-    /*
-      A tap goes to it. A press and hold opens it.
-
-      -------------------------------------------------------------------------
-      **Two gestures, because they are two intentions.**
-
-      Out here a photograph is a thing standing further down a lane, and what a
-      tap means is *go and look at that one* — turn, walk up, stand square to
-      it. Throwing a full-screen picture over the world instead is the interface
-      deciding you were finished walking.
-
-      So the hold is the one that opens. It is the gesture people already use
-      for "stop, I want this properly", it cannot be triggered by accident while
-      dragging along the lane, and it leaves the tap free to mean the thing it
-      obviously means.
-      -------------------------------------------------------------------------
-    */
+    // Both a tap and a stationary hold open the full photograph.
     const HOLD = 420
     /** Past this a press is a drag along the lane, and belongs to the walk. */
     const SLOP = 8
@@ -666,47 +645,6 @@ export default function LanternWalk() {
     }
   })
 
-  /*
-    Where the open lantern is on screen, for the interface to grow its
-    photograph out of.
-
-    A bounding box of the four projected corners rather than an axis-aligned
-    rectangle, because a lantern is turned to face the path rather than the
-    camera and the two differ by a few degrees. The interface only needs
-    somewhere to start from.
-  */
-  useFrame(() => {
-    if (!opened) {
-      openPane.live = false
-      openPane.at = focus.open
-      return
-    }
-    const hung = opened.hung
-    const cx = hung.x + carried.x
-    const cz = hung.z + carried.z
-
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-    for (const [ox, oy] of [
-      [-GLASS_W / 2, -GLASS_H / 2],
-      [GLASS_W / 2, -GLASS_H / 2],
-      [GLASS_W / 2, GLASS_H / 2],
-      [-GLASS_W / 2, GLASS_H / 2],
-    ]) {
-      point.set(cx + ox * Math.cos(hung.yaw), hung.y + oy, cz - ox * Math.sin(hung.yaw))
-      point.project(camera)
-      const px = (point.x * 0.5 + 0.5) * size.width
-      const py = (-point.y * 0.5 + 0.5) * size.height
-      minX = Math.min(minX, px); maxX = Math.max(maxX, px)
-      minY = Math.min(minY, py); maxY = Math.max(maxY, py)
-    }
-    openPane.x = (minX + maxX) / 2
-    openPane.y = (minY + maxY) / 2
-    openPane.halfW = Math.max(1, (maxX - minX) / 2)
-    openPane.halfH = Math.max(1, (maxY - minY) / 2)
-    openPane.at = focus.open
-    openPane.live = true
-  })
-
   const length = deepest + OVERRUN
 
   return (
@@ -720,12 +658,7 @@ export default function LanternWalk() {
         <Pools memories={memories} palette={palette} />
         <Undergrowth memories={memories} length={length} palette={palette} density={grassy} />
         <Air memories={memories} palette={palette} density={grassy} />
-        {/*
-          One post more than there are memories: the next one is already up and
-          waiting at the head of the lane, with nothing hanging on it yet. That
-          is the whole of the empty state, and it needs no words — an empty walk
-          is one bare post on a path nobody has worn.
-        */}
+        {/* The collection grows with actual memories. */}
         <Posts memories={memories} waiting={false} palette={palette} />
         <MemoryLights memories={memories} />
         <FarLanterns memories={memories} hide={hidden} palette={palette} />

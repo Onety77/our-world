@@ -191,6 +191,46 @@ check('how far it hangs follows the arrow', () => {
   assert(angles[2] > TUNE.driftAngle * DEG * 0.8, 'full lock never reaches the dial')
 })
 
+check('and the front wheels are cranked against it, past the path', () => {
+  /*
+    The one thing everybody knows a drift looks like, and it was missing.
+
+    The wheels were drawn along the car's path. That points them almost exactly
+    down the road — and the chase camera is aligned with the road — so the body
+    swung out to a visible angle while the tyres sat dead ahead in the frame.
+
+    Three things make it read: they must point *against* the arrow, they must go
+    *past* the path rather than sit on it, and they must stay inside the lock
+    the car actually has, or it stops being a car.
+  */
+  for (const side of [-1, 1]) {
+    const car = moving()
+    pull(car, side)
+    go(car, 2, { steer: side * 0.7 })
+    const drawn = car.wheels[0].steer
+    assert(Math.abs(car.wheels[1].steer - drawn) < 1e-9, 'the two fronts disagree')
+    assert(Math.sign(drawn) === -side,
+      `not opposite lock: ${(drawn * DEG).toFixed(1)}° on a ${side > 0 ? 'right' : 'left'} drift`)
+    assert(Math.abs(drawn) > Math.abs(slipOf(car)) + 0.05,
+      `only along the path: ${(drawn * DEG).toFixed(1)}° against a slide of ${deg(car).toFixed(1)}°`)
+    assert(Math.abs(drawn) <= TUNE.steerLock + 1e-9,
+      `past the car's own lock: ${(drawn * DEG).toFixed(1)}°`)
+    if (side > 0) {
+      console.log(`        hung out ${deg(car).toFixed(1)}°, wheels drawn at ${(drawn * DEG).toFixed(1)}° — lock is ${(TUNE.steerLock * DEG).toFixed(1)}°`)
+    }
+  }
+})
+
+check('and full lock puts them on the stops without going past', () => {
+  const car = moving()
+  pull(car)
+  go(car, 3, { steer: 1 })
+  const drawn = Math.abs(car.wheels[0].steer)
+  console.log(`        full arrow: ${deg(car).toFixed(1)}° of slide, wheels at ${(drawn * DEG).toFixed(1)}°`)
+  assert(drawn > TUNE.steerLock * 0.9, `never reaches the stops: ${(drawn * DEG).toFixed(1)}°`)
+  assert(drawn <= TUNE.steerLock + 1e-9, 'drawn past the stops')
+})
+
 console.log('\nwhat it costs\n')
 
 check('the entry costs speed and holding it does not', () => {

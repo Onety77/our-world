@@ -1,15 +1,12 @@
 // Local browser fixtures: never touches the connected data provider.
 import { putPicture } from '../src/data/pictures'
 import { useMemories } from '../src/systems/memories'
+export { useMemories } from '../src/systems/memories'
+export { pictureFromStore, putPicture } from '../src/data/pictures'
 
-export async function seedMemories() {
+export async function seedMemories(sources = []) {
   if (new URLSearchParams(location.search).get('mock') !== '1') throw Error('Mock mode required')
   if (useMemories.getState().all.length) return { existing: useMemories.getState().all.length }
-  const sources = [
-    '/scripts/.memory-photo.jpg',
-    '/scripts/.memory-photo.jpg',
-    '/scripts/.memory-photo.jpg',
-  ]
   const images = await Promise.all(sources.map(async src => {
     const image = new Image(); image.crossOrigin = 'anonymous'; image.src = src
     await image.decode(); return image
@@ -21,8 +18,19 @@ export async function seedMemories() {
     canvas.width = i % 4 === 0 ? 1000 : 1600
     canvas.height = i % 4 === 0 ? 1400 : 1067
     const context = canvas.getContext('2d')
-    const scale = Math.max(canvas.width / image.width, canvas.height / image.height)
-    context.drawImage(image, (canvas.width - image.width * scale) / 2, (canvas.height - image.height * scale) / 2, image.width * scale, image.height * scale)
+    if (image) {
+      const scale = Math.max(canvas.width / image.width, canvas.height / image.height)
+      context.drawImage(image, (canvas.width - image.width * scale) / 2, (canvas.height - image.height * scale) / 2, image.width * scale, image.height * scale)
+    } else {
+      context.fillStyle = ['#465d69', '#687568', '#976655'][i % 3]
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.strokeStyle = '#fff9'; context.lineWidth = 3
+      for (let x = 20; x < canvas.width; x += 40) {
+        context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke()
+      }
+      context.fillStyle = '#fff'; context.font = '72px Georgia'
+      context.fillText(`Memory ${i + 1}`, 70, 160)
+    }
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .9))
     const blur = document.createElement('canvas'); blur.width = 16; blur.height = 12
     blur.getContext('2d').drawImage(canvas, 0, 0, 16, 12)

@@ -134,7 +134,8 @@ export const GLASS_H = GLASS_W * (2 / 3)
  */
 export function paneSize(width: number, height: number): { w: number; h: number } {
   const shape = Math.max(0.05, height) / Math.max(0.05, width)
-  return { w: GLASS_W, h: Math.min(1.8, Math.max(0.36, GLASS_W * shape)) }
+  const w = Math.min(GLASS_W, 1.8 / shape)
+  return { w, h: w * shape }
 }
 
 /**
