@@ -40,6 +40,93 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 8 Sep · Claude · the emoji board answers the mouse now
+
+Three things were wrong with it, and the third one hid the other two.
+
+**Every emoji landed at position zero.** Two causes, stacked. The board used to
+render inside a wrapper element that only appeared when it opened, which changes
+the shape of the React tree — so React discarded the textarea and built a new
+one, and a new textarea has its caret at 0. And even without that, the caret was
+read on the way *out*, by which time the grid had the focus. The wrapper is gone
+for good (`Ink` returns the bare field in every state, on every machine, because
+five different layouts position it directly), the board is a portal placed from
+the field's measured rectangle, and the caret is taken in the keydown handler for
+Alt+E while the field still holds it.
+
+**It always opened upward, and in full-screen film the composer is at the top of
+the screen**, so the one place it was needed most was the one place it was cut
+off. It measures now: `box.top - tall - OFF < 8` flips it below.
+
+**And it was completely dead to the mouse.** This is the one worth writing down.
+
+`useDismissOutside` binds `click` in the **capture** phase on `document`, and its
+handler ends:
+
+```js
+if (!info.control) consume(event)
+window.clearTimeout(dismissTimer)
+outsideWorldTap = false
+dismissNow.current()     // ← unconditional
+```
+
+Being a control spares you from having the event *consumed*. It does not spare
+you from the dismissal. So every click anywhere in the board called
+`stopWriting()`, which unmounted the composer, which unmounted `Ink`, which
+unmounted the board — all in the capture phase, before React's bubble-phase
+handler on the button under the mouse had run. Clicking "edit" did nothing;
+clicking an emoji made the whole composer disappear. The keyboard worked
+perfectly, because nothing listens for keys, and that asymmetry is what made it
+look like a portal/React problem for an hour. It is not: **`onClick` in a body
+portal is fine. The click was being answered by something else first.**
+
+The fix is a general one, because the collision is general — any panel belonging
+to an open surface but rendered elsewhere in the document has it.
+`useDismissOutside` now also counts `[data-inside]` as inside, and the board says
+`data-inside` on its root. If another portalled panel is ever added to a
+dismissible surface, that attribute is the whole contract.
+
+**"add one" is "edit".** Inside it: shift+arrows or ‹ › move one, `×` or
+backspace removes one (starters included — it is your keyboard), and a paste
+field adds one, on paste or on Enter. Usage-based sorting is gone from
+`systems/emoji` entirely: a list that reshuffles as you use it can never be
+learned, and the point of a grid with arrow keys is that the third one along is
+always the third one along. The order is yours; `all` is the order.
+
+### A section was silently not rendering while I tested this
+
+`uDawn` was declared in `Conversation.tsx`'s **vertex** shader and used in its
+**fragment** shader. Uniforms are per-stage — each one compiles alone and sees
+only what it names — so the fragment compile failed, the material failed, and the
+whole Stars fell through to "try that again". No TypeScript error, no build
+error, and `npm run shaders` passes: it looks for backticks that end a template
+early, not for identifiers that do not resolve. The only thing that catches this
+is opening the page.
+
+Worth knowing that `npm run shaders` has this blind spot. A cross-stage check —
+uniform used in FRAG, declared only in VERT — would be cheap and would have
+turned an hour into a second.
+
+### Verified
+
+Real CDP mouse and key events at 1280×800, against the Stars
+(`scratchpad/emoji.mjs`):
+
+| | |
+|---|---|
+| caret | `"hello world"`, cursor at 5 → `"hello😂 world"` |
+| flip | composer pinned to the top → `is-under`, fully on screen |
+| click an emoji | `"hello😂 world"` → `"hello😂🥹 world"` |
+| edit | `.emoji.is-editing` after a real click |
+| reorder | `❤️ 😂 🥹 😭 …` → `❤️ 😂 😭 🥹 …` |
+| remove | 40 → 39 |
+| add | 39 → 40, `🦄` at the front, in `localStorage` |
+
+Two things the render showed that the assertions did not: the paste field was
+6.5rem, which clipped its own placeholder to "paste one to", and the `×` badges
+were too soft to read against a colour emoji — the busiest background there is.
+Both widened and darkened.
+
 ## 8 Sep · Claude · Her Morning — the Stars' second sky, done properly
 
 The first attempt at this was thrown away. It deserved to be: it changed the

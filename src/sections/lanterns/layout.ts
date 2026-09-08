@@ -62,7 +62,7 @@ export const WALK_X = 340
  * where the lane foreshortens and two lanterns can otherwise land on top of
  * each other.
  */
-export const SPACING = 4.35
+export const SPACING = 5.4
 
 /**
  * How far to the side of the centreline a lantern hangs.
@@ -103,7 +103,7 @@ export const LANTERN_Y = 1.62
  * memory is *opened*, which shows the whole photograph at its own proportions.
  * ---------------------------------------------------------------------------
  */
-export const GLASS_W = 0.88
+export const GLASS_W = 1.45
 export const GLASS_H = GLASS_W * (2 / 3)
 
 /**
@@ -134,7 +134,7 @@ export const GLASS_H = GLASS_W * (2 / 3)
  */
 export function paneSize(width: number, height: number): { w: number; h: number } {
   const shape = Math.max(0.05, height) / Math.max(0.05, width)
-  return { w: GLASS_W, h: Math.min(1.55, Math.max(0.3, GLASS_W * shape)) }
+  return { w: GLASS_W, h: Math.min(1.8, Math.max(0.36, GLASS_W * shape)) }
 }
 
 /**

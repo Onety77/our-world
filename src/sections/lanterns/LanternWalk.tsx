@@ -22,7 +22,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Color, Group, Vector3 } from 'three'
+import { Color, Group, Matrix4, Raycaster, Vector2, Vector3 } from 'three'
 import { useData } from '@/data/provider'
 import { useMemories } from '@/systems/memories'
 import { useSceneEnv } from '@/world/SceneEnv'
@@ -40,6 +40,9 @@ import { Undergrowth } from './Undergrowth'
 import { Air } from './Air'
 import { Canopy } from './Canopy'
 import { openPane } from './view'
+import { paneTexture } from './picture'
+import { pickMemory } from './lanternGeometry'
+import { MemoryLights } from './MemoryLights'
 
 /**
  * How close a lantern has to be before its photograph is worth fetching.
@@ -242,6 +245,7 @@ export default function LanternWalk() {
    * ---------------------------------------------------------------------------
    */
   const [focused, setFocused] = useState<number | null>(null)
+  useEffect(() => { if (!openId) setFocused(null) }, [openId])
 
   /** The live press — see the note by [H[2J[3J in the gesture below. */
   const press = useRef<{ held: number | null; from: { x: number; y: number } | null; timer: number }>({
@@ -396,56 +400,43 @@ export default function LanternWalk() {
   const data = useData()
   const [urls, setUrls] = useState<Record<string, string>>({})
 
+  const requests = useRef(new Map<string, Promise<string>>())
   useEffect(() => {
     let gone = false
-    /*
-      Nearest first, and only a few at a time.
-
-      -------------------------------------------------------------------------
-      **Sixteen photographs asked for at once is sixteen photographs arriving
-      last.** A phone on mobile data has one pipe; starting every request
-      together shares it evenly, which sounds fair and means the one you are
-      standing in front of finishes at the same moment as the one four bends
-      away. `near` is already sorted by distance, so taking the first few and
-      letting the rest wait for a slot is the whole fix: the lantern you are
-      looking at gets the whole connection, and the others follow as you walk.
-
-      Three at a time rather than one, because a single file in flight leaves
-      the connection idle through every round trip.
-      -------------------------------------------------------------------------
-    */
-    const AT_ONCE = 3
-    const wanted = near.filter(({ memory }) => !urls[memory.id]).slice(0, AT_ONCE)
-    for (const { memory } of wanted) {
-      data
-        /*
-          The walking copy, not the full-size one.
-
-          A memory stores a lane-sized copy as well now — see `lanePath` — and
-          asking for it is the difference between a few tens of kilobytes and
-          several megabytes per lantern. Memories kept before that existed fall
-          back to the display copy inside the data layer, so this call does not
-          have to know which is which.
-        */
-        .pictureUrl(memory, 'lane')
-        .then((url) => {
-          if (!gone) setUrls((was) => (was[memory.id] ? was : { ...was, [memory.id]: url }))
-        })
-        .catch(() => {
-          /*
-            Left out of the map rather than stored as a failure.
-
-            The lantern keeps its sixteen-pixel preview and its colour, which is
-            true — this *is* the picture, at the resolution we have — and walking
-            past it again asks once more. A phone in a tunnel should not
-            permanently mark a photograph as missing.
-          */
-        })
+    // Resolving one photograph must not cancel its neighbours. Share in-flight
+    // work across movement, prioritise the nearest, and decode before revealing.
+    const queue = [...near].sort((a, b) =>
+      Math.abs(sFor(a.index) - walkAt()) - Math.abs(sFor(b.index) - walkAt()))
+    const worker = async () => {
+      while (!gone && queue.length) {
+        const entry = queue.shift()!
+        const { memory } = entry
+        let request = requests.current.get(memory.id)
+        if (!request) {
+          request = (async () => {
+            try {
+              const url = await data.pictureUrl(memory, 'lane')
+              await paneTexture(url)
+              return url
+            } catch {
+              const url = await data.pictureUrl(memory)
+              await paneTexture(url)
+              return url
+            }
+          })()
+          requests.current.set(memory.id, request)
+        }
+        try {
+          const url = await request
+          if (!gone) setUrls(was => was[memory.id] === url ? was : { ...was, [memory.id]: url })
+        } catch {
+          requests.current.delete(memory.id)
+        }
+      }
     }
-    return () => {
-      gone = true
-    }
-  }, [near, data, urls])
+    void Promise.all([worker(), worker(), worker()])
+    return () => { gone = true }
+  }, [near, data])
 
   // --- picking, and telling the interface where the open one is --------------
 
@@ -539,18 +530,18 @@ export default function LanternWalk() {
     }
   }
 
+  const picker = useMemo(() => new Raycaster(), [])
+  const inverse = useMemo(() => new Matrix4(), [])
+  const pointer = useMemo(() => new Vector2(), [])
   const whichLantern = (cx: number, cy: number): number | null => {
-    let best: { index: number; away: number } | null = null
-    const here = walkAt()
-    for (let i = 0; i < memories.length; i++) {
-      if (Math.abs(sFor(i) - here) > REACH) continue
-      const at = onScreen(i)
-      if (!at) continue
-      if (Math.abs(cx - at.x) > at.halfW || Math.abs(cy - at.y) > at.halfH) continue
-      const away = Math.abs(cx - at.x) + Math.abs(cy - at.y)
-      if (!best || away < best.away) best = { index: i, away }
-    }
-    return best ? best.index : null
+    if (!carrying.current || openId) return null
+    carrying.current.updateWorldMatrix(true, false)
+    inverse.copy(carrying.current.matrixWorld).invert()
+    pointer.set(cx / size.width * 2 - 1, 1 - cy / size.height * 2)
+    picker.setFromCamera(pointer, camera)
+    picker.ray.applyMatrix4(inverse)
+    const here = walkAt() / SPACING
+    return pickMemory(picker.ray, memories, Math.floor(here - 12), Math.ceil(here + 12))
   }
 
   /*
@@ -570,7 +561,8 @@ export default function LanternWalk() {
       const at = onScreen(i)
       if (at) seen.push({ i, x: at.x, y: at.y, halfW: at.halfW, halfH: at.halfH })
     }
-    ;(window as unknown as { __walk: unknown }).__walk = { at: here, open: openId, seen }
+    ;(window as unknown as { __walk: unknown }).__walk = { at: here, open: openId, seen,
+      pictures: near.filter(entry => urls[entry.memory.id]).length, near: near.length, pick: whichLantern }
   })
 
   useEffect(() => {
@@ -658,6 +650,7 @@ export default function LanternWalk() {
       // Walk to the piece of path this one was hung facing, and turn to it.
       walkTo(sFor(index) + 6.4)
       setFocused(index)
+      open(memory.id)
     }
 
     surface.addEventListener('pointerdown', down)
@@ -733,7 +726,8 @@ export default function LanternWalk() {
           is the whole of the empty state, and it needs no words — an empty walk
           is one bare post on a path nobody has worn.
         */}
-        <Posts memories={memories} waiting palette={palette} />
+        <Posts memories={memories} waiting={false} palette={palette} />
+        <MemoryLights memories={memories} />
         <FarLanterns memories={memories} hide={hidden} palette={palette} />
         <Halos memories={memories} palette={palette} />
         <PoleLamps memories={memories} palette={palette} />

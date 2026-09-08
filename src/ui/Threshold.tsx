@@ -1339,6 +1339,7 @@ function TheLanternWalk() {
           <span className="lantern-walk-touch">swipe up or down</span>
           <span className="lantern-walk-pointer">scroll or use the arrow keys</span>
           {' '}to walk backward through what we kept
+          <span className="memory-walk-open-hint">tap a photograph to open it</span>
         </span>
       )}
     </div>

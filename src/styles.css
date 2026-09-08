@@ -16884,16 +16884,20 @@ body.on-the-road .broke-what {
   render it at all in that case — so none of those layouts move.
   ---------------------------------------------------------------------------
 */
-.ink-with-emoji {
-  position: relative;
-  display: block;
-}
+/*
+  Placed from the field's rectangle, not from a wrapper around it.
 
+  It used to hang off a positioned element that appeared around the textarea
+  when it opened — which moved the caret to zero on every open, because a change
+  of tree shape makes React rebuild the input. It is in a portal on the body now
+  and its left/top are written by the component from a measurement, which is
+  also what lets it open *downward* when there is no room above: the film's chat
+  overlay sits at the top of the screen in full screen, and a board that always
+  went up was simply cut off there.
+*/
 .emoji {
-  position: absolute;
-  bottom: calc(100% + 0.5rem);
-  left: 0;
-  z-index: 40;
+  position: fixed;
+  z-index: 60;
   width: max-content;
   max-width: min(24rem, calc(100vw - 2rem));
   padding: 0.5rem;
@@ -17311,4 +17315,100 @@ body:has(.talking) .voice-lights-label {
   content: '';
   position: absolute;
   inset: -0.9rem -1.1rem;
+}
+
+/* --------------------------------------------------------------------------
+   Editing your own emoji
+   --------------------------------------------------------------------------
+   The button used to say "add one", which was the smallest true description of
+   what it did and the wrong promise: what people want from a list they have to
+   live with is to *arrange* it — take out the ones they never reach for, put
+   the ones they do at the front, and add their own. So it says "edit", and
+   inside it everything is movable, removable and addable.
+   -------------------------------------------------------------------------- */
+
+.emoji-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+  padding: 0 0.15rem;
+  flex-wrap: wrap;
+}
+
+.emoji-edit input {
+  /* Wide enough for its own placeholder — at 6.5rem it read "paste one to". */
+  flex: 1 1 8.75rem;
+  min-width: 8.75rem;
+  font-size: 1rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(240, 216, 178, 0.22);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--ink);
+}
+
+.emoji-nudge {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.emoji-nudge button {
+  all: unset;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  color: rgba(242, 239, 230, 0.82);
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  box-shadow: inset 0 0 0 1px rgba(240, 216, 178, 0.2);
+}
+
+.emoji-nudge button:hover {
+  color: #ffd09a;
+  box-shadow: inset 0 0 0 1px rgba(240, 216, 178, 0.45);
+}
+
+/*
+  In editing, the grid says so: every one carries the way to remove it, and the
+  one under the cursor is ringed rather than merely tinted — because in this
+  mode the cursor is a *handle*, not a highlight.
+*/
+.emoji.is-editing .emoji-grid button {
+  position: relative;
+}
+
+.emoji.is-editing .emoji-grid button.on {
+  box-shadow: inset 0 0 0 1px rgba(255, 194, 125, 0.75);
+}
+
+.emoji-off {
+  position: absolute;
+  top: -0.1rem;
+  right: -0.1rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  /*
+    Dark and ringed rather than tinted. It sits on top of a colour emoji, which
+    is the busiest possible background, and at this size anything softer simply
+    disappeared into whatever was under it.
+  */
+  background: #1b100b;
+  color: #ffc9a6;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 150, 0.55);
+}
+
+.emoji-off:hover {
+  background: #6b2a1c;
+  color: #ffe6d2;
 }

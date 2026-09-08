@@ -128,6 +128,17 @@ const VERT = /* glsl */ `
 const FRAG = /* glsl */ `
   precision mediump float;
 
+  /*
+    Declared again, here.
+
+    A uniform is not shared between the two stages — each one compiles on its
+    own and only sees what it names. This is used by both, and having it only in
+    the vertex shader failed the fragment compile outright, which in three's
+    material means the whole section refuses to render and the Stars showed its
+    error screen. Nothing catches this but running it.
+  */
+  uniform float uDawn;
+
   varying float vFresh;
 
   varying vec3 vColor;

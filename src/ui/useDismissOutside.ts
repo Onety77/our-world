@@ -31,8 +31,22 @@ export function useDismissOutside(
     const targetInfo = (event: Event) => {
       const target = event.target
       if (!(target instanceof Node)) return null
-      const inside = insideNow.current.some((boundary) => boundary.current?.contains(target))
       const element = target instanceof Element ? target : target.parentElement
+      /*
+        Inside means inside the *surface*, which is not the same as inside the
+        element. A panel belonging to an open thing may be rendered somewhere
+        else in the document entirely — the emoji board is a portal on the body,
+        placed from the composer's rectangle so that appearing cannot rebuild
+        the field it belongs to — and by the DOM it is outside every boundary
+        listed here. Clicking it therefore dismissed the very composer it was
+        serving, in the capture phase, before React's own handler on the button
+        had a chance to run: the board could be driven from the keyboard and was
+        completely dead to the mouse. Anything marked `data-inside` is part of
+        whatever is open, wherever it happens to be rendered.
+      */
+      const inside =
+        insideNow.current.some((boundary) => boundary.current?.contains(target)) ||
+        Boolean(element?.closest('[data-inside]'))
       const control = Boolean(element?.closest(
         'button, input, textarea, select, a, [role="button"], [role="tab"]',
       ))

@@ -41,14 +41,15 @@ import type { Memory } from '@/data/types'
 import { LIGHT_COLORS, type SkyPalette } from '@/systems/palette'
 import { ambientLightLevel } from '@/world/forms'
 import { useLanternLight } from '@/systems/lanternLight'
-import { GLASS_H, GLASS_W, LANTERN_Y, hangingFor, paneSize, sideFor } from './layout'
-import { blurTexture, paneTexture } from './picture'
+import { GLASS_W, hangingFor, paneSize, sideFor } from './layout'
+import { blurTexture, paneTexture, retainPane, releasePane } from './picture'
+import { LAMP_UP, postPieces } from './lanternGeometry'
 
 /** Longest walk this draws lanterns for. */
 const MOST = 600
 
 /** How far above the hood the lamp on the post head sits, in metres. */
-export const LAMP_UP = 0.34
+export { LAMP_UP } from './lanternGeometry'
 
 /* -------------------------------------------------------------------------- */
 /* the glass                                                                   */
@@ -357,73 +358,7 @@ export function Posts({
     }
 
     for (let i = 0; i < many; i++) {
-      const hung = hangingFor(i)
-      /*
-        Three pieces, and together they are what makes it a lantern rather than
-        a picture nailed to a stick.
-
-        It was one bare upright, which read as a signpost — a flat board on a
-        pole is a sign, and no amount of glow fixes that. What a hanging lamp
-        has is a *hood* over the light and an *arm* holding it out from whatever
-        it is fixed to, and those two shapes are most of the silhouette. The
-        hood also does real work after dark: it is the dark edge along the top
-        that stops the pane bleeding into the sky behind it.
-
-        Authored in the lantern's own frame — right along the picture's width,
-        normal the way it faces — so all of this stays true however the lane has
-        turned the lantern.
-      */
-      const c = Math.cos(hung.yaw)
-      const s = Math.sin(hung.yaw)
-      // The lantern's right vector, matching the glass — see POST_VERT.
-      const rx = c
-      const rz = -s
-      const side = sideFor(i)
-      const reach = GLASS_W / 2 + 0.055
-
-      const postX = hung.x + rx * reach * side
-      const postZ = hung.z + rz * reach * side
-      // The hood sits on top of *this* picture, which is now its own height.
-      const shape = memories[i] ? paneSize(memories[i].width, memories[i].height) : { h: GLASS_H }
-      const hoodY = hung.y + shape.h / 2 + 0.05
-      const foot = hung.y - LANTERN_Y
-      const top = hoodY + LAMP_UP
-
-      // The upright, from the ground to the lamp on its head.
-      piece(postX, (foot + top) / 2, postZ, 0.05, top - foot, 0.05, hung.yaw)
-      // The arm, reaching in from the post to over the middle of the picture.
-      piece(
-        hung.x + rx * (reach / 2) * side,
-        hoodY + 0.055,
-        hung.z + rz * (reach / 2) * side,
-        reach,
-        0.04,
-        0.04,
-        hung.yaw,
-      )
-      // The hood, a touch wider than the glass and overhanging its face.
-      piece(hung.x, hoodY, hung.z, GLASS_W + 0.15, 0.065, 0.23, hung.yaw)
-
-      /*
-        And the lamp on the head of the post.
-
-        ------------------------------------------------------------------
-        **A post that carries a light should have a light on it.**
-
-        Every lantern here was a lit *picture* and nothing else, which is why
-        the lane read as lit signage: the thing giving out the light was the
-        photograph, and a photograph is not a lamp. This is the small brass
-        cap and the flame under it — the actual source — and it changes what
-        the whole object is. The picture hangs *below the lamp*, which is what
-        a lantern on a pole has always been.
-
-        Only where there is a memory. A bare post at the head of the walk has
-        no lamp on it yet, and that is the honest picture of the next one.
-        ------------------------------------------------------------------
-      */
-      piece(postX, top - 0.055, postZ, 0.115, 0.028, 0.115, hung.yaw)
-      piece(postX, top + 0.055, postZ, 0.135, 0.03, 0.135, hung.yaw)
-      piece(postX, top, postZ, 0.075, 0.09, 0.075, hung.yaw)
+      postPieces(i, memories[i]?.width ?? 0, memories[i]?.height ?? 0, piece)
     }
 
     geo.setAttribute('iAt', new InstancedBufferAttribute(new Float32Array(at), 3))
@@ -748,8 +683,8 @@ const NEAR_FRAG = /* glsl */ `
   void main() {
     vec2 p = vUv * 2.0 - 1.0;
     float inner = max(abs(p.x), abs(p.y));
-    float glass = 1.0 - smoothstep(0.86, 0.94, inner);
-    float frame = smoothstep(0.86, 0.92, inner) * (1.0 - smoothstep(0.985, 1.0, inner));
+    float glass = 1.0 - smoothstep(0.96, 0.98, inner);
+    float frame = smoothstep(0.96, 0.98, inner) * (1.0 - smoothstep(0.985, 1.0, inner));
 
     /*
       The whole photograph, and nothing taken off it.
@@ -763,23 +698,22 @@ const NEAR_FRAG = /* glsl */ `
     // Until the real photograph has arrived this is the preview from the
     // document, which is sixteen pixels stretched — so it is crossed towards
     // the average colour rather than shown as a blur nobody asked for.
-    vec3 col = mix(mix(uTint, shot, 0.88), shot, uSharp);
+    vec3 col = mix(mix(uTint, shot, 0.25), shot, uSharp);
 
     float night = 1.0 - uLight;
-    col *= 0.72 + 0.62 * night;
+    col *= mix(0.9, 1.0, uSharp);
     float middle = 1.0 - smoothstep(0.0, 1.25, length(p));
-    col += uTint * middle * (0.06 + 0.18 * night);
+    col += uTint * middle * 0.035 * night * (1.0 - uSharp);
 
-    vec3 iron = vec3(0.016, 0.013, 0.011);
+    vec3 iron = vec3(0.58, 0.52, 0.40);
     col = mix(col, iron, frame);
 
     float a = max(glass, frame) * uForm;
     if (a <= 0.01) discard;
 
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
-    col = mix(col, uFogColor, fog);
+    col = mix(col, uFogColor, fog * 0.45);
     gl_FragColor = vec4(col, a * (1.0 - fog * 0.55));
-    #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `
@@ -911,13 +845,17 @@ export function NearLantern({
   }, [memory.blur, material])
 
   const sharp = useRef(0)
+  const ready = useRef(false)
   useEffect(() => {
     if (!picture) return
     let gone = false
+    retainPane(picture)
+    ready.current = false
     void paneTexture(picture)
       .then((texture) => {
         if (gone) return
         material.uniforms.uMap.value = texture
+        ready.current = true
         sharp.current = 0
         material.uniforms.uSharp.value = 0
       })
@@ -926,13 +864,15 @@ export function NearLantern({
       })
     return () => {
       gone = true
+      ready.current = false
+      releasePane(picture)
     }
   }, [picture, material])
 
   const form = useRef(forming ? 0 : 1)
   useFrame((_, delta) => {
     const u = material.uniforms
-    if (u.uMap.value && picture && sharp.current < 1) {
+    if (ready.current && sharp.current < 1) {
       sharp.current = Math.min(1, sharp.current + delta * 2.6)
       u.uSharp.value = sharp.current
     }

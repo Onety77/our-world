@@ -6,7 +6,7 @@
  * texture, and both are the same out on the lane.
  */
 
-import { LinearFilter, SRGBColorSpace, Texture } from 'three'
+import { LinearFilter, LinearMipmapLinearFilter, SRGBColorSpace, Texture } from 'three'
 import { GLASS_W, GLASS_H } from './layout'
 
 /** The shape every lantern is cut to. Three by two — see `GLASS_W`. */
@@ -32,7 +32,7 @@ export function cropFor(width: number, height: number): [number, number] {
  * photograph living on the GPU at full size for the sake of a pane you walk
  * past.
  */
-const PANE_PX = 720
+const PANE_PX = 1024
 
 /**
  * How many decoded photographs to keep.
@@ -48,6 +48,37 @@ const PANE_PX = 720
 const KEEP = 26
 
 const held = new Map<string, Texture>()
+const pending = new Map<string, Promise<Texture>>()
+const readers = new Map<string, number>()
+
+export function retainPane(url: string) { readers.set(url, (readers.get(url) ?? 0) + 1) }
+export function releasePane(url: string) {
+  const count = (readers.get(url) ?? 1) - 1
+  if (count > 0) readers.set(url, count)
+  else readers.delete(url)
+  trim()
+}
+function trim() {
+  for (const [url, texture] of held) {
+    if (held.size <= KEEP) break
+    if (readers.has(url)) continue
+    texture.dispose()
+    held.delete(url)
+  }
+}
+
+export function paneTexture(url: string): Promise<Texture> {
+  const existing = held.get(url)
+  if (existing) {
+    held.delete(url); held.set(url, existing)
+    return Promise.resolve(existing)
+  }
+  const loading = pending.get(url)
+  if (loading) return loading
+  const request = makePaneTexture(url).finally(() => pending.delete(url))
+  pending.set(url, request)
+  return request
+}
 
 /**
  * A lantern-sized texture for a photograph, made once and then remembered.
@@ -56,7 +87,7 @@ const held = new Map<string, Texture>()
  * small, because a `Texture` holds on to whatever image it was handed — drawing
  * it small does not make it *cost* small.
  */
-export async function paneTexture(url: string): Promise<Texture> {
+async function makePaneTexture(url: string): Promise<Texture> {
   const had = held.get(url)
   if (had) {
     // Re-inserted, so the map's own order is least-recently-used.
@@ -85,17 +116,13 @@ export async function paneTexture(url: string): Promise<Texture> {
 
   const texture = new Texture(canvas)
   texture.colorSpace = SRGBColorSpace
-  texture.minFilter = LinearFilter
+  texture.minFilter = LinearMipmapLinearFilter
   texture.magFilter = LinearFilter
+  texture.anisotropy = 4
   texture.needsUpdate = true
   held.set(url, texture)
 
-  while (held.size > KEEP) {
-    const oldest = held.keys().next().value
-    if (oldest === undefined) break
-    held.get(oldest)?.dispose()
-    held.delete(oldest)
-  }
+  trim()
   return texture
 }
 

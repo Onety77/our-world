@@ -28,7 +28,7 @@
  * are gone rather than ported. Travel is travel.
  */
 
-import { headFor } from './layout'
+import { headFor, SPACING } from './layout'
 
 const COARSE =
   typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true
@@ -188,10 +188,10 @@ export function alongTheLane(target: HTMLElement): () => void {
     ) return
     if (e.key === 'ArrowUp') {
       e.preventDefault()
-      walkTo(walk.to - 4.35)
+      walkTo(walk.to - SPACING)
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      walkTo(walk.to + 4.35)
+      walkTo(walk.to + SPACING)
     } else if (e.key === 'Home') {
       e.preventDefault()
       walkTo(walk.deepest)
