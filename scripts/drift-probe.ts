@@ -1,7 +1,7 @@
 /**
  * What a drift actually costs, and where it actually goes.
  *
- * `npm run drift`
+ * `npx tsx scripts/drift-probe.ts` — the traces behind `npm run drift`.
  *
  * Two complaints, both about drifting, and both of the kind a lap time hides.
  * The first — the car stopping dead in a long corner, and a swap costing
@@ -37,10 +37,21 @@ const DT = 1 / 120
 const KMH = 3.6
 const FLAT: CarInput = { steer: 0, throttle: 1, brake: 0, handbrake: false, boost: false }
 
+/*
+  Wound up by a driver that keeps it near the middle, not by holding it
+  straight.
+
+  Straight was fine when this was written and stopped being fine when the car
+  got quicker: the Rootway turns before 108 km/h now, so a car with no
+  steering reaches the first corner, buries itself in the rock at 86 and never
+  gets to the speed the probe is supposed to start from. It read as the probe
+  being broken, which it was not — the car had simply outgrown it.
+*/
 function windUpTo(track: Track, car: CarState, target: number): void {
   for (let step = 0; step < 120 * 120; step++) {
     if (speedOf(car) >= target) return
-    advanceCar(track, car, FLAT, DT)
+    const middle = Math.max(-1, Math.min(1, -(car.psi * 3 + car.n * 0.25)))
+    advanceCar(track, car, { ...FLAT, steer: middle }, DT)
   }
   throw new Error(`never reached ${target} m/s`)
 }
@@ -56,7 +67,7 @@ interface Run {
 function drift({ label, steer, handbrake, noWalls = false }: Run, seconds = 7): void {
   const track = makeTrack(7, 'rootway')
   const car = createCar(track)
-  windUpTo(track, car, 30)
+  windUpTo(track, car, 26)
 
   const kmh: string[] = []
   const along: string[] = []
@@ -97,7 +108,7 @@ function drift({ label, steer, handbrake, noWalls = false }: Run, seconds = 7): 
 const swap = (period: number) => (t: number) => (Math.floor(t / period) % 2 === 0 ? 1 : -1)
 const flick = (t: number) => t < 0.3
 
-console.log('\nentering every drift at 108 km/h with the throttle pinned\n')
+console.log('\nentering every drift at 94 km/h with the throttle pinned\n')
 console.log('  --- the fixed ones: short drifts and side-swaps, walls off ---\n')
 drift({ label: 'swapping sides every 0.6s', steer: swap(0.6), handbrake: flick, noWalls: true })
 drift({ label: 'swapping sides every 0.35s', steer: swap(0.35), handbrake: flick, noWalls: true })

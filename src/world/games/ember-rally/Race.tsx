@@ -1419,8 +1419,10 @@ class Driving {
         */
         boostLeft: car.boostLeft,
         driftAngle: car.driftAngle,
-        driftControl: car.driftControl,
-        driftTarget: car.driftTarget,
+        // How far through the drift model it is, and whether the pose is being
+        // held or swung — the two numbers a drift complaint is always about.
+        driftBlend: +car.driftBlend.toFixed(3),
+        driftSettled: +car.driftSettled.toFixed(2),
         touching: car.touching,
         shortcut: car.shortcut,
         strikes: car.strikes,

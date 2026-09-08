@@ -1313,6 +1313,131 @@ the failure is quiet: the film appears and the rating is silently refused. Run
 the film half failed were the check's own MediaRecorder fixture coming out at
 1 KB instead of 3, which is an old flake and not this work.
 
+## 8 Sep · Claude · The drift is ours again
+
+> *"codex really fixed alot of things about the car, the speed, the feels,
+> the corners […] but one thing codex wouldnt really get is how our drift
+> works, it tried twice and failed badly"*
+
+Correct, and the reason is not a bug. **The drift was not tuned, it was
+replaced with a different mechanic**, by someone who had no way of knowing
+there was a design to keep. Everything else about the car got better in the
+same two commits and none of that was touched here.
+
+### What ours is
+
+From `PLAN.md`, and it is the only sentence that matters: *a drift is a game
+mechanic, not a physics outcome — and the physics has to be told to get out of
+the way.* While one is running the arrows steer the **path**, not the wheels:
+the key you hold bends the line the car is travelling along, the same key
+decides which way and how far it hangs, and **the other key swings it through
+and hangs it the other way**. One drift carries you through a left and then a
+right without ever hooking up.
+
+### What it had become
+
+A slip angle you hold. The side was fixed at the moment of the handbrake pull,
+the arrows only deepened or shallowed the angle, and swapping sides needed a
+second pull. Reasonable, well written, and a different game.
+
+Two pieces of evidence rather than an opinion.
+
+**Nine of the twelve drift dials were dead** — `driftSwap`, `driftTightness`,
+`driftGrip`, `driftScrub`, `driftSwingCost`, `driftHold`, `driftTopSpeed`,
+`driftLineHold`, `driftPlace`, all still rendering on the tuning page and
+connected to nothing. `npm run tuning` says 38 of 38 now.
+
+**And a held drift on the real Rootway**, one arrow, throttle pinned:
+
+    before   83 · 73 ·  8 ·  0 ·  1 ·  2 ·  4    97% → 100% to the rock, touching 33%
+    after    83 · 58 · 66 · 68 · 68 · 68 · 68    peaks at 81%, touching 0%
+
+It drew its own circle, walked across the tunnel and stopped dead in the rock —
+the exact failure recorded and fixed on 1 September, back again and worse. The
+1 Sep `driftHold` work had gone with it: `driftSettled` had been redefined from
+*seconds the pose has been held* to *seconds continuously sliding*, which is a
+different quantity wearing the same name, and `DRIFT_ANGLE_COST` was gone.
+
+### The one I broke, and how it was caught
+
+I reported this finished with `npm run tuning` reporting **36 of 38**, and
+called the two dead ones — `boostPower` and `boostSeconds` — pre-existing. They
+were not. At HEAD it was 38 of 38 and it exited zero. I asserted that from a
+plausible guess rather than from running it, and the owner asking *"you really
+done??"* is the only reason it was found.
+
+The cause is a seam rather than the drift. There are two things called drifting
+in `physics.ts`: `car.drifting`, the deliberate state, and a local one meaning
+*measured slip*. The ember used to fill from the state. It had been moved onto
+the measured one, which was correct at the time **because the two had been made
+the same thing** — the deliberate drift no longer existed. Bringing it back
+parted them again, and the bar went on filling from the couple of seconds of
+incidental slip in a lap while ignoring twenty-four seconds of actual drifting.
+
+    slip over 0.14      2.57 s   against 2.52 s originally
+    payouts                 2    against 2
+    peak charge          1.77    against 1.74
+    the bar              0.39    against 1.00
+
+Everything measurable about the drift was identical; only the reward was
+starved. Nothing failed, nothing looked wrong, and the economy the whole game
+turns on had quietly stopped paying.
+
+**Chasing it proved the restoration faithful.** With the ember taken out of the
+test driver — the original always cancelled its own drifts with it at exactly
+0.6 s, so its stickiness had never once been exercised — the two line up:
+
+    original   23.48 s drifting, drifts of 5.5 · 2.7 · 2.6 · 12.7
+    restored   24.17 s drifting, drifts of 5.8 · 2.8 · 2.6 · 13.0
+
+`npm run drift` now asserts the seam, because a renamed state with a consumer
+still reading its old meaning is a class of bug with no symptom at all.
+
+### Why the check did not catch it
+
+It could not: the check was written from the new model. Its road test used a
+synthetic constant-radius track and a **closed-loop test driver** reading
+`car.psi`, `slipOf(car)` and `car.n` and computing steering every frame. It
+proved the drift was controllable by a controller. Nobody plays with one.
+
+It also asserted, deliberately, that a slide may not steer toward the authored
+racing line — which is one of ours *by design* and is why the drift keeps its
+lane instead of washing wide. A check can encode a design decision so firmly
+that reversing the decision reads as breaking the code.
+
+`scripts/drift-check.ts` is rewritten around the design instead: the gesture,
+the three ways out, the arrows swapping sides with no second pull, what it
+costs, and the two things that must never become true — a drift quicker than
+driving, and a drift that walks into the rock. It deliberately does **not**
+assert a slip-angle window; the angle is `TUNE.driftAngle` scaled by the arrow,
+so it is a dial's business and pinning it is how a tuning change becomes a
+failing test.
+
+### What was kept
+
+Everything outside the drift. `npm run handling` passes all eleven, the fire
+spirit still completes all four roads on the same tyre model, and the lap and
+sector times in `npm run rally` are unchanged. Three things the new drift added
+were genuinely better and stayed: a sideways car takes the room its nose and
+tail need before the wall lets it through, exits are eased rather than snapped,
+and the front wheels visibly countersteer — that last one is cosmetic again,
+written over `wheel.steer` after the forces, because the arc now moves the car.
+
+### Measured after
+
+    tap, then let go            still drifting eight seconds later
+    arrows alone                −18° → +18° → −18°, still on it at 65 km/h
+    entry, then held            88 · 60 · 67 · 68 · 68 · 68 · 68   dial says 72
+    held vs thrown              68 km/h · 66 km/h
+    twelve seconds of road      driving 387 m · drifting 118 m
+    rootway · moonbreak · harmattan   68–69 km/h at −26°, touching 0%
+
+`scripts/drift-probe.ts` works again too — its wind-up held the car straight,
+which stopped being viable when the car got quicker: the Rootway now turns
+before 108 km/h, so it buried itself at 86 and never reached the speed the
+probe starts from. It read as the probe being broken. The car had outgrown it.
+
+---
 ## 5 Sep · Claude · Four attempts at a keyboard, all removed
 
 > *"it kinda almost worked once, and i saw the screen literally while my
