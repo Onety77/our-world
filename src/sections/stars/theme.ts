@@ -91,6 +91,41 @@ export function crossTo(to: Sky): void {
   keep(to)
 }
 
+/** Cross to whichever one you are not in. */
+export function crossOver(): void {
+  crossTo(sky.to === 'morning' ? 'night' : 'morning')
+}
+
+/**
+ * The same crossing, from a keyboard.
+ *
+ * ---------------------------------------------------------------------------
+ * **A drag from the edge is a phone gesture, and this is read on a laptop too.**
+ *
+ * With a mouse it technically works — press within a few dozen pixels of the
+ * right edge and pull — and it is genuinely awkward: a trackpad drag that has
+ * to *start* in a band that narrow is a thing you aim at rather than a thing
+ * you do. There was no keyboard way at all, which on the surface where people
+ * type all evening is the surface that needed one most.
+ *
+ * **Alt+S.** Alt is the modifier this garden does not otherwise spend — Ctrl
+ * and Cmd belong to the browser, Shift belongs to Enter — and the conversation
+ * already ignores every Alt-modified key, so it cannot be mistaken for the
+ * start of a message. Alt+E is the emoji board in a composer; this is its
+ * neighbour and the same shape of thing: one chord, no aim required.
+ * ---------------------------------------------------------------------------
+ */
+export function theSkyKey(): () => void {
+  const onKey = (e: KeyboardEvent) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey) return
+    if (e.key.toLowerCase() !== 's') return
+    e.preventDefault()
+    crossOver()
+  }
+  window.addEventListener('keydown', onKey)
+  return () => window.removeEventListener('keydown', onKey)
+}
+
 /**
  * Pulling the sky across, from the edge.
  *
@@ -131,7 +166,16 @@ export function pullTheSky(): () => void {
 
   const down = (e: PointerEvent) => {
     if (!e.isPrimary) return
-    if ((e.target as HTMLElement | null)?.closest('button, input, textarea, a')) return
+    /*
+      Controls keep their own gestures — except the handle, which *is* this one.
+
+      It sits in the middle of the very band a pull starts from, so bailing on
+      every button would have made the one visible affordance the one place the
+      drag refused to begin. A press on it that never moves is still a click,
+      because nothing here acts until SLOP is passed.
+    */
+    const on = e.target as HTMLElement | null
+    if (on?.closest('button, input, textarea, a') && !on.closest('.sky-edge')) return
     if (window.innerWidth - e.clientX > EDGE) return
     // Toward whichever one you are not standing in.
     target = sky.at < 0.5 ? 1 : 0

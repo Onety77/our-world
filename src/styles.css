@@ -16995,6 +16995,7 @@ body.on-the-road .broke-what {
 */
 .sky-edge {
   position: absolute;
+  right: 0;
   top: 50%;
   width: 2px;
   height: 4.5rem;
@@ -17288,4 +17289,26 @@ body:has(.talking) .voice-lights-label {
   text-shadow:
     0 1px 2px rgba(6, 12, 10, calc(0.9 * (1 - var(--dawn)))),
     0 0 10px rgba(6, 12, 10, calc(0.78 * (1 - var(--dawn))));
+}
+
+/*
+  The handle is a control now, so it needs to be reachable and hittable.
+
+  Wider than it looks: the visible line stays two pixels, and the button around
+  it is a thumb and a mouse-pointer wide. A target you can see and cannot hit is
+  worse than no target.
+*/
+.sky-edge {
+  pointer-events: auto;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  outline-offset: 4px;
+}
+
+.sky-edge::before {
+  content: '';
+  position: absolute;
+  inset: -0.9rem -1.1rem;
 }

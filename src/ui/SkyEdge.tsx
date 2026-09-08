@@ -26,10 +26,10 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { sky } from '@/sections/stars/theme'
+import { crossOver, sky } from '@/sections/stars/theme'
 
 export function SkyEdge() {
-  const mark = useRef<HTMLSpanElement>(null)
+  const mark = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     let frame = 0
@@ -39,15 +39,15 @@ export function SkyEdge() {
       if (!el) return
 
       /*
-        It lives on whichever edge the *other* sky is behind, which is the same
-        rule the pull itself follows: on the plain the cloudsea is off to the
-        right, and once you are up there the plain is the thing off to the left.
-        A handle that stayed on one side would be pointing at the sky you are
-        already standing in.
+        It stays on the right, always.
+
+        It used to move to whichever edge the *other* sky was behind, matching a
+        pull that could start from either side. That pull is gone — one edge
+        toggles now, because nobody remembers which edge they are owed — and
+        this was not changed with it, so in the morning the only visible handle
+        sat on the left while the only working edge was on the right. The hint
+        was pointing away from the control, which is worse than no hint.
       */
-      const onRight = sky.at < 0.5
-      el.style.left = onRight ? 'auto' : '0'
-      el.style.right = onRight ? '0' : 'auto'
 
       /*
         Brighter and longer as the pull begins, and faint the rest of the time.
@@ -64,5 +64,21 @@ export function SkyEdge() {
     return () => cancelAnimationFrame(frame)
   }, [])
 
-  return <span className="sky-edge" ref={mark} aria-hidden="true" />
+  /*
+    A button, not a mark.
+
+    It was decoration with `pointer-events: none` — which is right for a hint
+    and wrong for the only thing on screen that says the second sky exists. On a
+    laptop the drag is awkward and there was nothing to click; now the hint *is*
+    the control, which is what it looked like all along.
+  */
+  return (
+    <button
+      type="button"
+      className="sky-edge"
+      ref={mark}
+      onClick={crossOver}
+      aria-label="cross to the other sky"
+    />
+  )
 }

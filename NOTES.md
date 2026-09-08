@@ -54,6 +54,32 @@ band on the far horizon. So the second sky is that band, stood inside: the stars
 go out, the plain sinks, the ridges come up pale in haze and the sun she is
 already under rises over them. Crossing the screen crosses the world.
 
+### Three ways across, because a drag from the edge is a phone gesture
+
+Asked how to change it on a laptop, and the honest answer was "click and drag
+from within thirty-six pixels of the right edge" — which technically worked
+and is a thing you aim at rather than a thing you do. There was no keyboard
+way at all, on the surface where they type all evening.
+
+So: **Alt+S** from anywhere in the Stars, a **click on the handle**, or the
+drag. Alt is the modifier this garden does not otherwise spend, and the
+conversation already ignores every Alt-modified key, so it can never be
+mistaken for the start of a message.
+
+The handle became a real button to do it — it was decoration with
+`pointer-events: none`, which is right for a hint and wrong for the only thing
+on screen that says the second sky exists. The pull now makes an exception for
+it, because it sits in the middle of the very band a drag starts from and
+bailing on every button would have made the one visible affordance the one
+place the gesture refused to begin.
+
+**And it was on the wrong side.** The handle still moved to whichever edge the
+other sky was behind — left over from the two-edge pull I had already replaced
+— so in the morning the only visible handle sat on the left while the only
+working edge was on the right. A hint pointing away from its control is worse
+than no hint. Found by asking the page where the button actually was rather
+than by looking at a screenshot, which would have shown a small bright line in
+a plausible place.
 ### The four faults, and what each one actually was
 
 **Seventy per cent of the screen never moved.** The night dome was *tinted* by

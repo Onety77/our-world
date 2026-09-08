@@ -44,7 +44,7 @@ import { otherHour, useWhoseHour } from '@/systems/whoseHour'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { VoiceComets } from './VoiceComets'
 import { Morning } from './Morning'
-import { pullTheSky, sky, stepSky } from './theme'
+import { pullTheSky, sky, stepSky, theSkyKey } from './theme'
 import { ambience } from '@/systems/ambience'
 import { Group } from 'three'
 
@@ -799,6 +799,8 @@ export default function Stars() {
 
   // On the window rather than on the canvas — see `pullTheSky`.
   useEffect(() => pullTheSky(), [])
+  // And from a keyboard, for the laptop — see `theSkyKey`.
+  useEffect(() => theSkyKey(), [])
 
   /*
     And it sounds different up there.
