@@ -963,14 +963,27 @@ function TheHollow() {
           ‹ choose another game
         </button>
 
+        {/*
+          ==================================================================
+          **What you already chose is not news.**
+
+          This carried the emblem, the name, the whole blurb and the duration
+          — the entire game card again, at full size, on the screen you
+          reached *by choosing that card*. It pushed the only new thing on the
+          screen into the bottom half and left a third of the phone empty
+          under it, and it made the step feel like a page rather than a
+          continuation.
+
+          A name and its mark is all a confirmation needs. Everything else
+          here is the question being asked, which is the one thing the
+          previous screen did not answer: how do you want to play it.
+          ==================================================================
+        */}
         <header className="hollow-way-heading">
-          <span className="threshold-whisper">the game is chosen</span>
           <span className="hollow-way-emblem" aria-hidden="true">
             {game.Emblem ? <game.Emblem /> : null}
           </span>
           <h2>{game.name}</h2>
-          <p>{say(game.blurb)}</p>
-          <small>{game.duration}</small>
         </header>
 
         {/*

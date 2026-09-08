@@ -6706,20 +6706,36 @@ body:has(.talking) .leave-place {
 
 .hollow-threshold .hollow-way-back::after { display: none; }
 
+/*
+  Name beside mark, on one line, and that is the whole header now.
+
+  A row rather than a stack: stacked, even two small things read as a title
+  block and reclaim the weight this screen just gave away. Side by side they
+  read as a label — which is what a confirmation is.
+*/
 .hollow-way-heading {
-  display: grid;
-  place-items: center;
-  gap: 0.42rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
   width: min(31rem, 92vw);
 }
 
+/*
+  The mark, at the size of a confirmation rather than of an announcement.
+
+  It was fourteen vh tall with the whole game card under it, on the screen you
+  reached *by choosing that card* — an answer to a question nobody was still
+  asking, taking the top half of a phone. Small and beside the name, it does the
+  one job left: says which game, in a glance, so you know the tap landed.
+*/
 .hollow-way-emblem {
   display: grid;
   place-items: center;
-  width: min(15rem, 48vw);
-  height: clamp(5.5rem, 14vh, 8rem);
-  margin: 0.2rem 0 0.3rem;
-  filter: drop-shadow(0 0 1.8rem rgba(255, 139, 52, 0.3));
+  width: clamp(2.6rem, 9vw, 3.4rem);
+  height: clamp(2.6rem, 9vw, 3.4rem);
+  margin: 0;
+  filter: drop-shadow(0 0 1.1rem rgba(255, 139, 52, 0.32));
 }
 
 .hollow-way-emblem .emblem {
@@ -6731,9 +6747,10 @@ body:has(.talking) .leave-place {
   margin: 0;
   color: var(--ink);
   font-family: var(--serif);
-  font-size: clamp(2rem, 5vw, 3.4rem);
+  /* Half what it was. The subject of this screen is underneath it. */
+  font-size: clamp(1.35rem, 3.2vw, 1.85rem);
   font-weight: 400;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   line-height: 1;
   text-shadow: var(--lift);
 }
@@ -6754,9 +6771,36 @@ body:has(.talking) .leave-place {
   text-transform: uppercase;
 }
 
+/*
+  And the ways take the room the heading handed back.
+
+  This screen exists to ask one question, so the answers are the largest thing
+  on it — which they were not, when the game card was repeated above them at
+  full size and pushed all three into the lower third with a void underneath.
+  Wider, taller rows, a real gap between them, and the whole block sitting on
+  the middle of the screen rather than under something.
+*/
 .hollow-way-threshold .game-ways {
-  margin-top: 0.35rem;
-  padding-block: 0.9rem;
+  margin-top: clamp(0.9rem, 3.5vh, 1.9rem);
+  padding-block: 0;
+  width: min(26rem, 88vw);
+  gap: 0.15rem;
+}
+
+.hollow-way-threshold .game-way {
+  padding-block: clamp(0.72rem, 2.4vh, 1.05rem);
+}
+
+.hollow-way-threshold .game-way-name {
+  font-size: clamp(1.12rem, 3.4vw, 1.4rem);
+}
+
+.hollow-way-threshold .game-way.is-first .game-way-name {
+  font-size: clamp(1.32rem, 4.2vw, 1.72rem);
+}
+
+.hollow-way-threshold .game-way-note {
+  font-size: 0.82rem;
 }
 
 .challenges-list .standing.is-selected {
@@ -16968,4 +17012,280 @@ body.on-the-road .broke-what {
   );
   transform-origin: center;
   will-change: transform, opacity;
+}
+
+/* --------------------------------------------------------------------------
+   The roads, in the Hollow's own hand
+   --------------------------------------------------------------------------
+
+   **Three screens, three languages, for the same act of choosing.** The Hollow
+   picks a game with frameless cards under a serif name; the ways screen is a
+   text list; and the road picker — the only game with roads — was built on its
+   own, earlier, with a different scale of type, a different arrow, a different
+   dot and a hard-edged panel. Nothing was wrong with any one of them and
+   together they read as three products.
+
+   The illustrations stay. They are the best thing on that screen and they are
+   the reason a road is worth choosing rather than listing. What changes is
+   everything *around* them: the name, the line under it, the way in, the
+   arrows and the marks now come from the same place as the game cards, so
+   moving from one screen to the next feels like moving through one room.
+
+   Written as overrides at the end of the file rather than by editing the rally
+   block, because those numbers are still what the racer's own pause screen
+   uses. This is the Hollow dressing a screen it shares.
+   -------------------------------------------------------------------------- */
+
+/* The scene loses its hard bottom edge, like a card with no frame. */
+.rally-course-scene {
+  border-radius: 0.2rem;
+  mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
+}
+
+/* The Rootway's arch already had its own shape; keep it and soften the foot. */
+.rally-course.rootway .rally-course-scene {
+  mask-image: linear-gradient(to bottom, black 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 82%, transparent 100%);
+}
+
+/* Name and line, at the game card's scale rather than their own. */
+.rally-course-name {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(1.5rem, 5.4vw, 2.05rem);
+  line-height: 1.06;
+  margin-top: 0.55rem;
+}
+
+.rally-course-copy {
+  font-family: var(--serif);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  max-width: 26ch;
+  min-height: 0;
+  margin-top: 0.1rem;
+  color: var(--ink-dim);
+}
+
+/*
+  The way in, in the same small capitals as "bring it to the fire" — and, like
+  it, only on the one you are actually looking at. A row of four invitations is
+  four things shouting; one is an answer to where you already are.
+*/
+.rally-course-enter {
+  margin-top: 0.35rem;
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: transparent;
+  transition: color 0.3s ease;
+}
+
+.rally-course.is-selected .rally-course-enter { color: rgba(255, 194, 125, 0.66); }
+
+/* The arrows the Hollow uses, not the bigger ones from the pause screen. */
+.rally-course-step {
+  width: 2.25rem;
+  border-color: rgba(242, 239, 230, 0.13);
+  background: rgba(7, 5, 4, 0.32);
+  color: rgba(242, 239, 230, 0.72);
+  font-size: 1.65rem;
+}
+
+.rally-course-step:hover,
+.rally-course-step:focus-visible {
+  color: var(--warm);
+  border-color: rgba(255, 181, 99, 0.5);
+  scale: 1.08;
+}
+
+/* And its marks, which were a different size and a different warm. */
+.rally-course-marks {
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.rally-course-marks button {
+  width: 0.34rem;
+  height: 0.34rem;
+  background: rgba(242, 239, 230, 0.28);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+
+.rally-course-marks button.on {
+  background: var(--warm);
+  transform: scale(1.35);
+}
+
+/*
+  The position line the Hollow shows as "03 / 05" in its header, here under the
+  road — same idea, same digits, so the two screens count the same way.
+*/
+.rally-course-position {
+  font-family: var(--sans);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 230, 0.34);
+}
+
+/*
+  And the question at the top, at the Hollow's size.
+
+  "Where do you want the engine?" was set at the racer's own display scale —
+  three lines on a phone, taller than the road it was asking about. The Hollow
+  asks "Choose your game" a screen earlier at about two-fifths of that, so this
+  now matches it: the same voice asking the next question, rather than a new
+  screen introducing itself.
+*/
+.rally-course-heading h1 {
+  font-size: clamp(1.65rem, 7.4vw, 2.15rem);
+  line-height: 1.05;
+  max-width: 16ch;
+}
+
+/* Round, like the Hollow's. They had inherited a square from the pause screen. */
+.rally-course-marks button {
+  border-radius: 50%;
+  padding: 0;
+  border: 0;
+}
+
+/*
+  Soft at the top as well as the foot.
+
+  A scene that fades at one end and is cut square at the other reads as a
+  photograph with a corner torn off. Both edges give, so the illustration sits
+  *in* the dark rather than on it — which is what makes it a card in this room
+  and not a panel from another one.
+*/
+.rally-course-scene {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 9%, black 78%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 9%, black 78%, transparent 100%);
+}
+
+.rally-course.rootway .rally-course-scene {
+  /* The arch already draws its own top, so only its foot needs softening. */
+  mask-image: linear-gradient(to bottom, black 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 82%, transparent 100%);
+}
+
+/*
+  The question, matched to the Hollow's — at the specificity that actually wins.
+
+  The first attempt at this lost silently: the phone rule for the road heading
+  is written as `.rally-courses .rally-course-heading h1`, two classes deep,
+  and a single-class override at the end of the file does not beat it however
+  late it comes. Same compound selector, later in the file, and it holds at
+  every width.
+*/
+.rally-courses .rally-course-heading h1,
+.rally-course-heading h1 {
+  font-size: clamp(1.75rem, 4vw, 3rem);
+  line-height: 1.05;
+  max-width: 16ch;
+}
+
+/* The arch's top gives too. A card in this room has no hard edges anywhere. */
+.rally-course.rootway .rally-course-scene {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 7%, black 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 7%, black 82%, transparent 100%);
+}
+
+@media (max-width: 34rem) {
+  .rally-courses .rally-course-heading h1,
+  .rally-course-heading h1 {
+    /* The Hollow's own phone size for "Choose your game", to the digit. */
+    font-size: clamp(1.75rem, 7.8vw, 2.15rem);
+    max-width: 14ch;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The conversation, in whichever sky it is hanging in
+   --------------------------------------------------------------------------
+
+   `--dawn` runs 0..1 with the Stars' crossing — see sections/stars/theme. At
+   nought the messages are lights in a night: cream and pale blue, glowing. At
+   one they are *writing in the morning*: dark, warm on your side and slate on
+   hers, with the glow taken off because nothing glows at sunrise.
+
+   That inversion is the single strongest thing separating the two skies. It is
+   also the thing the first attempt forgot entirely, which left the whole
+   conversation invisible at one end of its own gesture.
+
+   `color-mix` rather than two rules and a class, so it crosses continuously
+   under the finger instead of snapping at halfway. Every value falls back to
+   the night, which is what a browser without it will show.
+   -------------------------------------------------------------------------- */
+
+/*
+  The fallback belongs on the root, not on `.talking`.
+
+  Declaring it here shadowed the value the scene writes: the crossing was set on
+  the document element every frame and every message inside `.talking` went on
+  reading a local zero, so the ink never moved and the words stayed pale over a
+  sunrise. A custom property declared on a descendant wins over an inherited
+  one, always, however often the ancestor is written to.
+*/
+:root {
+  --dawn: 0;
+}
+
+.said.mine .said-body {
+  color: #ffdcab;
+  color: color-mix(in srgb, #4a2c12 calc(var(--dawn) * 100%), #ffdcab);
+}
+
+.said.hers .said-body {
+  color: #c3d6ff;
+  color: color-mix(in srgb, #26364f calc(var(--dawn) * 100%), #c3d6ff);
+}
+
+/*
+  The lift under the words goes too.
+
+  A dark halo behind dark ink is a smudge. It is what keeps light text readable
+  over a night sky and it is exactly wrong over a bright one, so it fades out as
+  the morning comes up and a soft *pale* one takes its place.
+*/
+.talking .said-body {
+  text-shadow:
+    0 1px 2px rgba(6, 12, 10, calc(0.9 * (1 - var(--dawn)))),
+    0 0 10px rgba(6, 12, 10, calc(0.78 * (1 - var(--dawn)))),
+    0 1px 0 rgba(255, 246, 232, calc(0.55 * var(--dawn)));
+}
+
+.talking .said-when {
+  color: rgba(242, 239, 230, calc(0.34 * (1 - var(--dawn))));
+  color: color-mix(
+    in srgb,
+    rgba(58, 40, 26, 0.62) calc(var(--dawn) * 100%),
+    rgba(242, 239, 230, 0.34)
+  );
+}
+
+/*
+  And the chrome, which was pale-on-pale over the morning.
+
+  "back to the garden", the place's own name and the voice-lights label are all
+  light text with a dark lift behind them — correct over a night sky and
+  invisible over a sunrise. They cross with everything else.
+
+  Only inside the Stars: every other place in the garden is still night or
+  meadow, and `--dawn` is nought everywhere but here.
+*/
+body:has(.talking) .places-back,
+body:has(.talking) .threshold-name,
+body:has(.talking) .voice-lights-label {
+  color: color-mix(
+    in srgb,
+    rgba(58, 40, 26, 0.86) calc(var(--dawn) * 100%),
+    rgba(242, 239, 230, 0.82)
+  );
+  text-shadow:
+    0 1px 2px rgba(6, 12, 10, calc(0.9 * (1 - var(--dawn)))),
+    0 0 10px rgba(6, 12, 10, calc(0.78 * (1 - var(--dawn))));
 }

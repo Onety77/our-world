@@ -1447,6 +1447,9 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       // The picture first. If this throws, nothing is written, and the failure
       // is a memory that was never hung rather than a pane with a hole in it.
       await putPicture(path, input.display)
+      // And the walking copy, when there is one — see `lanePath` in types.
+      const lanePath = input.lane ? `memories/${id}-lane.${input.ext}` : null
+      if (input.lane && lanePath) await putPicture(lanePath, input.lane)
 
       const memory: Memory = {
         id,
@@ -1459,6 +1462,7 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
         tint: input.tint,
         blur: input.blur,
         path,
+        ...(lanePath ? { lanePath } : {}),
         ...(input.when?.trim() ? { when: input.when.trim() } : {}),
         ...(input.why?.trim() ? { why: input.why.trim() } : {}),
       }
@@ -1518,8 +1522,10 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
       tellMemoryWatchers()
     },
 
-    pictureUrl(memory) {
-      return pictureFromStore(memory.path)
+    pictureUrl(memory, size) {
+      return pictureFromStore(
+        size === 'lane' && memory.lanePath ? memory.lanePath : memory.path,
+      )
     },
 
     // ---- the Stars ---------------------------------------------------------

@@ -33,6 +33,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry } from 'three'
 import type { SkyPalette } from '@/systems/palette'
+import { ambientLightLevel } from '@/world/forms'
 
 /** Comfortably inside the fog's far edge and outside anything the lane draws. */
 const RADIUS = 190
@@ -104,7 +105,18 @@ export function Canopy({ palette, dark }: { palette: SkyPalette; dark: number })
       needed most — at noon — which is the mistake that made the first version
       of this look fine at night and pointless in the afternoon.
     */
-    material.uniforms.uDark.value = 0.95 * dark
+    /*
+      Denser when the sky behind it is brighter.
+
+      A fixed opacity is a filter, and a filter cannot hold a mood: at midnight
+      it was doing nothing that needed doing and at three in the afternoon it
+      was nowhere near enough, so the lane was properly dark at night and washed
+      out by day. Leaves do not thin when the sun comes up — what changes is how
+      much they have to stop — so this leans on the world's own light level and
+      takes more out when there is more coming through.
+    */
+    const bright = ambientLightLevel(palette)
+    material.uniforms.uDark.value = Math.min(1, 0.95 * dark * (0.6 + 0.85 * bright))
     // Leaf-dark, warmed a little by whatever is behind it, so the gaps between
     // the branches are not a different colour from the canopy around them.
     ;(material.uniforms.uColor.value as Color).set(palette.fogColor).multiplyScalar(0.16)

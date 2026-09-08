@@ -50,7 +50,7 @@ check('lifting and trail braking tighten the line without snapping', () => {
   assert(results[1] > results[0] && results[2] > results[0])
 })
 
-check('a brief handbrake pull rotates the rear and recovers on release', () => {
+check('a brief handbrake pull rotates the rear and lifting recovers grip', () => {
   const car = moving()
   run(car, 0.35, { ...gas, steer: 0.65 })
   const initial = Math.abs(slipOf(car))
@@ -59,7 +59,7 @@ check('a brief handbrake pull rotates the rear and recovers on release', () => {
   console.log(`  slip ${(slipped * 180 / Math.PI).toFixed(1)}°, speed ${(speedOf(car) * 3.6).toFixed(1)} km/h`)
   assert(slipped > initial + 0.025)
   assert(speedOf(car) > 18)
-  run(car, 2, { ...gas, throttle: 0.55, steer: -0.15 })
+  run(car, 2, { ...neutral, steer: -0.15 })
   assert(Math.abs(slipOf(car)) < 0.12, `failed to recover: ${slipOf(car)}`)
   assert(speedOf(car) > 15)
 })

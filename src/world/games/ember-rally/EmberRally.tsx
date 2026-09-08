@@ -109,7 +109,7 @@ const COURSES: Record<StageId, {
     place: 'fire and stone',
     short: 'A close, changing road beneath the garden. Learn it by the lanterns.',
     soloTitle: 'Something is already down there',
-    soloCopy: 'A small fire knows this road. Brake before the bend, ease into the steering, then feed in the power as the road opens. For a tight turn, tap the handbrake and release it to let the tyres catch. A clean slide earns ember for the next straight.',
+    soloCopy: 'A small fire knows this road. Brake before the bend, then feed in the power as it opens. To drift, steer into the corner and tap the handbrake. Keep the power on to hold the slide; steer back to widen it, or lift to catch the rear. A clean slide earns ember for the next straight.',
     spirit: 'the fire-spirit',
     returnTo: 'return to the fire',
     setTitle: 'Set a line {she} cannot see',

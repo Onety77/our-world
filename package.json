@@ -15,7 +15,7 @@
     "scatter": "npx --yes tsx scripts/scatter-check.ts",
     "shaders": "npx --yes tsx scripts/shader-check.ts",
     "tuning": "npx --yes tsx scripts/tuning-check.ts",
-    "drift": "npx --yes tsx scripts/drift-probe.ts",
+    "drift": "npx --yes tsx scripts/drift-check.ts",
     "lobby": "npx --yes tsx scripts/lobby-check.ts",
     "pronouns": "node scripts/pronouns.mjs",
     "places": "node scripts/places.mjs",
@@ -40,7 +40,8 @@
     "film": "npx --yes tsx scripts/film-check.ts",
     "archive": "npx --yes tsx scripts/archive-check.ts",
     "offline": "node scripts/offline-check.mjs",
-    "sealed": "npx --yes tsx scripts/sealed-check.ts"
+    "sealed": "npx --yes tsx scripts/sealed-check.ts",
+    "colour": "npx --yes tsx scripts/colour-check.ts"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",

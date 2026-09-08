@@ -2013,6 +2013,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
     async hangMemory(input) {
       const id = newId()
       const path = `memories/${id}.${input.ext}`
+      const lanePath = input.lane ? `memories/${id}-lane.${input.ext}` : null
 
       await uploadBytes(storageRef(store, path), input.display, {
         // Whatever was actually encoded — WebP where the browser has it. A
@@ -2029,6 +2030,21 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         cacheControl: 'private, max-age=31536000, immutable',
       })
 
+      /*
+        And the walking copy, on the same terms.
+
+        After the display copy rather than beside it: if this one fails the
+        memory is still whole and the lane falls back to the big file, which
+        is the slow-but-correct path every older memory already takes. Doing
+        it first would risk a small copy with no memory attached to it.
+      */
+      if (input.lane && lanePath) {
+        await uploadBytes(storageRef(store, lanePath), input.lane, {
+          contentType: input.type,
+          cacheControl: 'private, max-age=31536000, immutable',
+        })
+      }
+
       const at = now()
       const memory: Memory = {
         id,
@@ -2041,6 +2057,7 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
         tint: input.tint,
         blur: input.blur,
         path,
+        ...(lanePath ? { lanePath } : {}),
         ...(input.when?.trim() ? { when: input.when.trim() } : {}),
         ...(input.why?.trim() ? { why: input.why.trim() } : {}),
       }
@@ -2117,13 +2134,20 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       token and does not expire, so caching it costs nothing and saves a
       request per pane per approach.
     */
-    pictureUrl(memory) {
-      const had = pictures.get(memory.path)
+    pictureUrl(memory, size) {
+      /*
+        Old memories have no small copy, and that is not a failure: the display
+        copy is the right picture, it is simply bigger than the lane needs. The
+        fallback lives here rather than at the call site so no reader has to
+        know which memories predate it.
+      */
+      const want = size === 'lane' && memory.lanePath ? memory.lanePath : memory.path
+      const had = pictures.get(want)
       if (had) return had
-      const asking = getDownloadURL(storageRef(store, memory.path)).catch((error) => {
+      const asking = getDownloadURL(storageRef(store, want)).catch((error) => {
         // Not cached, so a picture that failed once because the phone was in a
         // tunnel is asked for again the next time its pane comes near.
-        pictures.delete(memory.path)
+        pictures.delete(want)
         throw error
       })
       pictures.set(memory.path, asking)

@@ -32,7 +32,7 @@ export function cropFor(width: number, height: number): [number, number] {
  * photograph living on the GPU at full size for the sake of a pane you walk
  * past.
  */
-const PANE_PX = 640
+const PANE_PX = 720
 
 /**
  * How many decoded photographs to keep.

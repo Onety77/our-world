@@ -19,6 +19,7 @@
  * thing in this world that should be a picture of words.
  */
 
+import { sky } from './theme'
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
@@ -65,6 +66,8 @@ const VERT = /* glsl */ `
   uniform float uTime;
   uniform float uRise;
   uniform float uRecede;
+  /* 0..1 across to her morning — see sections/stars/theme. */
+  uniform float uDawn;
 
   varying vec3 vColor;
   varying vec2 vUv;
@@ -155,7 +158,15 @@ const FRAG = /* glsl */ `
     */
     vec3 col = vColor * glow * (1.0 + vHeart * 0.34 + vFresh * 0.9);
 
-    gl_FragColor = vec4(col, glow);
+    /*
+      A message is a *light* in your night. In her morning it is a word.
+
+      Nothing glows at sunrise, and eighty small white orbs hanging over a dawn
+      read as dust on the lens rather than as a conversation. So they go out as
+      the sky crosses, and the words — which change to dark ink at the same
+      moment — carry the whole of it on that side.
+    */
+    gl_FragColor = vec4(col, glow * (1.0 - uDawn));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -242,6 +253,7 @@ export function Conversation() {
         depthWrite: false,
         blending: AdditiveBlending,
         uniforms: {
+          uDawn: { value: 0 },
           uWalk: { value: 0 },
           uTime: { value: 0 },
           uRise: { value: SKY.rise },
@@ -263,6 +275,7 @@ export function Conversation() {
     stepWalk(Math.min(delta, 1 / 20))
     material.uniforms.uTime.value = t.current
     material.uniforms.uWalk.value = walk.at
+    material.uniforms.uDawn.value = sky.at
   })
 
   if (messages.length === 0) return null

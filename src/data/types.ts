@@ -478,6 +478,23 @@ export interface Memory {
   path: string
 
   /**
+   * Where the *walking* copy lives — the one the Lantern Walk hangs.
+   *
+   * -------------------------------------------------------------------------
+   * A memory used to have two sizes: a sixteen-pixel preview in this document,
+   * and the display copy at up to 2560 px. The lane wants sixteen photographs
+   * on screen at once, so it was downloading sixteen full-size photographs to
+   * draw panes a few hundred pixels wide — which on mobile data meant none of
+   * them arrived and the preview was all you ever saw.
+   *
+   * Optional, and it has to be: every memory kept before this existed has only
+   * the big one. Readers fall back to `path`, which is correct and slow rather
+   * than broken. See `LANE` in systems/picture.
+   * -------------------------------------------------------------------------
+   */
+  lanePath?: string
+
+  /**
    * Taken out of the glass, by the one who hung it.
    *
    * ---------------------------------------------------------------------------
@@ -1347,6 +1364,8 @@ export interface DataLayer {
    */
   hangMemory(input: {
     display: Blob
+    /** The small copy for the lane, or null when the display copy is small. */
+    lane: Blob | null
     /**
      * What the display copy actually is.
      *
@@ -1395,7 +1414,13 @@ export interface DataLayer {
    * Rejects rather than resolving to a placeholder: a picture that quietly
    * becomes a grey square is the failure this world is least willing to have.
    */
-  pictureUrl(memory: Memory): Promise<string>
+  /**
+   * A URL for one of a memory’s stored copies.
+   *
+   * `lane` asks for the small one and falls back to the display copy when a
+   * memory predates it, so a caller never has to know which memories are old.
+   */
+  pictureUrl(memory: Memory, size?: 'display' | 'lane'): Promise<string>
 
   // ---- the music -----------------------------------------------------------
 

@@ -9,7 +9,19 @@
  * sky is continuous at 23:59.
  */
 
-import { Color } from 'three'
+/*
+  Not three’s Color, and that is the whole point of the swap.
+
+  This module is read by the first thing the app renders, so importing three
+  here put `three.core` — 373 KB of renderer — into the entry’s static graph, to
+  be parsed in front of the sign-in screen for the sake of a hex parse and a
+  lerp. `systems/colour` is those operations and nothing else.
+
+  It is not an approximation: `npm run colour` compares the two across the hue
+  circle and every colour the garden ships, and fails on one digit. The rest of
+  the world still uses three, because the rest of the world is drawing with it.
+*/
+import { Tone } from './colour'
 
 import type { Sky } from './sky'
 
@@ -183,14 +195,15 @@ const KEYFRAMES: SkyPalette[] = [
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
-const scratchA = new Color()
-const scratchB = new Color()
+const scratchA = new Tone()
+const scratchB = new Tone()
 
 /**
- * three's ColorManagement is on by default, so `set()` already takes an sRGB hex
- * into the linear working space and `getHexString()` takes it back out. Blending
- * happens in linear, which is why dusk crossfades without going muddy — and why
- * calling convertSRGBToLinear() here as well would be a double conversion.
+ * `Tone.set()` takes an sRGB hex into the linear working space and
+ * `getHexString()` takes it back out — the same two conversions three's
+ * ColorManagement does, for the same reason. Blending happens in linear, which
+ * is why dusk crossfades without going muddy, and why converting here as well
+ * would be a double conversion.
  */
 /**
  * A colour with the colour taken out of it, and turned down.

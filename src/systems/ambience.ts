@@ -173,11 +173,29 @@ export interface AmbienceHandle {
    * the places, to say something that is not true: it is the same room, in
    * different weather.
    *
-   * Multiplied on top of the place's own row and cleared whenever the place
-   * changes, so a section can never leave its voicing behind for the next one.
+   * The named layers *replace* the place's own figures — they are not scaled,
+   * because a place that plays none of a layer cannot be given more of it by
+   * multiplication, and that mistake is silent. Anything not named keeps the
+   * place's own level. Cleared whenever the place changes, so a section can
+   * never leave its voicing behind for the next one.
    * -------------------------------------------------------------------------
    */
   setShade(shade: Record<string, number> | null): void
+  /**
+   * What the pen sounds like, 0..1.
+   *
+   * -------------------------------------------------------------------------
+   * Nought is the nib this world was built with: a hard point on dry paper,
+   * bright and scratchy, which is right at night when it is the only sound in
+   * the room. One is soft pencil — lower, blunter, shorter — for the Stars'
+   * morning, where the bright scratch of a nib over a sunrise is the one thing
+   * that still sounds like the middle of the night.
+   *
+   * A tone rather than a second cue, because it is the same gesture: somebody
+   * is writing. What changes is what they are writing with.
+   * -------------------------------------------------------------------------
+   */
+  setPen(soft: number): void
   /** 0..1, drops when the tab is hidden. */
   setMaster(value: number): void
   /** Suspend synthesis while no page can hear it. Music uses another element. */
@@ -256,16 +274,29 @@ export interface AmbienceHandle {
   Stars' rare tones as struck glass; none need meadow wind underneath them.
 */
 const MIX: Record<string, Record<Place, number>> = {
+  /*
+    The Lantern Walk column was the Glasshouse’s, inherited whole when the
+    place was replaced and the id renamed — which is how a lane outdoors ended
+    up playing a closed room: room 0.78 is a conservatory with the doors shut,
+    water 0.12 was rain on its roof, and shimmer 0.5 was its glass ringing.
+
+    None of that is out here. What a wooded lane at dusk is made of is leaves
+    and moving air, so those two carry it, with a trace of room for the little
+    that comes back off the trunks either side. Nothing rings, nothing drips.
+
+    Renaming a place does not rename what it sounds like, and this is the
+    reminder: a column belongs to the *place*, not to the id.
+  */
   //         garden  tree  river  hollow  stars  lanterns
   // The meadow's continuous wind and leaf bed stop at the threshold of the
   // enclosed/otherworldly places. Their own layers below must establish the
   // room; otherwise every one sounds like the garden at a different volume.
-  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0,    stars: 0,    lanterns: 0 },
-  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0,    lanterns: 0 },
-  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    lanterns: 0.12 },
+  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0,    stars: 0,    lanterns: 0.66 },
+  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0,    lanterns: 0.92 },
+  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    lanterns: 0 },
   fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 0.26, stars: 0,    lanterns: 0 },
-  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  lanterns: 0.78 },
-  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    lanterns: 0.5 },
+  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  lanterns: 0.05 },
+  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    lanterns: 0.1 },
 }
 
 /*
@@ -392,6 +423,8 @@ export function createAmbience(): AmbienceHandle {
   let masterLevel = 0.85
   /** Per-layer multipliers for the place being stood in — see `setShade`. */
   let shade: Record<string, number> | null = null
+  /** 0 nib, 1 soft pencil — see `setPen`. */
+  let penSoft = 0
   let worldEnabled = levelsNow().world > 0.001
   let worldHasOutput = worldEnabled
   let lastTick = 0
@@ -574,10 +607,28 @@ export function createAmbience(): AmbienceHandle {
       out of it. Only the destination side carries it, which means walking into
       the cloudsea fades the plain's own voice out normally underneath.
     */
-    const shaded = shade ? (shade[name] ?? 1) : 1
-    const at = (which: Place) =>
-      row[which] * (levels[which] ?? 1) * (bleed ? (bleed[which] ?? 1) : 1)
-    return at(from) * (1 - blend) + at(place) * shaded * blend
+    /*
+      A shade *replaces* the place's own figure for that layer. It does not
+      scale it.
+
+      -----------------------------------------------------------------------
+      **This was a multiplier, and a multiplier cannot add a sound that is not
+      already there.** The Stars plays no `air` at all — its column is a zero —
+      so asking for six times the air produced six times nothing, and the second
+      sky came out sounding exactly like the first. The change was real, the
+      arithmetic was sound, and the result was silence, which is the worst kind
+      of bug: everything looks like it worked.
+
+      A weather is not a louder version of another weather. It is a different
+      set of layers, so a theme states the ones it wants and the rest of the
+      place's own row carries on underneath.
+      -----------------------------------------------------------------------
+    */
+    const of = (which: Place) => {
+      const own = which === place && shade && name in shade ? shade[name] : row[which]
+      return own * (levels[which] ?? 1) * (bleed ? (bleed[which] ?? 1) : 1)
+    }
+    return of(from) * (1 - blend) + of(place) * blend
   }
 
   /**
@@ -1168,6 +1219,7 @@ function aWeight(hz: number): number {
         cave to blame.
       */
       shade = null
+      penSoft = 0
       // A silent room may be opening onto an audible one. Do not make that
       // crossfade wait on the silent two-Hz control cadence.
       worldHasOutput = worldEnabled
@@ -1229,6 +1281,10 @@ function aWeight(hz: number): number {
       shade = next
     },
 
+    setPen(soft) {
+      penSoft = Math.max(0, Math.min(1, soft))
+    },
+
     setSuspended(suspended) {
       sleeping = suspended
       if (suspendTimer !== null) clearTimeout(suspendTimer)
@@ -1286,14 +1342,23 @@ function aWeight(hz: number): number {
 
       const band = ctx.createBiquadFilter()
       band.type = 'bandpass'
-      // taking a character away is duller than putting one down
-      band.frequency.value = back
-        ? 900 + Math.random() * 400
-        : 2200 + Math.random() * 2600
-      band.Q.value = 0.7 + Math.random() * 1.1
+      /*
+        Taking a character away is duller than putting one down — and the whole
+        instrument moves down as the pen softens.
+
+        A nib is a hard point: high, narrow, a scratch. A soft pencil is broad
+        and low and has almost no top to it, so the band drops by two thirds and
+        widens out. Same noise, same envelope, different implement.
+      */
+      const bright = 1 - penSoft * 0.62
+      band.frequency.value =
+        (back ? 900 + Math.random() * 400 : 2200 + Math.random() * 2600) * bright
+      band.Q.value = (0.7 + Math.random() * 1.1) * (1 - penSoft * 0.45)
 
       const gain = ctx.createGain()
-      const peak = (back ? 0.05 : 0.075 + w * 0.06) * (0.75 + Math.random() * 0.5)
+      // Softer as well as lower: a pencil is quieter than a nib on the same page.
+      const peak =
+        (back ? 0.05 : 0.075 + w * 0.06) * (0.75 + Math.random() * 0.5) * (1 - penSoft * 0.3)
       gain.gain.setValueAtTime(0.0001, now)
       gain.gain.exponentialRampToValueAtTime(peak, now + 0.004)
       gain.gain.exponentialRampToValueAtTime(0.0001, now + length)

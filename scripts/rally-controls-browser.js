@@ -56,6 +56,11 @@ export default async function checkControls() {
     controls = attachControls(surface);
     await wait(100);
     check(controls.read(20).throttle > 0.5, 'touch automatic throttle');
+    thumb.handbrake = true;
+    await wait(100);
+    const drift = controls.read(20);
+    check(drift.handbrake && drift.throttle > 0.7, 'touch drift retains power');
+    thumb.handbrake = false;
     thumb.brake = true;
     await wait(100);
     const braked = controls.read(20);

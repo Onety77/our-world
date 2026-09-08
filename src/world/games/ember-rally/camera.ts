@@ -275,7 +275,10 @@ export class ChaseCamera {
     const behind = Math.max(0, car.s - this.back * (0.4 + engagement * 0.6))
     roadAtRoute(track, behind, car.shortcut, this.road)
     const basis = basisAt(this.road)
-    roadPoint(this.road, this.lateral, this.lift, this.here, basis)
+    // Opposite-lock framing must not carry the lens through the tunnel wall.
+    const cameraRoom = Math.max(0.5, this.road.width - 0.8)
+    const cameraLateral = Math.max(-cameraRoom, Math.min(cameraRoom, this.lateral))
+    roadPoint(this.road, cameraLateral, this.lift, this.here, basis)
 
     // --- what it looks at ----------------------------------------------------
     // Ahead of the car, and biased toward the racing line, so the corner opens

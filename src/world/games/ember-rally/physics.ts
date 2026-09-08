@@ -33,7 +33,7 @@
  * same on a crest as in a dip. And the drift was a scalar somebody had tuned
  * rather than something that happened to the machine.
  *
- * Here the handbrake is not a grip multiplier. It is a torque, applied to two
+ * The initial handbrake pull is a torque, applied to two
  * wheels, large enough to stop them turning; once they have stopped, their
  * *longitudinal* slip is total, and the friction circle below has nothing left
  * to spend on holding the back of the car in line. The car comes round because
@@ -41,6 +41,11 @@
  * consequence of it — that it works better on the brakes, that it does almost
  * nothing below walking pace, that lifting off mid-corner tightens your line —
  * falls out rather than being written down.
+ *
+ * A deliberate pull while steering also opens an arcade drift balance:
+ * sliding rear tyres, assisted opposite lock and bounded yaw control. Power
+ * sustains it; lift, braking or a committed catch restores the grip setup.
+ * Tyre forces still carry the car, and slip is always its real body angle.
  *
  * The five pieces, in the order one step runs them:
  *
@@ -357,24 +362,23 @@ export interface CarState {
   driftCharge: number
 
   // --- the drift -----------------------------------------------------------
-  /** Measured rear slip; never changes the movement model. */
+  /** Measured body slip, used by effects, traction control and rewards. */
   drifting: boolean
   /** Smoothed slide intensity for effects. Does not blend movement models. */
   driftBlend: number
   /** The angle it is hanging at, radians. Negative is hung out to the right. */
   driftAngle: number
-  /** Seconds the arrows have been near centre while drifting. Two lets go. */
+  /** Seconds since the last measured slide. */
   driftStraight: number
-  /**
-   * Seconds the pose has been *held* rather than swung, 0 when it is moving.
-   *
-   * Deliberately not `driftCharge`, which is the ember's and counts any slip at
-   * all: this one has to know the difference between a slide sitting at its
-   * angle and a slide being thrown across to the other side, because the first
-   * has stopped costing anything and the second is the most expensive thing you
-   * can do. See the ceiling in `integrate`.
-   */
+  /** Seconds continuously sliding, independent of the reward charge. */
   driftSettled: number
+  /** Deliberate handbrake entry, separate from incidental tyre slip. */
+  driftSide: number
+  /** Engagement of the sliding tyre balance, eased in and out. */
+  driftControl: number
+  driftTarget: number
+  handbrakeTime: number
+  driftExitTime: number
 
   // --- how it is sitting ---------------------------------------------------
   /** Radians. Positive leans the car to its right. */
@@ -494,6 +498,11 @@ export function createCar(track: Track): CarState {
     driftAngle: 0,
     driftStraight: 0,
     driftSettled: 0,
+    driftSide: 0,
+    driftControl: 0,
+    driftTarget: 0,
+    handbrakeTime: 0,
+    driftExitTime: 0,
     roll: 0,
     pitch: 0,
     heave: 0,
@@ -636,7 +645,8 @@ function maxSteer(v: number, catching = 0): number {
   return Math.min(TUNE.steerLock, gripping + Math.abs(catching))
 }
 
-// A slide is a measured state, never a second movement model.
+// Effects and rewards always measure the actual velocity, including during
+// assisted drifts. The shell never receives a decorative sideways rotation.
 function updateSlide(car: CarState, dt: number, v: number) {
   const angle = slipOf(car)
   const sliding = v > Math.max(7, TUNE.driftEnterSpeed) && Math.abs(angle) > (car.drifting ? 0.10 : 0.16)
@@ -645,6 +655,49 @@ function updateSlide(car: CarState, dt: number, v: number) {
   car.driftBlend += ((sliding ? 1 : 0) - car.driftBlend) * (1 - Math.exp(-8 * dt))
   car.driftStraight = sliding ? 0 : car.driftStraight + dt
   car.driftSettled = sliding ? car.driftSettled + dt : 0
+}
+
+/** Intent opens a sliding tyre balance; ordinary corners keep their grip setup.
+ * A tap initiates, power sustains, lift or sustained opposite lock exits.
+ * Another pull with opposite steering transfers the rear through an S bend.
+ * There is deliberately no road heading, racing line or target speed here.
+ */
+function prepareDrift(car: CarState, input: CarInput, v: number, dt: number) {
+  const freshPull = input.handbrake && car.handbrakeTime === 0
+  car.handbrakeTime = input.handbrake ? car.handbrakeTime + dt : 0
+  const canEnter = !car.reversing && !car.touching && !car.rough &&
+    v > Math.max(9, TUNE.driftEnterSpeed) && input.brake < 0.25
+  if (canEnter && input.handbrake && Math.abs(input.steer) > 0.18 &&
+      (freshPull || (car.driftSide === 0 && car.handbrakeTime < 0.25))) {
+    car.driftSide = Math.sign(input.steer)
+    car.driftExitTime = 0
+  }
+  if (car.driftSide !== 0) {
+    const opposite = input.steer * car.driftSide < -0.6
+    const centred = Math.abs(input.steer) < 0.08
+    const exiting = (input.handbrake && opposite) ||
+      (!input.handbrake && (input.throttle < 0.18 || opposite || centred))
+    car.driftExitTime = exiting ? car.driftExitTime + dt : 0
+    if (input.handbrake && opposite && car.driftExitTime > 0.18) {
+      car.driftSide = Math.sign(input.steer)
+      car.driftExitTime = 0
+    }
+    const exitDelay = centred && input.throttle >= 0.18 ? 0.65 : 0.22
+    if (v < 8 || car.reversing || car.touching || input.brake > 0.35 || car.driftExitTime > exitDelay) {
+      car.driftSide = 0
+    }
+  }
+  const active = car.driftSide !== 0
+  car.driftControl += ((active ? 1 : 0) - car.driftControl) *
+    (1 - Math.exp(-(active ? 7 : 3.5) * dt))
+  if (!active && car.driftControl < 0.001) car.driftControl = 0
+  const inward = input.steer * car.driftSide
+  const angle = Math.min(0.68, TUNE.driftAngle * (0.78 + 0.40 * input.throttle + 0.24 * inward))
+  const target = active ? -car.driftSide * angle * Math.min(1, Math.max(0, (v - 7) / 7)) : 0
+  car.driftTarget += (target - car.driftTarget) * (1 - Math.exp(-(active ? 3.8 : 4.5) * dt))
+  // In a powered drift the pull locks the rear briefly, then feeds the clutch
+  // back in. Holding the drift button can sustain a slide without parking it.
+  return input.handbrake ? (active ? Math.max(0, 1 - car.handbrakeTime / 0.18) : 1) : 0
 }
 
 /** Wheel positions in the body frame: forward, right. */
@@ -711,6 +764,8 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     : (1 - road.wet * 0.14) * (1 - road.sand * 0.34) * (1 - skipping * 0.3)
   const rollingDrag = (car.rough ? 0.09 : 0.0135) + road.sand * 0.055 + skipping * 0.075
   const mu = TUNE.grip * surfaceGrip
+  const handbrake = prepareDrift(car, input, v, dt)
+  const drift = car.driftControl
 
   // --- steering ------------------------------------------------------------
   // The wheels take a moment to get there. Without this the car changes
@@ -725,8 +780,12 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   const recovery = Math.max(0, Math.min(1, (Math.abs(beta) - 0.07) / 0.24))
   const assist = input.handbrake ? 0.12 * TUNE.autoCountersteer : Math.min(0.9, TUNE.autoCountersteer * 2)
   const counter = beta * recovery * assist * Math.min(1, v / 8)
-  const wanted = Math.max(-TUNE.steerLock, Math.min(TUNE.steerLock,
+  const gripSteer = Math.max(-TUNE.steerLock, Math.min(TUNE.steerLock,
     steerCommand * maxSteer(v, catching) + counter))
+  const driftSide = car.driftSide || -Math.sign(car.driftTarget)
+  const frontVelocity = Math.atan2(car.vn + FRONT * car.yaw, Math.max(3, car.vs))
+  const driftSteer = frontVelocity + driftSide * (0.055 + 0.065 * steerCommand * driftSide)
+  const wanted = Math.max(-0.78, Math.min(0.78, gripSteer + (driftSteer - gripSteer) * drift))
   car.steerAngle += (wanted - car.steerAngle) * (1 - Math.exp(-18 * dt))
   car.caught = recovery > 0.5 && !input.handbrake
   const delta = car.steerAngle
@@ -1011,7 +1070,9 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     const demand = Math.max(1e-6, Math.hypot(qx, qy))
     const saturation = Math.tanh(demand)
     const fx = budget * saturation * qx / demand
-    const fy = budget * saturation * qy / demand
+    // The sliding rear still carries force, but sheds lateral grip progressively.
+    // Longitudinal drive stays in the same combined-slip budget.
+    const fy = budget * saturation * qy / demand * (front ? 1 : 1 - 0.68 * drift)
     wheel.used = saturation
 
     // --- the wheel itself --------------------------------------------------
@@ -1024,9 +1085,8 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     const abs = Math.max(0.12, Math.min(1, 1 + (wheel.slipRatio + 0.10) * 5))
     let stopping = Math.min(brakeTorque[i] * brakeDemand,
       budget * WHEEL_RADIUS * 0.96) * (v > 2 ? abs : 1)
-    if (!front && input.handbrake) drive = 0
-    // The handbrake keeps acting until the driver releases it.
-    if (!front && input.handbrake) stopping += TUNE.handbrake / 2
+    if (!front) drive *= 1 - handbrake
+    if (!front) stopping += TUNE.handbrake / 2 * handbrake
 
     const inertia = front
       ? WHEEL_INERTIA
@@ -1054,7 +1114,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     if (stopping > 0 && Math.sign(omega) !== Math.sign(wheel.omega) && wheel.omega !== 0) {
       omega = 0
     }
-    if (input.handbrake && !front) omega *= Math.exp(-14 * dt)
+    if (!front && handbrake > 0) omega *= Math.exp(-14 * handbrake * dt)
     wheel.omega = omega
     wheel.spin += omega * dt
 
@@ -1078,6 +1138,16 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   along -= TUNE.weight * TUNE.gravity * rollingDrag * Math.sign(car.vs || 1)
   // The road tilts under it.
   along -= TUNE.weight * TUNE.gravity * road.grade
+
+  if (drift > 0 && v > 5) {
+    // Yaw assistance balances the measured tyre forces around a slip angle.
+    // It changes angular momentum, never translates the car or supplies speed.
+    const travelRate = (car.vs * totalY - car.vn * along) / (TUNE.weight * v * v)
+    const desiredYaw = travelRate + (beta - car.driftTarget) * 4
+    const correction = (desiredYaw - car.yaw) * 8 * DERIVED.inertia - moment
+    const authority = TUNE.weight * TUNE.gravity * WHEELBASE * 0.7
+    moment += Math.max(-authority, Math.min(authority, correction)) * drift
+  }
 
   const accel = along / TUNE.weight + car.vn * car.yaw
   const lateral = totalY / TUNE.weight - car.vs * car.yaw
@@ -1109,7 +1179,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
 
   // Recovery assistance acts as a bounded yaw damper. It cannot choose a
   // line, rotate velocity onto the road, or add speed to sustain a slide.
-  if (!input.handbrake && v > 7) {
+  if (!input.handbrake && v > 7 && drift === 0) {
     const limit = Math.max(0.14, TUNE.driftAngle * 0.4)
     const excess = Math.max(0, Math.abs(beta) - limit)
     const growing = car.yaw * beta < 0
@@ -1427,7 +1497,12 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   car.slam = 0
   car.hitWall = 0
 
-  const limit = wallAt(road) - CAR_HALF_WIDTH
+  // A sideways car takes more room. Include its nose and tail while drifting
+  // so they contact the wall before the body disappears into it.
+  const sidewaysWidth = CAR_HALF_WIDTH * Math.abs(Math.cos(car.psi)) +
+    CAR_LENGTH * 0.5 * Math.abs(Math.sin(car.psi))
+  const contactWidth = CAR_HALF_WIDTH + Math.max(0, sidewaysWidth - CAR_HALF_WIDTH) * drift
+  const limit = wallAt(road) - contactWidth
   const touching = Math.abs(car.n) > limit
   if (touching) {
     const side = Math.sign(car.n)

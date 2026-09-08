@@ -19,7 +19,43 @@ import { useSections } from '@/systems/sections'
 import { attachSwipe } from '@/systems/swipe'
 import { attachPointerLook } from '@/systems/pointerLook'
 import { attachTreeOrbit } from '@/systems/treeOrbit'
-import { World } from '@/world/World'
+/*
+  The world arrives behind the door, not in front of it.
+
+  ---------------------------------------------------------------------------
+  **This one static import was 1.45 MB of JavaScript parsed before anybody
+  could type a password.**
+
+  It sat directly beside the door’s own import, which is what made it easy to
+  miss: one line of code, and behind it three.js, the meadow, the grass, the
+  trees, the water and every shader in the garden. Measured on a build with a
+  cold cache, the sign-in screen pulled 41 requests and 0.76 MB over the wire,
+  and `index.html` carried 33 modulepreload tags — the browser fetching the
+  whole world at top priority to draw a box with two fields in it.
+
+  A door needs React, the provider and the door. Nothing else. So the world is
+  fetched the way places and games already are, and the entry keeps only what
+  the first screen can actually use.
+
+  **And it is warmed the moment the door is on screen** — see the effect in
+  `Doorway`. Somebody reading a sign-in form spends seconds there; the fetch
+  starts on the first frame and is long finished before a password is. Lazy
+  without warming would have traded a slow first paint for a pause after the
+  one button that must never pause.
+
+  The renewal outage is worth remembering next to this: a cached shell naming
+  a chunk that no longer exists is how the garden stopped opening for a day.
+  That cannot happen now — the service worker precaches *every* JS file in the
+  build rather than a walked graph, so a shell and its chunks are one thing.
+  See `gardenWorker` in vite.config.
+  ---------------------------------------------------------------------------
+*/
+const World = later(
+  (): Promise<{ default: ComponentType<{ hourOverride: number | null }> }> =>
+    import('@/world/World').then((m) => ({
+      default: m.World as ComponentType<{ hourOverride: number | null }>,
+    })),
+)
 import { Door } from '@/ui/Door'
 import { Overlay } from '@/ui/Overlay'
 import { Places } from '@/ui/Places'
@@ -507,7 +543,9 @@ function Garden() {
 
   return (
     <>
-      <World hourOverride={hourOverride} />
+      <Suspense fallback={null}>
+        <World hourOverride={hourOverride} />
+      </Suspense>
       {/* Catches every gesture that isn't on a control. Transparent, and above
           the canvas so nothing below can swallow a swipe. */}
       <div ref={surface} className="surface" />
@@ -611,6 +649,19 @@ function Doorway() {
 
 export default function App() {
   const [error, setError] = useState<Error | null>(null)
+
+  /*
+    Fetch the world while the door is still on screen.
+
+    Here rather than in `Doorway`, which only exists once you are already past
+    the door — by then the wait would be exactly the wait this is for. On the
+    first frame instead, in parallel with the sign-in resolving: whoever is
+    reading a form spends seconds in front of it, and the world lands long
+    before the button does.
+  */
+  useEffect(() => {
+    World.warm()
+  }, [])
 
   useEffect(() => {
     const onError = (e: ErrorEvent) => setError(e.error ?? new Error(e.message))

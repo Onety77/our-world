@@ -311,7 +311,9 @@ export function attachControls(surface: HTMLElement): RallyControls {
       */
       const pedal = Math.max(thumb.brake ? 1 : 0, padDriving ? padBrake : 0,
         held.has('arrowdown') || held.has('s') ? 1 : 0)
-      const gas = pedal > 0.05 || thumb.handbrake ? 0 :
+      // Keep power available during a touch drift. The physics manages the
+      // initial rear lock and clutch; the brake pedal still lifts the throttle.
+      const gas = pedal > 0.05 ? 0 :
         held.has('arrowup') || held.has('w') ? 1 : padDriving ? padGas : phone ? 1 : 0
       throttle += (gas - throttle) * (1 - Math.exp(-(gas > throttle ? GAS_ON : GAS_OFF) * dt))
 

@@ -125,10 +125,27 @@ function underTheTrees(palette: SkyPalette, dark: number): SkyPalette {
     the one thing here that cannot be settled from a screenshot.
   */
   const keep = (open: number, shut: number) => open + (shut - open) * dark
+
+  /*
+    A ceiling, not just a fraction — and this is what was wrong at noon.
+
+    Multiplying the hour's own light by a constant keeps the *ratio* and throws
+    away the point: a tenth of a bright afternoon is still far more light than a
+    tenth of dusk, so the lane stayed pale all day and the lanterns had nothing
+    to hold off. Under a real canopy what reaches the ground is roughly a fixed
+    small amount whatever the sun is doing — that is what a canopy *is* — so the
+    dimming takes whichever is lower.
+
+    The hour still shows: the colour of the light, the sky through the gaps and
+    the fog all still come from it. What stops changing is how much there is.
+  */
+  const under = (was: number, share: number, most: number) =>
+    Math.min(was * keep(1, share), was * (1 - dark) + most * dark)
+
   return {
     ...palette,
-    sunIntensity: palette.sunIntensity * keep(1, 0.1),
-    ambientIntensity: palette.ambientIntensity * keep(1, 0.16),
+    sunIntensity: under(palette.sunIntensity, 0.1, 0.16),
+    ambientIntensity: under(palette.ambientIntensity, 0.16, 0.3),
     ambientColor: dim(palette.ambientColor, keep(1, 0.42)),
     sunColor: dim(palette.sunColor, keep(1, 0.6)),
     grassBase: dim(palette.grassBase, keep(1, 0.44)),
@@ -381,10 +398,36 @@ export default function LanternWalk() {
 
   useEffect(() => {
     let gone = false
-    for (const { memory } of near) {
-      if (urls[memory.id]) continue
+    /*
+      Nearest first, and only a few at a time.
+
+      -------------------------------------------------------------------------
+      **Sixteen photographs asked for at once is sixteen photographs arriving
+      last.** A phone on mobile data has one pipe; starting every request
+      together shares it evenly, which sounds fair and means the one you are
+      standing in front of finishes at the same moment as the one four bends
+      away. `near` is already sorted by distance, so taking the first few and
+      letting the rest wait for a slot is the whole fix: the lantern you are
+      looking at gets the whole connection, and the others follow as you walk.
+
+      Three at a time rather than one, because a single file in flight leaves
+      the connection idle through every round trip.
+      -------------------------------------------------------------------------
+    */
+    const AT_ONCE = 3
+    const wanted = near.filter(({ memory }) => !urls[memory.id]).slice(0, AT_ONCE)
+    for (const { memory } of wanted) {
       data
-        .pictureUrl(memory)
+        /*
+          The walking copy, not the full-size one.
+
+          A memory stores a lane-sized copy as well now — see `lanePath` — and
+          asking for it is the difference between a few tens of kilobytes and
+          several megabytes per lantern. Memories kept before that existed fall
+          back to the display copy inside the data layer, so this call does not
+          have to know which is which.
+        */
+        .pictureUrl(memory, 'lane')
         .then((url) => {
           if (!gone) setUrls((was) => (was[memory.id] ? was : { ...was, [memory.id]: url }))
         })

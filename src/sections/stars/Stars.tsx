@@ -43,7 +43,7 @@ import { LIGHT_COLORS } from '@/systems/palette'
 import { otherHour, useWhoseHour } from '@/systems/whoseHour'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { VoiceComets } from './VoiceComets'
-import { Cloudsea } from './Cloudsea'
+import { Morning } from './Morning'
 import { pullTheSky, sky, stepSky } from './theme'
 import { ambience } from '@/systems/ambience'
 import { Group } from 'three'
@@ -325,8 +325,20 @@ const DOME_FRAG = /* glsl */ `
       it. Going darker up here was the first instinct and it is wrong for
       exactly the reason the place is worth drawing.
     */
-    col = mix(col, col * 1.35 + vec3(0.035, 0.05, 0.085), uCross);
-    gl_FragColor = vec4(col, 1.0);
+    /*
+      The night goes out of the sky as the morning comes over it.
+
+      Faded rather than tinted, and the stars go with it — the first attempt at
+      a second sky lifted this dome a little and left it there, so the night was
+      still underneath and seventy per cent of the screen never changed. A dawn
+      does not brighten a night sky; it replaces it.
+
+      Alpha rather than hiding, because the morning dome is drawn over the top
+      and the two have to dissolve through each other: halfway across is a
+      violet sky with the last stars still in it and the sun already on the
+      ridge, which is the frame that sells the crossing.
+    */
+    gl_FragColor = vec4(col, 1.0 - uCross);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -342,6 +354,8 @@ function Dome({ herHour }: { herHour: number }) {
         vertexShader: DOME_VERT,
         fragmentShader: DOME_FRAG,
         side: BackSide,
+        // Transparent now: it has to be able to leave. See the note by uCross.
+        transparent: true,
         depthWrite: false,
         uniforms: {
           /*
@@ -781,6 +795,7 @@ export default function Stars() {
     dissolve.
   */
   const ground = useRef<Group>(null)
+  const nightAir = useRef<Group>(null)
 
   // On the window rather than on the canvas — see `pullTheSky`.
   useEffect(() => pullTheSky(), [])
@@ -824,22 +839,98 @@ export default function Stars() {
     */
     if (Math.abs(at - voiced.current) > 0.02) {
       voiced.current = at
+      /*
+        The morning's own bed, *stated* rather than scaled.
+
+        -------------------------------------------------------------------
+        **The first version multiplied the night's mix and could not possibly
+        have worked.** The Stars plays no `air` and no `leaves` at all — both
+        are zeroes in its column — so asking for six times the air produced
+        six times nothing, and the second sky came out sounding identical to
+        the first. Everything looked right and nothing changed.
+
+        A morning is not a louder night. It is open air and something growing
+        in it, with the close, contained hush of a night plain taken out and
+        the cold sparkle taken almost all the way out. `setShade` sets these
+        outright now — see the note on it — so a layer the place does not
+        play can still be asked for.
+
+        Crossfaded by hand rather than switched, because the pull is
+        continuous: half a crossing is half a morning, in the ears as well.
+        -------------------------------------------------------------------
+      */
+      // And what you are writing with — a nib at night, soft pencil by day.
+      ambience.setPen(at)
       ambience.setShade({
-        air: 1 + at * 5.5,
-        shimmer: 1 - at * 0.55,
-        room: 1 - at * 0.8,
+        air: at * 0.85,
+        leaves: at * 0.5,
+        room: 0.3 * (1 - at) + 0.04 * at,
+        shimmer: 1 - at * 0.88,
       })
     }
 
+    /*
+      The night's own things leave together.
+
+      The plain sinks *and* the air above it goes — the drifting motes and the
+      two lights are as much "your night" as the ground is, and leaving them
+      hanging in a sunrise was most of why the first crossing read as two
+      pictures stacked rather than one becoming the other.
+    */
     const g = ground.current
-    if (!g) return
-    g.position.y = at * -16
-    // Nothing to draw once it is well under the cloud.
-    g.visible = at < 0.985
+    if (g) {
+      g.position.y = at * -16
+      g.visible = at < 0.985
+    }
+    const air = nightAir.current
+    if (air) air.visible = at < 0.9
   })
 
+  /*
+    And the conversation changes ink with the sky.
+
+    ---------------------------------------------------------------------------
+    **Light words on a pale morning are not readable, and that is not a detail
+    to leave to a later pass.** The messages are cream and pale blue because
+    they hang in a night; over a sunrise they vanish. The first crossing shipped
+    without this and the conversation — the entire reason the place exists —
+    went unreadable at one end of its own gesture.
+
+    So the morning gets its own ink: dark, warm on your side and slate on hers,
+    the way writing on paper in the morning actually looks. It is not a
+    concession to legibility, it is the strongest single thing that makes the
+    two skies feel like different hours — light *in* the dark, against words
+    *on* the light.
+
+    Written as one number on the document rather than a class, so it crosses
+    continuously with the finger and the styles interpolate it themselves. A
+    ref-and-rAF rather than React state, for the reason everything else here is:
+    this changes sixty times a second under a drag and a re-render of a whole
+    conversation is what the technical law is about.
+    ---------------------------------------------------------------------------
+  */
+  useEffect(() => {
+    const root = document.documentElement
+    let frame = 0
+    const paint = () => {
+      frame = requestAnimationFrame(paint)
+      root.style.setProperty('--dawn', sky.at.toFixed(3))
+    }
+    frame = requestAnimationFrame(paint)
+    return () => {
+      cancelAnimationFrame(frame)
+      root.style.removeProperty('--dawn')
+    }
+  }, [])
+
   // And it hands the voicing back on the way out, so nothing carries.
-  useEffect(() => () => ambience.setShade(null), [])
+  useEffect(
+    () => () => {
+      ambience.setShade(null)
+      ambience.setPen(0)
+    },
+    [],
+  )
 
   return (
     <>
@@ -849,9 +940,11 @@ export default function Stars() {
         <Horizon />
         <SkyPath />
       </group>
-      <Cloudsea />
-      <Motes />
-      <TwoLights />
+      <Morning />
+      <group ref={nightAir}>
+        <Motes />
+        <TwoLights />
+      </group>
       <VoiceComets />
       {/* every message the two of you have ever sent, as a light */}
       <Conversation />

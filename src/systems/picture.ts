@@ -54,6 +54,32 @@
 const LONGEST = 2560
 
 /**
+ * The long edge of the copy the Lantern Walk hangs, in pixels.
+ *
+ * ---------------------------------------------------------------------------
+ * **The rung that was missing, and the reason the lane looked blurred.**
+ *
+ * A memory had two representations: a sixteen-pixel preview in the document,
+ * and the display copy at up to 2560 px in storage. Nothing in between. So a
+ * lane that wants sixteen photographs on screen at once was downloading
+ * sixteen *full-size photographs* — several megabytes — to draw panes a few
+ * hundred pixels wide, and on mobile data none of them arrived. What you were
+ * left looking at was the sixteen-pixel preview, stretched. It was never a
+ * decision to blur anything; it was the placeholder outstaying the thing it
+ * was standing in for.
+ *
+ * Seven hundred and twenty is generous for a lantern about a fifth of a phone
+ * screen wide, and it still covers the one opened full-screen on a phone. It
+ * encodes to a few tens of kilobytes: sixteen of these is smaller than one of
+ * the display copies.
+ *
+ * The full copy is still what an *opened* memory shows on a large screen — see
+ * `path` against `lanePath` in `Memory`. This is the walking copy.
+ * ---------------------------------------------------------------------------
+ */
+const LANE = 720
+
+/**
  * Encoder quality.
  *
  * 0.82 rather than 0.9. Above about 0.85 the file grows fast and the pictures
@@ -101,6 +127,14 @@ export const TOO_BIG = 40 * 1024 * 1024
 export interface Prepared {
   /** The copy that gets stored. Freshly encoded, WebP where the browser has it. */
   display: Blob
+  /**
+   * A small copy for the Lantern Walk — see `LANE`.
+   *
+   * Null when the picture is already at or under that size, in which case the
+   * display copy *is* the small one and storing it twice would be paying for
+   * the same bytes to say the same thing.
+   */
+  lane: Blob | null
   /** What it actually turned out to be — see the fallback in toBlob. */
   type: string
   ext: string
@@ -323,6 +357,27 @@ export async function prepare(file: Blob, quarterTurns = 0): Promise<Prepared> {
     }
     const encoded = await toBlob(big, QUALITY)
 
+    /*
+      And the walking copy, drawn off the big one rather than off the source.
+
+      The browser has just drawn `big`, so the second reduction starts from
+      something already decoded and oriented — the same reason the preview below
+      is drawn from it. Skipped entirely when the picture is already small
+      enough: a 600-pixel photograph does not need a 720-pixel copy of itself.
+    */
+    let lane: Blob | null = null
+    if (Math.max(width, height) > LANE * 1.15) {
+      const fit = LANE / Math.max(width, height)
+      const lw = Math.max(1, Math.round(width * fit))
+      const lh = Math.max(1, Math.round(height * fit))
+      const [mid, mctx] = canvasOf(lw, lh)
+      mctx.imageSmoothingQuality = 'high'
+      mctx.drawImage(big, 0, 0, lw, lh)
+      lane = (await toBlob(mid, QUALITY)).blob
+      mid.width = 0
+      mid.height = 0
+    }
+
     // The sixteen-pixel version, drawn off the already-shrunk one so the
     // browser does the second reduction from something it has just drawn.
     const bw = width >= height ? BLUR : Math.max(1, Math.round((width / height) * BLUR))
@@ -359,6 +414,7 @@ export async function prepare(file: Blob, quarterTurns = 0): Promise<Prepared> {
 
     return {
       display: encoded.blob,
+      lane,
       type: encoded.type,
       ext: encoded.ext,
       width,

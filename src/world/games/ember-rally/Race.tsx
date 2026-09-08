@@ -869,7 +869,7 @@ class Driving {
   private shownKmh = -1
   private speedFlat = false
   private gritDue = 0
-  private smokeDue = 0
+  private readonly smokeDue = [0, 0, 0, 0]
   /** Per-tyre loose-ground cadence; one wheel crossing the edge is visible. */
   private readonly earthDue = [0, 0, 0, 0]
   /** Twin-silencer cadence at the start line and during the first pull-away. */
@@ -1419,6 +1419,8 @@ class Driving {
         */
         boostLeft: car.boostLeft,
         driftAngle: car.driftAngle,
+        driftControl: car.driftControl,
+        driftTarget: car.driftTarget,
         touching: car.touching,
         shortcut: car.shortcut,
         strikes: car.strikes,
@@ -2063,26 +2065,18 @@ class Driving {
       enough to tear it.
     */
     if (!car.rough && speed > 8) {
-      let sliding = 0
-      for (const wheel of car.wheels) {
-        sliding = Math.max(sliding, Math.abs(wheel.slipRatio) - 0.22, Math.abs(wheel.slipAngle) - 0.2)
-      }
-      if (sliding > 0) {
-        this.smokeDue -= delta * (10 + sliding * 90) * Math.min(1, speed / 22)
-        while (this.smokeDue < 0) {
-          this.smokeDue += 1
-          // Pick the worst offender, so the smoke is where the mistake is.
-          let worst = 0
-          let amount = 0
-          for (let i = 0; i < 4; i++) {
-            const wheel = car.wheels[i]
-            const bad = Math.abs(wheel.slipRatio) * 0.6 + Math.abs(wheel.slipAngle) * 2
-            if (bad > amount) {
-              amount = bad
-              worst = i
-            }
-          }
-          this.smokeFrom(args.dust, args.mine, MESH_FOR_WHEEL[worst], Math.min(1, amount))
+      for (let i = 0; i < 4; i++) {
+        const wheel = car.wheels[i]
+        const sliding = Math.max(0, Math.abs(wheel.slipRatio) - 0.22, Math.abs(wheel.slipAngle) - 0.2)
+        if (sliding <= 0) continue
+        const amount = Math.min(1, sliding * 2.2)
+        // Each contact patch leaves its own trail. Choosing only the worst
+        // tyre made a balanced drift smoke from just one side of the car.
+        this.smokeDue[i] -= delta * (8 + amount * 52) * Math.min(1, speed / 22) *
+          (1 - car.road.wet * 0.8) * (1 - car.road.sand * 0.9)
+        while (this.smokeDue[i] < 0) {
+          this.smokeDue[i] += 1
+          this.smokeFrom(args.dust, args.mine, MESH_FOR_WHEEL[i], amount)
         }
       }
     }
@@ -2415,8 +2409,8 @@ class Driving {
       (Math.random() - 0.5) * 1.4,
       0.5 + Math.random() * 1.1,
       (Math.random() - 0.5) * 1.4,
-      0.7 + Math.random() * 0.8,
-      0.16 + amount * 0.2,
+        0.9 + Math.random() * 0.7,
+        0.22 + amount * 0.3,
       // Smoke grows a great deal as it hangs, which is what separates it from
       // grit at a glance even before you have registered the colour.
       3.4,

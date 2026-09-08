@@ -40,6 +40,214 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 8 Sep · Claude · Her Morning — the Stars' second sky, done properly
+
+The first attempt at this was thrown away. It deserved to be: it changed the
+lower third and left the sky, it never touched the sound, its swipe only worked
+in one direction, and it made the conversation unreadable. Four separate
+failures, and three of them were things I did not check at all.
+
+**The theme is the other half of the place's own sentence.** The Stars has
+carried the same line since it was made — *"your night, their morning, and the
+space in between"* — and has only ever drawn the first half, with her dawn as a
+band on the far horizon. So the second sky is that band, stood inside: the stars
+go out, the plain sinks, the ridges come up pale in haze and the sun she is
+already under rises over them. Crossing the screen crosses the world.
+
+### The four faults, and what each one actually was
+
+**Seventy per cent of the screen never moved.** The night dome was *tinted* by
+the crossing rather than faded, so the night sky was still there underneath the
+whole time. It now goes to alpha zero while the morning dome comes over the top,
+and the two dissolve through each other — halfway is a violet sky with the last
+stars in it and the sun already on the ridge. The night's motes and its two
+lights leave with it; they are as much "your night" as the ground is, and
+leaving them hanging in a sunrise was most of why it read as two pictures
+stacked.
+
+**The sound could not possibly have changed, and I should have caught it.**
+`setShade` was a *multiplier* on the place's own mix, and the Stars plays no
+`air` and no `leaves` at all — both are zeroes in its column. Asking for six
+times the air produced six times nothing. It sets levels outright now, because
+**a weather is not a louder version of another weather**; it is a different set
+of layers. The morning is open air and something growing in it, with the close
+hush of a night plain taken out and the cold sparkle nearly gone.
+
+**The swipe only worked one way.** I had put the way back on the *opposite*
+edge, reasoning that each sky lives behind its own side. Tidy, and wrong: nobody
+remembers which edge they are owed. One edge now, and it toggles — pull from the
+right and whichever sky you are not in comes across; do it again and it takes
+you back. One gesture, and it is its own undo.
+
+**The words went invisible.** The messages are cream and pale blue because they
+hang in a night. Over a sunrise they vanish, and the conversation is the entire
+reason the place exists. They are dark ink in the morning now — warm brown on
+your side, slate on hers — with the dark halo behind them replaced by a pale
+one, and the message-lights put out, because nothing glows at sunrise. That
+inversion turned out to be the single strongest thing separating the two skies:
+light *in* the dark against words *on* the light.
+
+### Two things that bit, both silent
+
+**A custom property declared on a descendant beats an inherited one, always.**
+I wrote the crossing onto the document element every frame and also declared
+`--dawn: 0` on `.talking` — so every message inside it read the local zero and
+the ink never moved. Nothing errors; the value is simply never seen.
+
+**A sky on its own is a gradient, and a gradient is not a place.** The first
+morning was a beautiful wash with a sun in it and nothing to stand on. Four
+ridges receding into haze fixed it — and they have to be *pale*, palest at the
+back: at night a ridge is a dark cut-out against a lit horizon, at dawn the air
+between you and it is full of light. Getting that backwards gives a sunset with
+the colours swapped. The first set of ridges was also too dark and too high and
+put the last three messages black-on-black, which is the same mistake as the ink
+in a different costume.
+
+### And the smaller asks
+
+The pen changes with the sky — `setPen` runs the nib from a hard bright point
+to soft pencil, lower and blunter and quieter, because the scratch of a nib over
+a sunrise is the one sound that still belongs to the middle of the night. The
+sun rises as you pull, breathes in the haze, and the whole dome lifts on a
+ninety-second cycle. Chaff drifts through the low light where the night has cold
+sparks.
+
+The sun sits nearer the middle than looks right on a laptop: a phone's field of
+view is about half as wide, and comfortably off-centre on a desk is *off the
+screen* on the surface this is mostly read on.
+
+**Verified by driving the gesture**: crossed to 1.00 with the ink measured at
+rgb(0.29, 0.17, 0.07), then the same edge again to 0.00 with the ink back at
+cream. `npm run places` still has the cave as the quiet one.
+
+## 8 Sep · Claude · The Hollow stops repeating itself, and the roads join the room
+
+> *"it doesnt have to still have the full descritpion of the game on it, since
+> you already know what you select"* — and the roads *"doesnt really fit the
+> exisiting cards styles in the hollow"*
+
+Both true, and photographing the three screens in a row made the shape of it
+obvious: **choosing a game, choosing a way and choosing a road were three
+different design languages for the same act.** Frameless cards under a serif
+name; then a bare text list; then an illustrated carousel with its own type
+scale, its own arrows and its own dots. Nothing was wrong with any one of them
+and together they read as three products.
+
+**The ways screen was showing you the card you had just chosen.** Emblem at
+fourteen vh, full name, whole blurb, duration — the entire game card again, at
+full size, on the screen you reached *by tapping that card*. It pushed the only
+new thing into the bottom half and left a third of the phone empty under it. It
+is a name beside its mark now, on one line, and the three ways take the room
+that gave back.
+
+**The roads keep their illustrations and lose their frame.** Those scenes are
+the best thing on that screen and the reason a road is worth *choosing* rather
+than listing — the Rootway's arch, the Moonbreak's water, the Harmattan with no
+horizon in it at all. What changed is everything around them: name and line at
+the game card's scale, the way in as the same small capitals as "bring it to the
+fire" and only on the one you are looking at, the Hollow's smaller arrows, its
+round marks, its heading size. The scenes now fade at both edges instead of
+being cut square, so they sit *in* the dark rather than on it.
+
+### Two things worth keeping
+
+**A single-class override does not beat a two-class rule, however late it comes.**
+The road heading is written as `.rally-courses .rally-course-heading h1` inside
+a phone media query; my first override was one class deep at the end of the
+file and lost silently — the build passed, the screenshot was unchanged, and
+there is nothing to see unless you go looking for the winning rule.
+
+**The overrides live at the end of `styles.css`, not in the rally's own block.**
+Those numbers are still what the racer's pause screen uses. This is the Hollow
+dressing a screen it shares, and editing the rally's block would have changed a
+screen nobody asked about.
+
+### What I did not do
+
+I did not collapse the two Hollow screens into one, which was the other way to
+kill the repetition — a game row with its ways underneath, no navigation. It is
+probably better and it is a real rewrite of a file that also holds the live
+round handshake, the locks and the invite flow. Trimming first was the smaller
+risk; the merge is still there to do.
+
+## 8 Sep · Claude · The walk sounds like a lane, the door is a third of the weight, and the lanterns stopped being blurred
+
+Three things, and the third one was my fault twice.
+
+### The Lantern Walk was playing a closed room
+
+Its mix column was the Glasshouse's, inherited whole when the place was replaced
+and the id renamed: `room: 0.78` is a conservatory with the doors shut,
+`water: 0.12` was rain on its roof, `shimmer: 0.5` was its glass ringing. None
+of that is out on a lane. It is leaves and moving air now, with a trace of room
+for the little that comes back off the trunks.
+
+Measured rather than asserted — `npm run places` puts it at 0.004 A-weighted,
+1210 Hz, low 0.253, which sits it with the Tree (1068 Hz) and the Wellspring
+(1297 Hz) and nowhere near the Hollow (105 Hz, low 0.79). Before, it measured
+like the cave.
+
+**Renaming a place does not rename what it sounds like.** The column belongs to
+the place, not to the id, and there is now a note on the table saying so.
+
+### The cold open: 1.45 MB → 487 KB of JavaScript before the door
+
+Two static imports were doing it.
+
+**`App.tsx` imported `@/world/World` beside `@/ui/Door`** — one line, and behind
+it three.js, the meadow, the grass, the trees, the water and every shader in the
+garden, parsed before anybody could type a password. It is fetched with
+`later()` now, like places and games already were, and **warmed on the first
+frame** so the fetch finishes while the sign-in form is being read rather than
+after the one button that must not pause. Modulepreload tags: 33 → 10.
+
+**`systems/palette.ts` imported `Color` from three** — 373 KB of renderer in the
+entry graph to do a hex parse and a lerp, in the one module the very first
+render reads. It uses `systems/colour` now: the same two conversions three's
+ColorManagement does, in the same order, in the same space.
+
+**That swap is checked rather than trusted.** `npm run colour` compares the two
+across the hue circle and every colour the garden ships — 2,712 operations,
+identical to the digit. A colour pipeline that is *nearly* right shifts every
+sky, grass and fog in the world by a shade nobody can name, all at once, and
+that is not something to eyeball.
+
+### The lanterns were not blurred on purpose — they were stuck on the placeholder
+
+Reported twice, and I fixed the wrong thing the first time: I raised how many
+lanterns get a photograph, which made it worse.
+
+A memory had two representations: a **sixteen-pixel** preview in the document,
+and the display copy at up to **2560 px** in storage. Nothing in between. So a
+lane wanting sixteen photographs on screen was downloading sixteen *full-size
+photographs* — megabytes — to draw panes a few hundred pixels wide. On mobile
+data none of them arrived, and what you were left looking at was the sixteen
+pixels, stretched. It was never a decision to blur anything.
+
+So there is a middle rung: `LANE = 720`, a walking copy encoded when the memory
+is kept and stored beside the display copy, with `Memory.lanePath` pointing at
+it. Optional, because every memory kept before today has only the big one, and
+the fallback lives inside the data layer so no reader has to know which is
+which.
+
+Measured in a real browser on a 3000×2000 picture: **358 KB → 118 KB on noise,
+57 KB → 12 KB on photograph-like content** — three to five times smaller
+depending on what is in the picture. Sixteen of them go from about 0.9 MB to
+0.19 MB on the same image.
+
+And they are fetched **nearest-first, three at a time**. `near` was already
+sorted by distance and all sixteen were started together, which on one pipe
+means the lantern you are standing in front of finishes at the same moment as
+the one four bends away. Sixteen asked for at once is sixteen arriving last.
+
+### Worth knowing
+
+**This repo has mixed line endings.** The files another editor has touched came
+back CRLF; mine are LF. A multi-line anchor written with `
+` silently matches
+nothing in a CRLF file — it reports "found 0" for text that is plainly there,
+which cost a confused detour. Read, normalise, edit, restore.
+
 ## 7 Sep · Claude · Return sends in the Stars, on a keyboard
 
 > *"why the hell is it that on desktop in the stars section, the enter key
