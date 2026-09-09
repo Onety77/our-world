@@ -243,19 +243,33 @@ export default function LanternWalk() {
    * ---------------------------------------------------------------------------
    */
   const [focused, setFocused] = useState<number | null>(null)
-  useEffect(() => { if (!openId) setFocused(null) }, [openId])
+  const focusTarget = useRef<number | null>(null)
+  useEffect(() => () => { focus.open = 0 }, [])
+  useEffect(() => {
+    if (focused === null || openId) return
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      setFocused(null)
+    }
+    window.addEventListener('keydown', key, true)
+    return () => window.removeEventListener('keydown', key, true)
+  }, [focused, openId])
 
   /** The live press — see the note by [H[2J[3J in the gesture below. */
-  const press = useRef<{ held: number | null; from: { x: number; y: number } | null; timer: number }>({
+  const press = useRef<{ held: number | null; from: { x: number; y: number } | null; timer: number; pointer: number | null; cancelled: boolean; expanded: boolean }>({
     held: null,
     from: null,
     timer: 0,
+    pointer: null, cancelled: false, expanded: false,
   })
   useEffect(() => {
     const state = press.current
     const cancel = () => {
       window.clearTimeout(state.timer)
       state.timer = 0; state.held = null; state.from = null
+      state.pointer = null; state.cancelled = false; state.expanded = false
     }
     window.addEventListener('blur', cancel)
     return () => { cancel(); window.removeEventListener('blur', cancel) }
@@ -290,6 +304,7 @@ export default function LanternWalk() {
   */
   useEffect(() => {
     if (!opened) return
+    setFocused(opened.index)
     walkTo(sFor(opened.index) + 6.4)
   }, [opened])
 
@@ -337,8 +352,9 @@ export default function LanternWalk() {
     */
     let turn = 0
     lift.set(0, 0, 0)
-    if (focused !== null && focus.open > 0.0005) {
-      const hung = hangingFor(focused)
+    if (focused !== null) focusTarget.current = focused
+    if (focusTarget.current !== null && focus.open > 0.0005) {
+      const hung = hangingFor(focusTarget.current)
       const t = focus.open
       turn = -hung.yaw * t
 
@@ -359,13 +375,20 @@ export default function LanternWalk() {
 
       // Square on, a little below eye line, close enough to read and far
       // enough that a tall portrait is not cropped by the top of the screen.
-      lift.set(eye.position.x - swing.x, eye.position.y - 0.08 - swing.y, eye.position.z - 2.05 - swing.z)
+      // Fit the frame, lamp, and upright as well as the photograph. A fixed
+      // distance cropped them on narrow phones and made the approach too tight.
+      const distance = Math.max(2.8,
+        (GLASS_W + 0.32) * eye.projectionMatrix.elements[0] / (2 * 0.78),
+        1.75 * eye.projectionMatrix.elements[5] / 0.83)
+      lift.set(eye.position.x - swing.x, eye.position.y - 0.08 - swing.y, eye.position.z - distance - swing.z)
       lift.multiplyScalar(t)
     }
 
     if (pivot.current) {
-      pivot.current.position.copy(eye.position).add(lift)
-      pivot.current.rotation.y = turn
+      const settle = 1 - Math.exp(-9 * delta)
+      if (focus.open <= 0.0005) pivot.current.position.copy(eye.position)
+      else pivot.current.position.lerp(lift.add(eye.position), settle)
+      pivot.current.rotation.y += (turn - pivot.current.rotation.y) * settle
     }
     if (carrying.current) {
       carrying.current.position.copy(carried).sub(eye.position)
@@ -556,14 +579,14 @@ export default function LanternWalk() {
       const at = onScreen(i)
       if (at) seen.push({ i, x: at.x, y: at.y, halfW: at.halfW, halfH: at.halfH })
     }
-    ;(window as unknown as { __walk: unknown }).__walk = { at: here, open: openId, seen,
+    ;(window as unknown as { __walk: unknown }).__walk = { at: here, open: openId, focused, focus: focus.open, seen,
       pictures: near.filter(entry => urls[entry.memory.id]).length, near: near.length, pick: whichLantern }
   })
 
   useEffect(() => {
     const surface = document.querySelector<HTMLElement>('.surface')
     if (!surface) return
-    // Both a tap and a stationary hold open the full photograph.
+    // A tap approaches the lantern; only a stationary hold opens the original.
     const HOLD = 420
     /** Past this a press is a drag along the lane, and belongs to the walk. */
     const SLOP = 8
@@ -588,48 +611,58 @@ export default function LanternWalk() {
       g.timer = 0
       g.held = null
       g.from = null
+      g.pointer = null
+      g.cancelled = false
+      g.expanded = false
     }
 
     const down = (e: PointerEvent) => {
-      if (!e.isPrimary) return
+      if (!e.isPrimary || e.button !== 0 || openId) return
       if ((e.target as HTMLElement | null)?.closest('button, input, textarea, a')) return
       const box = surface.getBoundingClientRect()
       const index = whichLantern(e.clientX - box.left, e.clientY - box.top)
-      if (index === null) return
+      clear()
+      g.pointer = e.pointerId
       g.held = index
       g.from = { x: e.clientX, y: e.clientY }
+      if (index === null) return
       g.timer = window.setTimeout(() => {
         const memory = g.held !== null ? memories[g.held] : null
         // Stand at it as well, so letting go leaves you where the picture was.
         if (memory) {
+          g.expanded = true
+          g.timer = 0
           setFocused(g.held)
           open(memory.id)
         }
-        clear()
       }, HOLD)
     }
 
     const move = (e: PointerEvent) => {
-      if (!g.from) return
-      if (Math.abs(e.clientX - g.from.x) + Math.abs(e.clientY - g.from.y) > SLOP) clear()
+      if (!g.from || e.pointerId !== g.pointer) return
+      if (Math.abs(e.clientX - g.from.x) + Math.abs(e.clientY - g.from.y) > SLOP) {
+        window.clearTimeout(g.timer)
+        g.timer = 0
+        g.cancelled = true
+      }
     }
 
-    const up = () => {
-      if (g.held === null) {
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== g.pointer) return
+      const index = g.held
+      const ignored = g.cancelled || g.expanded || pulling()
+      clear()
+      if (ignored) return
+      if (index === null) {
         // A tap on nothing steps back out of whatever you were looking at.
-        if (!pulling()) setFocused(null)
-        clear()
+        setFocused(null)
         return
       }
-      const index = g.held
-      clear()
-      if (pulling()) return
       const memory = memories[index]
       if (!memory) return
       // Walk to the piece of path this one was hung facing, and turn to it.
       walkTo(sFor(index) + 6.4)
       setFocused(index)
-      open(memory.id)
     }
 
     surface.addEventListener('pointerdown', down)

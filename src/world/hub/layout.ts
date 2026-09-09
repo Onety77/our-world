@@ -1,5 +1,5 @@
 /**
- * Where the garden's five places stand.
+ * Where the garden's six places stand.
  *
  * Two things decide this, and both were learned the hard way.
  *
@@ -50,7 +50,7 @@ export const HUB_ORIGIN: [number, number] = [110, 0]
  * was tightening the gaps, and the whole point of the note below is that
  * tightening them is what crowds the neighbours into the frame.
  */
-export const HUB_WOOD = { inner: 80, outer: 130 }
+export const HUB_WOOD = { inner: 108, outer: 158 }
 
 /**
  * Where the treeline opens, in radians, and how wide.
@@ -73,7 +73,7 @@ export interface Anchor {
 }
 
 /**
- * The five places, in the order they are swiped through, as offsets from the
+ * The six places, in the order they are swiped through, as offsets from the
  * hub origin. Gaps vary between twenty-one and twenty-four metres and each
  * sits a few metres fore or aft of the line.
  *
@@ -91,12 +91,12 @@ const PLACES: { at: [number, number]; stand: number; aim: number }[] = [
   /*
     The Glasshouse — long, low and lying along the row rather than facing it.
 
-    Appended, never inserted. Everything below indexes this array positionally
-    and `HUB_STREAM` is measured off entry 1, so slotting a fifth place into
-    the middle would move the Wellspring's water away from the Wellspring
-    without a single test noticing.
+    These anchors follow the section registry and GardenHub landmarks. The
+    Clearing comes before memories; the river stays at entry 1 so HUB_STREAM
+    remains aligned with its landmark.
   */
-  { at: [56, 5], stand: 25, aim: 2.6 },
+  { at: [56, 5], stand: 19, aim: 2.1 }, // the clearing: a companion and an open book
+  { at: [85, -3], stand: 25, aim: 2.6 }, // memories remain the final destination
 ]
 
 export const ANCHORS: readonly Anchor[] = PLACES.map(({ at: [dx, dz], stand, aim }) => {

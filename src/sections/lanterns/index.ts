@@ -14,7 +14,7 @@ export default {
     Slotting a fifth place into the middle would move the Wellspring's water
     away from the Wellspring, silently.
   */
-  order: 4,
+  order: 5,
   camera: {
     /*
       Standing on the lane, at the head of it, looking down its length.

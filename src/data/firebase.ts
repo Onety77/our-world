@@ -21,6 +21,7 @@
  */
 
 import { initializeApp, type FirebaseApp } from 'firebase/app'
+import { firebaseLearning } from '@/learning/firebaseLearning'
 import {
   getAuth,
   onAuthStateChanged,
@@ -1035,6 +1036,8 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
 
   return {
     me,
+
+    ...firebaseLearning(db, me, now),
 
     subscribe(listener) {
       listeners.add(listener)

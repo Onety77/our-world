@@ -11,7 +11,6 @@ import { useQuestions } from '@/systems/questions'
 import { until } from '@/systems/time'
 import { useMenuKeys } from './useMenuKeys'
 import { HollowLobby } from './HollowLobby'
-import { FoldThreshold } from './Fold'
 
 function TheLanternWalk() {
   const start = useMemories((s) => s.leaveOne)
@@ -53,7 +52,7 @@ function TheLanternWalk() {
           <span className="lantern-walk-touch">swipe up or down</span>
           <span className="lantern-walk-pointer">scroll or use the arrow keys</span> to walk
           backward through what we kept
-          <span className="memory-walk-open-hint">tap a photograph to open it</span>
+          <span className="memory-walk-open-hint">tap to look closer · hold for the full photograph · tap away to step back</span>
         </span>
       )}
     </div>
@@ -224,8 +223,6 @@ export function Threshold() {
   if (id === 'hollow') return <HollowLobby />
 
   if (id === 'lanterns') return <TheLanternWalk />
-
-  if (id === 'fold') return <FoldThreshold />
 
   /*
     The Stars has no threshold any more.

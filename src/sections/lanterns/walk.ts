@@ -174,6 +174,7 @@ export function alongTheLane(target: HTMLElement): () => void {
   /** A wheel or a trackpad, for whoever is looking at this on a laptop. */
   const wheel = (e: WheelEvent) => {
     e.preventDefault()
+    if (focus.open > 0.02) return
     walkTo(walk.to + e.deltaY * 0.012)
   }
 

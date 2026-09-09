@@ -21,6 +21,7 @@ import { SECTIONS } from '@/sections/registry'
 import { SLIDE_DISTANCE, slide, slidePosition, useSections } from '@/systems/sections'
 import { eased, gaze, stepPointerLook } from '@/systems/pointerLook'
 import { stepTreeOrbit, treeOrbit } from '@/systems/treeOrbit'
+import { focus as memoryFocus } from '@/sections/lanterns/walk'
 
 /** How quickly the camera settles onto the place you asked for, per second. */
 const FOLLOW = 4.2
@@ -110,7 +111,8 @@ export function SlideCamera() {
     const off = slidePosition() - index
     const shove = Math.max(-1.4, Math.min(1.4, off)) * SLIDE_DISTANCE
 
-    const sway = section.camera.sway ?? 1
+    const sway = (section.camera.sway ?? 1) *
+      (entered && section.id === 'lanterns' ? 1 - memoryFocus.open : 1)
     const idleX = Math.sin(drift.current * 0.11) * 0.25
     const idleY = Math.sin(drift.current * 0.079 + 1.7) * 0.14
 

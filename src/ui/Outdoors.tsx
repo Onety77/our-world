@@ -19,6 +19,7 @@ const NAMES: Record<AnyPlace, string> = {
   river: 'the Wellspring',
   hollow: 'the Hollow',
   stars: 'the Stars',
+  clearing: 'the Clearing',
   lanterns: 'the Lantern Walk',
 }
 
@@ -28,6 +29,7 @@ const HEARD: Record<AnyPlace, string> = {
   river: 'water, air, leaves and the valley underneath the river',
   hollow: 'the cave fire, its crackles, the rock rumble and the small air leak',
   stars: 'the thin night air, distant room and rare glass-like tones',
+  clearing: 'soft air, leaves, and a little woodland hush',
   lanterns: 'leaves overhead, air moving down the lane, and a little off the trunks',
 }
 

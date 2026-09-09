@@ -6,6 +6,8 @@
  */
 
 /** There are exactly two people, forever. This is deliberate. */
+import type { LearningData } from '@/learning/model'
+
 export type UserId = 'warm' | 'cool'
 export const USER_IDS: readonly UserId[] = ['warm', 'cool'] as const
 export const otherUser = (id: UserId): UserId => (id === 'warm' ? 'cool' : 'warm')
@@ -541,8 +543,8 @@ export interface Memory {
  * they must be kept in step by hand, and `npm run rules` prints them out.
  */
 export const AMBIENCE_KEYS = [
-  'garden', 'tree', 'river', 'hollow', 'stars', 'lanterns',
-  'bleedTree', 'bleedRiver', 'bleedHollow', 'bleedStars', 'bleedGlasshouse',
+  'garden', 'tree', 'river', 'hollow', 'stars', 'clearing', 'lanterns',
+  'bleedTree', 'bleedRiver', 'bleedHollow', 'bleedStars', 'bleedClearing', 'bleedLanterns', 'bleedGlasshouse',
 ] as const
 
 export interface Track {
@@ -1091,7 +1093,7 @@ export interface WorldState {
  * The seam. `local` and `firebase` both implement this; nothing above the data
  * folder knows which one it's talking to.
  */
-export interface DataLayer {
+export interface DataLayer extends LearningData {
   /** Who am I, on this device. */
   me: UserId
 

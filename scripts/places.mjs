@@ -33,7 +33,7 @@ const CHROME =
   process.env.CHROME ?? 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'
 
 /** Each place, and what it is supposed to be. */
-const PLACES = ['tree', 'river', 'hollow', 'stars', 'lanterns']
+const PLACES = ['tree', 'river', 'hollow', 'stars', 'clearing', 'lanterns']
 
 /*
   What is being asserted, and why only this much.
@@ -188,7 +188,7 @@ const main = async () => {
     await ev(`(() => {
       const outdoors = window.__outdoors?.getState()
       outdoors?.toDefaults()
-      for (const place of ['tree', 'river', 'hollow', 'stars', 'lanterns']) {
+      for (const place of PLACES) {
         outdoors?.setBleed(place, 1)
       }
       return true
