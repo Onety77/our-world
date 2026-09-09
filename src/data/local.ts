@@ -37,9 +37,6 @@ import type { ScreenTalk,
   VoiceLight,
   VoiceLightGarden,
   Watched,
-  FoldGarden,
-  Practice,
-  Word,
 } from './types'
 import {
   activeQuestion,
@@ -55,9 +52,6 @@ import {
   voiceClipFromStore,
 } from './voiceClips'
 import { newId } from './ids'
-import { newWord, seedPractices, seedWords } from './foldSeed'
-import { PRACTICE_RECENT } from './types'
-import { turnOf } from '@/systems/fold'
 import {
   NOTE_LIMIT,
   alreadyIn,
@@ -470,52 +464,6 @@ function loadMemories(): Memory[] {
   }
 }
 
-/**
- * The Fold, beside the world for the same reason memories are.
- *
- * Two keys rather than one: the practices are read on every visit to draw the
- * animals, and the deck is only read when somebody actually sits down to a
- * session. Splitting them means the hill can be drawn from a few hundred bytes
- * without parsing a year of vocabulary.
- */
-const PRACTICES_KEY = 'garden:practices:v1'
-const WORDS_KEY = 'garden:words:v1'
-
-/**
- * A practice brought back from rest.
- *
- * Deleting the key rather than setting it to null or 0, because `restingAt` is
- * read as a truthy fact in `conditionOf` and a zero would be indistinguishable
- * from “never rested” only by luck. Firestore has `deleteField` for exactly
- * this; the mock has to do it by hand.
- */
-function stripResting(p: Practice): Practice {
-  const { restingAt: _gone, ...rest } = p
-  return rest
-}
-
-function loadFold(): { practices: Practice[]; words: Word[] } {
-  if (typeof localStorage === 'undefined') {
-    return { practices: seedPractices(), words: seedWords() }
-  }
-  try {
-    const rawPractices = JSON.parse(localStorage.getItem(PRACTICES_KEY) ?? 'null')
-    const rawWords = JSON.parse(localStorage.getItem(WORDS_KEY) ?? 'null')
-    /*
-      Seeded only when nothing has ever been stored, never when the array is
-      empty. An empty Fold is a real state — somebody who has retired
-      everything — and re-seeding it would put four animals back on the hill
-      every reload, which reads as the mock refusing to be emptied.
-    */
-    return {
-      practices: Array.isArray(rawPractices) ? (rawPractices as Practice[]) : seedPractices(),
-      words: Array.isArray(rawWords) ? (rawWords as Word[]) : seedWords(),
-    }
-  } catch {
-    return { practices: seedPractices(), words: seedWords() }
-  }
-}
-
 const ROUNDS_KEY = 'garden:rounds:v1'
 
 /**
@@ -922,26 +870,6 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
   function tellMemoryWatchers() {
     for (const w of memoryWatchers) w(memories)
-  }
-
-  const seeded = loadFold()
-  let practices = seeded.practices
-  let words = seeded.words
-  const foldWatchers = new Set<(f: FoldGarden) => void>()
-
-  function saveFold() {
-    if (typeof localStorage === 'undefined') return
-    try {
-      localStorage.setItem(PRACTICES_KEY, JSON.stringify(practices))
-      localStorage.setItem(WORDS_KEY, JSON.stringify(words))
-    } catch {
-      /* storage full; the hill still draws from what is in memory */
-    }
-  }
-
-  function tellFoldWatchers() {
-    const fold: FoldGarden = { practices, words, loaded: true }
-    for (const w of foldWatchers) w(fold)
   }
 
   function saveRounds() {
@@ -1497,116 +1425,6 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
     },
 
     // ---- the Glasshouse ----------------------------------------------------
-
-    // ---- The Fold --------------------------------------------------------
-
-    watchFold(listener) {
-      foldWatchers.add(listener)
-      listener({ practices, words, loaded: true })
-      return () => {
-        foldWatchers.delete(listener)
-      }
-    },
-
-    async takeIn(input) {
-      const name = input.name.trim()
-      // A practice with no name is not a practice. Refused at the seam rather
-      // than only disabled in the UI, because the seam is what both layers share.
-      if (name === '') throw new Error('that practice needs a name')
-      const practice: Practice = {
-        id: newId(),
-        name,
-        kind: input.kind,
-        by: input.by,
-        creature: input.creature,
-        startedAt: Date.now(),
-        days: 0,
-        lastDay: null,
-        recent: [],
-      }
-      practices = [...practices, practice]
-      saveFold()
-      tellFoldWatchers()
-      return practice
-    },
-
-    async restPractice(id, resting) {
-      practices = practices.map((p) =>
-        p.id !== id ? p : resting ? { ...p, restingAt: Date.now() } : stripResting(p),
-      )
-      saveFold()
-      tellFoldWatchers()
-    },
-
-    async practise(id, day, line) {
-      practices = practices.map((p) => {
-        if (p.id !== id) return p
-        /*
-          Idempotent, and that is the whole of the rule.
-
-          Practising twice in one day is one day. Without this the count is a
-          count of *visits*, which is a number you can inflate by opening the
-          app twice — and a growth curve you can game is a growth curve that
-          stops meaning anything the first time somebody notices.
-        */
-        if (p.lastDay === day) return p
-        return {
-          ...p,
-          days: p.days + 1,
-          lastDay: day,
-          recent: [day, ...p.recent.filter((d) => d !== day)].slice(0, PRACTICE_RECENT),
-          ...(line?.trim() ? { lastLine: line.trim() } : {}),
-        }
-      })
-      saveFold()
-      tellFoldWatchers()
-    },
-
-    async addWord(input) {
-      const word = newWord({ ...input, by: me, at: Date.now() })
-      if (word.text === '' || word.meaning === '') {
-        throw new Error('a word needs both halves')
-      }
-      words = [...words, word]
-      saveFold()
-      tellFoldWatchers()
-      return word
-    },
-
-    async turnWord(id, got, now = Date.now()) {
-      words = words.map((w) => {
-        if (w.id !== id) return w
-        const turn = turnOf(w, me, got, now)
-        return {
-          ...w,
-          // Only ever this person's own half. The rules say the same thing on
-          // the real layer; saying it here as well is what keeps the mock
-          // honest about a seal that cannot be seen from one device.
-          boxes: { ...w.boxes, [me]: turn.box },
-          dueAt: { ...w.dueAt, [me]: turn.dueAt },
-          ...(turn.landed
-            ? { landedAt: { ...(w.landedAt ?? {}), [me]: now } }
-            : {}),
-        }
-      })
-      saveFold()
-      tellFoldWatchers()
-    },
-
-    async reword(id, patch) {
-      words = words.map((w) =>
-        w.id !== id
-          ? w
-          : {
-              ...w,
-              ...(patch.text?.trim() ? { text: patch.text.trim() } : {}),
-              ...(patch.meaning?.trim() ? { meaning: patch.meaning.trim() } : {}),
-              ...(patch.note !== undefined ? { note: patch.note.trim() } : {}),
-            },
-      )
-      saveFold()
-      tellFoldWatchers()
-    },
 
     watchMemories(listener) {
       memoryWatchers.add(listener)

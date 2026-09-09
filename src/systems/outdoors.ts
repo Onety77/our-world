@@ -21,7 +21,7 @@ import { create } from 'zustand'
 import type { Place } from './ambience'
 
 /** Every place you can enter. */
-export const INSIDES = ['tree', 'river', 'hollow', 'stars', 'fold', 'lanterns'] as const
+export const INSIDES = ['tree', 'river', 'hollow', 'stars', 'lanterns'] as const
 export type InsidePlace = (typeof INSIDES)[number]
 
 /*
@@ -46,7 +46,6 @@ export const OPEN: PlaceLevels = {
   river: 1,
   hollow: 1,
   stars: 1,
-  fold: 1,
   lanterns: 1,
 }
 
@@ -69,7 +68,6 @@ export const QUIET: PlaceLevels = {
   river: 0,
   hollow: 0,
   stars: 0,
-  fold: 0,
   lanterns: 0,
 }
 
@@ -105,7 +103,6 @@ export const NO_BLEED: PlaceLevels = {
   river: 0,
   hollow: 0,
   stars: 0,
-  fold: 0,
   lanterns: 0,
 }
 
@@ -380,7 +377,6 @@ export function placeLevelsNow(): PlaceLevels {
     river: howMuch.river * mine.sections,
     hollow: howMuch.hollow * mine.sections,
     stars: howMuch.stars * mine.sections,
-    fold: howMuch.fold * mine.sections,
     lanterns: howMuch.lanterns * mine.sections,
   }
 }

@@ -22,7 +22,6 @@ import { TreeLandmark } from './hub/landmarks/Tree'
 import { RiverLandmark } from './hub/landmarks/River'
 import { HollowLandmark } from './hub/landmarks/Hollow'
 import { StarsLandmark } from './hub/landmarks/Stars'
-import { FoldLandmark } from './hub/landmarks/Fold'
 import { LanternWalkLandmark } from './hub/landmarks/LanternWalk'
 import { Grass } from './Grass'
 import { Flowers } from './Flowers'
@@ -59,17 +58,14 @@ function LivingLandmark({ index, children }: { index: number; children: React.Re
 /*
   Positional, and it must stay in step with the order of SECTIONS.
 
-  Appending is safe; inserting is not, and the Fold is the one insertion this
-  array has ever had — see the note on its entry in world/hub/layout for what
-  was checked before it went in. The index of a place is load-bearing in three
-  files and this is one of them.
+  Appending is safe; inserting is not. See the note in world/hub/layout — the
+  index of a place is load-bearing in three files.
 */
 const LANDMARKS = [
   TreeLandmark,
   RiverLandmark,
   HollowLandmark,
   StarsLandmark,
-  FoldLandmark,
   LanternWalkLandmark,
 ]
 
@@ -95,14 +91,7 @@ export function GardenHub() {
         palette={palette}
         openings={[HUB_OPENING.at]}
         seed="garden-hub:wood"
-        /*
-          Two hundred, not a hundred and seventy. The ring was widened for the
-          sixth place and the same count over a quarter more ground is a
-          visibly thinner wood — the trees are the backdrop the whole garden is
-          read against, and thinning them is not a saving, it is a hole in the
-          horizon.
-        */
-        count={200}
+        count={170}
         centre={HUB_ORIGIN}
         innerRadius={HUB_WOOD.inner}
         outerRadius={HUB_WOOD.outer}

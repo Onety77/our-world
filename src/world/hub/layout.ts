@@ -43,20 +43,14 @@ export const HUB_ORIGIN: [number, number] = [110, 0]
  * centre — so a ring starting at forty-two put the viewer inside the treeline
  * with a canopy filling the entire frame.
  *
- * **Widened once for the fifth place and again for the sixth.** Six landmarks
- * with the gaps the note below insists on span a hundred and thirty-eight
- * metres, and the camera at the far end of that stands about eighty-six out
- * from the middle — `sqrt(82² + 25²)`, because it backs off along z rather than
- * along the row. A hundred and five keeps the same nineteen metres of clearance
- * the four had.
- *
- * The alternative both times was tightening the gaps, and the whole point of
- * the note below is that tightening them is what crowds the neighbours into the
- * frame. The other alternative here was re-centring the row so it grew both
- * ways instead of only right — which would have moved four landmarks nobody
- * asked to move, for the sake of ten metres of wood.
+ * **Widened once, for the fifth place.** Five landmarks with the gaps the note
+ * below insists on span a hundred and twelve metres rather than eighty-eight,
+ * which puts the camera at the far ends about sixty-one metres out. Eighty
+ * keeps the same nineteen metres of clearance the four had. The alternative
+ * was tightening the gaps, and the whole point of the note below is that
+ * tightening them is what crowds the neighbours into the frame.
  */
-export const HUB_WOOD = { inner: 105, outer: 155 }
+export const HUB_WOOD = { inner: 80, outer: 130 }
 
 /**
  * Where the treeline opens, in radians, and how wide.
@@ -64,7 +58,7 @@ export const HUB_WOOD = { inner: 105, outer: 155 }
  * Wide enough to span every position the camera takes, so the wood is always a
  * backdrop behind the garden and never a fence in front of it.
  */
-export const HUB_OPENING = { at: Math.PI / 2, width: 1.34 }
+export const HUB_OPENING = { at: Math.PI / 2, width: 1.15 }
 
 export interface Anchor {
   /** World x, z. */
@@ -95,23 +89,14 @@ const PLACES: { at: [number, number]; stand: number; aim: number }[] = [
   { at: [-1, 4], stand: 26, aim: 2.8 }, // the cave mouth
   { at: [27, -3.5], stand: 23, aim: 2.6 }, // the cairn and its two lights
   /*
-    The Fold — a bank of grass with the mist sitting in it, and the one entry in
-    this array that was ever *inserted* rather than appended.
+    The Glasshouse — long, low and lying along the row rather than facing it.
 
-    The warning that used to live on the entry below is real and was checked
-    before this went in: everything here indexes positionally and `HUB_STREAM`
-    is measured off entry 1, so an insertion anywhere at or before the stream
-    would move the Wellspring's water away from the Wellspring with nothing to
-    catch it. Index four is past every such reference. What did have to move in
-    step is `LANDMARKS` in `world/GardenHub` and the `order` on the two section
-    definitions — nothing else in the garden knows a place by its number.
-
-    Stood a little further back than its neighbours: it is a piece of *ground*
-    rather than an object, so what has to be in frame is its whole width.
+    Appended, never inserted. Everything below indexes this array positionally
+    and `HUB_STREAM` is measured off entry 1, so slotting a fifth place into
+    the middle would move the Wellspring's water away from the Wellspring
+    without a single test noticing.
   */
-  { at: [54, 2], stand: 27, aim: 2.2 },
-  /* The Lantern Walk — long, low and lying along the row rather than facing it. */
-  { at: [82, 6], stand: 25, aim: 2.6 },
+  { at: [56, 5], stand: 25, aim: 2.6 },
 ]
 
 export const ANCHORS: readonly Anchor[] = PLACES.map(({ at: [dx, dz], stand, aim }) => {
