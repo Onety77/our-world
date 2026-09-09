@@ -180,7 +180,30 @@ export const DEFAULTS: Readonly<RallyTuning> = Object.freeze({
   driftScrub: 0.2,
   driftSwingCost: 0.34,
   driftHold: 0.85,
-  driftTopSpeed: 20,
+  /*
+    The speed a drift settles at, in metres per second — 94 km/h.
+
+    ------------------------------------------------------------------------
+    **It was 20, and that made crashing the better move.**
+
+    Measured in a car that tops out at 127 km/h: clouting the rock at full
+    speed leaves you 77, and a drift left you 66 on the way in and settled at
+    71. So the mechanic the whole game is built on — *drifting is how you buy
+    going fast* — cost more than hitting a wall, and the fastest way through
+    a corner was to bounce off it.
+
+    The number was never wrong so much as left behind. It is an absolute
+    speed, chosen when a wall cost almost nothing (127 → 123, measured), so
+    nobody was comparing the two. Making stone hurt properly is right and it
+    is what put these two numbers next to each other for the first time.
+
+    At 26 the entry dips to 84 and settles at 90 — above a wall at both
+    moments, so a drift is now the better line and not a penalty. And still
+    never a shortcut: twelve seconds of drifting covers 150 m where driving
+    covers 422.
+    ------------------------------------------------------------------------
+  */
+  driftTopSpeed: 26,
   driftLineHold: 0.85,
   driftPlace: 0.5,
   driftEnterSpeed: 11,
@@ -827,6 +850,131 @@ export const DIALS: readonly Dial[] = [
     max: 28,
     step: 0.5,
     show: (v) => `${Math.round(v * MS_TO_KMH)} km/h`,
+  },
+
+  /*
+    --------------------------------------------------------------------------
+    **The nine that were not here**, and the reason they are now.
+
+    Every one of these was already a number in `RallyTuning` doing real work in
+    the drift, and none of them was reachable: the page offered the helper, the
+    angle and the entry speed, and nothing else. So when the drift settled too
+    slowly — 71 km/h against a wall that leaves you 77, which made crashing the
+    better move — there was no dial to find, and the search landed on one that
+    sounded close and did something else.
+
+    A number that decides how the car feels and cannot be reached is worse than
+    a missing feature; it is a wrong answer waiting to be given. They are in the
+    order you would reach for them, not the order they run in.
+    --------------------------------------------------------------------------
+  */
+  {
+    key: 'driftTopSpeed',
+    group: 'drift',
+    name: 'The speed a drift settles at',
+    note: 'Where a held slide ends up, whatever it was doing when it started. Entering costs you speed down to about here and then it holds. Keep it above what clouting the rock leaves you or crashing becomes the quicker line.',
+    low: 'a crawl',
+    high: 'barely slows',
+    min: 12,
+    max: 34,
+    step: 0.5,
+    show: (v) => `${Math.round(v * MS_TO_KMH)} km/h`,
+  },
+  {
+    key: 'driftHold',
+    group: 'drift',
+    name: 'A held slide keeps its speed',
+    note: 'How much of the angle\u2019s cost fades once the pose stops moving. At full, hanging it out costs you on the way in and nothing after; at zero a long corner on one arrow bleeds away to a crawl. Throwing it across always costs, whatever this says.',
+    low: 'bleeds away',
+    high: 'holds it',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    show: pct,
+  },
+  {
+    key: 'driftSwingCost',
+    group: 'drift',
+    name: 'What throwing it across costs',
+    note: 'How much speed is scrubbed by *moving* the pose rather than sitting in it. This is what keeps a chicane taken flick-flick-flick expensive; at zero, swapping sides down a straight is free and quicker than driving.',
+    low: 'free',
+    high: 'dear',
+    min: 0,
+    max: 1.2,
+    step: 0.01,
+    show: times,
+  },
+  {
+    key: 'driftSwap',
+    group: 'drift',
+    name: 'How fast it swaps sides',
+    note: 'How quickly the car crosses to the other side when you hold the other arrow. High is a flick; low is a long lazy transfer you have to plan.',
+    low: 'lazy',
+    high: 'a flick',
+    min: 1,
+    max: 8,
+    step: 0.1,
+    show: (v) => `${(1 / v).toFixed(2)} s across`,
+  },
+  {
+    key: 'driftScrub',
+    group: 'drift',
+    name: 'What the angle costs',
+    note: 'How fast being sideways eats speed on the way in. It sets how sharply you drop to the settling speed rather than where you settle \u2014 that is the dial above.',
+    low: 'coasts',
+    high: 'anchors',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    show: times,
+  },
+  {
+    key: 'driftPlace',
+    group: 'drift',
+    name: 'How far the arrows move it across',
+    note: 'While drifting the arrows place the car across the road rather than naming a radius. This is how much of the room they can move it through \u2014 high is a decisive change of line, low keeps the slide near where it started.',
+    low: 'stays put',
+    high: 'right across',
+    min: 0,
+    max: 0.9,
+    step: 0.01,
+    show: pct,
+  },
+  {
+    key: 'driftLineHold',
+    group: 'drift',
+    name: 'How firmly it keeps its lane',
+    note: 'A slide washes wide on its own. This is how hard it is pulled back to the line it was on. Too low and a long corner walks you into the rock; too high and the drift is on rails.',
+    low: 'washes wide',
+    high: 'on a rail',
+    min: 0,
+    max: 2.2,
+    step: 0.01,
+    show: times,
+  },
+  {
+    key: 'driftTightness',
+    group: 'drift',
+    name: 'The tightest arc the arrows can ask for',
+    note: 'As a radius, so small is tight. It bounds what your steering may ask of a slide and never the corner you are already in \u2014 a drift always follows the road, however this is set.',
+    low: 'darts across',
+    high: 'long sweep',
+    min: 8,
+    max: 60,
+    step: 1,
+    show: (v) => `${Math.round(v)} m`,
+  },
+  {
+    key: 'driftGrip',
+    group: 'drift',
+    name: 'The most a slide can pull',
+    note: 'The hardest corner a drift is allowed to draw, in g. The backstop that stops a slide being a slot car \u2014 without it the lane-holding could ask for a corner no car could take.',
+    low: 'runs wide',
+    high: 'hooks round',
+    min: 0.6,
+    max: 3.4,
+    step: 0.05,
+    show: (v) => `${v.toFixed(2)} g`,
   },
 
   // --- ember ---------------------------------------------------------------

@@ -27,28 +27,42 @@
 
 import { RaceRoom } from '@/ui/RaceRoom'
 import type { Lobby } from '@/systems/useLobby'
+import { TrackArtwork } from '@/ui/TrackArtwork'
+import type { StageId } from './model'
 
 export function Wheel({
   lobby,
   roadName,
+  stage,
   theirName,
   onLeave,
 }: {
   lobby: Lobby
   roadName: string
+  stage: StageId
   theirName: string
   onLeave(): void
 }) {
   return (
     <div className="rally rally-centre wheel">
-      <p className="rally-kicker">wheel to wheel · {roadName.toLowerCase()}</p>
-      <RaceRoom
-        lobby={lobby}
-        theirName={theirName}
-        waitingFor={`${theirName} has been asked. The road is already chosen — nothing starts until you are both ready.`}
-        onLeave={onLeave}
-        leaveLabel="leave the room"
-      />
+      <div className="race-room-art">
+        <TrackArtwork stage={stage} />
+        <div>
+          <span>YOUR STARTING LINE</span>
+          <h2>{roadName}</h2>
+          <p>Two drivers. One road. The same start.</p>
+        </div>
+      </div>
+      <section className="race-room-content">
+        <p className="rally-kicker">EMBER RALLY · LIVE RACE</p>
+        <RaceRoom
+          lobby={lobby}
+          theirName={theirName}
+          waitingFor={`${theirName} has been asked. The road is already chosen — nothing starts until you are both ready.`}
+          onLeave={onLeave}
+          leaveLabel="leave the room"
+        />
+      </section>
     </div>
   )
 }

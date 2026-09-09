@@ -1,0 +1,317 @@
+.hollow-hub {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  color: #eee9de;
+  background: radial-gradient(ellipse at 18% 6%, #54433166, transparent 50%), #151a1bef;
+  padding: 0 clamp(20px, 5vw, 80px) max(28px, env(safe-area-inset-bottom));
+  text-shadow: none;
+}
+.hollow-hub button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 0;
+}
+.hollow-hub button:focus-visible {
+  outline: 2px solid #e8bb7f;
+  outline-offset: 5px;
+}
+.hollow-top {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #ffffff16;
+  font: 11px var(--sans);
+  letter-spacing: 0.13em;
+}
+.hollow-top > button {
+  background: none;
+  min-height: 44px;
+  letter-spacing: 0;
+}
+.hollow-top > span:nth-child(2) {
+  color: #b3aa99;
+}
+.hollow-presence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0;
+  color: #aaa99f;
+}
+.hollow-presence i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #858779;
+}
+.hollow-presence.online i {
+  background: #b5c998;
+  box-shadow: 0 0 10px #b5c94455;
+}
+.hollow-content {
+  max-width: 1280px;
+  margin: auto;
+  padding: clamp(28px, 5vh, 64px) 0 20px;
+}
+.hollow-eyebrow {
+  font: 9px var(--sans);
+  letter-spacing: 0.2em;
+  color: #c5ac85;
+}
+.hollow-heading h1 {
+  font: 400 clamp(38px, 4.7vw, 64px)/1.08 var(--serif);
+  letter-spacing: -0.025em;
+  margin: 12px 0 13px;
+}
+.hollow-heading > p {
+  color: #a6ada8;
+  font: 14px/1.65 var(--sans);
+  margin: 0;
+  max-width: 640px;
+}
+.hollow-library {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 20px;
+  margin-top: 32px;
+}
+.hollow-hub .hollow-game-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  text-align: left;
+  background: #242a29;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  overflow: hidden;
+  transition:
+    transform 0.2s,
+    border-color 0.2s,
+    background 0.2s;
+}
+.hollow-hub .hollow-game-tile:hover:not(:disabled) {
+  transform: translateY(-4px);
+  border-color: #d5b58077;
+  background: #2b302d;
+}
+.hollow-game-tile:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.hollow-tile-art {
+  height: clamp(150px, 22vh, 245px);
+  display: grid;
+  place-items: center;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 90%, #8a67434d, transparent), #202626;
+}
+.hollow-tile-art .track-artwork {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+.hollow-game-tile.scattergories .hollow-tile-art {
+  background: radial-gradient(ellipse at 50% 100%, #a3b99733, transparent), #24322f;
+}
+.hollow-game-tile.word-duel .hollow-tile-art {
+  background: radial-gradient(ellipse at 50% 100%, #aba0c344, transparent), #302d38;
+}
+.hollow-emblem {
+  transform: scale(1.45);
+}
+.hollow-tile-category {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  color: #efe8d5;
+  font: 9px var(--sans);
+  letter-spacing: 0.17em;
+}
+.hollow-tile-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 23px;
+}
+.hollow-tile-body > strong {
+  font: 400 clamp(26px, 2.5vw, 35px) var(--serif);
+}
+.hollow-tile-description {
+  font: 12px/1.7 var(--sans);
+  color: #b5bbb4;
+  margin: 9px 0 20px;
+  min-height: 42px;
+  max-width: 340px;
+}
+.hollow-tile-meta {
+  margin-top: auto;
+  font: 10px var(--sans);
+  color: #9ea69d;
+}
+.hollow-tile-enter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid #ffffff17;
+  padding-top: 15px;
+  margin-top: 18px;
+  color: #e4c698;
+  font: 11px var(--sans);
+}
+.hollow-tile-enter b {
+  font: 22px var(--sans);
+}
+.hollow-activity {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 40px;
+  padding-top: 28px;
+  margin-top: 32px;
+  border-top: 1px solid #ffffff17;
+}
+.hollow-activity h2 {
+  font: 400 25px var(--serif);
+  margin: 8px 0;
+}
+.hollow-activity > div:last-child {
+  display: flex;
+  flex-direction: column;
+}
+.hollow-activity button {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 48px;
+  padding: 8px 0;
+  background: transparent;
+  border-bottom: 1px solid #ffffff0c;
+  text-align: left;
+}
+.hollow-activity strong {
+  font: 16px var(--serif);
+}
+.hollow-activity button span {
+  margin-left: auto;
+  font: 11px var(--sans);
+  color: #b3b6a9;
+}
+.hollow-activity button b {
+  color: #d9bb8e;
+}
+.hollow-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 22px;
+  margin-top: 40px;
+}
+.hollow-modes > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 30px;
+  background: #252c29;
+  border: 1px solid #d6c5a022;
+  border-radius: 10px;
+  min-height: 300px;
+}
+.hollow-modes > button:hover:not(:disabled) {
+  border-color: #d6c5a0aa;
+}
+.hollow-modes > button:disabled {
+  opacity: 0.52;
+  cursor: default;
+}
+.hollow-mode-icon {
+  font: 36px var(--serif);
+  color: #dcc397;
+  margin-bottom: 28px;
+}
+.hollow-modes small {
+  font: 9px var(--sans);
+  color: #aaa998;
+  letter-spacing: 0.15em;
+}
+.hollow-modes strong {
+  font: 30px var(--serif);
+  margin-top: 10px;
+}
+.hollow-modes p {
+  font: 13px/1.7 var(--sans);
+  color: #bdc2b9;
+  margin: 12px 0 26px;
+}
+.hollow-mode-action {
+  font: 12px var(--sans);
+  color: #e4c698;
+  margin-top: auto;
+}
+@media (max-width: 760px) {
+  .hollow-top {
+    min-height: 62px;
+  }
+  .hollow-top > span:nth-child(2) {
+    display: none;
+  }
+  .hollow-content {
+    padding-top: 28px;
+  }
+  .hollow-library {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .hollow-game-tile.ember-rally {
+    grid-column: 1/-1;
+  }
+  .hollow-game-tile.ember-rally .hollow-tile-art {
+    height: 190px;
+  }
+  .hollow-tile-art {
+    height: 115px;
+  }
+  .hollow-tile-body {
+    padding: 18px 14px;
+  }
+  .hollow-tile-body > strong {
+    font-size: 25px;
+  }
+  .hollow-emblem {
+    transform: scale(0.88);
+  }
+  .hollow-tile-description {
+    font-size: 11px;
+  }
+  .hollow-tile-meta {
+    line-height: 1.5;
+  }
+  .hollow-activity {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .hollow-modes {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 26px;
+  }
+  .hollow-modes > button {
+    min-height: auto;
+    padding: 24px;
+  }
+  .hollow-mode-icon {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hollow-hub * {
+    transition: none !important;
+  }
+}

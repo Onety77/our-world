@@ -262,6 +262,60 @@ check('and throwing it across costs more than sitting in it', () => {
   assert(kmh(thrown) < kmh(held), 'a chicane taken flick-flick-flick is free')
 })
 
+check('and it beats hitting the rock, which it did not', () => {
+  /*
+    ------------------------------------------------------------------------
+    The invariant nobody had written down, and it was inverted.
+
+    Reported from playing: *"its better to even hit something than start a
+    drift."* True, and measured — in a car topping out at 127 km/h, clouting
+    the rock at full speed left 77 while a drift left 66 on the way in and
+    settled at 71. The mechanic the whole game is built on cost more than
+    crashing, so the quickest way through a corner was to bounce off it.
+
+    `driftTopSpeed` is an absolute speed and it was chosen when a wall cost
+    almost nothing — 127 → 123. Making stone hurt properly is right, and it is
+    what put these two numbers beside each other for the first time.
+
+    Both moments are checked: the dip on the way in, and where it settles. The
+    dip is the one that was worst and the one you feel.
+    ------------------------------------------------------------------------
+  */
+  const straight = flatTrack(200000)
+  straight.width.fill(10000)
+  const fast = createCar(straight)
+  for (let i = 0; i < 120 * 90; i++) advanceCar(straight, fast, GAS, DT)
+  const top = speedOf(fast)
+
+  const stone = flatTrack(200000)
+  stone.width.fill(6)
+  const hit = createCar(stone)
+  for (let i = 0; i < 120 * 90; i++) advanceCar(stone, hit, GAS, DT)
+  hit.n = 2.4
+  hit.psi = 0.10
+  let afterWall = speedOf(hit)
+  for (let i = 0; i < 120 * 2; i++) {
+    advanceCar(stone, hit, GAS, DT)
+    afterWall = Math.min(afterWall, speedOf(hit))
+  }
+
+  const sliding = createCar(straight)
+  for (let i = 0; i < 120 * 90; i++) advanceCar(straight, sliding, GAS, DT)
+  go(sliding, 0.25, { steer: 0.7, handbrake: true }, straight)
+  let dip = speedOf(sliding)
+  for (let i = 0; i < 120 * 6; i++) {
+    advanceCar(straight, sliding, { ...GAS, steer: 0.7 }, DT)
+    dip = Math.min(dip, speedOf(sliding))
+  }
+  const settled = speedOf(sliding)
+
+  console.log(`        top ${(top * KMH).toFixed(0)} · the rock leaves ${(afterWall * KMH).toFixed(0)} · a drift dips to ${(dip * KMH).toFixed(0)} and settles ${(settled * KMH).toFixed(0)}`)
+  assert(dip > afterWall,
+    `crashing is the better move: the rock leaves ${(afterWall * KMH).toFixed(0)} km/h, a drift ${(dip * KMH).toFixed(0)}`)
+  assert(settled > afterWall + 2,
+    `a settled drift is no better than a crash: ${(settled * KMH).toFixed(0)} against ${(afterWall * KMH).toFixed(0)}`)
+})
+
 check('a drift is never a quicker way down a road', () => {
   const straight = moving(28)
   const from = straight.s

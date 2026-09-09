@@ -90,6 +90,23 @@ function drive(): number[] {
   let cornering = 0
   let drifting = 0
   let burning = 0
+  /*
+    The shell's worst lean and worst dive, not whatever they happened to be on
+    the last frame.
+
+    `leanLimit` and `bodyLean` bound a *transient*: the car leans over in a
+    corner and comes back, so the final value is whatever the last hundred
+    milliseconds of the lap looked like and is the same number at every
+    setting. Measured over this exact drive, final roll was −0.733° at a limit
+    of 0.3, of 0.12 and of 0.02 — while the peak went 5.89° · 5.88° · 1.15°.
+    The dial was doing its job and this could not see it, so it reported it
+    dead the moment the drive ended somewhere slightly different.
+
+    Peaks, like `mostSideways` and `mostAngle` two lines up already are, for
+    the same reason those are.
+  */
+  let mostRoll = 0
+  let mostPitch = 0
 
   const dt = 1 / 120
   for (let step = 0; step < 120 * 40 && !car.finished; step++) {
@@ -132,6 +149,8 @@ function drive(): number[] {
     if (Math.abs(car.vn) > mostSideways) mostSideways = Math.abs(car.vn)
     if (Math.abs(car.n) > mostAngle) mostAngle = Math.abs(car.n)
     cornering += Math.abs(car.cornering) * dt
+    if (Math.abs(car.roll) > mostRoll) mostRoll = Math.abs(car.roll)
+    if (Math.abs(car.pitch) > mostPitch) mostPitch = Math.abs(car.pitch)
     if (car.drifting) drifting += dt
     if (car.boostLeft > 0) burning += dt
   }
@@ -144,8 +163,8 @@ function drive(): number[] {
     cornering,
     drifting,
     burning,
-    car.roll,
-    car.pitch,
+    mostRoll,
+    mostPitch,
     car.ember,
   ]
 }

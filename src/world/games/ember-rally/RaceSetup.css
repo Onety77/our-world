@@ -1,0 +1,578 @@
+.playing:has(.race-setup) {
+  z-index: 30;
+  animation: none;
+}
+.race-setup {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  background: radial-gradient(ellipse at 12% 24%, #35404755, transparent 70%), #141b20;
+  color: #edeae2;
+  padding: 0 clamp(20px, 4vw, 72px) max(32px, env(safe-area-inset-bottom));
+  text-shadow: none;
+}
+.race-setup button {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+}
+.race-setup button:focus-visible {
+  outline: 2px solid var(--road-accent);
+  outline-offset: 4px;
+}
+.race-setup-top {
+  min-height: 70px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #ffffff18;
+  font: 10px var(--sans);
+}
+.race-setup-top > span {
+  letter-spacing: 0.13em;
+  color: #a4aeb2;
+}
+.race-setup-top i {
+  font-style: normal;
+  margin: 0 15px;
+  opacity: 0.35;
+}
+.race-setup-top button {
+  background: transparent;
+  min-height: 44px;
+}
+.race-setup-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  padding: 32px 0 26px;
+  max-width: 1440px;
+  margin: auto;
+}
+.race-eyebrow {
+  font: 9px var(--sans);
+  letter-spacing: 0.18em;
+  color: var(--road-accent);
+}
+.race-setup-heading h1 {
+  margin: 9px 0 0;
+  font: 400 clamp(34px, 4vw, 54px)/1.08 var(--serif);
+  letter-spacing: -0.025em;
+}
+.race-setup-heading > p {
+  color: #a1adb2;
+  font: 12px/1.6 var(--sans);
+  margin: 0;
+}
+.race-setup-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.9fr) minmax(280px, 1fr);
+  gap: clamp(24px, 4vw, 60px);
+  max-width: 1440px;
+  margin: auto;
+}
+.race-track-side {
+  min-width: 0;
+}
+.race-track-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid #ffffff1c;
+  border-radius: 7px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.race-track-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 48px;
+  padding: 10px 7px;
+  background: #ffffff03;
+  font: 11px var(--sans);
+  border-right: 1px solid #ffffff12;
+}
+.race-track-tabs button:last-child {
+  border-right: 0;
+}
+.race-track-tabs button span {
+  font-size: 8px;
+  color: #7b8b91;
+}
+.race-track-tabs button small {
+  flex-basis: 100%;
+  font-size: 8px;
+  color: #b2a995;
+}
+.race-track-tabs button.selected {
+  background: color-mix(in srgb, var(--road-accent) 16%, #172027);
+  color: var(--road-accent);
+  box-shadow: inset 0 -2px var(--road-accent);
+}
+.race-track-tabs button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.race-track-tabs button:focus-visible {
+  outline-offset: -4px;
+}
+.race-track-hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.85;
+  min-height: 240px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #273039;
+  animation: race-landscape-in 0.3s ease-out;
+}
+.race-track-hero > .track-artwork {
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+.race-track-caption {
+  position: absolute;
+  bottom: 25px;
+  left: 26px;
+  right: 160px;
+}
+.race-track-caption > span {
+  font: 9px var(--sans);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--road-accent);
+}
+.race-track-caption h2 {
+  font: 400 clamp(28px, 3.5vw, 48px)/1.1 var(--serif);
+  margin: 8px 0;
+}
+.race-track-caption p {
+  font: 11px var(--sans);
+  color: #d0d4ce;
+  margin: 0;
+}
+.race-route {
+  position: absolute;
+  bottom: 23px;
+  right: 20px;
+  width: 145px;
+  color: var(--road-accent);
+  text-align: center;
+}
+.race-route svg {
+  display: block;
+  width: 100%;
+  height: 90px;
+}
+.race-route span {
+  font: 8px var(--sans);
+  color: #c0c8c7;
+}
+.race-track-details {
+  display: flex;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 22px 0;
+  border-bottom: 1px solid #ffffff16;
+}
+.race-track-details p {
+  font: 12px/1.8 var(--sans);
+  color: #b3bdbe;
+  margin: 0;
+  max-width: 430px;
+}
+.race-track-details > div {
+  text-align: right;
+  flex-shrink: 0;
+}
+.race-track-details > div span {
+  display: block;
+  color: #899797;
+  font: 8px var(--sans);
+  letter-spacing: 0.13em;
+  margin-bottom: 7px;
+}
+.race-track-details strong {
+  font: 15px var(--serif);
+  color: #e7d8bb;
+}
+.race-track-tip {
+  display: flex;
+  align-items: start;
+  gap: 16px;
+  font: 11px/1.7 var(--sans);
+  color: #94a5a9;
+  margin: 17px 0 0;
+}
+.race-track-tip > span {
+  color: var(--road-accent);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  padding-top: 3px;
+}
+.race-options {
+  border-left: 1px solid #ffffff16;
+  padding-left: clamp(22px, 3vw, 40px);
+  padding-top: 7px;
+}
+.race-options h2 {
+  font: 400 28px var(--serif);
+  margin: 10px 0 22px;
+}
+.race-mode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.race-mode-list button {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 17px 15px;
+  border-radius: 7px;
+  border: 1px solid #ffffff19;
+  background: #ffffff02;
+  text-align: left;
+}
+.race-mode-list button:hover {
+  background: #ffffff08;
+}
+.race-mode-list button.selected {
+  border-color: color-mix(in srgb, var(--road-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--road-accent) 7%, #172027);
+}
+.race-mode-list button > i {
+  width: 13px;
+  height: 13px;
+  border: 1px solid #66777e;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.race-mode-list button.selected > i {
+  border: 4px solid var(--road-accent);
+}
+.race-mode-list strong {
+  display: block;
+  font: 13px var(--sans);
+  margin-bottom: 7px;
+}
+.race-mode-list small {
+  display: block;
+  font: 11px/1.65 var(--sans);
+  color: #a6b2b5;
+}
+.race-session-note {
+  font: 11px/1.75 var(--sans);
+  color: #b8c3c2;
+  padding: 20px 0;
+  min-height: 88px;
+}
+.race-setup .race-launch {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 53px;
+  padding: 15px 20px;
+  background: var(--road-accent);
+  color: #172026;
+  border-radius: 5px;
+  font: 600 13px var(--sans);
+}
+.race-launch > span {
+  font-size: 20px;
+}
+.race-setup .race-launch:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.race-setup .race-launch:disabled {
+  background: #354047;
+  color: #a0a9aa;
+  cursor: default;
+}
+.race-launch-note {
+  display: block;
+  font: 9px/1.5 var(--sans);
+  color: #899a9e;
+  text-align: center;
+  margin-top: 12px;
+}
+.race-setup .race-watch-runs {
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  color: var(--road-accent);
+  font: 11px var(--sans);
+}
+.race-controls-guide {
+  display: flex;
+  gap: 30px;
+  position: relative;
+  background: #26323b;
+  border: 1px solid #ffffff1f;
+  border-radius: 7px;
+  padding: 22px 45px 22px 22px;
+  max-width: 1440px;
+  margin: 0 auto 24px;
+}
+.race-controls-guide > div {
+  flex: 1;
+}
+.race-controls-guide strong {
+  font: 13px var(--sans);
+  color: var(--road-accent);
+}
+.race-controls-guide p {
+  font: 11px/1.8 var(--sans);
+  color: #c0c8c7;
+  margin-bottom: 0;
+}
+.race-controls-guide > button {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  background: transparent;
+  font-size: 26px;
+  width: 36px;
+  height: 36px;
+}
+@keyframes race-landscape-in {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.playing:has(.wheel) {
+  z-index: 30;
+}
+.rally.wheel {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 50px;
+  padding: 50px;
+  background: #141b20;
+  text-shadow: none;
+  text-align: left;
+}
+.race-room-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.1;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.race-room-art > svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+.race-room-art > div {
+  position: absolute;
+  bottom: 35px;
+  left: 30px;
+  right: 30px;
+}
+.race-room-art span {
+  font: 9px var(--sans);
+  letter-spacing: 0.18em;
+  color: #d9c497;
+}
+.race-room-art h2 {
+  font: 42px var(--serif);
+  margin: 10px 0;
+}
+.race-room-art p {
+  font: 12px var(--sans);
+  color: #b9c1be;
+}
+.race-room-content {
+  text-align: center;
+}
+.race-room-content h1 {
+  font-size: clamp(30px, 3vw, 44px);
+}
+.race-room-content .rally-copy {
+  font: 13px/1.8 var(--sans);
+  color: #b2bcbe;
+}
+.race-room-content .rally-actions button {
+  text-shadow: none;
+  font: 13px var(--sans);
+  background: #e3c59a;
+  color: #192126;
+  min-height: 48px;
+  border-radius: 5px;
+  padding: 12px 28px;
+}
+.race-room-content .rally-actions button.quiet {
+  color: #d3d9d4;
+  background: #ffffff09;
+}
+.race-room-content .rally-actions button::after {
+  display: none;
+}
+@media (min-width: 1000px) and (max-height: 760px) {
+  .race-setup-heading {
+    padding: 22px 0 20px;
+  }
+  .race-track-hero {
+    aspect-ratio: 2.25;
+  }
+  .race-mode-list button {
+    padding: 13px;
+  }
+  .race-options h2 {
+    margin-bottom: 15px;
+  }
+}
+@media (max-width: 900px) {
+  .rally.wheel {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+    padding: 24px;
+    gap: 25px;
+    justify-content: start;
+    align-content: start;
+  }
+  .race-room-art {
+    aspect-ratio: 2;
+    min-height: 190px;
+  }
+  .race-room-art > div {
+    left: 20px;
+    bottom: 20px;
+  }
+  .race-room-art h2 {
+    font-size: 31px;
+  }
+  .race-setup {
+    padding-bottom: max(120px, calc(env(safe-area-inset-bottom) + 110px));
+  }
+  .race-start-panel {
+    position: fixed;
+    z-index: 2;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 13px 20px max(13px, env(safe-area-inset-bottom));
+    background: #141b20f5;
+    border-top: 1px solid #ffffff22;
+    backdrop-filter: blur(16px);
+  }
+  .race-launch-note {
+    margin-top: 7px;
+  }
+  .race-setup-top {
+    min-height: 61px;
+  }
+  .race-setup-top > span {
+    display: none;
+  }
+  .race-setup-heading {
+    padding: 28px 0 22px;
+  }
+  .race-setup-heading > p {
+    display: none;
+  }
+  .race-setup-layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .race-track-tabs button {
+    font-size: 10px;
+    gap: 4px;
+  }
+  .race-track-tabs button span {
+    display: none;
+  }
+  .race-track-hero {
+    min-height: 225px;
+  }
+  .race-track-caption {
+    left: 18px;
+    bottom: 20px;
+    right: 95px;
+  }
+  .race-track-caption h2 {
+    font-size: 32px;
+  }
+  .race-route {
+    width: 100px;
+    right: 10px;
+    bottom: 20px;
+  }
+  .race-route svg {
+    height: 75px;
+  }
+  .race-route span {
+    font-size: 7px;
+  }
+  .race-track-details {
+    gap: 20px;
+    padding: 17px 0;
+  }
+  .race-track-details p {
+    font-size: 11px;
+  }
+  .race-track-details strong {
+    font-size: 13px;
+  }
+  .race-track-details > div {
+    flex-basis: 90px;
+  }
+  .race-track-tip {
+    display: block;
+  }
+  .race-track-tip > span {
+    display: block;
+    margin-bottom: 4px;
+  }
+  .race-options {
+    padding: 22px 0 0;
+    border-left: none;
+    border-top: 1px solid #ffffff1c;
+  }
+  .race-controls-guide {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .race-track-hero {
+    animation: none;
+  }
+}
+@media (min-width: 650px) and (max-height: 500px) {
+  .rally.wheel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px;
+    padding: 24px;
+    align-items: center;
+    align-content: center;
+  }
+  .race-room-art {
+    aspect-ratio: 1.25;
+    min-height: 230px;
+  }
+  .race-room-content h1 {
+    font-size: 28px;
+    margin: 12px 0;
+  }
+  .race-room-content .wheel-grid {
+    margin: 15px 0;
+  }
+  .race-room-content .rally-copy {
+    font-size: 11px;
+    margin: 12px 0;
+  }
+}

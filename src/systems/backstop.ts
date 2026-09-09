@@ -67,39 +67,49 @@ if (typeof window !== 'undefined') {
 export function useBackCloses(open: boolean, close: () => void): void {
   const latest = useRef(close)
   latest.current = close
+  const generation = useRef(0)
+  const owned = useRef<{ id: number; closed: boolean; close(): void } | null>(null)
 
   useEffect(() => {
     if (!open || typeof window === 'undefined') return
-    const id = nextId++
-    let closed = false
-    const entry = {
-      id,
+    const turn = ++generation.current
+    const entry = owned.current ?? {
+      id: nextId++,
+      closed: false,
       close: () => {
-        closed = true
+        entry.closed = true
         latest.current()
       },
     }
-    stack.push(entry)
-    window.history.pushState({ backstop: id }, '')
+    if (!owned.current) {
+      owned.current = entry
+      stack.push(entry)
+      window.history.pushState({ backstop: entry.id }, '')
+    }
 
-    return () => {
-      const at = stack.findIndex((item) => item.id === id)
-      if (at >= 0) stack.splice(at, 1)
-      /*
+    // React Strict Mode replays setup immediately after cleanup. Reuse the
+    // owned entry in that case; an asynchronous history.back() cannot be undone.
+    return () =>
+      queueMicrotask(() => {
+        if (generation.current !== turn) return
+        owned.current = null
+        const at = stack.findIndex((item) => item.id === entry.id)
+        if (at >= 0) stack.splice(at, 1)
+        /*
         Closed from inside the app rather than by a back gesture, so our
         history entry is still sitting there and has to be taken off. If the
         back gesture is what closed us, it has already been consumed and
         calling `back` again would step past something else.
       */
-      if (!closed) {
-        tidying = true
-        window.history.back()
-        // If the browser declines to move — no entry, a blocked history — the
-        // flag would stay set and swallow the *next* real back gesture.
-        window.setTimeout(() => {
-          tidying = false
-        }, 400)
-      }
-    }
+        if (!entry.closed && window.history.state?.backstop === entry.id) {
+          tidying = true
+          window.history.back()
+          // If the browser declines to move — no entry, a blocked history — the
+          // flag would stay set and swallow the *next* real back gesture.
+          window.setTimeout(() => {
+            tidying = false
+          }, 400)
+        }
+      })
   }, [open])
 }

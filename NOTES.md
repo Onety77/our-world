@@ -1313,6 +1313,72 @@ the failure is quiet: the film appears and the rating is silently refused. Run
 the film half failed were the check's own MediaRecorder fixture coming out at
 1 KB instead of 3, which is an old flake and not this work.
 
+## 8 Sep · Claude · The drift gets its dials
+
+Nine numbers that decide how a drift feels have always been in `RallyTuning`,
+doing real work, and none of them was reachable: the control room offered the
+helper, the angle and the entry speed and nothing else. So when the drift
+settled too slowly there was no dial to find — and the search landed on one
+that sounded close and did something else entirely.
+
+**A number that decides how the car feels and cannot be reached is worse than
+a missing feature.** It is a wrong answer waiting to be given, and it was
+given: an afternoon spent moving the wrong slider, and a correct conclusion
+that the drift was broken.
+
+All nine are dials now, in the order you would reach for them rather than the
+order they run in — settling speed, what a held slide keeps, what throwing it
+costs, how fast it swaps, what the angle costs, how far the arrows move it
+across, how firmly it keeps its lane, the tightest arc it will draw, and the
+most it can pull. `npm run tuning` says **47 of 47**.
+
+**And three warnings, because these dials open real traps.** The one that
+matters is the invariant that was silently false for months: a drift settling
+under about 62% of the car’s top speed is beaten by clouting the rock, so
+crashing becomes the quicker line and nobody drifts. The page now says so, in
+the two speeds, before you leave the slider there.
+
+Checked at 390 px: every one of the eleven drift rows fits on a single line,
+the longest being *"The tightest arc the arrows can ask for · 25 m"*.
+
+---
+
+## 8 Sep · Claude · Crashing was faster than drifting
+
+> *"its better to even hit something than start a drift […] if you hit
+> something at top speed at most you get back to like 80 to 85km/hr, but then
+> why the hell when i get in a drift the car goes all the way back to like
+> 62km/hr"*
+
+Measured, and worse than reported. In a car that tops out at **127 km/h**:
+
+    clout the rock at full speed     127 → 77 km/h
+    enter a drift at full speed      127 → 66, settling at 71
+
+So the mechanic the whole game is built on — *drifting is how you buy going
+fast* — cost more than crashing, at both the moment you feel most and the one
+you live in. The quickest way through a corner was to bounce off it.
+
+**Not a tuning mistake, and not new.** `driftTopSpeed` is an absolute speed,
+and it has been 20 m/s (72 km/h) throughout. What moved is the other side of
+the comparison: before the car work a wall cost almost nothing — 127 → **123**
+, measured — so the two numbers were never seen together. Making stone hurt
+properly is right, and it is what exposed this.
+
+At 26 m/s the entry dips to 84 and settles at 90: above a wall at both
+moments, 71% of top speed, and still nowhere near a shortcut — twelve seconds
+of drifting covers 147 m where driving covers 387.
+
+`npm run drift` now asserts it against the rock directly, because "the reward
+mechanic must beat the punishment" is the kind of invariant that is obvious
+once written and invisible for months when it is not.
+
+**It reaches both phones without anything being published.** Only keys in
+`DIALS` are ever sent — `changedOnly()` walks that list — so a constant like
+this always comes from the code, under whatever set is in force.
+
+---
+
 ## 8 Sep · Claude · The drift is ours again
 
 > *"codex really fixed alot of things about the car, the speed, the feels,
@@ -1342,10 +1408,17 @@ second pull. Reasonable, well written, and a different game.
 
 Two pieces of evidence rather than an opinion.
 
-**Nine of the twelve drift dials were dead** — `driftSwap`, `driftTightness`,
-`driftGrip`, `driftScrub`, `driftSwingCost`, `driftHold`, `driftTopSpeed`,
-`driftLineHold`, `driftPlace`, all still rendering on the tuning page and
-connected to nothing. `npm run tuning` says 38 of 38 now.
+**Nine of the twelve drift numbers were wired to nothing** — `driftSwap`,
+`driftTightness`, `driftGrip`, `driftScrub`, `driftSwingCost`, `driftHold`,
+`driftTopSpeed`, `driftLineHold`, `driftPlace`, all still declared in
+`RallyTuning` and `DEFAULTS`, and read by no line of physics.
+
+> **Correction.** I first wrote this as "nine dead *dials*, still rendering on
+> the tuning page". They are not dials: only `driftHelper`, `driftAngle` and
+> `driftEnterSpeed` are in `DIALS` and reach the control room. The other nine
+> are code constants, which is also why `npm run tuning` never saw them — it
+> walks `DIALS`, and there are 38 of those. I asserted the stronger version
+> without checking, twice in one day.
 
 **And a held drift on the real Rootway**, one arrow, throttle pinned:
 

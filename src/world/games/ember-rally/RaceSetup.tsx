@@ -1,0 +1,320 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useData, useWorldSlice } from '@/data/provider'
+import { otherUser } from '@/data/types'
+import { usePlaying } from '@/systems/playing'
+import { roadKey, useDoorman } from '@/systems/locks'
+import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
+import { TrackArtwork } from '@/ui/TrackArtwork'
+import { ROAD_INFO, ROAD_ORDER } from './courseInfo'
+import { moveRun, timeLabel, type RallyMove, type StageId } from './model'
+import type { Track } from './track'
+import { useBest } from './best'
+import './RaceSetup.css'
+
+type Mode = 'solo' | 'challenge' | 'live'
+function RouteMap({ track }: { track: Track }) {
+  const route = useMemo(() => {
+    const points: [number, number][] = []
+    for (let i = 0; i < track.x.length; i += 8) points.push([track.x[i], track.z[i]])
+    const xs = points.map((p) => p[0]),
+      zs = points.map((p) => p[1])
+    const minX = Math.min(...xs),
+      minZ = Math.min(...zs)
+    const dx = Math.max(...xs) - minX,
+      dz = Math.max(...zs) - minZ
+    const scale = Math.min(160 / Math.max(1, dx), 110 / Math.max(1, dz))
+    const mapped = points.map(([x, z]) => [
+      20 + (160 - dx * scale) / 2 + (x - minX) * scale,
+      15 + (110 - dz * scale) / 2 + (z - minZ) * scale,
+    ])
+    return {
+      path: mapped.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '),
+      first: mapped[0],
+      last: mapped.at(-1)!,
+    }
+  }, [track])
+  return (
+    <svg
+      viewBox="0 0 200 140"
+      role="img"
+      aria-label={`Route map for ${ROAD_INFO[track.stage].name}`}
+    >
+      <path
+        d={route.path}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={route.first[0]} cy={route.first[1]} r="4" fill="currentColor" />
+      <circle
+        cx={route.last[0]}
+        cy={route.last[1]}
+        r="4"
+        fill="#151c21"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+    </svg>
+  )
+}
+
+export function RaceSetup({
+  stage,
+  track,
+  solo,
+  mine,
+  theirs,
+  theirName,
+  onSelect,
+  onStart,
+  onLeave,
+  onReplay,
+}: {
+  stage: StageId
+  track: Track
+  solo: boolean
+  mine: RallyMove[]
+  theirs: RallyMove[]
+  theirName: string
+  onSelect(stage: StageId): void
+  onStart(kind: 'qualifying' | 'chase'): void
+  onLeave(): void
+  onReplay?(): void
+}) {
+  const data = useData(),
+    shut = useDoorman()
+  const presence = useWorldSlice((s) => s.presence),
+    them = otherUser(data.me)
+  const [mode, setMode] = useState<Mode>(solo ? 'solo' : 'challenge')
+  const [controls, setControls] = useState(false)
+  const launch = useRef<HTMLButtonElement>(null)
+  const best = useBest((s) => s.bests[stage])
+  const info = ROAD_INFO[stage]
+  const theirLine = moveRun(theirs, 'qualifying', stage),
+    myLine = moveRun(mine, 'qualifying', stage)
+  const bothHere = presence[data.me].online && presence[them].online
+  const room = readSitting(presence[them].racing)?.key
+  const roomStage = room ? stageOfKey(room, '') : ''
+  const joining = mode === 'live' && room && ROAD_ORDER.includes(roomStage as StageId) ? room : null
+  const locked = shut(roadKey(stage))
+  useEffect(() => {
+    if (joining) onSelect(roomStage as StageId)
+  }, [joining, roomStage, onSelect])
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (
+        event.key !== 'Enter' ||
+        event.repeat ||
+        document.activeElement instanceof HTMLButtonElement ||
+        document.activeElement instanceof HTMLInputElement
+      )
+        return
+      event.preventDefault()
+      launch.current?.click()
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [])
+  const chooseMode = (next: Mode) => {
+    setMode(next)
+    if (next !== 'live' && (next === 'solo') !== solo)
+      usePlaying.getState().open('ember-rally', next === 'solo')
+  }
+  const begin = () => {
+    if (locked) return
+    if (mode === 'live') {
+      if (!bothHere) return
+      // An explicit join keeps the existing room, even when device clocks differ.
+      const key = joining ?? raceKey(data.now(), stage)
+      data.publishPresence({ racing: key })
+      usePlaying.getState().openRace('ember-rally', key)
+    } else onStart(mode === 'solo' || theirLine ? 'chase' : 'qualifying')
+  }
+  return (
+    <section
+      className="race-setup"
+      style={{ '--road-accent': info.accent } as React.CSSProperties}
+      aria-label="Set up your race"
+    >
+      <nav className="race-setup-top">
+        <button onClick={onLeave}>← All games</button>
+        <span>
+          THE HOLLOW <i>/</i> EMBER RALLY
+        </span>
+        <button onClick={() => setControls((v) => !v)} aria-expanded={controls}>
+          Driving controls {controls ? '−' : '+'}
+        </button>
+      </nav>
+      <header className="race-setup-heading">
+        <div>
+          <span className="race-eyebrow">FIND YOUR NEXT FAVOURITE CORNER</span>
+          <h1>Choose your road.</h1>
+        </div>
+        <p>
+          Four different worlds.
+          <br />
+          One car that’s yours to master.
+        </p>
+      </header>
+      {controls && (
+        <section className="race-controls-guide" aria-label="Driving controls">
+          <div>
+            <strong>Keyboard</strong>
+            <p>
+              W / ↑ accelerate · S / ↓ brake · A D / ← → steer
+              <br />
+              Space handbrake · Shift ember boost · Escape pause
+            </p>
+          </div>
+          <div>
+            <strong>Touch</strong>
+            <p>
+              Use the steering, brake, handbrake, and ember controls shown on the road. Acceleration
+              is automatic.
+            </p>
+          </div>
+          <button onClick={() => setControls(false)} aria-label="Close driving controls">
+            ×
+          </button>
+        </section>
+      )}
+      <div className="race-setup-layout">
+        <div className="race-track-side">
+          <div
+            className="race-track-tabs"
+            role="group"
+            aria-label="Choose a track"
+            onKeyDown={(event) => {
+              if (joining || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+              event.preventDefault()
+              const next =
+                (ROAD_ORDER.indexOf(stage) + (event.key === 'ArrowRight' ? 1 : 3)) %
+                ROAD_ORDER.length
+              onSelect(ROAD_ORDER[next])
+              event.currentTarget.querySelectorAll('button')[next]?.focus()
+            }}
+          >
+            {ROAD_ORDER.map((road, i) => (
+              <button
+                key={road}
+                aria-pressed={stage === road}
+                disabled={Boolean(joining && stage !== road)}
+                onClick={() => onSelect(road)}
+                className={stage === road ? 'selected' : ''}
+              >
+                <span>0{i + 1}</span>
+                {ROAD_INFO[road].name.replace('The ', '')}
+                {shut(roadKey(road)) && <small>Unavailable</small>}
+              </button>
+            ))}
+          </div>
+          <div className="race-track-hero" key={stage}>
+            <TrackArtwork stage={stage} />
+            <div className="race-track-caption">
+              <span>{info.landscape}</span>
+              <h2>{info.name}</h2>
+              <p>{info.character}</p>
+            </div>
+            <div className="race-route">
+              <RouteMap track={track} />
+              <span>{((track.length - track.start) / 1000).toFixed(1)} km · point to point</span>
+            </div>
+          </div>
+          <div className="race-track-details">
+            <p>{info.description}</p>
+            <div>
+              <span>PERSONAL BEST</span>
+              <strong>{best ? timeLabel(best.timeMs) : 'Your first run awaits'}</strong>
+            </div>
+          </div>
+          <p className="race-track-tip">
+            <span>DRIVER’S NOTE</span>
+            {info.tip}
+          </p>
+        </div>
+        <aside className="race-options">
+          <span className="race-eyebrow">MAKE IT YOUR RACE</span>
+          <h2>How are we playing?</h2>
+          <div className="race-mode-list" role="group" aria-label="Race mode">
+            {(
+              [
+                ['solo', 'Solo run', 'Race a spirit and improve your personal best.'],
+                [
+                  'challenge',
+                  'Time challenge',
+                  `Leave a recorded run for ${theirName}, or chase theirs.`,
+                ],
+                [
+                  'live',
+                  'Race together',
+                  `Side by side with ${theirName}. Both drivers start together.`,
+                ],
+              ] as const
+            ).map(([value, title, description]) => (
+              <button
+                key={value}
+                aria-pressed={mode === value}
+                onClick={() => chooseMode(value)}
+                className={mode === value ? 'selected' : ''}
+              >
+                <i aria-hidden="true" />
+                <span>
+                  <strong>{title}</strong>
+                  <small>{description}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="race-session-note" role="status">
+            {mode === 'live'
+              ? joining
+                ? `${theirName} is waiting on ${ROAD_INFO[stage].name}. Join the room, then both say ready.`
+                : bothHere
+                  ? `${theirName} is online. You’ll both get ready before the start.`
+                  : `Live racing is available when ${theirName} is online. Solo runs and time challenges are ready now.`
+              : mode === 'challenge'
+                ? theirLine
+                  ? `${theirName}’s recorded run: ${timeLabel(theirLine.timeMs)} to beat.`
+                  : myLine
+                    ? `Your recorded run: ${timeLabel(myLine.timeMs)}. Set another time for ${theirName} to chase.`
+                    : `${theirName} can race your recording later. You don’t need to be online together.`
+                : 'Just you and the road’s spirit. Replay as often as you like.'}
+          </div>
+          <div className="race-start-panel">
+            <button
+              ref={launch}
+              className="race-launch"
+              disabled={locked || (mode === 'live' && !bothHere)}
+              onClick={begin}
+            >
+              {locked
+                ? 'Track unavailable'
+                : mode === 'live'
+                  ? joining
+                    ? 'Join race room'
+                    : 'Open race room'
+                  : mode === 'challenge'
+                    ? theirLine
+                      ? 'Chase their time'
+                      : 'Set a time'
+                    : 'Start driving'}
+              <span aria-hidden="true">→</span>
+            </button>
+            <span className="race-launch-note">
+              {mode === 'live'
+                ? 'The race starts after both drivers are ready.'
+                : `${info.name} · ${mode === 'solo' ? 'Solo run' : 'Time challenge'}`}
+            </span>
+          </div>
+          {mode === 'challenge' && onReplay && (
+            <button className="race-watch-runs" onClick={onReplay}>
+              Watch both recorded runs →
+            </button>
+          )}
+        </aside>
+      </div>
+    </section>
+  )
+}

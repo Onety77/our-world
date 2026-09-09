@@ -80,6 +80,30 @@ function troubles(t: RallyTuning): string[] {
       'The back grips less than the front, so the car is unstable above a certain speed — it will spin rather than run wide, and no amount of steering will save it. Raise rear tyre bite above front.',
     )
   }
+  /*
+    The one that was true for months and nobody could see.
+
+    A drift that settles far below the car’s pace is not a hard drift, it is
+    a punishment: clouting the rock at full speed leaves you around 60% of it,
+    so under that figure crashing is quicker than the mechanic the whole game
+    is built on. Reported from the seat as *"its better to even hit something
+    than start a drift"*, and it took a measurement to name.
+  */
+  if (t.driftTopSpeed < t.topSpeed * 0.62) {
+    out.push(
+      `A drift settles at ${Math.round(t.driftTopSpeed * 3.6)} km/h in a car that does ${Math.round(t.topSpeed * 3.6)}. Hitting the rock leaves you more than that, so crashing is the quicker line and nobody will drift. Raise the speed a drift settles at.`,
+    )
+  }
+  if (t.driftHold < 0.2 && t.driftScrub > 0.3) {
+    out.push(
+      'A held slide keeps almost none of its speed and the angle costs a lot, so one long corner on one arrow will bleed away to a crawl. Raise "a held slide keeps its speed", or drop what the angle costs.',
+    )
+  }
+  if (t.driftSwingCost < 0.05) {
+    out.push(
+      'Throwing the car across costs nothing, so swapping sides down a straight is quicker than driving it. That makes the drift the fastest way everywhere and every other number here decoration.',
+    )
+  }
   if (t.driftAngle >= t.spinProtection) {
     out.push(
       'The drift wants to hang further out than spin protection allows, so the two are pulling against each other and a drift will feel like it is hitting a rail. Keep drift angle below spin protection.',
