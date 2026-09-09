@@ -48,7 +48,7 @@ export function Wheel({
       <div className="race-room-art">
         <TrackArtwork stage={stage} />
         <div>
-          <span>YOUR STARTING LINE</span>
+          <span>where you meet before the road</span>
           <h2>{roadName}</h2>
           <p>Two drivers. One road. The same start.</p>
         </div>

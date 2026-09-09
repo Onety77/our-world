@@ -628,6 +628,177 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /*
+      ======================================================================
+      The Fold — the practices, and the deck.
+      ======================================================================
+    */
+
+    match /practices/{id} {
+      allow read: if isOneOfUs();
+
+      /*
+        Either of you may take an animal in, including one you both keep.
+
+        `by` is deliberately not forced to `me()`: 'both' is a real owner here —
+        the shared practice is the whole point of the section — and there are
+        exactly two people, so a practice opened "for her" is a gift rather than
+        an impersonation. What cannot be done is starting one already grown.
+      */
+      allow create: if isOneOfUs()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.kind in ['words', 'days']
+        && request.resource.data.by in ['warm', 'cool', 'both']
+        && request.resource.data.creature is string
+        && request.resource.data.creature.size() <= 16
+        && request.resource.data.startedAt is number
+        && request.resource.data.days == 0
+        && request.resource.data.lastDay == null
+        && request.resource.data.recent.size() == 0;
+
+      /*
+        A day is added, and **the count may only ever go up by one.**
+
+        This is the rule that makes the growth curve mean something. Without
+        `days == resource.data.days + 1` a device could write any number it
+        liked and an animal could be full grown on the afternoon it was taken
+        in — and since the size of every animal on the hill is a pure function
+        of this number, that is the only cheat available in the whole section.
+
+        `lastDay != resource.data.lastDay` is the other half: one day counts
+        once, however many times it is sent. The client wraps this in a
+        transaction so two devices cannot both decide it is a new day; this is
+        what stops the same thing being done on purpose.
+      */
+      allow update: if isOneOfUs()
+        && request.resource.data.diff(resource.data)
+             .affectedKeys()
+             .hasOnly(['days', 'lastDay', 'recent', 'lastLine', 'restingAt'])
+        && request.resource.data.get('lastLine', '').size() <= 300
+        && (
+          // adding a day
+          (
+            request.resource.data.days == resource.data.days + 1
+            && request.resource.data.lastDay is string
+            && request.resource.data.lastDay != resource.data.lastDay
+            && request.resource.data.recent.size() <= 90
+          )
+          // or saying something more about a day already counted, or putting
+          // the practice out to rest and bringing it back. The day list is
+          // pinned here too: nothing but adding a day may rewrite it.
+          || (
+            request.resource.data.days == resource.data.days
+            && request.resource.data.lastDay == resource.data.lastDay
+            && request.resource.data.recent == resource.data.recent
+          )
+        );
+
+      /*
+        Never deleted. Resting is an update; a delete would take the weeks
+        somebody did keep it with it, which is the one thing this place is for.
+      */
+      allow delete: if false;
+    }
+
+    match /words/{id} {
+      allow read: if isOneOfUs();
+
+      /*
+        A word enters with no schedule at all.
+
+        `boxes` and `dueAt` must be empty on create, so nobody arrives at a
+        deck with a hundred words already marked as known — which would empty
+        the other person's sessions for a month without either of them
+        understanding why.
+      */
+      allow create: if isOneOfUs()
+        && request.resource.data.by == me()
+        && request.resource.data.at is number
+        && request.resource.data.practiceId is string
+        && request.resource.data.practiceId.size() > 0
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 120
+        && request.resource.data.meaning is string
+        && request.resource.data.meaning.size() > 0
+        && request.resource.data.meaning.size() <= 240
+        && request.resource.data.get('note', '').size() <= 240
+        && request.resource.data.boxes.size() == 0
+        && request.resource.data.dueAt.size() == 0;
+
+      /*
+        ====================================================================
+        **The one rule this collection exists for: your schedule is yours.**
+
+        A word is one document and each of you has your own standing with it,
+        because two people learning the same language do not know the same
+        words at the same time. That split only means something once it is
+        enforced here — otherwise either device could write the other's box,
+        and one bad client would silently reschedule a year of somebody
+        else's learning with no visible failure anywhere.
+
+        **`affectedKeys()` is top-level only**, and that is the trap this rule
+        was written wrongly against first. Updating `boxes.warm` changes the
+        *`boxes` field*, so the affected key is `boxes` — a rule asking for
+        `hasOnly(['boxes.' + me(), ...])` matches nothing and refuses every
+        turn. It has to be said in two steps: the document may only touch these
+        three maps, and **inside each map only your own key may move.**
+        `MapDiff` on the maps themselves is what says the second half.
+
+        The client writes dotted paths for the matching reason — a whole-map
+        write would *replace* her half rather than leave it alone, and would be
+        refused right here.
+
+        Same standing as the question vine's seal and the archive's: it cannot
+        be seen from one device, so `npm run fold` proves it above the wire and
+        this is what proves it on it.
+        ====================================================================
+      */
+      allow update: if isOneOfUs()
+        && (
+          // turning a word over: only your own entry, in only these three maps
+          (
+            request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasOnly(['boxes', 'dueAt', 'landedAt'])
+            && request.resource.data.boxes
+                 .diff(resource.data.boxes).affectedKeys().hasOnly([me()])
+            && request.resource.data.dueAt
+                 .diff(resource.data.dueAt).affectedKeys().hasOnly([me()])
+            && request.resource.data.get('landedAt', {})
+                 .diff(resource.data.get('landedAt', {}))
+                 .affectedKeys().hasOnly([me()])
+            // and it has to be a box the schedule actually has
+            && request.resource.data.boxes[me()] is number
+            && request.resource.data.boxes[me()] >= 0
+            && request.resource.data.boxes[me()] <= 5
+            && request.resource.data.dueAt[me()] is number
+          )
+          // or correcting what the word actually says, which belongs to both
+          // of you: a typo in a shared deck is a typo in both decks.
+          || (
+            request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasOnly(['text', 'meaning', 'note'])
+            && request.resource.data.text.size() > 0
+            && request.resource.data.text.size() <= 120
+            && request.resource.data.meaning.size() > 0
+            && request.resource.data.meaning.size() <= 240
+            && request.resource.data.get('note', '').size() <= 240
+          )
+        );
+
+      /*
+        A word can be taken out, and this is the one collection here where that
+        is right: a word entered with the wrong spelling and already half
+        learned is worse than no word, and unlike a memory or a thought a word
+        carries nothing irreplaceable. Only the one who put it in.
+      */
+      allow delete: if isOneOfUs() && resource.data.by == me();
+    }
+
     match /rounds/{roundId} {
       allow read: if isOneOfUs();
 

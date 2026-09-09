@@ -77,6 +77,7 @@ import { PotForm } from '@/ui/Pot'
 import { ProfileSheet } from '@/ui/Profile'
 import { LetterReader, Writing } from '@/ui/Letters'
 import { Glasshouse } from '@/ui/Memories'
+import { FoldSitting } from '@/ui/Fold'
 import { Questions, QuestionSeedNotice } from '@/ui/Questions'
 /*
   The control room, fetched only by whoever opens its door.
@@ -96,6 +97,7 @@ import { usePlaying } from '@/systems/playing'
 import { useArrival } from '@/systems/arrival'
 import { takenOverNow, useTakenOver } from '@/systems/attention'
 import { useMemories } from '@/systems/memories'
+import { useTending } from '@/systems/tending'
 import { atTheDoor, mayOpenTheDoor, useHourOverride } from '@/systems/dev'
 import { later } from '@/systems/later'
 import { useWatchLocks } from '@/systems/locks'
@@ -412,6 +414,18 @@ function Garden() {
     () => data.watchMemories((all) => useMemories.getState().setAll(all)),
     [data],
   )
+  /*
+    The Fold, for the life of the session and not just while you are in it.
+
+    Same reason the memories watcher is here: the hill is drawn out in the
+    garden as well, so its landmark needs the practices before anybody has
+    entered anything — and a subscription mounted by the section would be a
+    second read of everything every time you walked in.
+  */
+  useEffect(
+    () => data.watchFold((fold) => useTending.getState().setFold(fold)),
+    [data],
+  )
   const currentQuestionId = useWorldSlice((state) => state.questions.current?.id ?? null)
   const currentQuestionComplete = useWorldSlice(
     (state) => state.questions.current?.completedAt != null,
@@ -558,6 +572,7 @@ function Garden() {
       <PotForm />
       <ProfileSheet />
       <Glasshouse />
+      <FoldSitting />
       <Questions />
       <QuestionSeedNotice />
       <Playing />

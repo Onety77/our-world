@@ -118,6 +118,10 @@ import { AMBIENCE_KEYS } from './types'
 import { presenceBody, readPresence } from './presence'
 import { markPatch, readMessage } from './messages'
 import { newId } from './ids'
+import { isWholeWord, readPractice, readWord } from './foldWire'
+import type { Practice, Word } from './types'
+import { turnOf } from '@/systems/fold'
+import { PRACTICE_RECENT } from './types'
 import { NOTE_LIMIT, isScore, other, tidyTitle } from '@/systems/archive'
 import {
   RALLY_STREAM_INTERVAL,
@@ -176,6 +180,17 @@ const TRACKS = 'tracks'
 const MUSIC_MAX = 25 * 1024 * 1024
 const MESSAGES = 'messages'
 const MEMORIES = 'memories'
+/*
+  The Fold, in two collections.
+
+  Split for the same reason the mock splits its two keys: the practices are read
+  every time somebody looks at the hill, and the deck only when they sit down to
+  a session. One collection would mean pulling a year of vocabulary down to draw
+  four animals.
+*/
+const PRACTICES = 'practices'
+/** Named for the section, because `WORDS` above is already Word Duel's. */
+const FOLD_WORDS = 'words'
 const ROUNDS = 'rounds'
 const PLANTS = 'plants'
 const DECOR = 'decor'
@@ -1944,6 +1959,184 @@ export function createFirebaseDataLayer(user: User): FirebaseDataLayer {
       Ordered ascending by the server, because a memory's place in the
       Glasshouse is its index in this list and that place is permanent.
     */
+    // ---- The Fold --------------------------------------------------------
+
+    /*
+      Both collections behind one listener.
+
+      Nothing above the seam can do anything useful with half of this — a deck
+      with no practice has no animal to belong to — so the two snapshots are
+      joined here and published once both have spoken. `loaded` stays false
+      until then, which is what lets the threshold tell "no practices yet" apart
+      from "Firestore has not answered", and those are two very different
+      sentences to show somebody on a first visit.
+    */
+    watchFold(listener) {
+      let practices: Practice[] | null = null
+      let words: Word[] | null = null
+
+      const publish = () => {
+        if (practices === null || words === null) return
+        listener({ practices, words, loaded: true })
+      }
+
+      const stopPractices = onSnapshot(
+        query(collection(db, PRACTICES), orderBy('startedAt', 'asc')),
+        (snap) => {
+          practices = snap.docs.map((d) => readPractice(d.id, d.data() as Record<string, unknown>))
+          publish()
+        },
+      )
+      const stopWords = onSnapshot(
+        query(collection(db, FOLD_WORDS), orderBy('at', 'asc')),
+        (snap) => {
+          words = snap.docs
+            .map((d) => readWord(d.id, d.data() as Record<string, unknown>))
+            .filter(isWholeWord)
+          publish()
+        },
+      )
+      return () => {
+        stopPractices()
+        stopWords()
+      }
+    },
+
+    async takeIn(input) {
+      const name = input.name.trim()
+      if (name === '') throw new Error('that practice needs a name')
+      const id = newId()
+      const practice: Practice = {
+        id,
+        name,
+        kind: input.kind,
+        by: input.by,
+        creature: input.creature,
+        startedAt: now(),
+        days: 0,
+        lastDay: null,
+        recent: [],
+      }
+      await setDoc(doc(db, PRACTICES, id), {
+        name,
+        kind: practice.kind,
+        by: practice.by,
+        creature: practice.creature,
+        startedAt: practice.startedAt,
+        days: 0,
+        lastDay: null,
+        recent: [],
+      })
+      return practice
+    },
+
+    async restPractice(id, resting) {
+      await updateDoc(doc(db, PRACTICES, id), {
+        // Removed rather than zeroed: `conditionOf` reads this as a truthy
+        // fact, and a stored 0 would only fail to look like "rested" by luck.
+        restingAt: resting ? now() : deleteField(),
+      })
+    },
+
+    /*
+      One transaction, because "have I already done today" and "add a day" are
+      the same decision.
+
+      Two devices — or one device pressed twice on a slow connection — read the
+      same `lastDay`, both decide it is not today, and both increment. The
+      growth curve is the whole readout of this place and a count you can
+      inflate by tapping twice is a count that means nothing.
+    */
+    async practise(id, day, line) {
+      const at = doc(db, PRACTICES, id)
+      await runTransaction(db, async (tx) => {
+        const now = await tx.get(at)
+        if (!now.exists()) return
+        const raw = now.data() as Record<string, unknown>
+        const practice = readPractice(id, raw)
+        const words = line?.trim() ?? ''
+        if (practice.lastDay === day) {
+          // Already counted. The line is still worth keeping — somebody came
+          // back and said something more about the same day.
+          if (words !== '') tx.update(at, { lastLine: words })
+          return
+        }
+        tx.update(at, {
+          days: practice.days + 1,
+          lastDay: day,
+          recent: [day, ...practice.recent.filter((d) => d !== day)].slice(0, PRACTICE_RECENT),
+          ...(words !== '' ? { lastLine: words } : {}),
+        })
+      })
+    },
+
+    async addWord(input) {
+      const text = input.text.trim()
+      const meaning = input.meaning.trim()
+      if (text === '' || meaning === '') throw new Error('a word needs both halves')
+      const id = newId()
+      const note = input.note?.trim() ?? ''
+      const word: Word = {
+        id,
+        practiceId: input.practiceId,
+        text,
+        meaning,
+        ...(note !== '' ? { note } : {}),
+        by: me,
+        at: now(),
+        ...(input.handed ? { handed: true } : {}),
+        boxes: {},
+        dueAt: {},
+      }
+      await setDoc(doc(db, FOLD_WORDS, id), {
+        practiceId: word.practiceId,
+        text,
+        meaning,
+        ...(note !== '' ? { note } : {}),
+        by: me,
+        at: word.at,
+        ...(input.handed ? { handed: true } : {}),
+        boxes: {},
+        dueAt: {},
+      })
+      return word
+    },
+
+    /*
+      Only ever this person's own half of the schedule, and the rules say the
+      same thing independently.
+
+      Dotted paths rather than a merged object: `boxes: { warm: 3 }` would
+      *replace* the map and quietly delete her standing with the word. This is
+      also what makes the rule writable at all — it can name the two fields this
+      person is allowed to touch.
+    */
+    async turnWord(id, got, stamp = now()) {
+      const at = doc(db, FOLD_WORDS, id)
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(at)
+        if (!snap.exists()) return
+        const word = readWord(id, snap.data() as Record<string, unknown>)
+        const turn = turnOf(word, me, got, stamp)
+        tx.update(at, {
+          [`boxes.${me}`]: turn.box,
+          [`dueAt.${me}`]: turn.dueAt,
+          ...(turn.landed ? { [`landedAt.${me}`]: stamp } : {}),
+        })
+      })
+    },
+
+    async reword(id, patch) {
+      const text = patch.text?.trim()
+      const meaning = patch.meaning?.trim()
+      const note = patch.note?.trim()
+      await updateDoc(doc(db, FOLD_WORDS, id), {
+        ...(text ? { text } : {}),
+        ...(meaning ? { meaning } : {}),
+        ...(note !== undefined ? { note: note === '' ? deleteField() : note } : {}),
+      })
+    },
+
     watchMemories(listener) {
       return onSnapshot(query(collection(db, MEMORIES), orderBy('at', 'asc')), (snap) => {
         const memories = snap.docs

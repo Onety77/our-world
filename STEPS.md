@@ -225,9 +225,17 @@ from *nobody, to nothing* and opens exactly two doors, matched on the two
 addresses, lowercased on both sides. Every collection the app uses has its own
 block: `world`, `profiles`, `letters`, `contributions`, `plants`, `decor`,
 `tracks`, `messages`, `voiceLights`, `voiceLightConfig`, `rallyTuning`,
-`memories`, `rounds/moves`, `questionRounds/answers`, `questionSeeds` — and a
-final `match /{document=**}` that denies everything else forever. Checked
-against the app just now: nothing the code writes is missing a rule.
+`memories`, `rounds/moves`, `questionRounds/answers`, `questionSeeds`,
+`practices`, `words` — and a final `match /{document=**}` that denies everything
+else forever. Checked against the app just now: nothing the code writes is
+missing a rule.
+
+The last two are the Fold's, and `words` carries the third seal in the file:
+each of you may write only your own `boxes.<you>`, `dueAt.<you>` and
+`landedAt.<you>` on a word you both share, because two people learning the same
+language do not know the same words at the same time. Miss it and the failure is
+silent in the usual way — a word that will not stay learned, with nothing on
+screen to say why.
 
 **Realtime Database** — presence only. Where the two of you are standing right
 now, written several times a second and thrown away. The rule that matters is

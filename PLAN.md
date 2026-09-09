@@ -41,7 +41,7 @@ the activities are the entire point. Gone for good:
 
 **What replaced it:** the garden is the home, and its places are the levels.
 You swipe horizontally to browse living previews of the Tree, Wellspring,
-Hollow, Stars and Glasshouse without leaving the garden. Tapping **enter this place** moves
+Hollow, Stars, Fold and Lantern Walk without leaving the garden. Tapping **enter this place** moves
 the camera inside and reveals that place's activities. No feet, no avatar.
 Browsing chooses a place; entering uses it.
 
@@ -50,7 +50,7 @@ Browsing chooses a place; entering uses it.
 ## The sections
 
 Each is a distinct environment. Same sky and time of day across all of them, so
-it reads as one world seen in five places.
+it reads as one world seen in six places.
 
 | Section | The place | The activity |
 |---|---|---|
@@ -58,6 +58,7 @@ it reads as one world seen in five places.
 | **The Wellspring** | a **river** between stone banks, mist, reeds | money the two of you have really set aside. **The more saved, the fuller and faster the river runs.** Never labelled "saved" — it is *ours*. |
 | **The Hollow** | a **cave**, firelit, embers climbing, rock that shifts in the light | games. Word Duel, Ember Rally and Scattergories live here. The room drifting slightly is deliberate and liked — keep it. |
 | **The Stars** | a dark plain under an enormous sky, two lights, **one horizon glowing with her dawn** | **chat, and it is built.** Every message is a light: the newest hangs low over her dawn, older ones climb and recede into the star field until they are indistinguishable from stars. Scroll or drag to walk back through it. Answer any line and the quote sits above your reply; put a heart on one and **its light in the sky burns bigger, warmer and steadier for good**. The split horizon is the point: when it's night here it's morning there. |
+| **The Fold** | a shallow fold in the hills, **full of mist**, long grass, a broken drystone wall, thorns on the ridge | **what each of you is getting better at, and what lives on it.** One animal on the slope per practice, and its size is the days it has been kept — a number that never goes down. Absence moves the animal *further off and lying down*, never smaller. The mist is the only progress there is: it hides the far side until you have done today's work, so **doing the work is what lets you see what you have been neglecting**. A language gets a real deck with real spacing; everything else the garden simply takes your word for, and says so. She can hand you a word. |
 | **The Glasshouse** | an old **iron conservatory** in the meadow, overgrown, milky glazing with holes in it | **photographs.** A flower grows on the floor in front of every one, in that picture's own colours, and after dark the frames and the flowers are the light. The room turns to face the pane you settle on. Every picture either of you keeps becomes a pane of coloured glass in the wall, and the building is literally made of them: the ironwork is always whole and the glass is only where a memory has been hung. Walk the aisle and the light each photograph throws lies in coloured pools across the floor. One picture, one line — and the other one may add exactly one thing, on the *back* of the glass. |
 
 More sections slot in later by adding one folder.
@@ -94,7 +95,7 @@ tap it to move inside. Inside, swipes belong to the activity and Escape/back
 returns to the garden. Day/night still runs on your own clock.
 
 The outside is its own scene (`world/GardenHub.tsx`), not a distant camera on
-the full section. Its four landmarks coexist in one meadow. Full section
+the full section. Its six landmarks coexist in one meadow. Full section
 components do not mount until entry; this separation keeps browsing a world
 with destinations instead of becoming four full-screen pages.
 
@@ -506,6 +507,20 @@ the river.**
 - **Sealing**: a round's opening move (seq 0) is a blind commit; rules refuse
   to return hers until yours exists. `firestore.rules` is a template —
   `npm run rules` fills addresses from `.env.local` into `rules-out/`.
+- **`affectedKeys()` in a rule is top-level only.** Writing `boxes.warm`
+  changes the *`boxes` field*, so the affected key is `boxes` — a rule asking
+  for `hasOnly(['boxes.' + me()])` matches nothing and refuses every write. To
+  say "only your own entry in this map moved", take a second `MapDiff` on the
+  map itself: `request.resource.data.boxes.diff(resource.data.boxes)
+  .affectedKeys().hasOnly([me()])`. The Fold's `words` rule is the worked
+  example.
+- **Nothing compiles `firestore.rules`, so a mangled edit to it is silent.**
+  `npm run rules` counts `match `, `allow `, `function `, `if ` and braces
+  across the comment strip — it says nothing about whether a rule is *correct*,
+  and it passed happily on a block whose every string literal had been emptied
+  by a shell quoting accident. **Read `rules-out/firestore.rules` after
+  touching the template.** (The same counter also refuses any comment
+  containing the word "if" followed by a space.)
 
 - **A meadow of one blade size cannot reach the treeline, and the attempt is
   what made the garden slow.** One instanced disc of grass has to choose: thin
@@ -1445,6 +1460,18 @@ once — reporting the treeline at its old figure for a while after `woodDetail`
 halved it — which is the whole argument for checking a counting script against
 a browser now and then. A number nobody checks is a number everybody trusts.
 
+**The Fold has two switches and a probe, and they exist for two different
+reasons.** `?fold=clear` and `?fold=thick` pin the mist, because the state worth
+photographing is the far side of the hill and reaching it by hand means
+answering twelve words first — which makes every screenshot a different picture.
+They *snap* rather than ease, for the reason the turntable takes `&at=`: at
+three frames a second under SwiftShader, fourteen real seconds of waiting move
+an eased value by about two, and the first `?fold=clear` shot came back at
+eleven metres of visibility instead of twenty-six. `window.__fold` under
+`?shot=1` publishes the mist's near and far planes and every animal's screen
+position and distance — which is what caught the herd projecting itself four
+hundred and eighty metres away, in a picture that looked entirely correct.
+
 Physics does not need a browser at all: `npm run rally` drives the car headless
 and prints acceleration, top speed, cornering grip, what the handbrake does and
 whether the fire-spirit can still get round five real roads without spinning.
@@ -1604,6 +1631,21 @@ handling changed.
       glides to its bay and the room turns square to the wall, solved against
       the camera each frame so it holds on any screen, with everything else in
       the building quietly losing its light while it happens
+- [x] **The Fold, the sixth place — and the first one ever inserted rather than
+      appended.** A shallow fold in the hills full of mist, with an animal on
+      the slope for every practice either of you keeps. Growth is days kept and
+      **never goes down**; absence moves an animal further off and lying down,
+      which is the same argument `Plant.growthDays` already settled for plants.
+      The mist is the only progress indicator and it is the fog uniforms every
+      shader here already has — it hides the far side until the day's work is
+      done, so *doing the work is what shows you what you have been
+      neglecting*. A language gets real Leitner spacing with its own schedule
+      per person (a seal the rules enforce); everything else is marked on your
+      word and the place says so on its face. Words come from the two of you
+      rather than a list, which is what makes handing her one possible.
+      `npm run fold` proves the schedule and the seal above the wire; see
+      `src/sections/fold/README.md` for the whole argument, including which
+      part of the brief it argues with and why.
 - [ ] Visual polish and full desktop/mobile screenshot sweep of both modes
 - [x] **The dead world is gone.** Figure, People, cloth, gait, body,
       benchSpots, Benches, Placed, CameraRig walking, `places/*`, navigation,
@@ -1689,8 +1731,13 @@ handling changed.
 
 1. **Go live** — owner does the console steps in `FIREBASE.md`, then a real
    two-device test. The Stars has a `messages` collection, the Glasshouse a
-   `memories` one and the archive a `watched` one with a `scores` subcollection
-   under it, so all three rule blocks go up with the rest.
+   `memories` one, the archive a `watched` one with a `scores` subcollection
+   under it, and the Fold two — `practices` and `words` — so all of those rule
+   blocks go up with the rest.
+   **The Fold's `words` rule is the third sealed thing in the file** and fails
+   the same way the other two do if it is missed: each of you owns your own
+   half of a shared word's schedule, so a refused write there is silent and
+   looks like a word that will not stay learned.
    **The archive will not work at all until they do**, and it will fail in the
    one way that is easy to misread: the film appears, and the rating is
    silently refused. It is the second sealed thing in the file after the

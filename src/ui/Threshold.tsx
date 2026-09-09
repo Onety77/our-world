@@ -11,6 +11,7 @@ import { useQuestions } from '@/systems/questions'
 import { until } from '@/systems/time'
 import { useMenuKeys } from './useMenuKeys'
 import { HollowLobby } from './HollowLobby'
+import { FoldThreshold } from './Fold'
 
 function TheLanternWalk() {
   const start = useMemories((s) => s.leaveOne)
@@ -223,6 +224,8 @@ export function Threshold() {
   if (id === 'hollow') return <HollowLobby />
 
   if (id === 'lanterns') return <TheLanternWalk />
+
+  if (id === 'fold') return <FoldThreshold />
 
   /*
     The Stars has no threshold any more.

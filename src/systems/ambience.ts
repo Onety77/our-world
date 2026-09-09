@@ -91,7 +91,14 @@ export interface SynthesisBus {
  * the only view with real weather in it. The rest are the insides of the four
  * places, by section id.
  */
-export type Place = 'garden' | 'tree' | 'river' | 'hollow' | 'stars' | 'lanterns'
+export type Place =
+  | 'garden'
+  | 'tree'
+  | 'river'
+  | 'hollow'
+  | 'stars'
+  | 'fold'
+  | 'lanterns'
 
 /** Short physical events that belong to the world rather than to interface chrome. */
 export type WorldCue = 'root' | 'seal' | 'water' | 'glass' | 'ember' | 'paper'
@@ -287,16 +294,31 @@ const MIX: Record<string, Record<Place, number>> = {
     Renaming a place does not rename what it sounds like, and this is the
     reminder: a column belongs to the *place*, not to the id.
   */
-  //         garden  tree  river  hollow  stars  lanterns
+  /*
+    The Fold is high, open and in cloud, and that is a *thinner* sound than the
+    meadow rather than a louder one.
+
+    Air carries it — more of it than anywhere else here, because there is
+    nothing up there to break the wind and the ridge is bare. Almost no leaves:
+    the only trees in the place are fourteen thorns on the skyline, and a lane's
+    worth of rustle would put a wood in a field. A trace of room, which is what
+    a hillside in fog actually sounds like — mist shortens everything, so the
+    one thing that must *not* happen here is the long open ring of the meadow.
+
+    Nothing rings and nothing runs. Copying the Lantern Walk's column would have
+    been the easy start and would have been wrong in exactly the way that
+    column records having been wrong itself.
+  */
+  //         garden  tree  river  hollow  stars  fold  lanterns
   // The meadow's continuous wind and leaf bed stop at the threshold of the
   // enclosed/otherworldly places. Their own layers below must establish the
   // room; otherwise every one sounds like the garden at a different volume.
-  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0,    stars: 0,    lanterns: 0.66 },
-  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0,    lanterns: 0.92 },
-  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    lanterns: 0 },
-  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 0.26, stars: 0,    lanterns: 0 },
-  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  lanterns: 0.05 },
-  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    lanterns: 0.1 },
+  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0,    stars: 0,    fold: 1.15, lanterns: 0.66 },
+  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0,    fold: 0.14, lanterns: 0.92 },
+  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    fold: 0,    lanterns: 0 },
+  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 0.26, stars: 0,    fold: 0,    lanterns: 0 },
+  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  fold: 0.22, lanterns: 0.05 },
+  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    fold: 0,    lanterns: 0.1 },
 }
 
 /*

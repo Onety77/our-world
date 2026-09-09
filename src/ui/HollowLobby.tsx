@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
+import { create } from 'zustand'
 import { useData, useWorldSlice } from '@/data/provider'
 import { otherUser } from '@/data/types'
 import { usePlaying } from '@/systems/playing'
@@ -10,7 +11,14 @@ import { theRoom } from '@/systems/waiting'
 import { GAMES } from '@/world/games/registry'
 import { useStandings } from '@/world/games/useRound'
 import { TrackArtwork } from './TrackArtwork'
+import { useChoiceKeys } from './useChoiceKeys'
 import './HollowLobby.css'
+
+// Keep your place when a game temporarily takes over the world.
+const useHollowMenu = create<{ selected: string | null; lastGame: string }>(() => ({
+  selected: null,
+  lastGame: 'ember-rally',
+}))
 
 export function HollowLobby() {
   const data = useData(),
@@ -20,7 +28,20 @@ export function HollowLobby() {
   const presence = useWorldSlice((s) => s.presence)
   const them = otherUser(data.me),
     name = profiles[them].name
-  const [selected, setSelected] = useState<string | null>(null)
+  const { selected, lastGame } = useHollowMenu()
+  const setSelected = (selected: string | null) => useHollowMenu.setState({ selected })
+  const back = () => {
+    if (selected) setSelected(null)
+    else {
+      useHollowMenu.setState({ selected: null, lastGame: 'ember-rally' })
+      useSections.getState().leave()
+    }
+  }
+  const choices = useChoiceKeys({
+    screen: selected ?? 'library',
+    initial: selected ? '.hollow-modes button:not(:disabled)' : `.hollow-game-tile.${lastGame}`,
+    onBack: back,
+  })
   const game = GAMES.find((g) => g.id === selected)
   const listed = useMemo(
     () => GAMES.filter((g) => g.mode !== 'live' && !shut(gameKey(g.id))),
@@ -35,17 +56,6 @@ export function HollowLobby() {
       theRoom.waitingForYou = 0
     }
   }, [yours])
-  useEffect(() => {
-    if (!selected) return
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopImmediatePropagation()
-      setSelected(null)
-    }
-    window.addEventListener('keydown', key, true)
-    return () => window.removeEventListener('keydown', key, true)
-  }, [selected])
   const start = (id: string, solo: boolean) => {
     if (!shut(gameKey(id))) usePlaying.getState().open(id, solo)
   }
@@ -59,35 +69,46 @@ export function HollowLobby() {
   }
   const openGame = (id: string) => {
     if (shut(gameKey(id))) return
+    useHollowMenu.setState({ lastGame: id })
     if (id === 'ember-rally') start(id, true)
     else setSelected(id)
   }
   return (
-    <section className="hollow-hub" aria-label="The Hollow games">
-      <nav className="hollow-top">
-        <button onClick={() => (selected ? setSelected(null) : useSections.getState().leave())}>
-          ← {selected ? 'All games' : 'The garden'}
-        </button>
-        <span>THE HOLLOW</span>
+    <section
+      ref={choices}
+      className="hollow-hub"
+      aria-label="The Hollow games"
+      aria-describedby="hollow-keys"
+    >
+      <nav className="hollow-top" data-choice-row="navigation">
+        <button onClick={back}>← {selected ? 'All games' : 'The garden'}</button>
+        <span>the hollow</span>
         <span className={`hollow-presence ${presence[them].online ? 'online' : ''}`}>
           <i />
           {presence[them].online ? `${name} is here` : 'Play at your own pace'}
         </span>
       </nav>
+      <p className="hollow-key-hint" id="hollow-keys">
+        ← → choose <span>↑ ↓ wander</span> Enter play <span>Esc back</span>
+      </p>
       <div className="hollow-content">
         {game ? (
           <>
             <header className="hollow-heading">
-              <span className="hollow-eyebrow">YOUR NEXT GAME</span>
+              <span className="hollow-eyebrow">a little time to play</span>
               <h1>{game.name}</h1>
               <p>{say(game.blurb)}</p>
             </header>
-            <div className="hollow-modes" aria-label={`Ways to play ${game.name}`}>
+            <div
+              className="hollow-modes"
+              data-choice-row="modes"
+              aria-label={`Ways to play ${game.name}`}
+            >
               {game.mode !== 'live' && (
                 <>
                   <button onClick={() => start(game.id, false)}>
                     <span className="hollow-mode-icon">↗</span>
-                    <small>TAKE TURNS</small>
+                    <small>take turns</small>
                     <strong>{game.id === 'word-duel' ? 'Daily duel' : `Challenge ${name}`}</strong>
                     <p>
                       {game.invite
@@ -103,7 +124,7 @@ export function HollowLobby() {
                   </button>
                   <button onClick={() => start(game.id, true)}>
                     <span className="hollow-mode-icon">◎</span>
-                    <small>SOLO</small>
+                    <small>on your own</small>
                     <strong>Practice</strong>
                     <p>
                       {game.id === 'word-duel'
@@ -117,7 +138,7 @@ export function HollowLobby() {
               {game.live && (
                 <button disabled={!bothHere} onClick={live}>
                   <span className="hollow-mode-icon">◉</span>
-                  <small>TOGETHER, LIVE</small>
+                  <small>here, together</small>
                   <strong>{game.id === 'word-duel' ? 'Beat the clock' : 'Play together'}</strong>
                   <p>{say(game.live.tip)}. Both players get ready before the game begins.</p>
                   <span className="hollow-mode-action">
@@ -130,11 +151,11 @@ export function HollowLobby() {
         ) : (
           <>
             <header className="hollow-heading">
-              <span className="hollow-eyebrow">A LITTLE FRIENDLY COMPETITION</span>
+              <span className="hollow-eyebrow">where the evening wanders</span>
               <h1>Stay for a game.</h1>
               <p>A quick word duel, a road worth racing, or something to play together.</p>
             </header>
-            <div className="hollow-library">
+            <div className="hollow-library" data-choice-row="games">
               {[...GAMES]
                 .sort((a, b) => Number(b.id === 'ember-rally') - Number(a.id === 'ember-rally'))
                 .map((g) => {
@@ -160,10 +181,10 @@ export function HollowLobby() {
                         )}
                         <span className="hollow-tile-category">
                           {g.id === 'ember-rally'
-                            ? 'RACING'
+                            ? 'a road through the dark'
                             : g.id === 'word-duel'
-                              ? 'WORD GAME'
-                              : 'PARTY GAME'}
+                              ? 'a little wordplay'
+                              : 'see where your mind goes'}
                         </span>
                       </span>
                       <span className="hollow-tile-body">
@@ -197,10 +218,10 @@ export function HollowLobby() {
             </div>
             <section className="hollow-activity" aria-label="Your shared games">
               <div>
-                <span className="hollow-eyebrow">BETWEEN THE TWO OF YOU</span>
+                <span className="hollow-eyebrow">between the two of you</span>
                 <h2>Your shared games</h2>
               </div>
-              <div>
+              <div data-choice-row="shared" data-choice-axis="vertical">
                 {listed.map((g) => {
                   const status = turns[g.id]
                   return (

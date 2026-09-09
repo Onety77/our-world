@@ -7,14 +7,15 @@ export default {
   name: 'The Lantern Walk',
   blurb: 'Every picture worth keeping, hung along the way back.',
   /*
-    Last in the row, and appended rather than inserted.
+    Last in the row, and it stays last.
 
-    Every other index in the garden is load-bearing: `world/hub/layout` names
-    its landmarks positionally and `HUB_STREAM` is measured off ANCHORS[1].
-    Slotting a fifth place into the middle would move the Wellspring's water
-    away from the Wellspring, silently.
+    Every index here is load-bearing: `world/hub/layout` names its landmarks
+    positionally and `HUB_STREAM` is measured off ANCHORS[1]. This was 4 until
+    the Fold went in between the Stars and here — the one insertion the garden
+    has ever had. See the note in `sections/fold/index.ts` for what had to move
+    with it, and what did not.
   */
-  order: 4,
+  order: 5,
   camera: {
     /*
       Standing on the lane, at the head of it, looking down its length.

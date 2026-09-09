@@ -5,6 +5,7 @@ import { usePlaying } from '@/systems/playing'
 import { roadKey, useDoorman } from '@/systems/locks'
 import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
 import { TrackArtwork } from '@/ui/TrackArtwork'
+import { useChoiceKeys } from '@/ui/useChoiceKeys'
 import { ROAD_INFO, ROAD_ORDER } from './courseInfo'
 import { moveRun, timeLabel, type RallyMove, type StageId } from './model'
 import type { Track } from './track'
@@ -89,7 +90,17 @@ export function RaceSetup({
     them = otherUser(data.me)
   const [mode, setMode] = useState<Mode>(solo ? 'solo' : 'challenge')
   const [controls, setControls] = useState(false)
-  const launch = useRef<HTMLButtonElement>(null)
+  const controlsToggle = useRef<HTMLButtonElement>(null)
+  const choices = useChoiceKeys({
+    screen: 'race-setup',
+    initial: '.race-track-tabs .selected',
+    onBack: () => {
+      if (controls) {
+        setControls(false)
+        controlsToggle.current?.focus()
+      } else onLeave()
+    },
+  })
   const best = useBest((s) => s.bests[stage])
   const info = ROAD_INFO[stage]
   const theirLine = moveRun(theirs, 'qualifying', stage),
@@ -102,21 +113,6 @@ export function RaceSetup({
   useEffect(() => {
     if (joining) onSelect(roomStage as StageId)
   }, [joining, roomStage, onSelect])
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if (
-        event.key !== 'Enter' ||
-        event.repeat ||
-        document.activeElement instanceof HTMLButtonElement ||
-        document.activeElement instanceof HTMLInputElement
-      )
-        return
-      event.preventDefault()
-      launch.current?.click()
-    }
-    window.addEventListener('keydown', key)
-    return () => window.removeEventListener('keydown', key)
-  }, [])
   const chooseMode = (next: Mode) => {
     setMode(next)
     if (next !== 'live' && (next === 'solo') !== solo)
@@ -134,22 +130,32 @@ export function RaceSetup({
   }
   return (
     <section
+      ref={choices}
       className="race-setup"
       style={{ '--road-accent': info.accent } as React.CSSProperties}
       aria-label="Set up your race"
+      aria-describedby="race-keys"
     >
-      <nav className="race-setup-top">
+      <nav className="race-setup-top" data-choice-row="navigation">
         <button onClick={onLeave}>← All games</button>
         <span>
-          THE HOLLOW <i>/</i> EMBER RALLY
+          the hollow <i>·</i> ember rally
         </span>
-        <button onClick={() => setControls((v) => !v)} aria-expanded={controls}>
+        <button
+          ref={controlsToggle}
+          onClick={() => setControls((v) => !v)}
+          aria-expanded={controls}
+          aria-controls="race-controls"
+        >
           Driving controls {controls ? '−' : '+'}
         </button>
       </nav>
+      <p className="hollow-key-hint" id="race-keys">
+        ← → roads <span>↑ ↓ choices</span> Enter continue <span>Esc back</span>
+      </p>
       <header className="race-setup-heading">
         <div>
-          <span className="race-eyebrow">FIND YOUR NEXT FAVOURITE CORNER</span>
+          <span className="race-eyebrow">somewhere beyond the firelight</span>
           <h1>Choose your road.</h1>
         </div>
         <p>
@@ -159,7 +165,12 @@ export function RaceSetup({
         </p>
       </header>
       {controls && (
-        <section className="race-controls-guide" aria-label="Driving controls">
+        <section
+          id="race-controls"
+          className="race-controls-guide"
+          data-choice-row="controls"
+          aria-label="Driving controls"
+        >
           <div>
             <strong>Keyboard</strong>
             <p>
@@ -175,7 +186,13 @@ export function RaceSetup({
               is automatic.
             </p>
           </div>
-          <button onClick={() => setControls(false)} aria-label="Close driving controls">
+          <button
+            onClick={() => {
+              setControls(false)
+              controlsToggle.current?.focus()
+            }}
+            aria-label="Close driving controls"
+          >
             ×
           </button>
         </section>
@@ -184,22 +201,16 @@ export function RaceSetup({
         <div className="race-track-side">
           <div
             className="race-track-tabs"
+            data-choice-row="tracks"
             role="group"
             aria-label="Choose a track"
-            onKeyDown={(event) => {
-              if (joining || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
-              event.preventDefault()
-              const next =
-                (ROAD_ORDER.indexOf(stage) + (event.key === 'ArrowRight' ? 1 : 3)) %
-                ROAD_ORDER.length
-              onSelect(ROAD_ORDER[next])
-              event.currentTarget.querySelectorAll('button')[next]?.focus()
-            }}
           >
             {ROAD_ORDER.map((road, i) => (
               <button
                 key={road}
                 aria-pressed={stage === road}
+                data-choice-preview
+                data-choice-next="modes"
                 disabled={Boolean(joining && stage !== road)}
                 onClick={() => onSelect(road)}
                 className={stage === road ? 'selected' : ''}
@@ -225,19 +236,25 @@ export function RaceSetup({
           <div className="race-track-details">
             <p>{info.description}</p>
             <div>
-              <span>PERSONAL BEST</span>
+              <span>your best</span>
               <strong>{best ? timeLabel(best.timeMs) : 'Your first run awaits'}</strong>
             </div>
           </div>
           <p className="race-track-tip">
-            <span>DRIVER’S NOTE</span>
+            <span>a word for the road</span>
             {info.tip}
           </p>
         </div>
         <aside className="race-options">
-          <span className="race-eyebrow">MAKE IT YOUR RACE</span>
+          <span className="race-eyebrow">your kind of evening</span>
           <h2>How are we playing?</h2>
-          <div className="race-mode-list" role="group" aria-label="Race mode">
+          <div
+            className="race-mode-list"
+            data-choice-row="modes"
+            data-choice-axis="vertical"
+            role="group"
+            aria-label="Race mode"
+          >
             {(
               [
                 ['solo', 'Solo run', 'Race a spirit and improve your personal best.'],
@@ -256,6 +273,8 @@ export function RaceSetup({
               <button
                 key={value}
                 aria-pressed={mode === value}
+                data-choice-preview
+                data-choice-next="start"
                 onClick={() => chooseMode(value)}
                 className={mode === value ? 'selected' : ''}
               >
@@ -282,9 +301,8 @@ export function RaceSetup({
                     : `${theirName} can race your recording later. You don’t need to be online together.`
                 : 'Just you and the road’s spirit. Replay as often as you like.'}
           </div>
-          <div className="race-start-panel">
+          <div className="race-start-panel" data-choice-row="start">
             <button
-              ref={launch}
               className="race-launch"
               disabled={locked || (mode === 'live' && !bothHere)}
               onClick={begin}
@@ -309,9 +327,11 @@ export function RaceSetup({
             </span>
           </div>
           {mode === 'challenge' && onReplay && (
-            <button className="race-watch-runs" onClick={onReplay}>
-              Watch both recorded runs →
-            </button>
+            <div data-choice-row="replay">
+              <button className="race-watch-runs" onClick={onReplay}>
+                Watch both recorded runs →
+              </button>
+            </div>
           )}
         </aside>
       </div>

@@ -290,7 +290,7 @@ function useShownWorld(): { entered: boolean; section: number } {
  * stands in is visible down the whole length of the aisle. A conservatory with
  * no sky above it would be a corridor.
  */
-const OPEN_AIR = new Set(['tree', 'river', 'lanterns'])
+const OPEN_AIR = new Set(['tree', 'river', 'fold', 'lanterns'])
 
 /**
  * Which places lay their own ground, and so do not want the world's.
@@ -302,10 +302,16 @@ const OPEN_AIR = new Set(['tree', 'river', 'lanterns'])
  * world meadow drawn over the top would be a second, stationary floor
  * disagreeing with the first about where your feet are.
  *
+ * **The Fold is in here for a different reason**, and it is worth not
+ * conflating them: it does not travel at all. It lays its own ground because it
+ * needs a *hillside*, and `groundHeight` is one function shared by every place
+ * in the world — a hill put into it here would be a hill under the Tree. See
+ * `sections/fold/layout`.
+ *
  * It still wants the sky, the clouds and the horizon, which is why this is its
  * own set rather than an exception inside `OPEN_AIR`.
  */
-const OWN_GROUND = new Set(['lanterns'])
+const OWN_GROUND = new Set(['fold', 'lanterns'])
 
 function Scene({ hourOverride }: { hourOverride: number | null }) {
   const profiles = useWorldSlice((s) => s.profiles)

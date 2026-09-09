@@ -27,6 +27,7 @@ import { useArrival } from './arrival'
 import { useMemories } from './memories'
 import { useQuestions } from './questions'
 import { useWatching } from './watching'
+import { useTending } from './tending'
 
 /**
  * True while anything is filling the screen.
@@ -58,7 +59,26 @@ export function useTakenOver(): boolean {
   const memory = useMemories((s) => s.openId !== null || s.hanging)
   const question = useQuestions((s) => s.view !== null)
   const watching = useWatching((s) => s.open)
-  return shut || playing || reading || composing || pot || profile || memory || question || watching
+  /*
+    A sitting in the Fold. It does not cover the world — the mist opening behind
+    the word is the whole feedback of that section, so a backdrop would hide the
+    thing it is reporting — but everything *ambient* still has to get out of the
+    way. The place name, the marks along the bottom and the clocks in the corner
+    are somebody else's text over the word you are trying to remember.
+  */
+  const tending = useTending((s) => s.sitting || s.forming !== null)
+  return (
+    shut ||
+    playing ||
+    reading ||
+    composing ||
+    pot ||
+    profile ||
+    memory ||
+    question ||
+    watching ||
+    tending
+  )
 }
 
 /**
@@ -81,5 +101,7 @@ export function takenOverNow(): boolean {
     useMemories.getState().hanging
     || useQuestions.getState().view !== null
     || useWatching.getState().open
+    || useTending.getState().sitting
+    || useTending.getState().forming !== null
   )
 }

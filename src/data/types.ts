@@ -541,8 +541,9 @@ export interface Memory {
  * they must be kept in step by hand, and `npm run rules` prints them out.
  */
 export const AMBIENCE_KEYS = [
-  'garden', 'tree', 'river', 'hollow', 'stars', 'lanterns',
-  'bleedTree', 'bleedRiver', 'bleedHollow', 'bleedStars', 'bleedGlasshouse',
+  'garden', 'tree', 'river', 'hollow', 'stars', 'fold', 'lanterns',
+  'bleedTree', 'bleedRiver', 'bleedHollow', 'bleedStars', 'bleedFold',
+  'bleedGlasshouse',
 ] as const
 
 export interface Track {
@@ -1059,6 +1060,164 @@ export interface Move {
  */
 
 // ---------------------------------------------------------------------------
+// The Fold
+// ---------------------------------------------------------------------------
+
+/**
+ * Which animal is standing for a practice, and what colour it is.
+ *
+ * A closed set rather than free text, because these are *drawn* — each one is
+ * a different arrangement of the same instanced parts up on the hill, and a
+ * kind nobody has modelled would have to fall back to something, silently.
+ * Adding one is adding a case in `sections/fold/creatures.ts` and a name here.
+ */
+export type CreatureKind = 'dog' | 'hare' | 'goat' | 'crane' | 'fox' | 'ox'
+
+export const CREATURE_KINDS: readonly CreatureKind[] = [
+  'dog', 'hare', 'goat', 'crane', 'fox', 'ox',
+] as const
+
+/**
+ * What a practice is made of, and therefore what the garden may honestly do
+ * with it.
+ *
+ * `words` is a language: there is a deck, the spacing is real, and a session is
+ * something the garden runs. `days` is everything else — drawing, an
+ * instrument, running, a book. **The garden cannot verify any of those and
+ * must not pretend to.** All it does is remember that you said you did it, and
+ * keep the line you left about what you did.
+ *
+ * The honest-states law is why this is two kinds and not one: a single kind
+ * would have meant inventing an exercise for a guitar nobody is holding.
+ */
+export type PracticeKind = 'words' | 'days'
+
+/** Whose practice it is. `both` is the one thing the two of you keep together. */
+export type PracticeOwner = UserId | 'both'
+
+/**
+ * Something one of you is trying to get better at, and the animal that lives
+ * on it.
+ *
+ * ---------------------------------------------------------------------------
+ * **`days` only ever goes up, and that is the design, not an oversight.**
+ *
+ * It is a count of days on which somebody practised — the same shape as
+ * `Plant.growthDays`, for the same stated reason: a garden that punishes a
+ * missed week kills the habit it exists to build. The animal's *size* is a
+ * function of this number alone, so nothing you can do makes it smaller.
+ *
+ * What absence changes is `lastDay`, and from that the garden derives where the
+ * animal is standing and whether it is awake — near and following you about, or
+ * lying down in the mist at the far end. Derived, never stored: a stored mood
+ * is a mood that can be wrong after a device has been asleep.
+ * ---------------------------------------------------------------------------
+ */
+export interface Practice {
+  id: string
+  /** Theirs, in their own words. "Spanish", "drawing hands", "the fingering". */
+  name: string
+  kind: PracticeKind
+  by: PracticeOwner
+  creature: CreatureKind
+  /** epoch ms the animal was taken in. */
+  startedAt: number
+  /** Days somebody practised. Never decreases. See above. */
+  days: number
+  /** Local date key of the most recent day, "2026-09-09", in their timezone. */
+  lastDay: string | null
+  /**
+   * Which days, most recent first, capped.
+   *
+   * Kept because a count cannot answer "have I been keeping this up lately",
+   * which is the only question anybody asks of a habit. Capped because two
+   * people over five years is otherwise an unbounded array in a document that
+   * is read on every visit.
+   */
+  recent: string[]
+  /**
+   * The last thing said about doing it. One line, and only the most recent.
+   *
+   * A history of these would be a second collection and a second thing to
+   * read on every visit, to answer a question nobody asks. What this answers is
+   * the one that *is* asked, by the other one, from another country: **what
+   * were you working on?** — which only ever wants the last answer.
+   */
+  lastLine?: string
+  /** Retired rather than deleted: the animal stays, it simply stops being fed. */
+  restingAt?: number
+}
+
+/** How many recent days a practice remembers. About a season. */
+export const PRACTICE_RECENT = 90
+
+/** Days of practice at which an animal is full grown. */
+export const FULL_GROWN_DAYS = 60
+
+/**
+ * One word in a language practice.
+ *
+ * The word and its meaning belong to the pair; **the schedule does not.** Two
+ * people learning the same language do not know the same words at the same
+ * time, so `boxes` and `dueAt` are keyed by person. That split is also what
+ * makes handing a word over possible at all: the word is one document, and each
+ * of you has your own standing with it.
+ */
+export interface Word {
+  id: string
+  practiceId: string
+  /** The word itself, as it is written in the language being learned. */
+  text: string
+  /** What it means, in the words of whoever put it in. */
+  meaning: string
+  /**
+   * Where it was met — a line, optional. "on the sign outside the market".
+   *
+   * The single most useful thing on a flashcard and the thing every deck of
+   * shipped vocabulary lacks: a word you met somewhere is a word with a hook
+   * on it.
+   */
+  note?: string
+  by: UserId
+  at: number
+  /**
+   * Handed to the other one, deliberately.
+   *
+   * A word either of you adds is in both decks — you are learning the same
+   * language. This says it was *chosen for* them, which is the difference
+   * between a shared list and a gift, and it is what the other one's Fold
+   * shows on the day it arrives.
+   */
+  handed?: boolean
+  /** Leitner box per person, 0..5. Absent means never seen by them. */
+  boxes: Partial<Record<UserId, number>>
+  /** epoch ms this person should next see it. Absent means "now". */
+  dueAt: Partial<Record<UserId, number>>
+  /**
+   * The first time each of you got a handed word right.
+   *
+   * Only ever set for `handed` words, and only so the person who gave it can be
+   * told once, quietly, that it landed. There is no other counting here.
+   */
+  landedAt?: Partial<Record<UserId, number>>
+}
+
+/** Leitner intervals in days, by box. Box 0 comes back in the same session. */
+export const FOLD_BOXES: readonly number[] = [0, 1, 3, 7, 16, 35]
+
+/** Most words the garden will put in front of you in one session. */
+export const FOLD_SESSION = 12
+
+/** The Fold, as the UI sees it. */
+export interface FoldGarden {
+  practices: Practice[]
+  /** Every word in every language practice. Two people do not have many. */
+  words: Word[]
+  /** False until the collections have answered once. */
+  loaded: boolean
+}
+
+// ---------------------------------------------------------------------------
 // The whole world, as the UI sees it
 // ---------------------------------------------------------------------------
 
@@ -1351,6 +1510,66 @@ export interface DataLayer {
    * documents only. No picture crosses this listener, so a Glasshouse with
    * five hundred memories in it costs about the same to watch as an empty one.
    */
+  // ---- The Fold --------------------------------------------------------
+
+  /**
+   * Everything up on the hill: the practices and every word in them.
+   *
+   * One subscription rather than two, because nothing in this place is useful
+   * on its own — a deck with no practice has no animal to belong to, and a
+   * practice with no deck cannot say how many words are due. Two subscriptions
+   * would mean every reader handling the half-arrived state.
+   */
+  watchFold(listener: (fold: FoldGarden) => void): () => void
+
+  /**
+   * Take an animal in.
+   *
+   * There is no undo and no delete anywhere in this section: a practice you
+   * stop is `restPractice`, which leaves the animal on the hill. Removing one
+   * would remove the record of the weeks you did keep it.
+   */
+  takeIn(input: {
+    name: string
+    kind: PracticeKind
+    by: PracticeOwner
+    creature: CreatureKind
+  }): Promise<Practice>
+
+  /** Stop feeding one. The animal stays; nothing is deleted. */
+  restPractice(id: string, resting: boolean): Promise<void>
+
+  /**
+   * Mark today done for a practice, in the practising person’s own local day.
+   *
+   * The day key is computed on the device from their timezone rather than from
+   * the server clock, because “today” at seven hours’ distance is two
+   * different days and the person who did the work is the one who knows which.
+   * Idempotent: practising twice in one day is one day.
+   */
+  practise(id: string, day: string, line?: string): Promise<void>
+
+  /** Put a word into a language practice. `handed` makes it a gift. */
+  addWord(input: {
+    practiceId: string
+    text: string
+    meaning: string
+    note?: string
+    handed?: boolean
+  }): Promise<Word>
+
+  /**
+   * The result of turning one word over.
+   *
+   * `got` moves it up a box; not-got drops it to box 1 rather than box 0 —
+   * see the note on `FOLD_BOXES`. Only ever writes this person’s own half of
+   * the schedule, which is what the rules enforce as well.
+   */
+  turnWord(id: string, got: boolean, now?: number): Promise<void>
+
+  /** Correct a word either of you wrote down wrong. Text and meaning only. */
+  reword(id: string, patch: { text?: string; meaning?: string; note?: string }): Promise<void>
+
   watchMemories(listener: (memories: Memory[]) => void): () => void
 
   /**

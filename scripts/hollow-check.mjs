@@ -39,9 +39,10 @@ if (!endpoint) {
   for (let i = 0; i < 100; i++) {
     const portFile = join(profile, 'DevToolsActivePort')
     if (existsSync(portFile)) {
-      const [port, path] = readFileSync(portFile, 'utf8').trim().split(/\r?\n/)
       try {
-        if ((await fetch(base)).ok) {
+        // Chrome briefly holds this file open while publishing its port on Windows.
+        const [port, path] = readFileSync(portFile, 'utf8').trim().split(/\r?\n/)
+        if (port && path && (await fetch(base)).ok) {
           endpoint = 'ws://127.0.0.1:' + port + path
           break
         }
@@ -106,6 +107,31 @@ const click = async (selector) => {
   } else await ev(`document.querySelector(${JSON.stringify(selector)}).click()`)
   await wait(220)
 }
+const press = async (key, repeat = false) => {
+  const codes = {
+    Enter: 13,
+    Escape: 27,
+    ArrowLeft: 37,
+    ArrowUp: 38,
+    ArrowRight: 39,
+    ArrowDown: 40,
+    Tab: 9,
+  }
+  await page('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key,
+    code: key,
+    windowsVirtualKeyCode: codes[key],
+    autoRepeat: repeat,
+  })
+  await page('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key,
+    code: key,
+    windowsVirtualKeyCode: codes[key],
+  })
+  await wait(160)
+}
 const check = (value, label) => {
   assert(value, label)
   console.log('PASS ' + label)
@@ -117,11 +143,13 @@ const capture = async (name) => {
   const shot = await page('Page.captureScreenshot', { format: 'png' })
   writeFileSync(join(output, name + '.png'), Buffer.from(shot.data, 'base64'))
 }
-for (const [name, width, height, mobile] of [
-  ['desktop', 1440, 900, false],
-  ['phone', 393, 852, true],
-  ['landscape', 852, 393, true],
-]) {
+for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
+  ? []
+  : [
+      ['desktop', 1440, 900, false],
+      ['phone', 393, 852, true],
+      ['landscape', 852, 393, true],
+    ]) {
   touching = mobile
   await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile })
   await page('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: 5 })
@@ -229,8 +257,127 @@ for (const [name, width, height, mobile] of [
   await until(`!!document.querySelector('.race-setup')`)
   await ev('history.back()')
   await until(`!!document.querySelector('.hollow-library')`)
-  check(await ev(`location.href.startsWith(${JSON.stringify(base)})`), name + ' browser Back returns to the Hollow without leaving the site')
+  check(
+    await ev(`location.href.startsWith(${JSON.stringify(base)})`),
+    name + ' browser Back returns to the Hollow without leaving the site',
+  )
 }
+// A complete trip using real keys: no DOM clicks or scripted focus.
+touching = false
+await page('Emulation.setDeviceMetricsOverride', {
+  width: 1440,
+  height: 900,
+  deviceScaleFactor: 1,
+  mobile: false,
+})
+await page('Emulation.setTouchEmulationEnabled', { enabled: false })
+await page('Page.navigate', { url: base + '/?section=hollow&mock=1&shot=1' })
+await until(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='come in')`)
+await press('Enter')
+await until(`!!document.querySelector('.hollow-library')`)
+await press('Enter')
+await until(`!!document.querySelector('.race-setup')`)
+await press('ArrowRight')
+await press('ArrowRight')
+await press('ArrowLeft')
+check(
+  await ev(
+    `document.querySelector('.race-track-caption h2').textContent==='The Moonbreak' && document.activeElement===document.querySelector('.race-track-tabs button:nth-child(2)')`,
+  ),
+  'arrows preview roads and move real focus with the ember',
+)
+await press('Enter')
+check(
+  await ev(`document.activeElement===document.querySelector('.race-mode-list button:first-child')`),
+  'Enter on a road moves to race modes',
+)
+await press('ArrowDown')
+check(
+  await ev(`import('/scripts/hollow-browser.js').then(m=>!m.inspectRace().solo)`),
+  'down selects the shared challenge',
+)
+await press('ArrowUp')
+await press('Enter')
+check(
+  await ev(`document.activeElement===document.querySelector('.race-launch')`),
+  'Enter on a mode reaches the start action',
+)
+await press('Enter', true)
+check(
+  await ev(`!!document.querySelector('.race-setup')`),
+  'held Enter cannot accidentally start a race',
+)
+await press('Enter')
+await until(`!!document.querySelector('.rally-running')`)
+await press('Escape')
+await until(`!!document.querySelector('.rally-paused')`)
+await press('ArrowUp')
+await press('Enter')
+await until(`!!document.querySelector('.race-setup')`)
+check(
+  await ev(`document.querySelector('.race-track-caption h2').textContent==='The Moonbreak'`),
+  'keyboard-only driving, pause, and return keeps the road',
+)
+await press('ArrowUp')
+await press('ArrowRight')
+await press('Enter')
+await until(`!!document.querySelector('.race-controls-guide')`)
+await press('Escape')
+check(
+  await ev(
+    `!document.querySelector('.race-controls-guide') && document.activeElement===document.querySelector('.race-setup-top button:last-child') && !!document.querySelector('.race-setup')`,
+  ),
+  'Escape closes controls first and restores their focus',
+)
+await press('Escape')
+await until(`!!document.querySelector('.hollow-library')`)
+await press('ArrowRight')
+await press('Enter')
+await until(`!!document.querySelector('.hollow-modes')`)
+await press('ArrowRight')
+await press('Enter')
+await until(`import('/scripts/hollow-browser.js').then(m=>m.inspectRace().game==='word-duel')`)
+await press('Escape')
+await until(`!!document.querySelector('.hollow-modes')`)
+check(
+  await ev(`document.querySelector('.hollow-heading h1').textContent==='Word duel'`),
+  'Escape from Word Duel returns to its ways to play',
+)
+await press('Escape')
+await press('ArrowRight')
+await press('Enter')
+await until(`document.querySelector('.hollow-heading h1')?.textContent==='Scattergories'`)
+await press('Enter')
+await until(`!!document.querySelector('.race-room')`)
+await press('Escape')
+await until(`!!document.querySelector('.hollow-modes')`)
+check(
+  await ev(`document.querySelector('.hollow-heading h1').textContent==='Scattergories'`),
+  'Scattergories and its ready room work without a pointer',
+)
+await press('Escape')
+await press('ArrowDown')
+check(
+  await ev(`!!document.activeElement.closest('.hollow-activity')`),
+  'shared games are reachable with the down arrow',
+)
+await press('Escape')
+await until(`!document.querySelector('.hollow-hub')`)
+check(
+  await ev(`!!document.querySelector('.place-name.browsing')`),
+  'Escape from the library returns to the garden',
+)
+await press('Enter')
+await until(`!!document.querySelector('.hollow-library')`)
+await ev(`window.__local.setLocks({'game:word-duel':'both'})`)
+await wait(150)
+await press('ArrowRight')
+check(
+  await ev(`document.activeElement===document.querySelector('.hollow-game-tile.scattergories')`),
+  'arrows skip unavailable games',
+)
+await press('ArrowLeft')
+await ev(`window.__local.setLocks({})`)
 // Presence and locks are staged only through the mock provider.
 await click('.hollow-game-tile.ember-rally')
 await until(`!!document.querySelector('.race-setup')`)
@@ -262,7 +409,23 @@ check(
   'joining strips readiness metadata and keeps the existing room',
 )
 await capture('live-room')
-await click('.wheel .rally-actions button:first-child')
+await press('ArrowRight')
+check(
+  await ev(
+    `document.activeElement===document.querySelector('.wheel .rally-actions button:last-child')`,
+  ),
+  'ready-room arrows reach leave',
+)
+await press('Escape')
+await until(`!!document.querySelector('.race-setup')`)
+check(
+  await ev(`document.querySelector('.race-track-caption h2').textContent==='The Harmattan'`),
+  'Escape from the race room returns one level with its road',
+)
+await click('.race-mode-list button:last-child')
+await click('.race-launch')
+await until(`!!document.querySelector('.wheel')`)
+await press('Enter')
 await until(`!!document.querySelector('.rally-running')`)
 check(
   await ev(

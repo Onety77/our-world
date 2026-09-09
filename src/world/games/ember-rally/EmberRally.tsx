@@ -7,6 +7,7 @@ import { useRace } from './session'
 import { usePublishedTuning } from './tuningSync'
 import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
 import { useMenuKeys } from '@/ui/useMenuKeys'
+import { useChoiceKeys } from '@/ui/useChoiceKeys'
 import { useLobby } from '@/systems/useLobby'
 import { useStayAwake } from '@/systems/awake'
 import { useHoldOrientation } from '@/systems/orientation'
@@ -409,7 +410,12 @@ export default function EmberRally({
         stage={activeStage}
         roadName={COURSES[activeStage].name}
         theirName={theirName}
-        onLeave={onLeave}
+        onLeave={() => {
+          setStage(activeStage)
+          flagDropped.current = false
+          backToFire()
+          usePlaying.getState().open('ember-rally', true)
+        }}
       />
     )
   }
@@ -1012,6 +1018,7 @@ function Replay({
   theirName: string
   onLeave(): void
 }) {
+  const choices = useChoiceKeys({ screen: 'replay', initial: '.rally-leave', onBack: onLeave })
   useEffect(() => {
     useGameStage.getState().take(true)
     useRace.getState().watch({ track, replay: runs })
@@ -1022,15 +1029,17 @@ function Replay({
   }, [track, runs])
 
   return (
-    <div className="rally rally-running">
-      <button type="button" className="rally-leave" onClick={onLeave}>
-        leave the replay
-      </button>
+    <section ref={choices} className="rally rally-running" aria-label="Race replay">
+      <div data-choice-row="replay">
+        <button type="button" className="rally-leave" onClick={onLeave}>
+          leave the replay
+        </button>
+      </div>
       <div className="rally-replay-names" aria-hidden="true">
         <span>you</span>
         <span>{theirName}</span>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -1084,6 +1093,16 @@ function RunOver({
   const hers = against?.run ?? null
   const won = hers !== null && run.timeMs <= hers.timeMs
   const gap = hers === null ? 0 : Math.abs(run.timeMs - hers.timeMs)
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (!saving && !event.repeat) onDone()
+    }
+    window.addEventListener('keydown', key, true)
+    return () => window.removeEventListener('keydown', key, true)
+  }, [onDone, saving])
 
   return (
     <div className="rally-over">

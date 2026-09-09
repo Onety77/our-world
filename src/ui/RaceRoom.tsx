@@ -22,7 +22,7 @@
 import { LOBBY_COUNTDOWN_MS } from '@/systems/lobby'
 import { useSay } from '@/systems/useSay'
 import type { Lobby } from '@/systems/useLobby'
-import { useMenuKeys } from './useMenuKeys'
+import { useChoiceKeys } from './useChoiceKeys'
 
 /** The one number, big, in the middle. Three, two, one, and the flag. */
 function Flag({ countdown }: { countdown: number }) {
@@ -77,10 +77,14 @@ export function RaceRoom({
 }) {
   const say = useSay()
   const counting = lobby.countdown !== null && lobby.countdown > 0
-  const keys = useMenuKeys(2, true, !counting)
+  const choices = useChoiceKeys({
+    screen: counting ? 'countdown' : 'ready-room',
+    initial: '.rally-actions button',
+    onBack: onLeave,
+  })
 
   return (
-    <>
+    <section ref={choices} className="race-room" aria-label="Get ready together">
       {counting ? (
         <Flag countdown={lobby.countdown ?? 0} />
       ) : (
@@ -101,40 +105,25 @@ export function RaceRoom({
                 ? `Waiting for ${theirName} to be ready.`
                 : 'Both of you say ready, and it starts together.'}
           </p>
-          <div className="rally-actions">
+          <div className="rally-actions" data-choice-row="ready">
             {lobby.youAreReady ? (
-              <button
-                ref={keys.ref(0)}
-                type="button"
-                className={`quiet${keys.selected === 0 ? ' is-selected' : ''}`}
-                onFocus={() => keys.choose(0)}
-                onClick={lobby.wait}
-              >
+              <button type="button" className="quiet" onClick={lobby.wait}>
                 not yet
               </button>
             ) : (
-              <button
-                ref={keys.ref(0)}
-                type="button"
-                className={keys.selected === 0 ? 'is-selected' : undefined}
-                onFocus={() => keys.choose(0)}
-                onClick={lobby.ready}
-              >
+              <button type="button" onClick={lobby.ready}>
                 ready
               </button>
             )}
-            <button
-              ref={keys.ref(1)}
-              type="button"
-              className={`quiet${keys.selected === 1 ? ' is-selected' : ''}`}
-              onFocus={() => keys.choose(1)}
-              onClick={onLeave}
-            >
+            <button type="button" className="quiet" onClick={onLeave}>
               {leaveLabel}
             </button>
           </div>
+          <p className="hollow-key-hint">
+            ← → choose <span>Enter confirm</span> Esc back
+          </p>
         </>
       )}
-    </>
+    </section>
   )
 }

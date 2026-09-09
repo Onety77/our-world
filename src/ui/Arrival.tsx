@@ -262,11 +262,20 @@ export function Arrival({ name }: { name: string }) {
       <div className="inner">
         <p className="arrival-who">for {name}</p>
         <h1>The Garden Between Us</h1>
+        {/*
+          One clause per place, in the order you swipe through them, and the
+          count at the front has to match. It said *five* and named a glasshouse
+          for a while after the Glasshouse had become the Lantern Walk — which
+          is the first sentence anybody reads here, describing a place that no
+          longer exists. If a place is ever added, moved or renamed, this line
+          is part of the job.
+        */}
         <p className="arrival-what">
-          Five places, and the two of you. A tree that keeps what you think, a
+          Six places, and the two of you. A tree that keeps what you think, a
           river that runs on what you have put by, a fire with something to
-          play, a sky wide enough to talk across, and a glasshouse built out of
-          every picture worth keeping.
+          play, a sky wide enough to talk across, a hill where the things you
+          are getting better at are living animals, and a lane hung with every
+          picture worth keeping.
         </p>
         <button type="button" ref={way} onClick={open}>
           come in

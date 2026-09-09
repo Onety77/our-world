@@ -42,7 +42,8 @@
     "archive": "npx --yes tsx scripts/archive-check.ts",
     "offline": "node scripts/offline-check.mjs",
     "sealed": "npx --yes tsx scripts/sealed-check.ts",
-    "colour": "npx --yes tsx scripts/colour-check.ts"
+    "colour": "npx --yes tsx scripts/colour-check.ts",
+    "fold": "npx --yes tsx scripts/fold-check.ts"
   },
   "dependencies": {
     "@fontsource/im-fell-english": "^5.3.0",
