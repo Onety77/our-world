@@ -8,7 +8,6 @@
  */
 
 import { SEED } from '@/config'
-import { localLearning } from '@/learning/localLearning'
 import { convert, money, zero } from './money'
 // where a thought's flower grows; the seed uses the same spiral real ones do
 import { thoughtSpot } from '@/sections/tree/layout'
@@ -918,8 +917,6 @@ export function createLocalDataLayer(me: UserId): LocalDataLayer {
 
   return {
     me,
-
-    ...localLearning(me),
 
     subscribe(listener) {
       listeners.add(listener)

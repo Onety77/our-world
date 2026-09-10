@@ -1,5 +1,5 @@
 /**
- * The garden — the shared meadow the six places stand in.
+ * The garden — the shared meadow the five places stand in.
  *
  * This is the home, not a menu of the sections. Each place is a real object
  * out on the grass with its own weather, water and light, and the camera
@@ -22,7 +22,6 @@ import { TreeLandmark } from './hub/landmarks/Tree'
 import { RiverLandmark } from './hub/landmarks/River'
 import { HollowLandmark } from './hub/landmarks/Hollow'
 import { StarsLandmark } from './hub/landmarks/Stars'
-import { ClearingLandmark } from './hub/landmarks/Clearing'
 import { LanternWalkLandmark } from './hub/landmarks/LanternWalk'
 import { Grass } from './Grass'
 import { Flowers } from './Flowers'
@@ -59,15 +58,14 @@ function LivingLandmark({ index, children }: { index: number; children: React.Re
 /*
   Positional, and it must stay in step with the order of SECTIONS.
 
-  Keep this array aligned with SECTIONS and the anchors in world/hub/layout.
-  The river remains at index 1 because its water is anchored there.
+  Appending is safe; inserting is not. See the note in world/hub/layout — the
+  index of a place is load-bearing in three files.
 */
 const LANDMARKS = [
   TreeLandmark,
   RiverLandmark,
   HollowLandmark,
   StarsLandmark,
-  ClearingLandmark,
   LanternWalkLandmark,
 ]
 

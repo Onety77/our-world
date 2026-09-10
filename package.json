@@ -8,8 +8,6 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "learning": "npx --yes tsx scripts/learning-check.ts",
-    "clearing": "node scripts/clearing-browser-check.mjs",
     "rules": "node scripts/rules.mjs",
     "rally": "npx --yes tsx scripts/rally-check.ts",
     "handling": "npx --yes tsx scripts/handling-check.ts",

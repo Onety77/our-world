@@ -92,7 +92,6 @@ const Admin = later(
     import('@/ui/Admin').then((m) => ({ default: m.Admin as ComponentType })),
 )
 import { Threshold } from '@/ui/Threshold'
-import { ClearingEntry } from '@/ui/ClearingEntry'
 import { usePlaying } from '@/systems/playing'
 import { useArrival } from '@/systems/arrival'
 import { takenOverNow, useTakenOver } from '@/systems/attention'
@@ -553,7 +552,6 @@ function Garden() {
       <Veil />
       <Places />
       <Threshold />
-      <ClearingEntry />
       <Overlay />
       <LetterReader />
       <Writing />

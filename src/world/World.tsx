@@ -290,7 +290,7 @@ function useShownWorld(): { entered: boolean; section: number } {
  * stands in is visible down the whole length of the aisle. A conservatory with
  * no sky above it would be a corridor.
  */
-const OPEN_AIR = new Set(['tree', 'river', 'clearing', 'lanterns'])
+const OPEN_AIR = new Set(['tree', 'river', 'lanterns'])
 
 /**
  * Which places lay their own ground, and so do not want the world's.

@@ -91,7 +91,7 @@ export interface SynthesisBus {
  * the only view with real weather in it. The rest are the insides of the four
  * places, by section id.
  */
-export type Place = 'garden' | 'tree' | 'river' | 'hollow' | 'stars' | 'clearing' | 'lanterns'
+export type Place = 'garden' | 'tree' | 'river' | 'hollow' | 'stars' | 'lanterns'
 
 /** Short physical events that belong to the world rather than to interface chrome. */
 export type WorldCue = 'root' | 'seal' | 'water' | 'glass' | 'ember' | 'paper'
@@ -291,12 +291,12 @@ const MIX: Record<string, Record<Place, number>> = {
   // The meadow's continuous wind and leaf bed stop at the threshold of the
   // enclosed/otherworldly places. Their own layers below must establish the
   // room; otherwise every one sounds like the garden at a different volume.
-  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0,    stars: 0,    clearing: .65, lanterns: 0.66 },
-  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0,    clearing: .7, lanterns: 0.92 },
-  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    clearing: 0, lanterns: 0 },
-  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 0.26, stars: 0,    clearing: 0, lanterns: 0 },
-  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  clearing: .03, lanterns: 0.05 },
-  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    clearing: .04, lanterns: 0.1 },
+  air:      { garden: 1,   tree: 1,    river: 0.5,  hollow: 0,    stars: 0,    lanterns: 0.66 },
+  leaves:   { garden: 1,   tree: 1.3,  river: 0.28, hollow: 0,    stars: 0,    lanterns: 0.92 },
+  water:    { garden: 0,   tree: 0,    river: 1,    hollow: 0,    stars: 0,    lanterns: 0 },
+  fire:     { garden: 0,   tree: 0,    river: 0,    hollow: 0.26, stars: 0,    lanterns: 0 },
+  room:     { garden: 0,   tree: 0.08, river: 0.14, hollow: 0.78, stars: 0.3,  lanterns: 0.05 },
+  shimmer:  { garden: 0,   tree: 0,    river: 0,    hollow: 0,    stars: 1,    lanterns: 0.1 },
 }
 
 /*
