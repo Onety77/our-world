@@ -397,8 +397,11 @@ measures the same either way is scenery, and this road was full of scenery.
 
 There are three. The Rootway closes around the car and derives its speed from
 walls and headlamps. **The Moonbreak** opens everything the other road closes:
-a pale raised causeway over black water, low edge stones passing in rhythm,
-wind-bent orchard trees, ruined arches and one moon held over the horizon.
+a raised causeway across a drowned garden at night — a moon with a road of
+light on the sea under it, mountains all the way round, towers, a glasshouse
+dome and broken aqueducts standing in the water, blossom in the orchard,
+stone arches with vines hanging from them, lilies and fireflies beside the road
+and a viaduct under the Sky Stair. See **The drowned garden, at night** below.
 **The Stormcrown** climbs out of both of them — cedars, a cloud you go into and
 come out above, and weather that is finally allowed to touch the car. The same
 `Track`, car, tyre model, controls, camera and ghost cross all three; only the
@@ -557,8 +560,62 @@ directions:
 from `Moonbreak.tsx` for one reason: everything in that file is built once into
 the road's chunks and never thinks again, and everything in this one has to be
 counted. A shark, two shoals and a couple of hundred grains of falling silt is
-a budget, and a budget wants a wall around it. Four extra draw calls, and the
-whole lot is switched off above the water rather than drawn at zero opacity.
+a budget, and a budget wants a wall around it. Five extra draw calls — the fifth
+is the moonlight coming down through the water — and the whole lot is switched
+off above the water rather than drawn at zero opacity.
+
+### The drowned garden, at night
+
+The Moonbreak used to read as an overcast evening over a lit swimming pool, and
+the reason was measurable: through the renderer's own ACES curve the old horizon
+came out `#8793aa`, the sea `#225769` — brighter than the sky over it — and the
+fog `#060e1d`, so everything far off faded to soot in front of a pale sky. Nothing
+had a lit side, the horizon was empty in every frame, and the only moving things
+above the water were the car and the lanterns.
+
+What it is now, and where each piece lives:
+
+- **A night chosen through the tone curve.** `moonlight.ts` holds the moon and one
+  `nightSky` function that the sky, the sea and the far shore all ask, so the sea
+  meets the horizon without a line. The colours were worked backwards from the
+  ones wanted on screen, because ACES crushes darks — a linear 0.01 is nearly
+  black.
+- **The moon lights things.** `uMoonDir` and `uMoonColor` in the shared light block:
+  a hard lambert term and a glint off anything wet. Black on the other three
+  roads, and the shader skips it when it is. Faded out with `deep.at`.
+- **The sea is a mirror.** Five travelling waves in metres, the sky reflected by
+  Fresnel, and a road of broken light across it toward the moon. Carried with the
+  camera like the sky, so its edge is always two kilometres off.
+- **Tidecut and the Moonhook are cuttings.** Both dip about two and a half metres
+  below the sea — the drop off the span and the Fall carry them there — and
+  nothing held the sea back: the camera went through the water plane, the light
+  turned green and the Drowned Mile's fish swam in the open sky. They are cut
+  between sea walls now (`addSeaWall`), laid in courses level with the sea while the
+  road falls away beneath them, with the sea spilling over in places. The water is
+  cut out of the sea plane by a small picture of each cutting (`buildCutMask`), and
+  `Race` only applies the water's light inside `MOONBREAK.deep`. The physics has
+  always stopped the car at `wallAt`; here it finally is a wall.
+- **The far shore** (`Moonshore.tsx`). Two ranges of mountains carried with the
+  camera and open to the sea under the moon; and fixed in the world, towers, a
+  drowned glasshouse dome, colonnades, broken aqueducts, wooded islands and one
+  great tree — from a fixed seed, because the horizon is part of what you learn.
+  They dissolve into the sky rather than the fog, so a far one is paler than a near
+  one.
+- **Beside the road** (`moonGarden.ts`). Orchard trees of leaf cards, in blossom in
+  the orchard, standing in the sea rather than floating at road height; ruined
+  stone arches with vines; weathered kerb posts; the stones the physics has always
+  struck you with, finally drawn where they are; a viaduct of piers and vaults under
+  the Sky Stair instead of a thirty-metre wall; and colonnades and steps on the
+  terraces at both ends.
+- **Alive** (`Moonlife.tsx`). Lilies on the sea beside the low causeway, one in five
+  in flower with a faint light of its own; fireflies over the orchard, the reeds and
+  the terraces; petals falling in the orchard. Thinned on the lower tiers.
+- **Under the water.** Shafts of moonlight falling slantwise through it, and the
+  survey stones rebuilt as columns of the drowned garden, some snapped on a slant.
+
+Measured on a phone-portrait frame (390×844): 58–60 thousand triangles and 34–38
+draw calls across the start, the orchard and Tidecut. The heaviest single thing is
+the lily pads, at 9.4 thousand.
 
 ## The car is tuned from the control room, not from here
 

@@ -291,6 +291,13 @@ the river.**
   plausible mid-grey is therefore *nothing*, which is exactly how the Rootway
   spent an afternoon rendering as a black rectangle with a car in it. Pick
   these against a render, never against a swatch.
+- **And a night is chosen through the tone curve.** The same ACES that makes a
+  plausible grey into nothing crushes every dark value: a linear 0.01 comes out
+  nearly black. So the Moonbreak's sky had to be a pale lavender to be visible at
+  all, its fog tone-mapped to soot, and the whole road read as an overcast
+  evening. Work the colours you want *on screen* backwards through the curve —
+  `moonlight.ts` records the three the night is built on — and a navy sky with a
+  visible horizon costs nothing.
 - **`computeVertexNormals` averages every face meeting at a vertex**, and two
   of the things you naturally want to build break on it. A flat end cap
   sharing its rim with the cylinder wall comes out as one smooth curve, so
@@ -1587,9 +1594,19 @@ handling changed.
       stones, two shoals and something much larger crossing overhead, and the
       mirror of the dive on the way out. It keeps the driving of the two bands
       it replaced — what changes is where you are, not what you are doing. The
-      whole of it is a move of the shared light block plus four draw calls, and
+      whole of it is a move of the shared light block plus five draw calls, and
       it is the cheapest kilometre on either road because water takes the fog
       in to seventy-eight metres
+- [x] **The Moonbreak at night.** It read as dusk over a lit swimming pool with
+      an empty horizon in every frame. Now a real night — a moon that lights
+      things, stars and a galaxy, a sea that mirrors the sky with a road of light
+      on it — a far shore of mountains and drowned towers, domes and aqueducts,
+      blossom trees, stone arches, lilies, fireflies, a viaduct under the Sky
+      Stair, and moonlight falling through the Drowned Mile. And two real bugs:
+      Tidecut and the Moonhook both ran two and a half metres under the sea with
+      nothing holding it back (they are sea-walled cuttings now), and the stones
+      the physics strikes you with were never drawn. No change to the road, the
+      lanes or the corners; `npm run moonbreak` is unchanged
 - [x] **The Glasshouse, the fifth place.** An iron conservatory built out of
       every picture the two of you keep: one instanced quad per memory in its
       own average colour for the whole building, the real photograph for the

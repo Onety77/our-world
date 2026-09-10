@@ -40,6 +40,62 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 10 Sep · Claude · the Moonbreak, at night
+
+The owner's ask: the level looked plain, make the world feel full — and do not
+touch the track, the lanes or the corners. None of those moved. `npm run
+moonbreak` passes unchanged, and `npm run rally` imports none of the files below.
+The whole story is in the ember-rally README under **The drowned garden, at
+night**; this is the index.
+
+**Two real bugs, both found by rendering the road, not by any check.**
+
+- **Tidecut and the Moonhook are below the sea.** The drop off the span and the
+  Fall both put the road at −3.6 m against a water plane at −1.08, and `Race`
+  keyed the water's light off the road's height alone. Every run, both hard
+  corners turned green for a few seconds, the camera went through the water plane,
+  the car sat under a sheet of translucent sea and the Drowned Mile's shoals swam
+  in the open sky. They are sea-walled cuttings now (`addSeaWall`, `buildCutMask`
+  in `Moonbreak.tsx`), and the depth drive in `Race` and `dev-span` only applies
+  inside `MOONBREAK.deep`. The Moonbreak soundscape reads `deep.at`, so its false
+  plunge at Tidecut is gone with it.
+- **`track.boulders` were never drawn on the Moonbreak.** The physics strikes you
+  with them; now you can see them (`addSeaStone`).
+
+Also the underwater moon spot was pinned to a world point a kilometre from the
+Drowned Mile, so it never appeared. It is camera-relative now.
+
+**What moved**
+
+- `materials.ts` — `uMoonDir`/`uMoonColor` in the shared light block. Black, and
+  skipped, on every other road.
+- `Race.tsx` — `ABOVE` retuned for a night (ambient `#7e889c`, fog `#2a3244`,
+  veins turned down, moon `#b8c6e0`), and the depth gate above.
+- `moonlight.ts` (new) — the moon, `nightSky`, a noise chunk. Its own file so the
+  world and the far shore do not import each other.
+- `Moonbreak.tsx` — sky, moon, carried sea with the moon path, sea walls, spills,
+  and all the placement calls. `Moonshore.tsx` (new) — ranges and drowned ruins.
+  `moonGarden.ts` (new) — trees, arches, posts, sea stones, viaduct, terraces,
+  sunken columns. `Moonlife.tsx` (new) — lilies, fireflies, petals.
+  `Deepwater.tsx` — shafts of moonlight.
+
+**For Codex.** Nothing in `systems/moonbreak.ts` or `MoonbreakSound.tsx` was
+touched. Two things there might want sound now: the sea spilling over the walls in
+both cuttings, and the viaduct's vaults going past under the Stair. The arch on the
+span is still the old light hoop, so its arch-pass event still lines up.
+
+**Measured**
+
+- Through ACES at 0.98, the old palette: horizon `#8793aa`, sea `#225769`, fog
+  `#060e1d`.
+- Phone portrait, 390×844, at the start, the orchard and Tidecut: 58–60k
+  triangles and 34–38 draw calls. Heaviest single thing: the lily pads, 9.4k.
+- Typecheck, the 143-shader sweep, `npm run moonbreak` and the production build
+  pass. `npm run rally` prints three flags — the Drowned Mile at 50.2 s against a
+  26–42 s target, its mouths at 1206/2119 against the tube's 1233/2102, and the
+  Stormcrown spirit at 241 s — and since that script imports only physics, tuning,
+  track, spirit, model and session, all three predate this.
+
 ## 8 Sep · Claude · the emoji board answers the mouse now
 
 Three things were wrong with it, and the third one hid the other two.

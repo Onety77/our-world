@@ -12,7 +12,8 @@
  * never thinks again. Everything in this one **moves**, and moving things are
  * the ones that have to be counted: a shark, two shoals and a few hundred
  * grains of falling silt is a budget, and a budget wants a wall around it. The
- * whole of the Drowned Mile is four extra draw calls.
+ * whole of the Drowned Mile is five extra draw calls, the fifth being the
+ * moonlight coming down through it.
  *
  * It is also the cheapest kilometre on either road, which is not an accident.
  * Water takes the fog from 62–235 metres down to 15–95, and the far end of a
@@ -33,6 +34,7 @@ import {
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
+  PlaneGeometry,
   ShaderMaterial,
   Sphere,
   Vector3,
@@ -40,6 +42,7 @@ import {
 import { basisAt, roadPoint } from './geometry'
 import { MOONBREAK, WATER_Y, roadAt, vergeWidth, type Track } from './track'
 import { deep } from './depth'
+import { MOON_DIR } from './moonlight'
 
 /**
  * The same fog the rest of the game uses, for the three things here that draw
@@ -507,6 +510,107 @@ function snowCloud(count: number): BufferGeometry {
 }
 
 /**
+ * The way light falls through the water: from the moon, bent steeper by the
+ * surface. Real water would take a moon thirteen degrees up to about forty-seven
+ * from the vertical; forty reads better through a curved pane of glass.
+ */
+const FALL = new Vector3(-MOON_DIR.x, 0, -MOON_DIR.z).normalize().multiplyScalar(Math.tan(0.7)).setY(-1).normalize()
+
+/**
+ * Shafts of moonlight, down through the water.
+ *
+ * ---------------------------------------------------------------------------
+ * The surface overhead is drawn and the glass catches caustics, but between the
+ * two there was nothing — and the one thing that says *there is a great deal of
+ * water above you, and a sky above that* is light hanging in it. So a hundred
+ * or so long quads, each turned about its own axis to face the camera, leaning
+ * along the fall of the light, widening as they go down and fading out before
+ * the floor. Some of them come down straight across the tube and over the road,
+ * which is the moment it lands.
+ *
+ * Additive and quiet, and faded into the murk with the same numbers as
+ * everything else here, because a shaft that stays bright to the vanishing point
+ * is a searchlight rather than moonlight.
+ * ---------------------------------------------------------------------------
+ */
+function buildShafts(track: Track): InstancedBufferGeometry {
+  const hash = (a: number, b: number, c: number) => {
+    const value = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453
+    return value - Math.floor(value)
+  }
+  const base = new PlaneGeometry(1, 1)
+  const tops: number[] = []
+  const shape: number[] = []
+  const point = new Vector3()
+  const { in: from, out: to } = MOONBREAK.deep.under
+  for (let s = from + 30, k = 0; s < to - 30; s += 16, k++) {
+    const road = roadAt(track, s)
+    const basis = basisAt(road, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
+    for (let j = 0; j < 2; j++) {
+      const drop = WATER_Y - (road.y - 1.5)
+      if (drop < 4) continue
+      roadPoint(road, (hash(k, j, 1) * 2 - 1) * 16, 0, point, basis)
+      const length = drop / -FALL.y
+      // Started up-light of where it is placed, so it lands there.
+      tops.push(point.x - FALL.x * length * 0.5, WATER_Y - 0.3, point.z - FALL.z * length * 0.5)
+      shape.push(length, 2 + hash(k, j, 2) * 4.5, hash(k, j, 3))
+    }
+  }
+  const geometry = new InstancedBufferGeometry()
+  geometry.index = base.index
+  geometry.setAttribute('position', base.getAttribute('position'))
+  geometry.setAttribute('uv', base.getAttribute('uv'))
+  geometry.setAttribute('iTop', new InstancedBufferAttribute(new Float32Array(tops), 3))
+  geometry.setAttribute('iShape', new InstancedBufferAttribute(new Float32Array(shape), 3))
+  geometry.instanceCount = tops.length / 3
+  geometry.boundingSphere = new Sphere(new Vector3(), 1e5)
+  base.dispose()
+  return geometry
+}
+
+const SHAFT_VERT = /* glsl */ `
+  attribute vec3 iTop;
+  attribute vec3 iShape;
+  uniform vec3 uFall;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  varying float vPhase;
+  void main() {
+    vUv = uv;
+    vPhase = iShape.z;
+    vec3 toCamera = normalize(cameraPosition - iTop);
+    vec3 side = normalize(cross(uFall, toCamera));
+    float down = 1.0 - uv.y;
+    vec3 world = iTop + uFall * (down * iShape.x) + side * ((uv.x - 0.5) * iShape.y * (1.0 + down * 0.8));
+    vWorld = world;
+    gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
+  }
+`
+
+const SHAFT_FRAG = /* glsl */ `
+  precision highp float;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  varying float vPhase;
+  uniform float uTime;
+  uniform float uDeep;
+  uniform vec3 uFogColor;
+  uniform float uFogNear;
+  uniform float uFogFar;
+  void main() {
+    float across = abs(vUv.x - 0.5) * 2.0;
+    float body = (1.0 - smoothstep(0.15, 1.0, across)) * smoothstep(0.0, 0.45, vUv.y) * (0.35 + 0.65 * vUv.y);
+    float flicker = 0.55 + 0.45 * sin(uTime * 0.7 + vPhase * 6.28) * sin(uTime * 0.43 + vPhase * 3.1);
+    float fog = smoothstep(uFogNear, uFogFar * 1.3, distance(cameraPosition, vWorld));
+    float light = body * flicker * (1.0 - fog) * uDeep;
+    if (light < 0.004) discard;
+    gl_FragColor = vec4(vec3(0.32, 0.58, 0.60) * light * 0.12, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`
+
+/**
  * The Drowned Mile's moving half.
  *
  * `at` is where the camera is, handed in once a frame by the race so nothing
@@ -536,6 +640,27 @@ export function Deepwater({ track }: { track: Track }) {
   */
   const shark = useMemo(() => shoalOf(1, 0x2b7, { small: 1.05, large: 1.05, low: 0, high: 0, long: 3.6, wide: 0 }), [])
   const snow = useMemo(() => snowCloud(190), [])
+  const shafts = useMemo(() => buildShafts(track), [track])
+  const shaftMaterial = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: SHAFT_VERT,
+        fragmentShader: SHAFT_FRAG,
+        side: DoubleSide,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        uniforms: {
+          uTime: { value: 0 },
+          uDeep: { value: 0 },
+          uFall: { value: FALL },
+          uFogColor: { value: new Color('#07242c') },
+          uFogNear: { value: 15 },
+          uFogFar: { value: 95 },
+        },
+      }),
+    [],
+  )
 
   const glassMaterial = useMemo(
     () =>
@@ -610,13 +735,15 @@ export function Deepwater({ track }: { track: Track }) {
       shoalB.dispose()
       shark.dispose()
       snow.dispose()
+      shafts.dispose()
       glassMaterial.dispose()
       materialA.dispose()
       materialB.dispose()
       materialShark.dispose()
       snowMaterial.dispose()
+      shaftMaterial.dispose()
     },
-    [glass, shoalA, shoalB, shark, snow, glassMaterial, materialA, materialB, materialShark, snowMaterial],
+    [glass, shoalA, shoalB, shark, snow, shafts, glassMaterial, materialA, materialB, materialShark, snowMaterial, shaftMaterial],
   )
 
   /**
@@ -653,6 +780,7 @@ export function Deepwater({ track }: { track: Track }) {
   const shoalMeshA = useRef<Mesh>(null)
   const shoalMeshB = useRef<Mesh>(null)
   const sharkMesh = useRef<Mesh>(null)
+  const shaftMesh = useRef<Mesh>(null)
   const glassMeshes = useRef<Mesh[]>([])
 
   /*
@@ -698,7 +826,7 @@ export function Deepwater({ track }: { track: Track }) {
       swim(state, rawDelta)
     } catch (error) {
       gaveUp.current = true
-      for (const mesh of [...glassMeshes.current, shoalMeshA.current, shoalMeshB.current, sharkMesh.current]) {
+      for (const mesh of [...glassMeshes.current, shoalMeshA.current, shoalMeshB.current, sharkMesh.current, shaftMesh.current]) {
         if (mesh) mesh.visible = false
       }
       console.error('The Drowned Mile stopped moving, and the road carried on:', error)
@@ -722,12 +850,15 @@ export function Deepwater({ track }: { track: Track }) {
     wear(materialA)
     wear(materialB)
     wear(materialShark)
+    wear(shaftMaterial)
 
     glassMaterial.uniforms.uTime.value = t
     glassMaterial.uniforms.uDeep.value = at
     snowMaterial.uniforms.uTime.value = t
     snowMaterial.uniforms.uDeep.value = at
     snowMaterial.uniforms.uAt.value.copy(state.camera.position)
+    shaftMaterial.uniforms.uTime.value = t
+    shaftMaterial.uniforms.uDeep.value = at
 
     if (!warmed.current) {
       warmed.current = true
@@ -749,6 +880,7 @@ export function Deepwater({ track }: { track: Track }) {
     if (shoalMeshA.current) shoalMeshA.current.visible = showing
     if (shoalMeshB.current) shoalMeshB.current.visible = showing
     if (sharkMesh.current) sharkMesh.current.visible = showing
+    if (shaftMesh.current) shaftMesh.current.visible = showing
     if (!showing) return
 
     const place = (
@@ -815,6 +947,7 @@ export function Deepwater({ track }: { track: Track }) {
       <mesh ref={shoalMeshB} geometry={shoalB} material={materialB} frustumCulled={false} />
       <mesh ref={sharkMesh} geometry={shark} material={materialShark} frustumCulled={false} />
       <points geometry={snow} material={snowMaterial} frustumCulled={false} renderOrder={3} />
+      <mesh ref={shaftMesh} geometry={shafts} material={shaftMaterial} frustumCulled={false} renderOrder={3} />
     </>
   )
 }

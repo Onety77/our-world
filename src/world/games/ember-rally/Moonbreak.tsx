@@ -14,11 +14,15 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  DataTexture,
   DoubleSide,
+  LinearFilter,
+  RedFormat,
   ShaderMaterial,
   Mesh,
   Sphere,
   Vector3,
+  Vector4,
 } from 'three'
 import { random } from './model'
 import { basisAt, roadPoint, type RoadBasis, type TunnelChunk } from './geometry'
@@ -34,6 +38,22 @@ import {
 import { Deepwater } from './Deepwater'
 import { deep } from './depth'
 import { MoonbreakSound } from './MoonbreakSound'
+import { Moonshore } from './Moonshore'
+import { Moonlife } from './Moonlife'
+import { MOON, MOON_DIR, NIGHT, NOISE } from './moonlight'
+import {
+  DECK as VIADUCT_DECK,
+  addKerbPost,
+  addOrchardTree,
+  addRuinedArch,
+  addSeaStone,
+  addSunkenColumn,
+  addTerrace,
+  addViaduct,
+  faceToward,
+  viaductSpans,
+  wallEdge,
+} from './moonGarden'
 
 
 
@@ -75,7 +95,6 @@ const DECK = new Color('#584a45')
 const DECK_WORN = new Color('#766861')
 /** Between the boards: the drop, and the water a long way down it. */
 const DECK_GAP = new Color('#070b0e')
-const LEAVES = [new Color('#344d48'), new Color('#485546'), new Color('#5a4b57')]
 /** Down in the Drowned Mile, where the only green left is the kind that likes it. */
 const KELP = new Color('#3c6b52')
 const KELP_DARK = new Color('#26493f')
@@ -285,38 +304,6 @@ function addTube(mesh: CourseMesh, path: Vector3[], radius: number, color: Color
   }
 }
 
-function addCrown(mesh: CourseMesh, at: Vector3, radius: number, seed: number) {
-  const rings = 3
-  const sides = 7
-  const base = mesh.count
-  const color = LEAVES[seed % LEAVES.length]
-  for (let i = 0; i <= rings; i++) {
-    const phi = (i / rings) * Math.PI
-    for (let k = 0; k < sides; k++) {
-      const angle = (k / sides) * Math.PI * 2
-      const r = radius * (0.76 + hash3(seed, i, k) * 0.42)
-      tint.copy(color).multiplyScalar(0.78 + hash3(seed + 7, i, k) * 0.34)
-      point.set(
-        at.x + Math.sin(phi) * Math.cos(angle) * r,
-        at.y + Math.cos(phi) * r * 0.7,
-        at.z + Math.sin(phi) * Math.sin(angle) * r,
-      )
-      mesh.vertex(point, tint, 0.12, 1)
-    }
-  }
-  for (let i = 0; i < rings; i++) {
-    for (let k = 0; k < sides; k++) {
-      const next = (k + 1) % sides
-      mesh.quad(
-        base + i * sides + k,
-        base + i * sides + next,
-        base + (i + 1) * sides + next,
-        base + (i + 1) * sides + k,
-      )
-    }
-  }
-}
-
 function addArch(mesh: CourseMesh, track: Track, s: number) {
   const road = roadAt(track, s)
   const basis = basisAt(road, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
@@ -338,27 +325,6 @@ function addArch(mesh: CourseMesh, track: Track, s: number) {
       : p.clone().addScaledVector(new Vector3(basis.fx, basis.fy, basis.fz), -0.45),
   )
   addTube(mesh, second, 0.08, BARK_PALE)
-}
-
-function addTree(mesh: CourseMesh, track: Track, s: number, side: number, seed: number) {
-  const road = roadAt(track, s)
-  const basis = basisAt(road, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
-  const n = side * (road.width + vergeWidth(road.room) + 1.6 + hash3(seed, 2, 1) * 3.8)
-  const height = 3.8 + hash3(seed, 4, 5) * 3.2
-  const lean = -side * (0.45 + hash3(seed, 7, 3) * 0.75)
-  const trunk = Array.from({ length: 5 }, (_, index) => {
-    const t = index / 4
-    return roadPoint(
-      road,
-      n + lean * t * t,
-      0.05 + height * t,
-      new Vector3(),
-      basis,
-    ).addScaledVector(new Vector3(basis.fx, basis.fy, basis.fz), Math.sin(t * 2.7 + seed) * 0.35)
-  })
-  addTube(mesh, trunk, 0.18 + height * 0.018, BARK)
-  const crown = trunk.at(-1)!.clone().addScaledVector(new Vector3(basis.rx, basis.ry, basis.rz), -side * 0.45)
-  addCrown(mesh, crown, 1.55 + hash3(seed, 8, 9) * 1.25, seed)
 }
 
 /** Small drowned reed colonies: motionless geometry shaped as if wind bent it. */
@@ -634,12 +600,298 @@ function addSpanRig(
   }
 }
 
+/*
+  =============================================================================
+  THE SEA WALLS — Tidecut and the Moonhook
+  =============================================================================
+
+  **Both hard corners are below the sea.** Not by design: the drop off the
+  Swaying Span takes Tidecut about two and a half metres under the water, and
+  the Fall carries the road into the Moonhook the same distance down, before
+  each climbs back out. Nothing held the sea back, so the water plane lay
+  across the road a metre above the bonnet, the camera went through it, and
+  the light turned green for a few seconds on exactly the two corners that most
+  need you to see them.
+
+  The road is not changing, so the world has to make sense of it — and there
+  is a very old answer to a road that runs below the water beside it: **a
+  cutting between sea walls.** Dressed stone either side, a hand's breadth
+  higher than the sea, laid in level courses while the road falls away beneath
+  them, so the deepest part of the corner has the tallest wall. It is also the
+  first time the name "Tidecut" has been true.
+
+  It is honest to the car as well. The physics has always stopped the car at
+  `wallAt`, which everywhere else on the causeway is an edge with nothing past
+  it. Here it is finally a wall.
+
+  The water gets out of the way in `MoonbreakWorld` — see `buildCutMask`.
+  =============================================================================
+*/
+
+/** The top of a sea wall, in world metres: just above the water it holds. */
+const SEA_WALL_TOP = WATER_Y + 0.42
+/** One course of stone. Level in the world, however the road falls under it. */
+const COURSE = 0.52
+/** Where the stone face stands, just past the edge the car is stopped at. */
+const WALL_FACE = 0.15
+/** How far the wall runs back over the sea, face to back. */
+const WALL_DEPTH = 1.3
+const WALL_STONES = [new Color('#6f736c'), new Color('#80837a'), new Color('#63685f')]
+const WALL_MORTAR = new Color('#1b2023')
+const WALL_CAP = new Color('#8b8d83')
+const WALL_WEED = new Color('#17231f')
+
+export interface SeaCut {
+  from: number
+  to: number
+}
+
+/**
+ * Where the road runs below the sea outside the Drowned Mile.
+ *
+ * Measured off the road rather than written down, for the reason `MOONBREAK`
+ * is: a length changed anywhere upstream moves these, and a wall that stays
+ * where a corner used to be is worse than no wall.
+ */
+export function seaCuts(track: Track): SeaCut[] {
+  const cuts: SeaCut[] = []
+  const road = emptyRoad()
+  let from = -1
+  for (let s = 0; s <= track.length; s += 2) {
+    const drowned = s > MOONBREAK.deep.from - 20 && s < MOONBREAK.deep.to + 20
+    const low = !drowned && roadAt(track, s, road).y < WATER_Y + 0.45
+    if (low && from < 0) from = s
+    if (!low && from >= 0) {
+      cuts.push({ from, to: s })
+      from = -1
+    }
+  }
+  if (from >= 0) cuts.push({ from, to: track.length })
+  return cuts
+}
+
+function addSeaWall(
+  meshes: CourseMesh[],
+  track: Track,
+  chunkFor: (s: number) => number,
+  cut: SeaCut,
+) {
+  const road = emptyRoad()
+  const basis: RoadBasis = { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 }
+  const from = cut.from - 18
+  const to = cut.to + 18
+  const top = SEA_WALL_TOP
+  const toward = new Vector3()
+  const up = new Vector3(0, 1, 0)
+
+  /** A point `out` metres past the car's edge on `side`, at a height given in the world. */
+  const at = (s: number, side: number, out: number, y: number) => {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    roadPoint(road, side * (wallEdge(road) + out), 0, point, basis)
+    return new Vector3(point.x, y, point.z)
+  }
+  /** How high the ground is at the foot of the wall. */
+  const groundAt = (s: number, side: number) => {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    return roadPoint(road, side * (wallEdge(road) + WALL_FACE), 0, point, basis).y
+  }
+  /** Across the road toward its middle, from the wall on `side`. */
+  const inward = (s: number, side: number) => {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    return toward.set(-side * basis.rx, 0, -side * basis.rz).clone()
+  }
+
+  for (const side of [-1, 1]) {
+    /*
+      The dark behind the stones, the back of the wall down into the sea, and a
+      wet gutter along its foot. Everything the blocks below are laid against.
+    */
+    for (let s = from; s < to; s += RING) {
+      const s1 = Math.min(to, s + RING)
+      const g0 = groundAt(s, side)
+      const g1 = groundAt(s1, side)
+      if (top < g0 - 0.2 && top < g1 - 0.2) continue
+      const mesh = meshes[chunkFor(s)]
+      const face = inward(s, side)
+      const back = face.clone().multiplyScalar(-1)
+      faceToward(
+        mesh,
+        [
+          at(s, side, WALL_FACE + 0.05, g0 - 0.3),
+          at(s1, side, WALL_FACE + 0.05, g1 - 0.3),
+          at(s1, side, WALL_FACE + 0.05, top),
+          at(s, side, WALL_FACE + 0.05, top),
+        ],
+        face,
+        WALL_MORTAR,
+        0.3,
+        0.2,
+      )
+      faceToward(
+        mesh,
+        [
+          at(s, side, 0, g0 + 0.09),
+          at(s1, side, 0, g1 + 0.09),
+          at(s1, side, WALL_FACE + 0.06, g1 + 0.09),
+          at(s, side, WALL_FACE + 0.06, g0 + 0.09),
+        ],
+        up,
+        tint.copy(WALL_WEED).multiplyScalar(1.5),
+        0.95,
+        0.2,
+      )
+      faceToward(
+        mesh,
+        [
+          at(s, side, WALL_FACE + WALL_DEPTH, WATER_Y + 0.26),
+          at(s1, side, WALL_FACE + WALL_DEPTH, WATER_Y + 0.26),
+          at(s1, side, WALL_FACE + WALL_DEPTH, top - 0.16),
+          at(s, side, WALL_FACE + WALL_DEPTH, top - 0.16),
+        ],
+        back,
+        tint.copy(WALL_STONES[2]).multiplyScalar(0.72),
+        0.4,
+        0.2,
+      )
+      // Below the tideline it is weed, and it leans out a little into the sea.
+      faceToward(
+        mesh,
+        [
+          at(s, side, WALL_FACE + WALL_DEPTH + 0.3, WATER_Y - 1.8),
+          at(s1, side, WALL_FACE + WALL_DEPTH + 0.3, WATER_Y - 1.8),
+          at(s1, side, WALL_FACE + WALL_DEPTH, WATER_Y + 0.26),
+          at(s, side, WALL_FACE + WALL_DEPTH, WATER_Y + 0.26),
+        ],
+        back,
+        WALL_WEED,
+        0.8,
+        0.2,
+      )
+    }
+
+    /*
+      The stones, in courses that are level in the world.
+
+      The wall's top is a fixed height — it is holding back a sea, which is
+      flat — so the courses are counted down from it rather than up from a
+      road that is falling away. Where the road drops under a course the stone
+      simply goes on down into the ground, which is how a real wall on a slope
+      is built and why its lowest course is always a wedge.
+    */
+    for (let course = 0; course * COURSE < top - WATER_Y + 4; course++) {
+      const high = top - course * COURSE
+      const low = high - COURSE
+      let s = from - hash3(course, side, 1) * 1.4
+      let index = 0
+      while (s < to) {
+        const length = 1.05 + hash3(course, index, side + 3) * 0.8
+        const sA = Math.max(from, s)
+        const sB = Math.min(to, s + length)
+        s += length
+        index++
+        if (sB - sA < 0.3) continue
+        const gA = groundAt(sA, side) - 0.25
+        const gB = groundAt(sB, side) - 0.25
+        if (high <= gA && high <= gB) continue
+        const joint = 0.035
+        const bottomA = Math.min(high - joint * 3, Math.max(low + joint, gA))
+        const bottomB = Math.min(high - joint * 3, Math.max(low + joint, gB))
+        const pick = Math.floor(hash3(course * 7 + index, side, 11) * WALL_STONES.length)
+        tint.copy(WALL_STONES[pick]).multiplyScalar(0.84 + hash3(index, course, side * 5) * 0.26)
+        // The lowest stones stay wet where the spill runs down to the road.
+        const wetFoot = Math.max(0, 1 - (low - Math.min(gA, gB)) / 1.2)
+        tint.lerp(WALL_WEED, wetFoot * 0.35)
+        const mid = (sA + sB) / 2
+        faceToward(
+          meshes[chunkFor(mid)],
+          [
+            at(sA + joint, side, WALL_FACE, bottomA),
+            at(sB - joint, side, WALL_FACE, bottomB),
+            at(sB - joint, side, WALL_FACE, high - joint),
+            at(sA + joint, side, WALL_FACE, high - joint),
+          ],
+          inward(mid, side),
+          tint,
+          0.2 + wetFoot * 0.45,
+          0.22,
+        )
+      }
+    }
+
+    // And the capstones, each its own slab, with a lip the headlamps can find.
+    let s = from
+    let stone = 0
+    while (s < to) {
+      const length = 0.85 + hash3(stone, side, 21) * 0.45
+      const sA = s
+      const sB = Math.min(to, s + length)
+      s += length
+      stone++
+      if (groundAt(sA, side) > top + 0.35 && groundAt(sB, side) > top + 0.35) continue
+      const y = top + (hash3(stone, side, 23) - 0.5) * 0.05
+      const joint = 0.03
+      const mid = (sA + sB) / 2
+      const mesh = meshes[chunkFor(mid)]
+      const colour = tint
+        .copy(WALL_CAP)
+        .lerp(MOSS, hash3(stone, side, 29) * 0.55)
+        .multiplyScalar(0.85 + hash3(stone, 2, side) * 0.2)
+        .clone()
+      const face = inward(mid, side)
+      faceToward(
+        mesh,
+        [
+          at(sA + joint, side, WALL_FACE - 0.06, y),
+          at(sB - joint, side, WALL_FACE - 0.06, y),
+          at(sB - joint, side, WALL_FACE + WALL_DEPTH + 0.06, y),
+          at(sA + joint, side, WALL_FACE + WALL_DEPTH + 0.06, y),
+        ],
+        up,
+        colour,
+        0.25,
+        0.22,
+      )
+      faceToward(
+        mesh,
+        [
+          at(sA + joint, side, WALL_FACE - 0.06, y - 0.2),
+          at(sB - joint, side, WALL_FACE - 0.06, y - 0.2),
+          at(sB - joint, side, WALL_FACE - 0.06, y),
+          at(sA + joint, side, WALL_FACE - 0.06, y),
+        ],
+        face,
+        colour.clone().multiplyScalar(0.8),
+        0.25,
+        0.22,
+      )
+      faceToward(
+        mesh,
+        [
+          at(sA + joint, side, WALL_FACE + WALL_DEPTH + 0.06, y - 0.2),
+          at(sB - joint, side, WALL_FACE + WALL_DEPTH + 0.06, y - 0.2),
+          at(sB - joint, side, WALL_FACE + WALL_DEPTH + 0.06, y),
+          at(sA + joint, side, WALL_FACE + WALL_DEPTH + 0.06, y),
+        ],
+        face.clone().multiplyScalar(-1),
+        colour.clone().multiplyScalar(0.7),
+        0.25,
+        0.22,
+      )
+    }
+  }
+}
+
 /** The causeway in the same chunk format the race already knows how to cull. */
 export function buildMoonbreak(track: Track): TunnelChunk[] {
   const rings = Math.floor(track.length / RING) + 1
   const chunkCount = Math.ceil(track.length / CHUNK)
   const meshes = Array.from({ length: chunkCount }, () => new CourseMesh())
   const spans: { from: number; to: number }[] = []
+  const viaducts = viaductSpans(track)
+  const onViaduct = (s: number) => viaducts.some((span) => s >= span.from && s <= span.to)
   const road = emptyRoad()
   const basis: RoadBasis = { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 }
 
@@ -687,7 +939,14 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
         kerb rather than growing a wall upward through the sea.
         =====================================================================
       */
-      const flank = Math.min(-1.15, WATER_Y - road.y - 0.8)
+      /*
+        Except where it is high enough to stand on arches. A thirty-metre
+        wall down to the sea was right about holding the road up and wrong
+        about everything else — it read as a dam — so up the Sky Stair the
+        flank stops at the depth of the deck and `addViaduct` puts piers and
+        vaults under it.
+      */
+      const flank = onViaduct(s) ? -VIADUCT_DECK : Math.min(-1.15, WATER_Y - road.y - 0.8)
       const heights = [
         flank, 0.08, 0.035, 0.045, 0.055, 0.064, 0.07,
         0.064, 0.055, 0.045, 0.035, 0.08, flank,
@@ -777,53 +1036,61 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
   addSpanRig(meshes, track, chunkFor)
   addSpanDeck(meshes, track, chunkFor)
 
+  const cuts = seaCuts(track)
+  for (const cut of cuts) addSeaWall(meshes, track, chunkFor, cut)
+  /** Inside a sea cutting, where nothing that stands on the causeway's verge belongs. */
+  const inCut = (s: number, pad: number) => cuts.some((cut) => s > cut.from - pad && s < cut.to + pad)
+  for (const span of viaducts) addViaduct(meshes, track, chunkFor, span)
+  const lastArch = MOONBREAK.arches[MOONBREAK.arches.length - 1]
+  addTerrace(meshes, track, chunkFor, 0, 96)
+  addTerrace(meshes, track, chunkFor, lastArch + 6, track.length - 8)
+  const onTerrace = (s: number) => s < 102 || s > lastArch
+
   // Low pale stones mark the drop without turning the high road into a modern
   // guardrail. Their rhythm is what makes acceleration visible in open space.
   for (let s = 26; s < track.finishAt - 24; s += 15) {
-    const at = roadAt(track, s)
-    const frame = basisAt(at, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
     /*
       Not on the span. These are the causeway's kerb stones, and a bridge made
       of rope and boards has no business having cut stone bolted along it — the
       rope rail in addSpanRig is what marks that edge.
     */
     if (s > MOONBREAK.span.from - 6 && s < MOONBREAK.span.to + 6) continue
+    // Nor in the cuttings, where the sea wall is the edge.
+    if (inCut(s, 20)) continue
     for (const side of [-1, 1]) {
-      addBox(
-        meshes[chunkFor(s)],
-        at,
-        frame,
-        side * (at.width + vergeWidth(at.room) - 0.18),
-        0.02,
-        0.22,
-        0.17,
-        0.46 + (Math.floor(s / 15) % 3 === 0 ? 0.24 : 0),
-        PALE_STONE,
-      )
+      addKerbPost(meshes[chunkFor(s)], track, s, side, Math.floor(s / 15) % 3 === 0)
     }
   }
 
-  for (const s of MOONBREAK.arches) {
-    if (s < track.length) addArch(meshes[chunkFor(s)], track, s)
-  }
+  MOONBREAK.arches.forEach((s, index) => {
+    if (s >= track.length) return
+    // On the span the gate stays the light hoop it always was: stone piers
+    // there would stand in the middle of the rigging.
+    if (s > MOONBREAK.span.from && s < MOONBREAK.span.to) {
+      addArch(meshes[chunkFor(s)], track, s)
+      return
+    }
+    // The gate you leave by and the one you come home under are whole.
+    const ends = index === 0 || index === MOONBREAK.arches.length - 1
+    addRuinedArch(meshes[chunkFor(s)], track, s, !ends && hash3(s, 5, 5) < 0.6)
+  })
 
   /*
-    The two mouths, which are the same arch built three times over.
+    The two mouths, which are the heaviest arch on the road.
 
     Going under has to be an *event*, and an event needs a threshold — the
     moment the sky is cut off is the moment the whole thing lands, and a tube
     that simply begins in open water gives you nothing to cross. So each mouth
-    is three ribs half a metre apart at exactly the waterline, which from a car
-    at forty metres a second reads as one heavy stone collar going over the
-    roof, and then the light changes.
+    is one arch of doubled stone at exactly the waterline — it used to be three
+    thin ribs half a metre apart, doing the same job less well — which from a
+    car at forty metres a second is one heavy collar going over the roof, and
+    then the light changes.
   */
   for (const s of [MOONBREAK.deep.under.in, MOONBREAK.deep.under.out]) {
-    for (const nudge of [-0.55, 0, 0.55]) {
-      addArch(meshes[chunkFor(s + nudge)], track, s + nudge)
-    }
+    addRuinedArch(meshes[chunkFor(s)], track, s, false, 1.9)
   }
-  addArch(meshes[chunkFor(track.finishAt)], track, track.finishAt)
-  addArch(meshes[chunkFor(track.length - 24)], track, track.length - 24)
+  addRuinedArch(meshes[chunkFor(track.finishAt)], track, track.finishAt, false, 1.2)
+  addRuinedArch(meshes[chunkFor(track.length - 24)], track, track.length - 24, false)
 
   const rng = random(track.seed ^ 0x431f27)
   let treeSeed = 1
@@ -858,11 +1125,18 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
       which is what it did, and which only showed up by looking at it.
     */
     if (roadAt(track, s).y - WATER_Y > 6) continue
+    // And not below the sea behind a wall, where the ground they stood on is.
+    if (inCut(s, 26)) continue
+    // The terraces have their columns instead.
+    if (onTerrace(s)) continue
     if (highRoad && rng() < 0.52) continue
-    addTree(meshes[chunkFor(s)], track, s, rng() < 0.5 ? -1 : 1, treeSeed++)
+    // In flower in the orchard; mostly leaf everywhere else.
+    const blossom = orchard ? 0.72 : 0.12
+    addOrchardTree(meshes[chunkFor(s)], track, s, rng() < 0.5 ? -1 : 1, treeSeed++, blossom)
     if (orchard || rng() > 0.78) {
       const other = Math.min(track.finishAt - 35, s + 9 + rng() * 13)
-      addTree(meshes[chunkFor(other)], track, other, rng() < 0.5 ? -1 : 1, treeSeed++)
+      const otherSide = rng() < 0.5 ? -1 : 1
+      if (!inCut(other, 26)) addOrchardTree(meshes[chunkFor(other)], track, other, otherSide, treeSeed++, blossom)
     }
   }
 
@@ -885,21 +1159,16 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
   let mirrorSide = -1
   for (let s = MOONBREAK.deep.from + 120; s < MOONBREAK.deep.to - 110; s += 44) {
     const at = roadAt(track, s)
-    const frame = basisAt(at, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
     mirrorSide *= -1
     for (const side of [-1, 1]) {
       if (side === mirrorSide && hash3(s, 9, 2) < 0.42) continue
-      addBox(
+      addSunkenColumn(
         meshes[chunkFor(s)],
-        at,
-        frame,
+        track,
+        s,
         side * (at.width + vergeWidth(at.room) + 4.5 + hash3(s, side + 2, 3) * 2.6),
-        -0.3,
-        0.44,
-        0.36,
         4.2 + hash3(s, 4, 7) * 4.6,
         MIRROR_STONE,
-        0.82,
       )
     }
   }
@@ -916,6 +1185,8 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
   */
   for (let s = MOONBREAK.deep.from + 90; s < MOONBREAK.deep.to - 80; s += 13) {
     const at = roadAt(track, s)
+    // Not at the mouths, where the road is barely under and kelp would stand up out of the sea.
+    if (at.y > WATER_Y - 5) continue
     const frame = basisAt(at, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
     const side = hash3(s, 3, 11) < 0.5 ? -1 : 1
     const out = at.width + vergeWidth(at.room) + 2.9
@@ -951,11 +1222,251 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
     addBox(meshes[chunkFor(stone.s)], at, frame, stone.n, 0.02, 0.55, 0.42, 3.25, PALE_STONE)
   }
 
+  // The stones the physics strikes you with, drawn where they are. See `addSeaStone`.
+  for (const stone of track.boulders) {
+    if (inCut(stone.s, 6)) continue
+    // Under the water they would stand inside the glass.
+    if (stone.s > MOONBREAK.deep.from - 10 && stone.s < MOONBREAK.deep.to + 10) continue
+    addSeaStone(meshes[chunkFor(stone.s)], track, stone)
+  }
+
   return meshes.map((mesh, index) => {
     const geometry = mesh.build()
     if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
     return { ...spans[index], geometry }
   })
+}
+
+const MOON_VERT = /* glsl */ `
+  varying vec3 vNormal;
+  varying vec3 vWorld;
+  void main() {
+    vNormal = normal;
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`
+
+/*
+  The moon was a flat white disc, which reads as a hole in the sky or a sticker
+  on it. Two things make it a body: it darkens toward its rim, and it has seas
+  on it — broad soft dark country and a fine grit over everything. Always seen
+  from the same side, because it is carried at a fixed offset from the camera,
+  so the seas never wander.
+*/
+const MOON_FRAG = /* glsl */ `
+  precision highp float;
+  varying vec3 vNormal;
+  varying vec3 vWorld;
+  uniform float uDeep;
+  ${NOISE}
+  void main() {
+    vec3 n = normalize(vNormal);
+    float mu = max(dot(n, normalize(cameraPosition - vWorld)), 0.0);
+    float limb = 0.6 + 0.4 * pow(mu, 0.5);
+    float seas = smoothstep(0.45, 0.68, noise3(n * 2.1 + 4.0) * 0.65 + noise3(n * 4.8 + 1.3) * 0.35);
+    float grit = noise3(n * 21.0) * 0.6 + noise3(n * 55.0) * 0.4;
+    vec3 colour = vec3(1.15, 1.22, 1.32) * limb * (1.0 - seas * 0.32) * (0.95 + grit * 0.07);
+    gl_FragColor = vec4(colour * (1.0 - uDeep), 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`
+
+const SPILL_VERT = /* glsl */ `
+  attribute float aSeed;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  varying float vSeed;
+  void main() {
+    vUv = uv;
+    vSeed = aSeed;
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`
+
+/*
+  The sea coming over the top of a wall: a thin moving sheet across the
+  capstones and down the face, in threads that each fall at their own pace,
+  with froth at the foot. uv.y runs from the back of the capstone (negative)
+  over the lip (zero) to the road (one).
+*/
+const SPILL_FRAG = /* glsl */ `
+  precision highp float;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  varying float vSeed;
+  uniform float uTime;
+  uniform vec3 uFogColor;
+  uniform float uFogNear;
+  uniform float uFogFar;
+  float hash11(float x) { return fract(sin(x * 91.7 + 3.1) * 43758.5453); }
+  void main() {
+    /*
+      Soft threads, not hashed blocks. The first version cut the sheet into
+      eleven hard lanes of hashed streaks and at any distance past a few metres
+      it read as television static stuck to the wall. Each thread here fades to
+      nothing at both of its edges, so lanes never meet at a seam.
+    */
+    float across = vUv.x * 7.0;
+    float lane = floor(across);
+    float within = fract(across);
+    float thread = smoothstep(0.0, 0.5, within) * (1.0 - smoothstep(0.5, 1.0, within));
+    float pace = 0.9 + hash11(lane + vSeed * 7.0) * 0.6;
+    float flow = fract(vUv.y * 0.9 - uTime * pace + hash11(lane * 3.1 + vSeed));
+    float pulse = 0.55 + 0.45 * smoothstep(0.0, 0.6, flow) * (1.0 - smoothstep(0.6, 1.0, flow));
+    float sides = smoothstep(0.0, 0.25, vUv.x) * (1.0 - smoothstep(0.75, 1.0, vUv.x));
+    float lip = smoothstep(-0.4, -0.2, vUv.y);
+    float froth = smoothstep(0.8, 1.0, vUv.y);
+    float alpha = sides * lip * (thread * pulse * 0.32 + froth * 0.22);
+    vec3 colour = vec3(0.07, 0.09, 0.12) + vec3(0.16, 0.19, 0.24) * (thread * pulse + froth);
+    float fog = smoothstep(uFogNear, uFogFar, distance(cameraPosition, vWorld));
+    gl_FragColor = vec4(mix(colour, uFogColor, fog), alpha * (1.0 - fog * 0.7));
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`
+
+/**
+ * Where the sea is not, as a picture the water can look up.
+ *
+ * ---------------------------------------------------------------------------
+ * The water is one plane, and inside the two sea cuttings it needs a hole in it
+ * the shape of the road. A hole in the geometry means cutting a four-kilometre
+ * plane around two hairpins; a sum over road segments in the shader means a
+ * loop per pixel on the largest surface in the frame. So each cutting is drawn
+ * once into half of a small one-channel picture — the road's own width,
+ * stamped every half metre — and the water asks it a single question.
+ *
+ * The edge is placed inside the top of the wall, where the water would be
+ * hidden by stone anyway, so the half-metre resolution never shows.
+ * ---------------------------------------------------------------------------
+ */
+function buildCutMask(track: Track, cuts: SeaCut[]) {
+  const SIZE = 256
+  const data = new Uint8Array(SIZE * 2 * SIZE)
+  const regions = [new Vector4(0, 0, 0, 0), new Vector4(0, 0, 0, 0)]
+  const road = emptyRoad()
+  cuts.slice(0, 2).forEach((cut, index) => {
+    let minX = Infinity
+    let maxX = -Infinity
+    let minZ = Infinity
+    let maxZ = -Infinity
+    for (let s = cut.from; s <= cut.to; s += 1) {
+      roadAt(track, s, road)
+      minX = Math.min(minX, road.x)
+      maxX = Math.max(maxX, road.x)
+      minZ = Math.min(minZ, road.z)
+      maxZ = Math.max(maxZ, road.z)
+    }
+    const size = Math.max(maxX - minX, maxZ - minZ) + 32
+    const x0 = (minX + maxX) / 2 - size / 2
+    const z0 = (minZ + maxZ) / 2 - size / 2
+    regions[index].set(x0, z0, 1 / size, 0)
+    const texel = size / SIZE
+    for (let s = cut.from; s <= cut.to; s += 0.5) {
+      roadAt(track, s, road)
+      if (road.y > WATER_Y + 0.3) continue
+      const reach = wallEdge(road) + WALL_FACE + 0.75
+      const cx = (road.x - x0) / texel
+      const cz = (road.z - z0) / texel
+      const radius = (reach + 0.5) / texel
+      const i0 = Math.max(2, Math.floor(cx - radius))
+      const i1 = Math.min(SIZE - 3, Math.ceil(cx + radius))
+      const j0 = Math.max(2, Math.floor(cz - radius))
+      const j1 = Math.min(SIZE - 3, Math.ceil(cz + radius))
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const d = Math.hypot(i + 0.5 - cx, j + 0.5 - cz) * texel
+          const cover = Math.round(Math.max(0, Math.min(1, (reach - d) / 0.5 + 0.5)) * 255)
+          const k = j * SIZE * 2 + index * SIZE + i
+          if (cover > data[k]) data[k] = cover
+        }
+      }
+    }
+  })
+  const texture = new DataTexture(data, SIZE * 2, SIZE, RedFormat)
+  texture.magFilter = LinearFilter
+  texture.minFilter = LinearFilter
+  texture.needsUpdate = true
+  return { texture, regions }
+}
+
+/** Where the sea comes over the walls: a sheet over the capstones and one down the face. */
+function buildSpills(track: Track, cuts: SeaCut[]): BufferGeometry {
+  const position: number[] = []
+  const uv: number[] = []
+  const seed: number[] = []
+  const index: number[] = []
+  const road = emptyRoad()
+  const basis: RoadBasis = { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 }
+  const at = (s: number, side: number, out: number, y: number) => {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    roadPoint(road, side * (wallEdge(road) + out), 0, point, basis)
+    return [point.x, y, point.z]
+  }
+  const groundAt = (s: number, side: number) => {
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    return roadPoint(road, side * (wallEdge(road) + WALL_FACE), 0, point, basis).y
+  }
+  const sheet = (corners: number[][], uvs: number[][], id: number) => {
+    const base = position.length / 3
+    corners.forEach((corner, i) => {
+      position.push(corner[0], corner[1], corner[2])
+      uv.push(uvs[i][0], uvs[i][1])
+      seed.push(id)
+    })
+    index.push(base, base + 1, base + 2, base, base + 2, base + 3)
+  }
+
+  let id = 0
+  cuts.forEach((cut, c) => {
+    for (const side of [-1, 1]) {
+      for (let s = cut.from + 10; s < cut.to - 10; s += 17) {
+        if (hash3(s, side, c + 41) < 0.45) continue
+        const ground = groundAt(s, side)
+        // Only where there is a real drop to spill down; a trickle over a kerb is nothing.
+        if (SEA_WALL_TOP - ground < 1.1) continue
+        const reach = 0.6 + hash3(s, side, 43) * 0.8
+        const lip = SEA_WALL_TOP + 0.05
+        id++
+        sheet(
+          [
+            at(s - reach, side, WALL_FACE + WALL_DEPTH, lip - 0.01),
+            at(s + reach, side, WALL_FACE + WALL_DEPTH, lip - 0.01),
+            at(s + reach, side, WALL_FACE - 0.08, lip),
+            at(s - reach, side, WALL_FACE - 0.08, lip),
+          ],
+          [[0, -0.4], [1, -0.4], [1, 0], [0, 0]],
+          id,
+        )
+        sheet(
+          [
+            at(s - reach, side, WALL_FACE - 0.08, lip),
+            at(s + reach, side, WALL_FACE - 0.08, lip),
+            at(s + reach * 1.08, side, WALL_FACE - 0.14, ground - 0.1),
+            at(s - reach * 1.08, side, WALL_FACE - 0.14, ground - 0.1),
+          ],
+          [[0, 0], [1, 0], [1, 1], [0, 1]],
+          id,
+        )
+      }
+    }
+  })
+
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(position), 3))
+  geometry.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2))
+  geometry.setAttribute('aSeed', new BufferAttribute(new Float32Array(seed), 1))
+  geometry.setIndex(index)
+  if (position.length) geometry.computeBoundingSphere()
+  else geometry.boundingSphere = new Sphere()
+  return geometry
 }
 
 const SKY_VERT = /* glsl */ `
@@ -967,19 +1478,84 @@ const SKY_VERT = /* glsl */ `
 `
 
 const SKY_FRAG = /* glsl */ `
-  precision mediump float;
+  precision highp float;
   varying vec3 vDirection;
   uniform float uDeep;
+  uniform float uTime;
   uniform vec3 uFogColor;
-  float hash(vec3 p) { return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+  ${NIGHT}
+  ${NOISE}
+
+  /*
+    One star per cell at most, never near the edge of its cell, so no star is
+    ever cut in half by the cell beside it. Brightness is cubed: most are faint
+    and a few are not, which is the difference between a sky and glitter.
+  */
+  float starField(vec3 d, float scale, float density, float size) {
+    vec3 p = d * scale;
+    vec3 cell = floor(p);
+    float pick = hash13(cell);
+    if (pick < 1.0 - density) return 0.0;
+    vec3 at = cell + 0.3 + 0.4 * vec3(hash13(cell + 17.1), hash13(cell + 31.7), hash13(cell + 47.3));
+    float off = length(p - at);
+    float bright = pow(hash13(cell + 5.9), 3.0);
+    float twinkle = 0.72 + 0.28 * sin(uTime * (1.1 + pick * 2.7) + pick * 91.0);
+    return exp(-off * off / (size * size)) * (0.2 + bright * 1.8) * twinkle;
+  }
+
+  /*
+    Now and then, a shooting star. Off the clock, so it costs a few sums when
+    there is not one and a line test when there is.
+  */
+  float meteor(vec3 d) {
+    float period = 11.0;
+    float k = floor(uTime / period);
+    float t = uTime - k * period;
+    if (t > 0.9 || hash13(vec3(k, 1.0, 7.0)) < 0.5) return 0.0;
+    float bearing = hash13(vec3(k, 2.0, 3.0)) * 6.2832;
+    float rise = 0.35 + hash13(vec3(k, 5.0, 1.0)) * 0.45;
+    vec3 start = vec3(cos(bearing) * cos(rise), sin(rise), sin(bearing) * cos(rise));
+    vec3 across = normalize(cross(start, vec3(0.0, 1.0, 0.0)));
+    vec3 heading = across * (hash13(vec3(k, 9.0, 2.0)) < 0.5 ? -1.0 : 1.0) - vec3(0.0, 0.5, 0.0);
+    heading = normalize(heading - start * dot(heading, start));
+    float headAt = t * 0.5;
+    vec3 a0 = normalize(start + heading * max(0.0, headAt - 0.14));
+    vec3 a1 = normalize(start + heading * headAt);
+    vec3 seg = a1 - a0;
+    float along = clamp(dot(d - a0, seg) / max(dot(seg, seg), 0.000001), 0.0, 1.0);
+    float off = length(d - (a0 + seg * along));
+    return (1.0 - smoothstep(0.0005, 0.0022, off)) * along * along * sin(3.14159 * t / 0.9);
+  }
+
   void main() {
     vec3 d = normalize(vDirection);
-    float h = d.y * 0.5 + 0.5;
-    vec3 horizon = vec3(0.20, 0.24, 0.34);
-    vec3 zenith = vec3(0.025, 0.045, 0.10);
-    vec3 colour = mix(horizon, zenith, smoothstep(0.22, 0.82, h));
-    float stars = step(0.9992, hash(d * 460.0)) * smoothstep(0.5, 0.78, h);
-    colour += vec3(0.72, 0.82, 1.0) * stars * 0.72;
+    vec3 colour = nightSky(d);
+    float toMoon = max(dot(d, uMoonDir), 0.0);
+
+    // Thin high cloud, drifting, lit on the side toward the moon.
+    vec2 q = d.xz / (d.y + 0.12);
+    q = vec2(q.x * 0.5 + q.y * 0.22, q.y * 1.3) + vec2(uTime * 0.006, uTime * 0.0025);
+    float wisp = noise3(vec3(q * 1.2, 0.5)) * 0.6 + noise3(vec3(q * 3.4, 2.0)) * 0.3 + noise3(vec3(q * 8.5, 4.0)) * 0.1;
+    float veil = smoothstep(0.55, 0.82, wisp) * smoothstep(0.03, 0.16, d.y) * (1.0 - smoothstep(0.5, 0.92, d.y));
+
+    // Where stars can be seen: not in the murk on the horizon, not in the moon's glare, not through cloud.
+    float clear = smoothstep(0.02, 0.3, d.y) * (1.0 - pow(toMoon, 12.0)) * (1.0 - veil);
+
+    // The galaxy: a soft band on a great circle, with dark lanes of dust through it.
+    vec3 axis = normalize(vec3(0.42, 0.62, -0.66));
+    float across = dot(d, axis);
+    float band = exp(-across * across / 0.02);
+    float dust = noise3(d * 5.0 + 11.0) * 0.55 + noise3(d * 12.0) * 0.3 + noise3(d * 26.0) * 0.15;
+    float lanes = smoothstep(0.5, 0.72, noise3(d * 8.0 + vec3(3.0, 7.0, 1.0)) * 0.7 + noise3(d * 19.0) * 0.3);
+    float milky = band * smoothstep(0.3, 0.8, dust) * (1.0 - lanes * 0.8);
+    colour += vec3(0.020, 0.023, 0.032) * milky * clear;
+
+    float stars = starField(d, 62.0, 0.014, 0.12) + starField(d, 150.0, 0.045 + band * 0.12, 0.11) * 0.55;
+    colour += vec3(0.78, 0.84, 1.0) * stars * clear;
+    colour += vec3(0.9, 0.95, 1.1) * meteor(d) * 1.6 * (1.0 - veil);
+
+    vec3 lit = mix(vec3(0.014, 0.019, 0.032), vec3(0.15, 0.165, 0.2), pow(toMoon, 5.0));
+    colour = mix(colour, lit, veil * 0.78);
     /*
       Under the water there is no sky, and what is behind everything instead is
       the fog — the exact same colour, not a colour chosen to look like it.
@@ -1005,10 +1581,18 @@ const SKY_FRAG = /* glsl */ `
 `
 
 const WATER_VERT = /* glsl */ `
+  uniform vec4 uCutA;
+  uniform vec4 uCutB;
   varying vec3 vWorld;
+  varying vec2 vCutA;
+  varying vec2 vCutB;
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
     vWorld = world.xyz;
+    // Where this is in each cutting's picture. Linear in the world, so it is
+    // exact however large the triangle it is interpolated across.
+    vCutA = (world.xz - uCutA.xy) * uCutA.z;
+    vCutB = (world.xz - uCutB.xy) * uCutB.z;
     gl_Position = projectionMatrix * viewMatrix * world;
   }
 `
@@ -1036,26 +1620,75 @@ const WATER_VERT = /* glsl */ `
   crossed it, several times, while diving.
 */
 const WATER_FRAG = /* glsl */ `
-  precision mediump float;
+  precision highp float;
   varying vec3 vWorld;
+  varying vec2 vCutA;
+  varying vec2 vCutB;
   uniform float uTime;
   uniform float uDeep;
-  uniform vec3 uMoon;
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
+  uniform sampler2D uCuts;
+  ${NIGHT}
+
+  float inside(vec2 at) {
+    return step(0.0, at.x) * step(at.x, 1.0) * step(0.0, at.y) * step(at.y, 1.0);
+  }
+
+  // The slope of one travelling wave, in metres per metre.
+  vec2 swell(vec2 p, vec2 heading, float k, float amp, float pace) {
+    return heading * (amp * k * cos(dot(p, heading) * k - uTime * pace));
+  }
 
   void main() {
+    /*
+      No sea inside the sea walls. The cuttings at Tidecut and the Moonhook are
+      drawn into a small picture once, and the water is not drawn where the
+      picture says the road is. See buildCutMask.
+    */
+    float held = inside(vCutA) * texture2D(uCuts, vec2(vCutA.x * 0.5, vCutA.y)).r
+               + inside(vCutB) * texture2D(uCuts, vec2(0.5 + vCutB.x * 0.5, vCutB.y)).r;
+    if (held > 0.5) discard;
+
     float a = sin(vWorld.x * 0.055 + uTime * 0.42);
     float b = sin(vWorld.z * 0.071 - uTime * 0.31);
     float c = sin((vWorld.x + vWorld.z) * 0.025 + uTime * 0.18);
     float ripple = a * 0.35 + b * 0.28 + c * 0.37;
-    float glint = pow(max(0.0, ripple * 0.5 + 0.5), 9.0);
-    float thread = 1.0 - smoothstep(0.0, 0.055, abs(sin(vWorld.x * 0.08 + vWorld.z * 0.11 + uTime * 0.35)));
 
     // --- from above ---
-    vec3 over = mix(vec3(0.035, 0.105, 0.14), vec3(0.18, 0.29, 0.38), glint * 0.72);
-    over += vec3(0.15, 0.24, 0.28) * thread * 0.14;
+    /*
+      A sea at night is a mirror with a little depth in it, not a colour.
+
+      It was a teal that tone-mapped brighter than the sky over it, so the
+      causeway looked like it crossed a lit swimming pool. What water does at
+      night is reflect: the sky's own gradient, more strongly the flatter you
+      look across it, so the far sea meets the horizon without a line — and
+      one road of broken light laid across the waves toward the moon, which is
+      the single thing everybody knows a moonlit sea by. The swell is five
+      travelling waves stated in metres, the short ones faded out with range
+      before they can alias into noise.
+    */
+    vec3 look = cameraPosition - vWorld;
+    float range = length(look);
+    vec3 eye = look / range;
+    vec2 p = vWorld.xz;
+    float closeUp = 1.0 - smoothstep(40.0, 190.0, range);
+    float middle = 1.0 - smoothstep(140.0, 700.0, range);
+    vec2 slope = swell(p, vec2(0.83, 0.56), 0.165, 0.22, 0.8)
+               + swell(p, vec2(-0.35, 0.94), 0.37, 0.09, 1.1)
+               + swell(p, vec2(0.97, -0.24), 0.86, 0.05, 1.7) * middle
+               + (swell(p, vec2(0.44, 0.90), 2.03, 0.022, 2.6)
+               + swell(p, vec2(-0.90, 0.44), 4.8, 0.008, 3.9)) * closeUp;
+    vec3 n = normalize(vec3(-slope.x, 1.0, -slope.y));
+    float facing = max(dot(n, eye), 0.0);
+    float fresnel = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
+    vec3 bounce = reflect(-eye, n);
+    bounce.y = abs(bounce.y);
+    float moonward = max(dot(bounce, uMoonDir), 0.0);
+    float glitter = pow(moonward, 900.0) * 30.0 + pow(moonward, 60.0) * 0.28;
+    vec3 over = mix(vec3(0.0065, 0.0094, 0.0129), nightSky(bounce), fresnel);
+    over += vec3(0.82, 0.88, 1.0) * glitter * (0.25 + 0.75 * fresnel);
     /*
       Opaque at distance, not transparent.
 
@@ -1104,8 +1737,16 @@ const WATER_FRAG = /* glsl */ `
     // Past the critical angle the surface silvers over and stops being a window.
     float mirror = 1.0 - smoothstep(0.05, 0.42, flat_);
     // The moon, seen up through moving water.
-    float toMoon = distance(vWorld.xz, uMoon.xz);
-    float moon = smoothstep(240.0, 30.0, toMoon) * (0.4 + ripple * 0.6);
+    /*
+      Where the moon is, seen from under the water: bent by the surface to
+      about forty degrees up, so it hangs a little ahead of you in its own
+      direction. It used to be pinned to a point in the world a kilometre from
+      the Drowned Mile, which is why nobody ever saw it.
+    */
+    float depthBelow = max(1.0, ${WATER_Y.toFixed(2)} - cameraPosition.y);
+    vec2 moonSpot = cameraPosition.xz + normalize(uMoonDir.xz) * depthBelow * 1.07;
+    float toMoon = distance(vWorld.xz, moonSpot);
+    float moon = smoothstep(22.0, 3.0, toMoon) * (0.55 + ripple * 0.45);
     // Narrow bright veins on a dark field, rather than an even glow.
     float veins = pow(max(0.0, ripple * 0.5 + 0.5), 3.4);
     float fine = pow(1.0 - smoothstep(0.0, 0.12, abs(sin(vWorld.x * 0.19 - vWorld.z * 0.13 + uTime * 0.5))), 2.0);
@@ -1130,20 +1771,39 @@ const WATER_FRAG = /* glsl */ `
   }
 `
 
-/** The moon, which two shaders need to agree about. */
-const MOON = new Vector3(-420, 245, 980)
-
 /** Sky, moon and the water all the causeway pieces rise out of — or go under. */
 export function MoonbreakWorld({ track }: { track: Track }) {
   const skyRef = useRef<Mesh>(null)
   const moonRef = useRef<Mesh>(null)
+  const waterRef = useRef<Mesh>(null)
+  const cuts = useMemo(() => seaCuts(track), [track])
+  const mask = useMemo(() => buildCutMask(track, cuts), [track, cuts])
+  const spills = useMemo(() => buildSpills(track, cuts), [track, cuts])
   const sky = useMemo(
     () =>
       new ShaderMaterial({
         vertexShader: SKY_VERT,
         fragmentShader: SKY_FRAG,
         side: BackSide,
-        uniforms: { uDeep: { value: 0 }, uFogColor: { value: new Color('#04161c') } },
+        // The background, and only the background: drawn first, and never in
+        // front of the mountains, which stand further off than the dome is.
+        depthWrite: false,
+        uniforms: {
+          uDeep: { value: 0 },
+          uTime: { value: 0 },
+          uFogColor: { value: new Color('#04161c') },
+          uMoonDir: { value: MOON_DIR },
+        },
+      }),
+    [],
+  )
+  const moon = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: MOON_VERT,
+        fragmentShader: MOON_FRAG,
+        depthWrite: false,
+        uniforms: { uDeep: { value: 0 } },
       }),
     [],
   )
@@ -1158,10 +1818,30 @@ export function MoonbreakWorld({ track }: { track: Track }) {
         uniforms: {
           uTime: { value: 0 },
           uDeep: { value: 0 },
-          uMoon: { value: MOON },
+          uMoonDir: { value: MOON_DIR },
           uFogColor: { value: new Color('#04161c') },
           uFogNear: { value: 12 },
           uFogFar: { value: 78 },
+          uCuts: { value: mask.texture },
+          uCutA: { value: mask.regions[0] },
+          uCutB: { value: mask.regions[1] },
+        },
+      }),
+    [mask],
+  )
+  const spill = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: SPILL_VERT,
+        fragmentShader: SPILL_FRAG,
+        side: DoubleSide,
+        transparent: true,
+        depthWrite: false,
+        uniforms: {
+          uTime: { value: 0 },
+          uFogColor: { value: new Color('#2a3244') },
+          uFogNear: { value: 62 },
+          uFogFar: { value: 235 },
         },
       }),
     [],
@@ -1169,21 +1849,36 @@ export function MoonbreakWorld({ track }: { track: Track }) {
 
   useEffect(() => () => {
     sky.dispose()
+    moon.dispose()
     water.dispose()
-  }, [sky, water])
+    spill.dispose()
+  }, [sky, moon, water, spill])
+  useEffect(() => () => {
+    mask.texture.dispose()
+    spills.dispose()
+  }, [mask, spills])
 
   useFrame(({ camera }, delta) => {
-    // See the notes on the two meshes below: both are held at a fixed offset
-    // from the camera so neither can ever cross the far plane.
+    const step = Math.min(0.05, delta)
+    // See the notes on the meshes below: the sky, the moon and the sea are all
+    // held at a fixed offset from the camera so none of them can ever cross
+    // the far plane.
     skyRef.current?.position.copy(camera.position)
     moonRef.current?.position.copy(camera.position).add(MOON)
-    water.uniforms.uTime.value += Math.min(0.05, delta)
+    waterRef.current?.position.set(camera.position.x, WATER_Y, camera.position.z)
+    water.uniforms.uTime.value += step
     water.uniforms.uDeep.value = deep.at
     water.uniforms.uFogColor.value.copy(deep.fog)
     water.uniforms.uFogNear.value = deep.near
     water.uniforms.uFogFar.value = deep.far
+    sky.uniforms.uTime.value += step
     sky.uniforms.uDeep.value = deep.at
     sky.uniforms.uFogColor.value.copy(deep.fog)
+    moon.uniforms.uDeep.value = deep.at
+    spill.uniforms.uTime.value += step
+    spill.uniforms.uFogColor.value.copy(deep.fog)
+    spill.uniforms.uFogNear.value = deep.near
+    spill.uniforms.uFogFar.value = deep.far
   })
 
   return (
@@ -1217,12 +1912,25 @@ export function MoonbreakWorld({ track }: { track: Track }) {
         for exactly this reason and after exactly this bug.
         =====================================================================
       */}
-      <mesh ref={skyRef} frustumCulled={false} material={sky}>
+      <mesh ref={skyRef} frustumCulled={false} material={sky} renderOrder={-10}>
         <sphereGeometry args={[1600, 28, 16]} />
       </mesh>
-      <mesh position={[0, WATER_Y, 0]} rotation={[-Math.PI / 2, 0, 0]} frustumCulled={false} material={water}>
+      {/*
+        The sea goes with you too. Its waves are keyed to the world, not to the
+        mesh, so carrying it moves nothing you can see — and it means the edge
+        of it is always two kilometres off in every direction, rather than
+        somewhere just past the far end of the road.
+      */}
+      <mesh
+        ref={waterRef}
+        position={[0, WATER_Y, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        frustumCulled={false}
+        material={water}
+      >
         <planeGeometry args={[4200, 4200]} />
       </mesh>
+      <mesh geometry={spills} material={spill} renderOrder={2} />
       {/*
         And the moon goes with it, for the same reason and one more.
 
@@ -1232,10 +1940,11 @@ export function MoonbreakWorld({ track }: { track: Track }) {
         metres away in a fixed direction — which is also what a moon *is*: a
         thing that does not move when you do.
       */}
-      <mesh ref={moonRef} frustumCulled={false}>
-        <sphereGeometry args={[54, 24, 18]} />
-        <meshBasicMaterial color="#d9dfd3" fog={false} />
+      <mesh ref={moonRef} frustumCulled={false} material={moon} renderOrder={-9}>
+        <sphereGeometry args={[54, 32, 24]} />
       </mesh>
+      <Moonshore track={track} />
+      <Moonlife track={track} />
       <Deepwater track={track} />
     </>
   )

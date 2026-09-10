@@ -29,6 +29,7 @@ import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Color, Vector3, type Mesh } from 'three'
 import { buildMoonbreak, MoonbreakWorld } from '@/world/games/ember-rally/Moonbreak'
+import { MOON } from '@/world/games/ember-rally/moonlight'
 import { buildTunnel } from '@/world/games/ember-rally/geometry'
 import { buildStormcrown, StormcrownWorld } from '@/world/games/ember-rally/Stormcrown'
 import { storm } from '@/world/games/ember-rally/weather'
@@ -130,10 +131,13 @@ export default function Span() {
         that leaves `deep.at` at zero draws the Drowned Mile as a lit plastic
         pipe in open air, which is not what anybody is looking at it to see.
       */
-      const t = params.has('day') ? 0 : sunkAt(track, AT + 8)
-      lights.uniforms.uAmbient.value.set('#a3b2c4').lerp(new Color('#2b5763'), t)
-      lights.uniforms.uVeinColor.value.set('#8bcfc4').lerp(new Color('#9fe6dc'), t)
-      lights.uniforms.uFogColor.value.set('#172131').lerp(new Color('#04161c'), t)
+      const drowned = AT + 8 > MOONBREAK.deep.from && AT + 8 < MOONBREAK.deep.to
+      const t = params.has('day') || !drowned ? 0 : sunkAt(track, AT + 8)
+      lights.uniforms.uAmbient.value.set('#7e889c').lerp(new Color('#2b5763'), t)
+      lights.uniforms.uVeinColor.value.set('#24403f').lerp(new Color('#9fe6dc'), t)
+      lights.uniforms.uFogColor.value.set('#2a3244').lerp(new Color('#04161c'), t)
+      lights.uniforms.uMoonColor.value.set('#b8c6e0').multiplyScalar(1 - t)
+      lights.uniforms.uMoonDir.value.copy(MOON).normalize()
       lights.uniforms.uFogNear.value = 62 + (12 - 62) * t
       lights.uniforms.uFogFar.value = 235 + (78 - 235) * t
       deep.at = t

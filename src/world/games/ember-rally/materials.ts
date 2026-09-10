@@ -103,6 +103,26 @@ export function createLights(): RallyLights {
       /** And the sky's own fill, which in this weather is nearly as strong. */
       uSkyColor: { value: new Color('#c08b5c') },
       /*
+        =====================================================================
+        **Moonlight, for the one road with a moon in the sky.**
+
+        The Moonbreak was lit by the ambient alone, and the ambient has no
+        direction: a trunk, an arch and a pier came out the same value on
+        every face, so nothing in the open looked like it was standing in the
+        light of the thing hanging over the horizon. What makes a moonlit
+        place read is exactly what a flat fill cannot do — one side of every
+        stone pale, the other gone, and a line of glints down wet paving when
+        you drive toward it.
+
+        Black on every other road, and the shader skips the whole term when
+        it is. The direction is the Moonbreak's moon — see `MOON` there —
+        and the colour carries its strength, so there is one number to fade
+        when the road goes under the water.
+        =====================================================================
+      */
+      uMoonDir: { value: new Vector3(-0.38, 0.22, 0.89).normalize() },
+      uMoonColor: { value: new Color(0, 0, 0) },
+      /*
         Cold mineral in the walls — the same green as the fungus lanterns, so
         the tunnel has exactly two colours of light in it: your fire, and
         whatever grows down here.
@@ -167,6 +187,8 @@ const LIGHT_HEAD = /* glsl */ `
   uniform vec3 uSunDir;
   uniform vec3 uSunColor;
   uniform vec3 uSkyColor;
+  uniform vec3 uMoonDir;
+  uniform vec3 uMoonColor;
   uniform vec3 uVeinColor;
   uniform vec3 uFogColor;
   uniform float uFogNear;
@@ -291,6 +313,21 @@ const LIGHT_BODY = /* glsl */ `
     // headlights have not reached still reads as a wall.
     float up = normal.y * 0.5 + 0.5;
     vec3 col = albedo * uAmbient * (0.3 + 0.7 * up);
+
+    /*
+      The moon, if there is one. A hard lambert term, because moonlight is a
+      point source a very long way off and its shadows are sharp; and a glint
+      off anything wet, which on a causeway after rain is most of what you see
+      of the moon without looking up at it.
+    */
+    if (uMoonColor.r + uMoonColor.g + uMoonColor.b > 0.0) {
+      col += albedo * uMoonColor * max(0.0, dot(normal, uMoonDir));
+      if (gloss > 0.01) {
+        vec3 moonHalf = normalize(uMoonDir + view);
+        float moonSpec = pow(max(dot(normal, moonHalf), 0.0), 36.0 + gloss * 150.0);
+        col += uMoonColor * moonSpec * gloss * 1.4;
+      }
+    }
 
     /*
       The lamps, and how much of them is left once the sun is up.

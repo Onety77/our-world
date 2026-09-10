@@ -47,6 +47,7 @@ import {
 import { CarStudio, STUDIO } from './Studio'
 import { basisAt, buildTrail, buildTunnel, roadPoint } from './geometry'
 import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
+import { MOON } from './moonlight'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { buildHarmattan, HarmattanWorld } from './Harmattan'
 import { dust, district } from './dust'
@@ -118,6 +119,7 @@ import {
 } from './wire'
 import {
   HARMATTAN,
+  MOONBREAK,
   emptyRoad,
   galeStrengthAt,
   roadAt,
@@ -403,11 +405,13 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
   const lights = useMemo(() => {
     const next = createLights()
     if (track.stage === 'moonbreak') {
-      next.uniforms.uAmbient.value.set('#a3b2c4')
-      next.uniforms.uVeinColor.value.set('#8bcfc4')
-      next.uniforms.uFogColor.value.set('#172131')
-      next.uniforms.uFogNear.value = 62
-      next.uniforms.uFogFar.value = 235
+      next.uniforms.uAmbient.value.copy(ABOVE.ambient)
+      next.uniforms.uVeinColor.value.copy(ABOVE.vein)
+      next.uniforms.uFogColor.value.copy(ABOVE.fog)
+      next.uniforms.uFogNear.value = ABOVE.near
+      next.uniforms.uFogFar.value = ABOVE.far
+      next.uniforms.uMoonColor.value.copy(ABOVE.moon)
+      next.uniforms.uMoonDir.value.copy(MOON).normalize()
       next.uniforms.uHeadColor.value.set('#ffe2b8')
       next.uniforms.uSpotColor.value.set('#e8f2ff')
     } else if (track.stage === 'stormcrown') {
@@ -1249,12 +1253,25 @@ class Driving {
       exponential either side turns it into water closing over.
     */
     if (this.track.stage === 'moonbreak') {
-      const want = sunkAt(this.track, this.car.s + 8)
+      /*
+        Only inside the Drowned Mile.
+
+        Tidecut and the Moonhook dip a couple of metres under the sea as well —
+        the drop off the span and the Fall both carry the road below the water
+        before it climbs back — but those are open cuttings behind sea walls,
+        not a tube, and the light in them is the night's. Keyed off the road's
+        height alone, both corners turned the whole world green for a few
+        seconds and put the Drowned Mile's fish in the open sky.
+      */
+      const ahead = this.car.s + 8
+      const drowned = ahead > MOONBREAK.deep.from && ahead < MOONBREAK.deep.to
+      const want = drowned ? sunkAt(this.track, ahead) : 0
       this.sunk += (want - this.sunk) * (1 - Math.exp(-3.2 * args.delta))
       const t = this.sunk
       const u = args.lights.uniforms
       u.uAmbient.value.copy(ABOVE.ambient).lerp(UNDER.ambient, t)
       u.uVeinColor.value.copy(ABOVE.vein).lerp(UNDER.vein, t)
+      u.uMoonColor.value.copy(ABOVE.moon).lerp(UNDER.moon, t)
       u.uFogColor.value.copy(ABOVE.fog).lerp(UNDER.fog, t)
       u.uFogNear.value = ABOVE.near + (UNDER.near - ABOVE.near) * t
       u.uFogFar.value = ABOVE.far + (UNDER.far - ABOVE.far) * t
@@ -2845,10 +2862,27 @@ const ROOTWAKE_DARK = {
   fogFar: 68,
 }
 
+/*
+  The open road is a night now, and these were a dusk.
+
+  The ambient was a pale blue-grey strong enough to light the whole causeway
+  by itself, the fog was a colour that tone-maps to nearly black, and the sky
+  behind both was a light lavender — so the world read as an overcast evening
+  with the distance painted out in soot. Measured through the renderer's own
+  tone curve: the old horizon came out #8793aa and the sea #225769.
+
+  What replaces it is less light overall and one strong direction: a dimmer
+  fill, the moon doing the modelling (see `uMoonColor` in `materials`), a fog
+  the colour of the sky's own horizon so far things dissolve *into* the night
+  rather than into a black band in front of it, and the mineral veins turned
+  right down, because on dressed causeway stone under moonlight they read as
+  glitter rather than as a seam.
+*/
 const ABOVE = {
-  ambient: new Color('#a3b2c4'),
-  vein: new Color('#8bcfc4'),
-  fog: new Color('#172131'),
+  ambient: new Color('#7e889c'),
+  vein: new Color('#24403f'),
+  fog: new Color('#2a3244'),
+  moon: new Color('#b8c6e0'),
   near: 62,
   far: 235,
 }
@@ -2857,6 +2891,9 @@ const UNDER = {
   ambient: new Color('#2b5763'),
   vein: new Color('#9fe6dc'),
   fog: new Color('#04161c'),
+  // Nineteen metres of water takes the moon's direction away; what is left of
+  // it is the surface overhead, which the water shader draws.
+  moon: new Color('#000000'),
   near: 12,
   far: 78,
 }
