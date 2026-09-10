@@ -56,6 +56,7 @@ import { storm } from './weather'
 import { enclosureOf, tunnel } from './tunnel'
 import { setRaceMusic, type RaceMusicState } from './roadMusic'
 import { RootwaySound } from './RootwaySound'
+import { Rootlife } from './Rootlife'
 import {
   LAMP_SLOTS,
   createLights,
@@ -404,7 +405,15 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
 
   const lights = useMemo(() => {
     const next = createLights()
-    if (track.stage === 'moonbreak') {
+    if (track.stage === 'rootway') {
+      next.uniforms.uAmbient.value.copy(ROOTWAY_LIT.ambient)
+      next.uniforms.uFogColor.value.copy(ROOTWAY_LIT.fog)
+      next.uniforms.uFogNear.value = ROOTWAY_LIT.fogNear
+      next.uniforms.uFogFar.value = ROOTWAY_LIT.fogFar
+      next.uniforms.uVeinColor.value.copy(ROOTWAY_LIT.vein)
+      next.uniforms.uGlowWorms.value = 1
+      next.uniforms.uStrata.value = 1
+    } else if (track.stage === 'moonbreak') {
       next.uniforms.uAmbient.value.copy(ABOVE.ambient)
       next.uniforms.uVeinColor.value.copy(ABOVE.vein)
       next.uniforms.uFogColor.value.copy(ABOVE.fog)
@@ -615,6 +624,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
         here rather than inside one. It draws nothing.
       */}
       {track.stage === 'rootway' ? <RootwaySound track={track} /> : null}
+      {track.stage === 'rootway' ? <Rootlife track={track} /> : null}
 
       {chunks.map((chunk, i) => (
         <mesh
@@ -2848,10 +2858,30 @@ const STORM_HIGH = {
   far: 900,
 }
 
+/*
+  The cave was black, and measurably so.
+
+  Its rock is a dark umber and its fill a cold blue-grey a tenth of the strength
+  of the Moonbreak's, and multiplied together through the tone curve an unlit
+  wall came out `#000001` — and the fog, which is what the distance dissolves
+  into, `#010100`. So everything past the reach of the headlamps and the nearest
+  lantern was not dim rock, it was nothing, and two and a half kilometres of
+  tunnel read as one black corridor with a lit patch travelling down it.
+
+  A firelit cave is not black. The fill is warm now and a few times stronger —
+  what a road hung with fire every dozen metres actually has bouncing about in
+  it — the rock is paler (see `geometry`), and the fog is smoke rather than soot,
+  so the far end of a straight fades into a warm haze instead of stopping. The
+  veins are turned right down: on this rock they were bright green scribbles
+  across every wall, and the glow-worms on the vault do their job better.
+*/
 const ROOTWAY_LIT = {
-  ambient: new Color('#4a5b72'),
-  fogNear: 22,
-  fogFar: 118,
+  // Warm, but not orange: a stronger tint turned the whole cave rust.
+  ambient: new Color('#857c73'),
+  fog: new Color('#231f1c'),
+  vein: new Color('#0b2a26'),
+  fogNear: 20,
+  fogFar: 132,
 }
 
 const ROOTWAKE_DARK = {

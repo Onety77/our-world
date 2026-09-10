@@ -617,6 +617,47 @@ Measured on a phone-portrait frame (390×844): 58–60 thousand triangles and 34
 draw calls across the start, the orchard and Tidecut. The heaviest single thing is
 the lily pads, at 9.4 thousand.
 
+### The Rootway, lit from inside
+
+The cave was black, and measurably: its rock was an umber of a few per cent under
+a cold fill a tenth of the Moonbreak's, so through the tone curve an unlit wall
+came out `#000001` and the fog `#010100`. Everything past the headlamps and the
+nearest lantern was not dim rock but nothing, the mineral veins were the only
+thing drawn in that nothing — as bright green scribbles on every wall — and the
+roots under the lamps were orange hoses.
+
+What it is now, and where each piece lives:
+
+- **A firelit cave has depth.** The rock is a stone colour (`geometry.ts`), the
+  fill is warm and a few times stronger and the fog is smoke rather than soot
+  (`ROOTWAY_LIT` in `Race`), so the far end of a straight fades into a haze.
+- **Beds in the rock and glow-worms on the vault.** Two switches in the shared
+  rock shader, `uStrata` and `uGlowWorms`, both nought — and skipped — on every
+  other road. The beds are quiet and uneven (one strong sine was a tiger); the
+  glow-worms are small cold points added after the fog, so a chamber's roof sixty
+  metres ahead is a field of lights before it is a shape. The veins are turned
+  right down.
+- **The cave's own life** (`rootGarden.ts`), every piece placed by something the
+  road already knows rather than by a list of metres, because the Rootway is dealt
+  from a daily seed:
+  - fungus round every cold lantern — the lantern is the glow of it, and it is lit
+    by its own lamp, so nothing new is a light;
+  - iron round every fire: a cage on the ground, a bracket and bowl on a wall;
+  - quartz in the tight places, glossy, where the headlamps pass closest;
+  - flowstone columns in the chambers;
+  - a great taproot down through the vault of every chamber but the two at the
+    ends, with pale brackets and root threads — the Rootway runs under the garden,
+    and the largest thing growing in it is the Tree of Thoughts.
+- **The air** (`Rootlife.tsx`): spores hanging everywhere and thickest in the
+  rooms, embers only where the fire is really thick (the same `fireField` the ear
+  already uses, so the eye and the ear agree), and a column of sparks going up
+  off both hearths.
+
+Nothing solid is on the driveable stone: fungus and cages keep to the verge where
+the cairns always were, and everything larger stands past the edge the physics
+stops the car at. Measured at the countdown on the desktop frame: 41–45 thousand
+triangles and 27–30 draw calls, from 35–40 thousand and 24–26 before.
+
 ## The car is tuned from the control room, not from here
 
 **Roughly forty of the numbers that used to be constants in `physics.ts`,

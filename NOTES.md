@@ -40,6 +40,52 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 10 Sep · Claude · the Rootway, lit from inside
+
+The second road in the same series as the Moonbreak below: looks and world only,
+no change to the road. Nothing the road or the physics is made of was touched —
+`npm run rally` imports none of the files below. The story is in the ember-rally
+README under **The Rootway, lit from inside**; this is the index.
+
+**What was wrong, measured.** The rock was painted an umber of a few per cent
+and lit by a cold fill of a few per cent, so an unlit wall tone-mapped to
+`#000001` and the fog to `#010100`: every metre of the cave the headlamps and the
+nearest lantern did not reach was pure black. The veins were the only thing
+visible in it, as bright green loops on every wall.
+
+**What moved**
+
+- `geometry.ts` — the rock and root colours, and one call into `dressCave`.
+- `Race.tsx` — a Rootway branch in the light set-up (`ROOTWAY_LIT`: warm fill
+  `#857c73`, smoky fog `#231f1c` at 20–132 m, veins turned down) and `Rootlife`
+  mounted beside `RootwaySound`.
+- `materials.ts` — `uStrata` and `uGlowWorms` in the shared light block, nought
+  and skipped on every other road and in the car studio.
+- `rootGarden.ts` (new) — fungus, cages and sconces, quartz, flowstone columns,
+  taproots. Takes a `place` function instead of importing the road frame, because
+  `geometry` imports it.
+- `Rootlife.tsx` (new) — spores, embers, hearth sparks.
+
+**Two traps worth knowing**
+
+- **A tall thing in a chamber is invisible from the chase camera.** The camera is
+  low and pitched at the road, and a chamber's vault is twelve metres up; the
+  taproot was built, placed and verified in Node, and did not appear in a single
+  race frame until it was made twice as thick and a lighter grey. `dev-span.html`
+  looking into the chamber is how that got settled — and note it builds seed 7,
+  while a solo race with no setup is seed 1.
+- **A capture parked past the end wall is inside the rock.** `?from=2330` on seed
+  1 put the car in the apse, and the glare and the dark wedge that came with it
+  were the headlamps at zero range, not a bug in the hall.
+
+**For Codex.** Nothing in `systems/rootway.ts` or `RootwaySound.tsx` changed.
+The fire field the soundscape reads now also drives the embers, so if its weights
+change the embers change with them — which is the point.
+
+**Measured.** Desktop 900×560 at the countdown: 41–45k triangles and 27–30 draw
+calls, from 35–40k and 24–26. Phone portrait at the start: 42k and 30. Typecheck,
+the shader sweep and the production build pass.
+
 ## 10 Sep · Claude · the Moonbreak, at night
 
 The owner's ask: the level looked plain, make the world feel full — and do not

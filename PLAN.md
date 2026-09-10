@@ -1607,6 +1607,15 @@ handling changed.
       nothing holding it back (they are sea-walled cuttings now), and the stones
       the physics strikes you with were never drawn. No change to the road, the
       lanes or the corners; `npm run moonbreak` is unchanged
+- [x] **The Rootway, lit from inside.** It rendered black past the reach of the
+      headlamps — an unlit wall came out `#000001` through the tone curve — with
+      green scribbles for veins and roots like orange hose. Now a firelit cave
+      with depth and haze, beds in the rock, glow-worms on the vaults, fungus round
+      the cold lights, iron round the fires, quartz in the throats, flowstone
+      columns, a great taproot down through every chamber, and spores, embers and
+      sparks off both hearths. All of it placed from the road itself, because the
+      road is dealt from a seed; nothing on the driveable stone; no change to the
+      road
 - [x] **The Glasshouse, the fifth place.** An iron conservatory built out of
       every picture the two of you keep: one instanced quad per memory in its
       own average colour for the whole building, the real photograph for the

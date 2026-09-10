@@ -29,6 +29,7 @@ import {
   vergeWidth,
 } from './track'
 import { random, SAMPLE_MS, SAMPLE_SHORTCUT, type RallyRun } from './model'
+import { dressCave } from './rootGarden'
 import { emptyRoad, roadAt, roadAtRoute, type RoadAt, type Track } from './track'
 
 /** Metres between cross-sections. */
@@ -159,11 +160,23 @@ const STONE_ROAD = new Color('#6a6158')
 const STONE_WORN = new Color('#3a332e')
 const EARTH = new Color('#4b3b26')
 const MOSS = new Color('#3b4a2b')
-const ROCK_LOW = new Color('#332a23')
-const ROCK_MID = new Color('#3d3125')
-const ROCK_HIGH = new Color('#282523')
-const ROOT_BARK = new Color('#4e3722')
-const ROOT_TIP = new Color('#6d5231')
+/*
+  Paler than they were, by about three times.
+
+  The rock was painted so dark that no fill light could show it: an umber of a
+  few per cent, multiplied by any sensible ambient and pushed through the tone
+  curve, is black. The cave's depth has to come from the stone being a stone
+  colour. See `ROOTWAY_LIT` in `Race` for the other half of this.
+
+  The roots come down in saturation at the same time. Under the headlamps they
+  were orange hoses; bark is a grey-brown with the warmth in the light, not in
+  the wood.
+*/
+const ROCK_LOW = new Color('#5a4d43')
+const ROCK_MID = new Color('#625446')
+const ROCK_HIGH = new Color('#4a433d')
+const ROOT_BARK = new Color('#4a3a2c')
+const ROOT_TIP = new Color('#5e4b38')
 const CAIRN = new Color('#4a4239')
 const SHORTCUT_STONE = new Color('#4b4238')
 const ROOTWAKE_MOUTH = new Color('#71583f')
@@ -863,6 +876,24 @@ export function buildTunnel(track: Track): TunnelChunk[] {
       Math.floor(lantern.s * 13),
       CAIRN,
       road.wet * 0.5,
+    )
+  }
+
+  // --- what grows, burns and glitters in the rock — see `rootGarden` ---------
+  {
+    const placeRoad = emptyRoad()
+    const placeBasis: RoadBasis = { ...scratchBasis }
+    dressCave(
+      meshes,
+      chunkOf,
+      track,
+      (s, n, y) => {
+        roadAt(track, Math.max(0, Math.min(track.length, s)), placeRoad)
+        basisAt(placeRoad, placeBasis)
+        return roadPoint(placeRoad, n, y, new Vector3(), placeBasis)
+      },
+      // A stream of its own, so dressing the rock never moves a lantern or a root.
+      random(track.seed ^ 0x6c1f3),
     )
   }
 

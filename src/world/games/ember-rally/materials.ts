@@ -128,6 +128,13 @@ export function createLights(): RallyLights {
         whatever grows down here.
       */
       uVeinColor: { value: new Color('#14514a') },
+      /*
+        Two things only the Rootway has, both nought everywhere else and both
+        skipped by the shader when they are. Glow-worms on the underside of the
+        vault, and beds in the rock — see the fragment shader.
+      */
+      uGlowWorms: { value: 0 },
+      uStrata: { value: 0 },
       uFogColor: { value: new Color('#0a0908') },
       uFogNear: { value: 22 },
       uFogFar: { value: 118 },
@@ -190,6 +197,8 @@ const LIGHT_HEAD = /* glsl */ `
   uniform vec3 uMoonDir;
   uniform vec3 uMoonColor;
   uniform vec3 uVeinColor;
+  uniform float uGlowWorms;
+  uniform float uStrata;
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
@@ -488,6 +497,30 @@ ${LIGHT_BODY}
     float tooth = 0.25 + vSurface.y * 0.75;
     vec3 albedo = vColor * (1.0 - 0.13 * tooth + fine * 0.2 * tooth + broad * 0.16 * tooth);
 
+    /*
+      Beds in the rock, on the one road that is dug through it.
+
+      A cave wall is laid down in layers and cut through, and the layers are
+      what make it read as a thing with a history rather than as a dark surface
+      somebody sculpted. Level bands a couple of metres apart, warped slowly so
+      they bow and pinch the way real beds do, on rough stone only — never on
+      the road, which is worn flat across all of them.
+    */
+    if (uStrata > 0.0) {
+      float warp = sin(vWorld.x * 0.13 + vWorld.z * 0.09) * 0.6 + sin(vWorld.z * 0.21 - vWorld.x * 0.07) * 0.35;
+      float h = vWorld.y + warp;
+      /*
+        Quiet, and uneven. The first cut was one sine at a strong contrast and
+        every wall came out in bold regular stripes — a tiger, not a cliff. Two
+        layerings that share no period give beds of different thicknesses, and
+        a thin darker seam between some of them is what the eye reads as a bed.
+      */
+      float beds = sin(h * 2.1) * 0.6 + sin(h * 5.3 + 1.7) * 0.4;
+      float seam = 1.0 - smoothstep(0.0, 0.12, abs(sin(h * 2.1 + 0.9)));
+      float stone = smoothstep(0.3, 0.6, vSurface.y) * uStrata;
+      albedo *= mix(1.0, (0.93 + beds * 0.07) * (1.0 - seam * 0.18), stone);
+    }
+
     // Wet stone is darker as well as shinier, which is most of why rain reads.
     float wet = vSurface.x;
     albedo *= 1.0 - wet * 0.34;
@@ -546,7 +579,38 @@ ${LIGHT_BODY}
     float breathe = 0.6 + 0.4 * sin(uTime * 0.45 + vWorld.x * 0.12 + vWorld.z * 0.1);
     col += uVeinColor * vein * vein * breathe;
 
-    gl_FragColor = vec4(caveFog(col, vDepth), 1.0);
+    vec3 shown = caveFog(col, vDepth);
+
+    /*
+      Glow-worms, on the underside of the vault.
+
+      After the fog, not before it: they are their own light, and a point of
+      light in a dark cave is the one thing you can still see after the rock
+      around it has gone. That is what gives the Rootway its depth — the roof of
+      a chamber sixty metres ahead is a field of cold points before it is a
+      shape. Scattered one to a cell of world space, only on faces turned
+      downward, twinkling slowly and out of step with each other.
+    */
+    if (uGlowWorms > 0.0 && normal.y < -0.25) {
+      vec3 grid = vWorld * 2.4;
+      vec3 cell = floor(grid);
+      float pick = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+      if (pick > 0.93) {
+        vec3 at = cell + 0.25 + 0.5 * fract(vec3(pick * 17.13, pick * 31.71, pick * 47.37));
+        float off = length(grid - at);
+        float twinkle = 0.65 + 0.35 * sin(uTime * (0.6 + pick * 1.7) + pick * 60.0);
+        /*
+          Small, and gone at grazing angles. A point placed in world space is
+          cut by the surface as a disc, and a disc seen nearly edge-on is a long
+          streak — the first version drew cyan comets across the vault.
+        */
+        float facing = abs(dot(normal, normalize(cameraPosition - vWorld)));
+        float glow = exp(-off * off / 0.012) * twinkle * smoothstep(0.25, 0.7, -normal.y) * smoothstep(0.2, 0.6, facing);
+        glow *= 1.0 - smoothstep(uFogFar * 0.8, uFogFar * 1.25, vDepth);
+        shown += vec3(0.10, 0.55, 0.50) * glow * uGlowWorms * 0.8;
+      }
+    }
+    gl_FragColor = vec4(shown, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
