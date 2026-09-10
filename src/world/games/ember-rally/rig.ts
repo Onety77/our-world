@@ -27,6 +27,7 @@ import { basisAt, roadPoint, type RoadBasis } from './geometry'
 import { swayRollAt } from './track'
 import type { CarState } from './physics'
 import { emptyRoad, roadAtRoute, type Track } from './track'
+import { placeTyreContact, poseTyreContact } from './tyreContact'
 
 /** Everything `poseWheels` needs. The studio has no physics behind it. */
 export type Posture = Pick<CarState, 'wheels' | 'roll' | 'pitch' | 'heave'>
@@ -292,6 +293,7 @@ export function poseWheels(rig: CarRig, car: Posture) {
     const length = SPRING_SPAN + car.heave + lean
     spring.scale.y = Math.max(0.5, Math.min(1.7, length / SPRING_SPAN))
   }
+  poseTyreContact(rig)
 }
 
 /**
@@ -332,6 +334,7 @@ export function poseGhostWheels(
     // Same negation as `poseWheels`: right is negative about Y in this scene.
     if (i < 2) rig.hubs[i].rotation.y = front
   }
+  poseTyreContact(rig)
 }
 
 const placeRoad = emptyRoad()
@@ -423,4 +426,5 @@ export function placeCar(
   rig.ground.rotation.set(-road.grade, 0, road.bank + swaying)
   rig.body.rotation.set(pitch, 0, roll)
   rig.body.position.y = heave
+  placeTyreContact(rig, track, s, drop)
 }

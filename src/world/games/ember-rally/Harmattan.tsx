@@ -93,10 +93,9 @@ import {
   type Track,
 } from './track'
 import { HarmattanSound } from './HarmattanSound'
+import { HARMATTAN_RING as RING, HARMATTAN_PROFILE as PROFILE, harmattanProfile } from './harmattanSurface'
 
-const RING = 2
 const CHUNK = 60
-const PROFILE = 13
 
 /* ---- the palette, which is iron oxide and one blue ------------------------ */
 
@@ -1246,47 +1245,7 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
       roadAt(track, s, road)
       basisAt(road, basis)
 
-      /*
-        How far out the ground goes before it stops being drawn.
-
-        Wide on the plain, because the plain is the point of the plain; narrow
-        in the wadi and inside the walls, where something is genuinely close.
-        `room` already carries this — it is how far the walls stand back — so
-        the ground follows it rather than a second table of section ranges.
-      */
-      const inTown = s > HARMATTAN.gateAt - 20 && s < HARMATTAN.gateOut + 12
-      /*
-        Inside the walls it used to stop at a metre and a half past the verge,
-        which was right while there was nothing behind the wall. There is now —
-        a street of two-storey houses and a minaret — and they need a floor to
-        stand on. Ten metres is enough for the row and no more; the point of
-        the narrow town ground was never the number, it was that the walls are
-        close, and they still are.
-      */
-      const out = road.width + vergeWidth(road.room) + (inTown ? 10 : 6 + road.room * 22)
-      const offsets = [
-        -out, -out, -road.width, -road.width * 0.92, -road.width * 0.62,
-        -road.width * 0.31, 0,
-        road.width * 0.31, road.width * 0.62, road.width * 0.92, road.width,
-        out, out,
-      ]
-      /*
-        The road is *crowned* — high in the middle, falling away either side —
-        because a road that sheds water is built that way and because it puts a
-        little of the sand at the edges where sand goes. Nothing in the physics
-        reads this; the physics has `camber`, which is authored. This is the eye.
-      */
-      const drop = inTown ? -0.3 : -1.1
-      /*
-        Crowned in the middle, and bermed at both edges.
-
-        The berm is the raised bit at index 1 and 11. Inside the walls there is
-        none — a swept street between two buildings has a gutter, not a
-        windrow — which is one more small way the town is unlike everywhere
-        else on the road without anybody being told so.
-      */
-      const berm = inTown ? 0.02 : 0.34
-      const heights = [drop, berm, 0.02, 0.05, 0.075, 0.092, 0.1, 0.092, 0.075, 0.05, 0.02, berm, drop]
+      const { offsets, heights } = harmattanProfile(road, s)
       const base = mesh.count
 
       /*
@@ -2152,4 +2111,3 @@ export function HarmattanWorld({ track }: { track: Track }) {
     </group>
   )
 }
-
