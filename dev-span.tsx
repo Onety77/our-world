@@ -48,6 +48,8 @@ import {
 import { placeCar, poseGhostWheels, useCarRig } from '@/world/games/ember-rally/rig'
 import { buildHarmattan, HarmattanWorld } from '@/world/games/ember-rally/Harmattan'
 import { buildNightfall, NightfallWorld } from '@/world/games/ember-rally/Nightfall'
+import { syntheticMessages } from '@/world/games/ember-rally/Nightlife'
+import { garden } from '@/world/games/ember-rally/garden'
 import { NIGHTFALL } from '@/world/games/ember-rally/track'
 import { laySurface } from '@/world/games/ember-rally/roadSurface'
 import { BoxGeometry } from 'three'
@@ -113,8 +115,9 @@ export default function Span() {
     const road = roadAt(track, AT - BACK)
     const basis = basisAt(road)
     const from = roadPoint(road, OUT, UP, new Vector3(), basis)
+    // `lookn=` swings the look-at point sideways, for things beside the road.
     const ahead = roadAt(track, AT + 14)
-    const to = roadPoint(ahead, 0, 1.6, new Vector3(), basisAt(ahead))
+    const to = roadPoint(ahead, Number(params.get('lookn') ?? 0), 1.6, new Vector3(), basisAt(ahead))
     return [from, to]
   }, [])
 
@@ -122,6 +125,8 @@ export default function Span() {
   // script can raycast at a pixel and name what it sees.
   useFrame(({ scene, camera }) => {
     ;(window as unknown as { __span: unknown }).__span = { scene, camera, Raycaster, Vector2 }
+    // Where the car is, for the Nightfall's life that reads the race's own note of it.
+    garden.s = AT
   })
 
   useFrame((_, delta) => {
@@ -202,7 +207,9 @@ export default function Span() {
       lights.uniforms.uFogColor.value.set(light.fog)
       lights.uniforms.uFogNear.value = light.near
       lights.uniforms.uFogFar.value = light.far
-      lights.uniforms.uVeinColor.value.set('#000000')
+      // (The veins are the Hollow's ore, and `Nightlife` sets them per frame.)
+      lights.uniforms.uStrata.value = 1
+      lights.uniforms.uStrataTop.value = 0.88
       // The lanterns near here, lit as the race lights them.
       let slot = 0
       for (const lantern of track.lanterns) {
@@ -272,7 +279,8 @@ export default function Span() {
           garden={{
             thoughts: Number(params.get('thoughts') ?? 60),
             memories: Array.from({ length: Number(params.get('memories') ?? 18) }, (_, i) => ({ at: i, tint: ['#8a6f5a', '#5e7a8a', '#9a7a86', '#7d8a5e', '#a08a60'][i % 5] })),
-            messages: Number(params.get('messages') ?? 140),
+            messages: syntheticMessages(Number(params.get('messages') ?? 140)),
+            ore: Number(params.get('ore') ?? 0.7),
           }}
         />
       ) : null}

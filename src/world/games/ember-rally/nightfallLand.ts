@@ -195,6 +195,8 @@ interface Grid {
   WALLS: Float32Array
   /** Which place the nearest road is in, as 0..4. */
   PLACE: Float32Array
+  /** The nearest road's metre. */
+  SROAD: Float32Array
   /** How far from the river's middle, where there is one. */
   RIVER: Float32Array
 }
@@ -220,13 +222,14 @@ function makeGrid(track: Track): Grid {
     LEVEL: new Float32Array(cells),
     WALLS: new Float32Array(cells),
     PLACE: new Float32Array(cells),
+    SROAD: new Float32Array(cells),
     RIVER: new Float32Array(cells).fill(Infinity),
   }
 }
 
 /** Carry the nearest road's distance, level, verge and place to every cell. */
 function sweep(grid: Grid) {
-  const { nx, nz, NEAR, LEVEL, WALLS, PLACE } = grid
+  const { nx, nz, NEAR, LEVEL, WALLS, PLACE, SROAD } = grid
   const straight = CELL
   const diagonal = CELL * Math.SQRT2
   const take = (k: number, from: number, step: number) => {
@@ -236,6 +239,7 @@ function sweep(grid: Grid) {
       LEVEL[k] = LEVEL[from]
       WALLS[k] = WALLS[from]
       PLACE[k] = PLACE[from]
+      SROAD[k] = SROAD[from]
     }
   }
   for (let j = 0; j < nz; j++) {
@@ -372,6 +376,7 @@ function buildLand(track: Track): Land {
       grid.LEVEL[k] = plainLevel(s, road.y)
       grid.WALLS[k] = road.width + vergeWidth(road.room)
       grid.PLACE[k] = PLACE_INDEX[placeAt(s)]
+      grid.SROAD[k] = s
     }
   }
   sweep(grid)
@@ -379,10 +384,18 @@ function buildLand(track: Track): Land {
   blur(grid.LEVEL, nx, nz, 5, true, scratch)
   blur(grid.LEVEL, nx, nz, 5, false, scratch)
 
-  // The ground: level beside the road, and settling very gently away from it.
+  // The ground: level beside the road, and settling very gently away from it —
+  // then falling away over the last fifty metres before the margin, so the
+  // land ends by curving out of sight under the treeline rather than as a
+  // ledge with a ruler's edge, which is what a cliff to the floor looked like.
   const { H, NEAR, LEVEL, WALLS, PLACE } = grid
   for (let k = 0; k < H.length; k++) {
-    H[k] = NEAR[k] > MARGIN + CELL ? FLOOR : LEVEL[k] - 0.15 - 0.01 * Math.max(0, NEAR[k] - (WALLS[k] + 30))
+    if (NEAR[k] > MARGIN + CELL) {
+      H[k] = FLOOR
+      continue
+    }
+    const fall = smooth(MARGIN - 50, MARGIN + CELL, NEAR[k])
+    H[k] = LEVEL[k] - 0.15 - 0.01 * Math.max(0, NEAR[k] - (WALLS[k] + 30)) - fall * fall * 14
   }
 
   // The knoll over the Hollow, high enough to hold the room and the passages.
@@ -410,6 +423,24 @@ function buildLand(track: Track): Land {
     const place = PLACE[k]
     const amount = place === 3 ? 1.2 : place === 0 ? 3.2 : 2.2
     H[k] += ((fbm(x, z) - 0.5) * amount + (noise2(x / 8, z / 8) - 0.5) * 0.35) * away
+  }
+  /*
+    The knoll is a hill, not a tent. Two cones meeting made straight ridges
+    and flat flanks that read as folded card; this breaks them with noise in
+    proportion to how high the ground stands over the road's level — only
+    ever *upward*, so nothing here can bring the hillside down onto the vault
+    it is holding up, and only where the rise is, so the meadow either side
+    of it is untouched.
+  */
+  for (let k = 0; k < H.length; k++) {
+    if (NEAR[k] > MARGIN + CELL || PLACE[k] !== 2) continue
+    const rise = H[k] - LEVEL[k]
+    if (rise <= 1) continue
+    const i = k % nx
+    const x = x0 + i * CELL
+    const z = z0 + ((k - i) / nx) * CELL
+    const knead = noise2(x / 23 + 11, z / 23) * 0.6 + noise2(x / 9 + 5, z / 9) * 0.4
+    H[k] += knead * Math.min(rise, 12) * 0.32
   }
 
   // The river: a bed cut beside the road down the valley, with its own wander.
@@ -497,15 +528,16 @@ function buildLand(track: Track): Land {
     two passes below never raise.
   */
   for (const r of river) trough(grid, r.x, r.z, r.y, RIVER_HALF, 0.7, RIVER_BED)
-  // A cutting beyond it: the valley banks and the mouths of the cave are steep, the rest gentle.
+  // A cutting beyond it: the valley banks are steep, the rest gentle. The
+  // mouths of the cave are cut below, their own way.
   for (let r = 0; r < ringCount; r += 2) {
     if (!ringOpen[r]) continue
     const s = r * RING
     const place = placeAt(s)
-    const steep = place === 'wellspring' || place === 'hollow' ? 2.2 : 1.1
+    if (place === 'hollow') continue
+    const steep = place === 'wellspring' ? 2.2 : 1.1
     const edge = ringEdge[r]
-    // At the mouths the cutting is short, or it would carve the knoll off the vault behind it.
-    const reach = edge + (place === 'hollow' ? CELL + 1.5 : 44)
+    const reach = edge + 44
     const [i0, i1, j0, j1] = span(ringX[r], ringZ[r], reach)
     for (let j = j0; j <= j1; j++) {
       const dz = z0 + j * CELL - ringZ[r]
@@ -519,6 +551,26 @@ function buildLand(track: Track): Land {
         if (H[k] > allowed) H[k] = allowed
       }
     }
+  }
+  /*
+    The mouths: a cutting into the hillside, steep, and smooth along the
+    road. Cut by each cell's own distance to the road rather than by discs
+    round each ring — discs a few metres across, reaching only a little way
+    into a hill, left a scalloped ridge along both cuttings. And only where
+    the nearest road is in the open: a cell whose nearest metre of road is
+    under the knoll is the knoll's roof, and the roof stays.
+  */
+  for (let k = 0; k < H.length; k++) {
+    if (PLACE[k] !== 2 || NEAR[k] > MARGIN) continue
+    const s = grid.SROAD[k]
+    if (underground(s)) {
+      // The first metres of roof: cleared over the road's own strip only, so
+      // a cell straddling the mouth cannot stand across the last open ring.
+      const into = Math.min(s - (M.hollow.from + 22), M.hollow.to - 22 - s)
+      if (into > 7 || NEAR[k] > WALLS[k] + EDGE + 1.5) continue
+    }
+    const allowed = LEVEL[k] - 0.05 + 2.2 * Math.max(0, NEAR[k] - WALLS[k] - CELL * 0.6)
+    if (H[k] > allowed) H[k] = allowed
   }
   // And under the drawn road itself.
   {

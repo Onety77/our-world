@@ -2845,15 +2845,20 @@ function dressNightfall(track: Track, rng: () => number) {
   }
 
   /*
-    The two lights over the plain: hers and yours, warm and cool, hung high
-    either side of the bend, drifting toward each other and never meeting —
-    the shape of the thing. `warm` is the whole difference between them.
+    The two lights over the plain: hers and yours, warm and cool, close but
+    not touching, over a cairn on the inside of the bend — the Stars' own
+    landmark, as the garden shows it (`world/hub/landmarks/Stars`). One sits
+    higher, larger and nearer; the other hangs back. `warm` is the whole
+    difference between them. The cairn is built by `nightfallProps` at the
+    same place, fourteen metres inside the verge, and tops out about a metre
+    and a third above the ground.
   */
   {
-    const { from, to } = NIGHTFALL.stars
-    const bend = NIGHTFALL.starsBend
-    track.lanterns.push({ s: from + (bend - from) * 0.55, n: -22, y: 9, size: 2.4, warm: 1 })
-    track.lanterns.push({ s: bend + (to - bend) * 0.4, n: 24, y: 9, size: 2.4, warm: 0 })
+    const s = NIGHTFALL.starsBend + 30
+    const i = at(s)
+    const centre = -(track.width[i] + vergeWidth(track.room[i]) + 14)
+    track.lanterns.push({ s: s + 0.12, n: centre - 0.72, y: 2.55, size: 1.25, warm: 1 })
+    track.lanterns.push({ s: s - 0.2, n: centre + 0.66, y: 2.15, size: 1.0, warm: 0 })
   }
 
   // The lanterns of the walk, alternating, closer where the lane turns.

@@ -468,8 +468,14 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       next.uniforms.uFogColor.value.copy(meadow.fog)
       next.uniforms.uFogNear.value = meadow.near
       next.uniforms.uFogFar.value = meadow.far
+      // The veins are the Hollow's ore, and `Nightlife` turns them up in the
+      // room and off everywhere else, by how much of itself the room has earned.
       next.uniforms.uVeinColor.value.set('#000000')
       next.uniforms.uHeadColor.value.set('#ffd9a8')
+      // Beds in the Hollow's rock and the knoll's outcrops; none on grass,
+      // litter or the road, which are all smoother or rougher than the band.
+      next.uniforms.uStrata.value = 1
+      next.uniforms.uStrataTop.value = 0.88
     }
     return next
   }, [track.stage])

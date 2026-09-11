@@ -1751,6 +1751,14 @@ handling changed.
       `npm run tyre-contact` covers it. Uncommitted at the time of writing;
       no music bed yet (`music/nightfall.*` — `roadMusic` is ready for it).
       See `ember-rally/README.md` and the NOTES entry for what bit
+- [x] **The Nightfall is lived on.** The same pass as the other four: a
+      grass path with the line worn through it, a treeline and hills where the
+      sky had an edge, the Wellspring's boulders, shallows stones, spring and
+      mist, the knoll kneaded and its mouths cut smooth, beds, stalactites and
+      roots in the passages, seats and smoke and earned ore in the room, the
+      Stars' cairn under the two lights and waymarkers down the plain, the
+      walk's gateway, motes and falling leaves, swallows and bats. `nightfallProps.ts`
+      and `Nightair.tsx`. Measured: 57–215k triangles desktop, 76–182k phone
 - [ ] Full regression + screenshot sweep, update the in-world guide
 
 ## After that

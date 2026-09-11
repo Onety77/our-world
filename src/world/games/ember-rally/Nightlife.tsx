@@ -50,6 +50,7 @@ import { useWorldSlice } from '@/data/provider'
 import { useMemories } from '@/systems/memories'
 import { useTalking } from '@/systems/talking'
 import { useQuality } from '@/systems/quality'
+import { seasonedBy } from '@/systems/seasoned'
 import { FLOWER_COLORS, LIGHT_COLORS } from '@/systems/palette'
 import { growTree, leafGeometry, speciesFor } from '@/world/tree'
 import type { FormInstance } from '@/world/forms'
@@ -59,6 +60,9 @@ import { random } from './model'
 import { NIGHTFALL, emptyRoad, roadAt, vergeWidth, type Track } from './track'
 import { RIVER_HALF, placeAt, type Land } from './nightfallLand'
 import { dawnBearing, greatTreeAt, roomAt } from './Nightfall'
+import { district } from './dust'
+import { Nightair } from './Nightair'
+import { garden as onRoad } from './garden'
 
 function hash(a: number, b: number, c: number): number {
   const value = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453
@@ -192,6 +196,75 @@ const CARD_VERT = /* glsl */ `
   }
 `
 
+/**
+ * A far tree as a card turned to the eye about its own trunk, with the crown
+ * cut out of it in the fragment: three overlapping rounds and a trunk, the
+ * rounds a little different per tree so a belt of them is not one stamp.
+ */
+const TREECARD_VERT = /* glsl */ `
+  attribute vec3 iAt;
+  attribute vec3 iShape;
+  attribute float iTint;
+  varying vec2 vUv;
+  varying float vTint;
+  varying float vDepth;
+  varying vec3 vWorld;
+  void main() {
+    vUv = vec2(position.x + 0.5, position.y);
+    vTint = iTint;
+    // Turned to face the camera about the vertical.
+    vec3 toEye = cameraPosition - iAt;
+    // (flat is a GLSL qualifier, as half is a GLSL type: neither is a name.)
+    vec2 across = normalize(vec2(-toEye.z, toEye.x));
+    vec3 world = iAt + vec3(across.x, 0.0, across.y) * position.x * iShape.x * iShape.y + vec3(0.0, position.y * iShape.x, 0.0);
+    vWorld = world;
+    vec4 mv = viewMatrix * vec4(world, 1.0);
+    vDepth = -mv.z;
+    gl_Position = projectionMatrix * mv;
+  }
+`
+
+const TREECARD_FRAG = /* glsl */ `
+  precision highp float;
+  uniform vec3 uAmbient;
+  uniform float uDaylight;
+  uniform vec3 uSkyColor;
+  uniform vec3 uSunColor;
+  uniform vec3 uFogColor;
+  uniform float uFogNear;
+  uniform float uFogFar;
+  varying vec2 vUv;
+  varying float vTint;
+  varying float vDepth;
+  varying vec3 vWorld;
+  float crownRound(vec2 c, float r) {
+    float d = length((vUv - c) * vec2(1.0, 1.15));
+    // A ragged edge, so the outline is leaves and not a coin.
+    float rag = sin(atan(vUv.y - c.y, vUv.x - c.x) * 9.0 + vTint * 20.0) * 0.03;
+    return step(d, r + rag);
+  }
+  void main() {
+    float spread = 0.85 + vTint * 0.3;
+    // A broad low crown — most of the card is leaves, and the trunk shows only underneath.
+    float crown = crownRound(vec2(0.5, 0.58), 0.34 * spread);
+    crown += crownRound(vec2(0.28, 0.5), 0.24 * spread);
+    crown += crownRound(vec2(0.72, 0.52), 0.25 * spread);
+    crown += crownRound(vec2(0.5, 0.8), 0.19 * spread);
+    crown += crownRound(vec2(0.36, 0.72), 0.15 * spread);
+    float trunk = step(abs(vUv.x - 0.5), 0.03) * step(vUv.y, 0.3);
+    if (crown + trunk < 0.5) discard;
+    // Dark against the dusk: a silhouette takes a little of the sky, none of
+    // the sun — and less of the fog than the ground does, or the belt dissolves
+    // into the horizon it is there to give an edge to.
+    vec3 body = vec3(0.13, 0.15, 0.1);
+    vec3 colour = body * (uAmbient * 0.8 + uSkyColor * uDaylight * 0.5 + uSunColor * uDaylight * 0.08);
+    colour = mix(colour, uFogColor, smoothstep(uFogNear, uFogFar, vDepth) * 0.72);
+    gl_FragColor = vec4(colour, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`
+
 /** Points of light: message-lights over the dawn, embers off the hearth, fireflies. */
 const SPARK_VERT = /* glsl */ `
   attribute vec3 iAt;
@@ -280,16 +353,33 @@ const RIVER_FRAG = /* glsl */ `
   varying float vAcross;
   varying float vDepth;
   void main() {
-    // Ripples, as a normal built from the same waves the vertices ride.
-    float dA = cos(vAlong * 0.9 - uClock * 2.1 + vAcross * 3.0) * 0.9 * 0.03 + cos(vAlong * 2.3 - uClock * 3.4 - vAcross * 5.0) * 2.3 * 0.015;
-    float dX = cos(vAlong * 0.9 - uClock * 2.1 + vAcross * 3.0) * 3.0 * 0.03 - cos(vAlong * 2.3 - uClock * 3.4 - vAcross * 5.0) * 5.0 * 0.015;
+    /*
+      Ripples, as a normal built from the same two waves the vertices ride and
+      a third, finer, at an angle that answers neither — the garden's own rule
+      for water (world/water): two waves cross into a lattice, three at odd
+      angles and frequencies do not.
+    */
+    float w1 = vAlong * 0.9 - uClock * 2.1 + vAcross * 3.0;
+    float w2 = vAlong * 2.3 - uClock * 3.4 - vAcross * 5.0;
+    // Two more in world metres at angles that answer nothing, finer and
+    // smaller as they go — slope is height times frequency, and slope is all
+    // the reflection reads. The ribbon's own two waves are kept small in the
+    // normal: a crest a ribbon can describe is a straight rung bank to bank.
+    float w3 = vWorld.x * 1.7 + vWorld.z * 2.9 - uClock * 2.7;
+    float w4 = vWorld.x * 3.9 - vWorld.z * 2.2 + uClock * 1.9;
+    float dA = cos(w1) * 0.9 * 0.012 + cos(w2) * 2.3 * 0.006 + cos(w3) * 2.9 * 0.011 + cos(w4) * 2.2 * 0.005;
+    float dX = cos(w1) * 3.0 * 0.012 - cos(w2) * 5.0 * 0.006 + cos(w3) * 1.7 * 0.011 - cos(w4) * 3.9 * 0.005;
     vec3 n = normalize(vec3(-dX * 2.0, 1.0, -dA * 2.0));
     vec3 view = normalize(cameraPosition - vWorld);
     float fresnel = pow(1.0 - max(0.0, dot(n, view)), 3.0);
-    // The Wellspring's water: dark teal with the sky lying on it, more at a low angle.
-    vec3 deep = vec3(0.05, 0.085, 0.095);
-    vec3 skyIn = mix(uAmbient * 0.45, uSkyColor * 0.55 + uSunColor * 0.1, uDaylight);
-    vec3 colour = mix(deep * (uAmbient * 2.5 + uDaylight * 0.8), skyIn, 0.15 + fresnel * 0.45);
+    // The Wellspring's water: deep and cold in the channel, paler where it
+    // runs thin at the banks — the garden's own two colours — lit by the
+    // road's light, with a little of the sky lying on it at a low angle.
+    float bankNear = smoothstep(0.3, 0.95, abs(vAcross));
+    vec3 body = mix(vec3(0.16, 0.26, 0.29), vec3(0.38, 0.48, 0.45), bankNear);
+    vec3 lit = body * (uAmbient * 1.5 + (uSkyColor * 0.6 + uSunColor * 0.15) * uDaylight);
+    vec3 skyIn = mix(uAmbient * 0.6, uSkyColor * 0.7 + uSunColor * 0.12, uDaylight);
+    vec3 colour = mix(lit, skyIn, 0.08 + fresnel * 0.3);
     // The sun on the water, while there is one.
     vec3 h = normalize(uSunDir + view);
     colour += uSunColor * pow(max(0.0, dot(n, h)), 90.0) * uDaylight * 0.8;
@@ -302,10 +392,9 @@ const RIVER_FRAG = /* glsl */ `
       vec3 hl = normalize(toward / max(dist, 0.001) + view);
       colour += uLampColors[i] * (fall * fall * 0.12 + pow(max(0.0, dot(n, hl)), 60.0) * fall * 0.6);
     }
-    // The shallows: paler, and broken, toward the banks.
-    float bank = smoothstep(0.55, 1.0, abs(vAcross));
-    colour = mix(colour, colour + vec3(0.06, 0.07, 0.07) * (uAmbient * 3.0 + uDaylight), bank * 0.6);
-    float alpha = 0.92 - bank * 0.5;
+    // Broken at the very edge, so the bank is wet rather than cut.
+    float bank = smoothstep(0.7, 1.0, abs(vAcross));
+    float alpha = 0.94 - bank * 0.6;
     colour = mix(colour, uFogColor, smoothstep(uFogNear, uFogFar, vDepth));
     gl_FragColor = vec4(colour, alpha);
     #include <tonemapping_fragment>
@@ -428,6 +517,64 @@ function grassShape(): BufferGeometry {
     position.push(cx * 0.03 - cz * 0.03, 0, cz * 0.03 + cx * 0.03, cx * 0.03 + cz * 0.03, 0, cz * 0.03 - cx * 0.03, cx * lean, tall, cz * lean)
     colour.push(foot.r, foot.g, foot.b, foot.r, foot.g, foot.b, tip.r, tip.g, tip.b)
     index.push(i, i + 1, i + 2)
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(position), 3))
+  geometry.setAttribute('aColor', new BufferAttribute(new Float32Array(colour), 3))
+  geometry.setIndex(index)
+  const normal = new Float32Array(position.length)
+  for (let i = 1; i < normal.length; i += 3) normal[i] = 1
+  geometry.setAttribute('normal', new BufferAttribute(normal, 3))
+  return geometry
+}
+
+/** A fern of the wood's floor: five fronds fanning out and drooping. */
+function fernShape(): BufferGeometry {
+  const position: number[] = []
+  const colour: number[] = []
+  const index: number[] = []
+  const dark = new Color('#2f4a2a')
+  const pale = new Color('#5a7a44')
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * Math.PI * 2 + hash(k, 3, 1) * 0.5
+    const cx = Math.cos(a), cz = Math.sin(a)
+    const reach = 0.7 + hash(k, 3, 2) * 0.4
+    // A frond is a kite: the base, two wide points a third out, and the tip, drooping.
+    const i = position.length / 3
+    position.push(0, 0.05, 0)
+    position.push(cx * reach * 0.4 - cz * 0.16, 0.42, cz * reach * 0.4 + cx * 0.16)
+    position.push(cx * reach * 0.4 + cz * 0.16, 0.42, cz * reach * 0.4 - cx * 0.16)
+    position.push(cx * reach, 0.26, cz * reach)
+    colour.push(dark.r, dark.g, dark.b, pale.r, pale.g, pale.b, pale.r, pale.g, pale.b, dark.r, dark.g, dark.b)
+    index.push(i, i + 1, i + 2, i + 1, i + 3, i + 2)
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(position), 3))
+  geometry.setAttribute('aColor', new BufferAttribute(new Float32Array(colour), 3))
+  geometry.setIndex(index)
+  const normal = new Float32Array(position.length)
+  for (let i = 1; i < normal.length; i += 3) normal[i] = 1
+  geometry.setAttribute('normal', new BufferAttribute(normal, 3))
+  return geometry
+}
+
+/** A bush: a low round mass of leafy cards, for the knoll and the meadow's edge. */
+function bushShape(): BufferGeometry {
+  const position: number[] = []
+  const colour: number[] = []
+  const index: number[] = []
+  const inner = new Color('#2d3b26')
+  const outer = new Color('#4a5c38')
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2 + hash(k, 5, 1)
+    const cx = Math.cos(a), cz = Math.sin(a)
+    const r = 0.35 + hash(k, 5, 2) * 0.25
+    const h = 0.55 + hash(k, 5, 3) * 0.35
+    // A card leaning outward from the middle, its foot near the centre.
+    const i = position.length / 3
+    position.push(-cz * 0.3, 0, cx * 0.3, cz * 0.3, 0, -cx * 0.3, cx * r + cz * 0.28, h, cz * r - cx * 0.28, cx * r - cz * 0.28, h, cz * r + cx * 0.28)
+    colour.push(inner.r, inner.g, inner.b, inner.r, inner.g, inner.b, outer.r, outer.g, outer.b, outer.r, outer.g, outer.b)
+    index.push(i, i + 1, i + 2, i, i + 2, i + 3)
   }
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(position), 3))
@@ -598,35 +745,65 @@ function plantWoods(track: Track, land: Land, share: number) {
   return kinds.map((kind, i) => batched(kind, plantings[i].at, plantings[i].shapes, plantings[i].tints, 120, 14)).flat()
 }
 
-/** The meadow's grass and the valley's reeds. */
+/**
+ * The meadow's grass and the valley's reeds; the wood's ferns; the bushes on
+ * the knoll and along the meadow's edge; the plain's dry tufts.
+ *
+ * Thick beside the road and thinning away from it, because the road is where
+ * the eye is: a meadow that is bare for the first ten metres and grassy at
+ * forty is a meadow seen from a car with no grass in it.
+ */
 function plantGround(track: Track, land: Land, share: number) {
   const rng = random(track.seed ^ 0x77bd2)
   const road = emptyRoad()
   const basis = flatBasis()
   const grass = { at: [] as number[], shapes: [] as number[], tints: [] as number[] }
   const reeds = { at: [] as number[], shapes: [] as number[], tints: [] as number[] }
+  const ferns = { at: [] as number[], shapes: [] as number[], tints: [] as number[] }
+  const bushes = { at: [] as number[], shapes: [] as number[], tints: [] as number[] }
   const M = NIGHTFALL
-  const put = (into: typeof grass, s: number, side: number, out: number, tall: number, wide: number) => {
+  const put = (into: typeof grass, s: number, side: number, out: number, tall: number, wide: number, keep = 0.3) => {
     roadAt(track, s, road)
     basisAt(road, basis)
     const h = Math.hypot(basis.rx, basis.rz) || 1
     const along = rng() * 3
     const x = road.x + (basis.rx / h) * side * out + basis.fx * along
     const z = road.z + (basis.rz / h) * side * out + basis.fz * along
-    if (land.roadDistance(x, z) < road.width + vergeWidth(road.room) + 0.3) return
+    if (land.roadDistance(x, z) < road.width + vergeWidth(road.room) + keep) return
+    if (land.slopeAt(x, z) > 0.9) return
     if (hash(Math.round(x * 3), Math.round(z * 3), 9) > share) return
     into.at.push(x, land.heightAt(x, z) - 0.03, z)
     into.shapes.push(tall, wide, rng() * Math.PI * 2)
     into.tints.push(rng())
   }
-  for (let s = 6; s < track.length - 6; s += 3) {
+  for (let s = 6; s < track.length - 6; s += 2) {
     const place = placeAt(s)
     roadAt(track, s, road)
     const wall = road.width + vergeWidth(road.room)
-    const want = place === 'meadow' ? 1 : place === 'walk' ? 0.4 : place === 'stars' ? 0.5 : place === 'wellspring' ? 0.5 : 0
-    if (want === 0) continue
+    const cave = s > M.hollow.from + 16 && s < M.hollow.to - 16
+    if (cave) continue
     for (const side of [-1, 1]) {
-      for (let k = 0; k < 3; k++) if (rng() < want) put(grass, s, side, wall + 0.6 + rng() * rng() * 30, 0.35 + rng() * 0.5, 1)
+      if (place === 'meadow') {
+        // Thick to the verge, thinning out to forty metres.
+        for (let k = 0; k < 5; k++) put(grass, s, side, wall + 0.3 + rng() * rng() * 14, 0.4 + rng() * 0.5, 1)
+        for (let k = 0; k < 2; k++) put(grass, s, side, wall + 14 + rng() * 26, 0.35 + rng() * 0.4, 1)
+        if (rng() < 0.05) put(bushes, s, side, wall + 3 + rng() * 40, 0.9 + rng() * 1.2, 1.2, 1.2)
+      } else if (place === 'wellspring') {
+        for (let k = 0; k < 2; k++) put(grass, s, side, wall + 0.4 + rng() * rng() * 10, 0.35 + rng() * 0.4, 1)
+        if (rng() < 0.03) put(bushes, s, side, wall + 6 + rng() * 30, 0.8 + rng() * 1.0, 1.2, 1.2)
+      } else if (place === 'hollow') {
+        // The knoll: scrub in the grass over the rock.
+        if (rng() < 0.12) put(bushes, s, side, wall + 8 + rng() * 50, 0.7 + rng() * 1.1, 1.3, 1.5)
+        if (rng() < 0.5) put(grass, s, side, wall + 2 + rng() * 30, 0.3 + rng() * 0.35, 1)
+      } else if (place === 'stars') {
+        // Dry tufts, sparse, palest near the road where the lamps find them.
+        if (rng() < 0.45) put(grass, s, side, wall + 0.3 + rng() * rng() * 12, 0.3 + rng() * 0.3, 0.8)
+        if (rng() < 0.12) put(grass, s, side, wall + 12 + rng() * 40, 0.3 + rng() * 0.3, 0.8)
+      } else {
+        // The wood's floor: ferns and a little grass.
+        for (let k = 0; k < 2; k++) if (rng() < 0.7) put(ferns, s, side, wall + 0.6 + rng() * rng() * 9, 0.8 + rng() * 0.7, 1)
+        if (rng() < 0.5) put(grass, s, side, wall + 0.3 + rng() * 5, 0.3 + rng() * 0.35, 1)
+      }
     }
   }
   // Reeds along the water.
@@ -651,7 +828,57 @@ function plantGround(track: Track, land: Land, share: number) {
   return {
     grass: batched(grassShape(), grass.at, grass.shapes, grass.tints, 60, 1),
     reeds: batched(reedShape(), reeds.at, reeds.shapes, reeds.tints, 60, 2.5),
+    ferns: batched(fernShape(), ferns.at, ferns.shapes, ferns.tints, 60, 1.2),
+    bushes: batched(bushShape(), bushes.at, bushes.shapes, bushes.tints, 90, 2.5),
   }
+}
+
+/**
+ * The treeline: a belt of silhouettes far off round the meadow, the valley's
+ * rim and — thinly — the plain, where the ground runs out and the sky began
+ * with a ruler's edge. Cards, because at a hundred and fifty metres at dusk a
+ * tree is its outline and nothing else; the wood's real trees stand nearer.
+ */
+function plantTreeline(track: Track, land: Land) {
+  const rng = random(track.seed ^ 0x3c9e1)
+  const at: number[] = []
+  const shapes: number[] = []
+  const tints: number[] = []
+  const road = emptyRoad()
+  const basis = flatBasis()
+  for (let s = 0; s < track.length; s += 3) {
+    const place = placeAt(s)
+    if (place === 'hollow' || place === 'walk') continue
+    const chance = place === 'stars' ? 0.3 : 1
+    roadAt(track, s, road)
+    basisAt(road, basis)
+    const h = Math.hypot(basis.rx, basis.rz) || 1
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 2; k++) {
+        if (rng() > chance) continue
+        // Two rows: a near belt and a far one behind it, so the edge is a wood and not a fence.
+        const out = (k === 0 ? 125 : 165) + rng() * 40
+        const x = road.x + (basis.rx / h) * side * out + basis.fx * rng() * 3
+        const z = road.z + (basis.rz / h) * side * out + basis.fz * rng() * 3
+        // Not where the road comes back round (the Tree Turn's inside is the meadow).
+        if (land.roadDistance(x, z) < 90) continue
+        at.push(x, land.heightAt(x, z) - 0.5, z)
+        shapes.push(8 + rng() * 8, 0.8 + rng() * 0.7, rng())
+        tints.push(rng())
+      }
+    }
+  }
+  return batched(treeCardShape(), at, shapes, tints, 200, 16)
+}
+
+/** One card for a far tree: a vertical quad the shader cuts a crown out of. */
+function treeCardShape(): BufferGeometry {
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array([-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0]), 3))
+  geometry.setAttribute('aColor', new BufferAttribute(new Float32Array([0.12, 0.14, 0.09, 0.12, 0.14, 0.09, 0.16, 0.18, 0.11, 0.16, 0.18, 0.11]), 3))
+  geometry.setAttribute('normal', new BufferAttribute(new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]), 3))
+  geometry.setIndex([0, 1, 2, 0, 2, 3])
+  return geometry
 }
 
 /**
@@ -768,29 +995,49 @@ function riverRibbon(land: Land): BufferGeometry {
 
 // ---------------------------------------------------------------------------
 
-/** What of the garden's own is on the road: how many thoughts, which memories (their tints), how many messages. */
+/**
+ * What of the garden's own is on the road: how many thoughts, which memories
+ * (their tints), the messages (who said each, and how many hearts it has — a
+ * hearted one burns bigger and steadier, as the Stars hang them), and how much
+ * of itself the Hollow's room has earned, which is how much ore shows in it.
+ */
 export interface GardenCounts {
   thoughts: number
   memories: readonly { at: number; tint: string }[]
-  messages: number
+  /** Oldest first. */
+  messages: readonly { warm: boolean; hearts: number }[]
+  /** 0..1 — see `systems/seasoned`. */
+  ore: number
 }
 
 /** The life, read live from the garden's data. The race mounts this. */
 export function NightlifeLive(props: { track: Track; rock: ShaderMaterial; land: Land }) {
   const thoughts = useWorldSlice((s) => s.letters.length)
   const memories = useMemories((m) => m.all)
-  const messages = useTalking((t) => t.messages.length)
-  return <Nightlife {...props} garden={{ thoughts, memories, messages }} />
+  const said = useTalking((t) => t.messages)
+  const pollen = useWorldSlice((s) => s.pollen.total)
+  const messages = useMemo(
+    () => said.map((m) => ({ warm: m.by === 'warm', hearts: m.hearts ? Object.keys(m.hearts).length : 0 })),
+    [said],
+  )
+  const ore = useMemo(() => seasonedBy(pollen), [pollen])
+  return <Nightlife {...props} garden={{ thoughts, memories, messages, ore }} />
+}
+
+/** A stand-in conversation for a build with no data behind it, such as `dev-span`. */
+export function syntheticMessages(count: number): { warm: boolean; hearts: number }[] {
+  return Array.from({ length: count }, (_, i) => ({ warm: hash(i, 9, 1) > 0.5, hearts: hash(i, 9, 2) > 0.8 ? 2 : hash(i, 9, 2) > 0.6 ? 1 : 0 }))
 }
 
 export function Nightlife({ track, rock, land, garden }: { track: Track; rock: ShaderMaterial; land: Land; garden: GardenCounts }) {
   const tier = useQuality((q) => q.tier)
   const share = tier === 'low' ? 0.45 : tier === 'medium' ? 0.72 : 1
-  const { thoughts, memories, messages } = garden
+  const { thoughts, memories, messages, ore } = garden
 
   const tree = useMemo(() => greatTreeAt(track, land), [track, land])
   const woods = useMemo(() => plantWoods(track, land, share), [track, land, share])
   const ground = useMemo(() => plantGround(track, land, share), [track, land, share])
+  const treeline = useMemo(() => plantTreeline(track, land), [track, land])
   const flowers = useMemo(() => plantFlowers(track, land, tree.foot, thoughts, share), [track, land, tree, thoughts, share])
   const river = useMemo(() => riverRibbon(land), [land])
   const room = useMemo(() => roomAt(track), [track])
@@ -848,14 +1095,18 @@ export function Nightlife({ track, rock, land, garden }: { track: Track; rock: S
         card.push(0.26, 0.34, a + Math.PI / 2, glow)
       }
     })
-    return { geometry: cards(at, face, card), lit: Math.min(sorted.length, posts.length), posts: posts.length }
+    // And each post's colour by itself, for the motes that drift round it.
+    const tints = posts.map((_, i) => (sorted[i] ? new Color(sorted[i].tint).lerp(plain, 0.15).getHexString() : plain.getHexString())).map((h) => `#${h}`)
+    return { geometry: cards(at, face, card), lit: Math.min(sorted.length, posts.length), posts: posts.length, tints }
   }, [track, memories])
 
-  // The lights in the sky: one per message, low over her dawn and climbing away.
+  // The lights in the sky: one per message, low over her dawn and climbing
+  // away, in the colour of whoever said it; a hearted one burns bigger.
   const skyLights = useMemo(() => {
     const at: number[] = []
     const spark: number[] = []
-    const count = Math.min(messages, 400)
+    const recent = messages.slice(-400)
+    const count = recent.length
     const centre = roadAt(track, NIGHTFALL.stars.from + 400)
     for (let i = 0; i < count; i++) {
       const t = i / Math.max(1, count - 1)
@@ -867,10 +1118,30 @@ export function Nightlife({ track, rock, land, garden }: { track: Track; rock: S
       const y = centre.y + 4 + age * 220 + hash(i, 6, 2) * 12
       at.push(centre.x + Math.sin(a) * distance, y, centre.z + Math.cos(a) * distance)
       // The newest are lanterns, plainly; the oldest are one more star.
-      spark.push(2.0 + (1 - age) * 3.6, hash(i, 6, 3), 0, hash(i, 6, 4) > 0.5 ? 1 : 0)
+      const m = recent[i]
+      spark.push((2.0 + (1 - age) * 3.6) * (1 + m.hearts * 0.35), hash(i, 6, 3), 0, m.warm ? 1 : 0)
     }
     return { geometry: sparks(at, spark), count }
   }, [track, dawn, messages])
+
+  // The two lights over the cairn, as halos round the road's own lamps: one
+  // warm and one cool, breathing a little out of step, never level.
+  const pair = useMemo(() => {
+    const at: number[] = []
+    const spark: number[] = []
+    const road = emptyRoad()
+    const basis = flatBasis()
+    const point = new Vector3()
+    for (const l of track.lanterns) {
+      if (l.fire || l.s < NIGHTFALL.stars.from || l.s > NIGHTFALL.stars.to) continue
+      roadAt(track, l.s, road)
+      basisAt(road, basis)
+      roadPoint(road, l.n, l.y, point, basis)
+      at.push(point.x, point.y, point.z)
+      spark.push(l.warm ? 5.5 : 4.5, l.warm ? 0.1 : 0.62, 0, l.warm)
+    }
+    return sparks(at, spark)
+  }, [track])
 
   // The hearth's embers, and the fireflies of the meadow at dusk.
   const embers = useMemo(() => {
@@ -917,7 +1188,10 @@ export function Nightlife({ track, rock, land, garden }: { track: Track; rock: S
       tree: plant(0.008),
       grass: plant(0.5),
       reed: plant(0.12),
+      fern: plant(0.2),
+      bush: plant(0.06),
       flower: plant(0.25),
+      treeline: new ShaderMaterial({ vertexShader: TREECARD_VERT, fragmentShader: TREECARD_FRAG, side: DoubleSide, uniforms: { ...light } }),
       paper: new ShaderMaterial({ vertexShader: CARD_VERT, fragmentShader: LIT_FRAG, side: DoubleSide, uniforms: { ...light, uClock: clock, uFlutter: { value: 0.35 } } }),
       pane: new ShaderMaterial({ vertexShader: CARD_VERT, fragmentShader: LIT_FRAG, side: DoubleSide, uniforms: { ...light, uClock: clock, uFlutter: { value: 0 } } }),
       spark: new ShaderMaterial({
@@ -946,13 +1220,25 @@ export function Nightlife({ track, rock, land, garden }: { track: Track; rock: S
     woods.forEach((b) => b.geometry.dispose())
     ground.grass.forEach((b) => b.geometry.dispose())
     ground.reeds.forEach((b) => b.geometry.dispose())
+    ground.ferns.forEach((b) => b.geometry.dispose())
+    ground.bushes.forEach((b) => b.geometry.dispose())
     flowers.forEach((b) => b.geometry.dispose())
-  }, [woods, ground, flowers])
-  useEffect(() => () => { river.dispose(); papers.geometry.dispose(); papers.threads.dispose(); panes.geometry.dispose(); skyLights.geometry.dispose(); embers.dispose(); fireflies.dispose() },
-    [river, papers, panes, skyLights, embers, fireflies])
+    treeline.forEach((b) => b.geometry.dispose())
+  }, [woods, ground, flowers, treeline])
+  useEffect(() => () => { river.dispose(); papers.geometry.dispose(); papers.threads.dispose(); panes.geometry.dispose(); skyLights.geometry.dispose(); pair.dispose(); embers.dispose(); fireflies.dispose() },
+    [river, papers, panes, skyLights, pair, embers, fireflies])
 
   const refs = useRef<Mesh[]>([])
-  const allBatches = useMemo(() => [...woods, ...ground.grass, ...ground.reeds, ...flowers], [woods, ground, flowers])
+  // Every planting, with the material each is drawn in and how far it is drawn.
+  const allBatches = useMemo(() => [
+    ...woods.map((b) => ({ b, m: 'tree' as const, far: 300 })),
+    ...treeline.map((b) => ({ b, m: 'treeline' as const, far: 900 })),
+    ...ground.bushes.map((b) => ({ b, m: 'bush' as const, far: 160 })),
+    ...ground.grass.map((b) => ({ b, m: 'grass' as const, far: 110 })),
+    ...ground.reeds.map((b) => ({ b, m: 'reed' as const, far: 110 })),
+    ...ground.ferns.map((b) => ({ b, m: 'fern' as const, far: 110 })),
+    ...flowers.map((b) => ({ b, m: 'flower' as const, far: 110 })),
+  ], [woods, treeline, ground, flowers])
   const fires = useMemo(() => {
     const point = new Vector3()
     const out: { at: [number, number, number]; big: boolean }[] = []
@@ -978,27 +1264,37 @@ export function Nightlife({ track, rock, land, garden }: { track: Track; rock: S
     return out
   }, [track, room])
 
+  const oreColour = useMemo(() => new Color(), [])
   useFrame(({ camera }, delta) => {
     clock.value += Math.min(0.05, delta)
+    /*
+      The ore in the room's rock: the Hollow's amber threads, as much of them
+      as the room has earned, and only in the room — the road's vein term is a
+      contour in world space on rough stone, which is exactly a seam of ore,
+      and it is off everywhere else on this road.
+    */
+    const inRoom = district(onRoad.s, NIGHTFALL.ring.from - 50, NIGHTFALL.ring.to + 50, 40)
+    oreColour.setRGB(1.0, 0.44, 0.13).multiplyScalar(0.9 * ore * inRoom)
+    ;(rock.uniforms.uVeinColor.value as Color).lerp(oreColour, 1 - Math.exp(-3 * delta))
     // Only what the fog leaves, and never a wood a quarter of a mile off: past
     // three hundred metres a tree is a silhouette the ground already makes.
-    const far = Math.min(300, rock.uniforms.uFogFar.value as number)
+    const fog = rock.uniforms.uFogFar.value as number
     for (let i = 0; i < allBatches.length; i++) {
       const mesh = refs.current[i]
       if (!mesh) continue
-      const reach = i < woods.length ? far : Math.min(far, 110)
-      mesh.visible = camera.position.distanceTo(allBatches[i].centre) - allBatches[i].radius < reach
+      const { b, far } = allBatches[i]
+      mesh.visible = camera.position.distanceTo(b.centre) - b.radius < Math.min(far, fog * 1.05)
     }
   })
 
   return (
     <>
-      {allBatches.map((b, i) => (
+      {allBatches.map(({ b, m }, i) => (
         <mesh
           key={`life-${i}`}
           ref={(node) => { if (node) refs.current[i] = node }}
           geometry={b.geometry}
-          material={i < woods.length ? materials.tree : i < woods.length + ground.grass.length ? materials.grass : i < woods.length + ground.grass.length + ground.reeds.length ? materials.reed : materials.flower}
+          material={materials[m]}
         />
       ))}
       <mesh geometry={river} material={materials.river} renderOrder={1} />
@@ -1006,11 +1302,13 @@ export function Nightlife({ track, rock, land, garden }: { track: Track; rock: S
       {papers.count > 0 ? <lineSegments geometry={papers.threads} material={materials.thread} frustumCulled={false} /> : null}
       {panes.posts > 0 ? <mesh geometry={panes.geometry} material={materials.pane} frustumCulled={false} /> : null}
       {skyLights.count > 0 ? <points geometry={skyLights.geometry} material={materials.spark} frustumCulled={false} /> : null}
+      <points geometry={pair} material={materials.spark} frustumCulled={false} />
       <points geometry={embers} material={materials.ember} frustumCulled={false} />
       <points geometry={fireflies} material={materials.firefly} frustumCulled={false} />
       {fires.map((fire, i) => (
         <Fire key={`fire-${i}`} position={fire.at} height={fire.big ? 5 : 1.4} width={fire.big ? 2.8 : 0.9} intensity={0} night={0} />
       ))}
+      <Nightair track={track} rock={rock} land={land} paneTints={panes.tints} />
     </>
   )
 }

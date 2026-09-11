@@ -63,15 +63,16 @@ import { random } from './model'
 import { HEARTH_RISE, NIGHTFALL, emptyRoad, roadAt, vergeWidth, type RoadAt, type Track } from './track'
 import { landFor, nightfallVerge, placeAt, underground, type Land, type Place } from './nightfallLand'
 import { Nightlife, NightlifeLive, type GardenCounts } from './Nightlife'
+import { layProps, stone } from './nightfallProps'
 
 const RING = 2
 const CHUNK = 50
 
 /* ---- the palette: the garden's, at dusk ------------------------------------ */
 
-/** The meadow's path: earth worn through the grass. */
+/** The meadow's path: trodden grass, and the earth worn through it along the line. */
+const TRACK_GRASS = new Color('#5e6540')
 const PATH = new Color('#6b5a46')
-const PATH_WORN = new Color('#7c6a55')
 /** The valley track: river gravel. */
 const GRAVEL = new Color('#63645c')
 const GRAVEL_WORN = new Color('#737468')
@@ -309,31 +310,6 @@ export function greatTreeAt(track: Track, land: Land) {
       leafDetail: 0.55,
       woodDetail: 0.75,
     }),
-  }
-}
-
-/** A lump of the meadow's stone, sitting in the ground. */
-function stone(mesh: CourseMesh, x: number, y: number, z: number, size: number, seed: number) {
-  const RINGS = 3
-  const SIDES = 7
-  const base = mesh.count
-  for (let i = 0; i <= RINGS; i++) {
-    const phi = (-0.3 + (i / RINGS) * 1.3) * (Math.PI / 2)
-    const r = Math.cos(phi)
-    tint.copy(ROCK_LOW).lerp(ROCK_HIGH, i / RINGS).multiplyScalar(0.85 + hash3(seed, i, 1) * 0.3)
-    for (let k = 0; k < SIDES; k++) {
-      const a = (k / SIDES) * Math.PI * 2 + seed
-      const lumpy = 0.8 + hash3(seed, i, k) * 0.4
-      point.set(x + Math.cos(a) * size * r * lumpy, y + Math.sin(phi) * size * 0.7 - size * 0.2, z + Math.sin(a) * size * 0.85 * r * lumpy)
-      mesh.vertex(point, tint, 0, 0.8)
-    }
-  }
-  for (let i = 0; i < RINGS; i++) {
-    for (let k = 0; k < SIDES; k++) {
-      const a = base + i * SIDES + k
-      const next = base + i * SIDES + ((k + 1) % SIDES)
-      mesh.quad(a, a + SIDES, next + SIDES, next)
-    }
   }
 }
 
@@ -606,14 +582,21 @@ const SEAMS: { at: number; before: Place; after: Place }[] = [
   { at: NIGHTFALL.hollow.to, before: 'hollow', after: 'stars' },
   { at: NIGHTFALL.stars.to, before: 'stars', after: 'walk' },
 ]
-const ROAD_OF: Record<Place, [Color, Color, Color]> = {
-  meadow: [PATH, PATH_WORN, VERGE_GRASS],
-  wellspring: [GRAVEL, GRAVEL_WORN, VERGE_BANK],
-  hollow: [STONE, STONE_WORN, VERGE_CAVE],
-  stars: [DARK, DARK_WORN, VERGE_PLAIN],
-  walk: [LANE, LANE_WORN, VERGE_LITTER],
+/*
+  The road's surface, its worn line, its verge — and how hard the line is
+  worn into it. On the Meadow the road is *grass*: trodden, dry and cropped,
+  with an earth line worn right through it along the racing line, which is
+  what a path across a meadow is. The first cut drew the whole width as bare
+  earth and it read as the Harmattan's red dirt with a green plane either side.
+*/
+const ROAD_OF: Record<Place, [Color, Color, Color, number]> = {
+  meadow: [TRACK_GRASS, PATH, VERGE_GRASS, 1],
+  wellspring: [GRAVEL, GRAVEL_WORN, VERGE_BANK, 0.5],
+  hollow: [STONE, STONE_WORN, VERGE_CAVE, 0.5],
+  stars: [DARK, DARK_WORN, VERGE_PLAIN, 0.5],
+  walk: [LANE, LANE_WORN, VERGE_LITTER, 0.7],
 }
-function roadColours(s: number): [Color, Color, Color] {
+function roadColours(s: number): [Color, Color, Color, number] {
   const place = placeAt(s)
   const own = ROAD_OF[place]
   for (const seam of SEAMS) {
@@ -625,6 +608,7 @@ function roadColours(s: number): [Color, Color, Color] {
       new Color().copy(a[0]).lerp(b[0], t),
       new Color().copy(a[1]).lerp(b[1], t),
       new Color().copy(a[2]).lerp(b[2], t),
+      a[3] + (b[3] - a[3]) * t,
     ]
   }
   return own
@@ -677,7 +661,7 @@ export function buildNightfall(track: Track): TunnelChunk[] {
       // Passages are vaulted; the mouths and the room are open sections (the room has its own roof).
       const vaulted = underground(s) && !inRoom(s) && s > NIGHTFALL.hollow.from + 14 && s < NIGHTFALL.hollow.to - 14
       const kind = vaulted ? 'vault' : 'open'
-      const [roadColour, worn, vergeColour] = roadColours(s)
+      const [roadColour, worn, vergeColour, wear] = roadColours(s)
       const base = mesh.count
 
       if (vaulted) {
@@ -692,7 +676,7 @@ export function buildNightfall(track: Track): TunnelChunk[] {
           if (floor) {
             const away = Math.abs(offsets[k] - road.line)
             const wornBy = 1 - Math.min(1, Math.max(0, (away - 0.4) / 1.1))
-            tint.copy(roadColour).lerp(worn, wornBy * 0.5).multiplyScalar(0.93 + hash3(ring, k, 2) * 0.12)
+            tint.copy(roadColour).lerp(worn, wornBy * wear).multiplyScalar(0.93 + hash3(ring, k, 2) * 0.12)
             colour = tint
             rough = 0.3
             wet = road.wet
@@ -781,7 +765,7 @@ export function buildNightfall(track: Track): TunnelChunk[] {
           if (surface) {
             const away = Math.abs(across[k] - road.line)
             const wornBy = 1 - Math.min(1, Math.max(0, (away - 0.35) / 1.2))
-            tint.copy(roadColour).lerp(worn, wornBy * 0.5).multiplyScalar(0.93 + hash3(ring, k, 2) * 0.12)
+            tint.copy(roadColour).lerp(worn, wornBy * wear).multiplyScalar(0.93 + hash3(ring, k, 2) * 0.12)
             colour = tint
             rough = 0.28
             wet = road.wet
@@ -1136,6 +1120,9 @@ export function buildNightfall(track: Track): TunnelChunk[] {
     lanternPost(meshes[chunkFor(lantern.s)], point.x, ground, point.z, lantern.y - verge.grade(lantern.n) + 0.05, Math.round(lantern.s))
   }
 
+  // And everything else that stands on it — see `nightfallProps`.
+  layProps(track, land, room, (s) => meshes[chunkFor(s)])
+
   return meshes.map((mesh, index) => {
     const geometry = mesh.build()
     if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
@@ -1193,23 +1180,84 @@ const SKY_FRAG = /* glsl */ `
     dusk = mix(dusk, duskLow * 1.1, west * west * (1.0 - up) * 0.6);
     vec3 sky = mix(dusk, night, uNight);
 
-    // The stars, out as the dusk goes, and only up where the air is clear:
-    // a point in one cell in three hundred, not the cell itself.
+    /*
+      The stars, out as the dusk goes, and only up where the air is clear —
+      two fields: a fine one, a point in one cell in three hundred, and a
+      coarser one of fewer, brighter stars over it, so the sky has a few
+      you would name. The Stars' own sky is "deep and full of stars", and one
+      field alone read as a scatter.
+    */
     vec3 cell = floor(dir * 260.0);
     vec3 within = fract(dir * 260.0) - 0.5;
     float dot_ = length(within);
-    float star = step(0.9966, hash(cell)) * (1.0 - smoothstep(0.08, 0.3, dot_)) * smoothstep(0.02, 0.2, up);
+    float star = step(0.993, hash(cell)) * (1.0 - smoothstep(0.06, 0.3, dot_)) * smoothstep(0.02, 0.2, up);
     float twinkle = 0.7 + 0.3 * sin(uTime * 1.7 + hash(cell + 1.0) * 40.0);
-    sky += vec3(0.85, 0.88, 1.0) * star * twinkle * uNight * 1.2;
-    // A faint band of the galaxy, over the plain.
+    sky += vec3(0.85, 0.88, 1.0) * star * twinkle * uNight * 1.0;
+    vec3 bigCell = floor(dir * 90.0);
+    vec3 bigWithin = fract(dir * 90.0) - 0.5;
+    float big = step(0.985, hash(bigCell + 3.0)) * (1.0 - smoothstep(0.05, 0.22, length(bigWithin))) * smoothstep(0.03, 0.25, up);
+    float bigTwinkle = 0.75 + 0.25 * sin(uTime * 1.1 + hash(bigCell + 5.0) * 60.0);
+    sky += mix(vec3(0.9, 0.92, 1.0), vec3(1.0, 0.88, 0.7), hash(bigCell + 9.0)) * big * bigTwinkle * uNight * 1.9;
+    // The galaxy: a band of many faint stars and a haze between them, over the plain.
     float band = exp(-pow(dot(dir, normalize(vec3(0.3, 0.55, -0.78))), 2.0) * 9.0);
-    sky += vec3(0.16, 0.19, 0.28) * band * up * uNight * 0.5;
+    sky += vec3(0.16, 0.19, 0.28) * band * up * uNight * 0.55;
+    vec3 fineCell = floor(dir * 520.0);
+    float dust = step(0.992, hash(fineCell + 7.0)) * (1.0 - smoothstep(0.1, 0.4, length(fract(dir * 520.0) - 0.5)));
+    sky += vec3(0.7, 0.75, 0.9) * dust * band * up * uNight * 0.6;
+
+    /*
+      A shooting star, now and then: one streak every twenty to thirty
+      seconds, a second long, somewhere high. Drawn as the distance from the
+      direction to a short great-circle arc that moves — bright at the head,
+      fading down the tail.
+    */
+    {
+      float period = 24.0;
+      float which = floor(uTime / period);
+      float phase = fract(uTime / period) * period;
+      vec3 seed = vec3(which * 1.7, which * 0.3, which * 2.1);
+      float start = 3.0 + hash(seed) * 16.0;
+      float life = 1.1;
+      float t = (phase - start) / life;
+      if (t > 0.0 && t < 1.0) {
+        float a = hash(seed + 1.0) * 6.2832;
+        float e = 0.35 + hash(seed + 2.0) * 0.4;
+        vec3 from = normalize(vec3(cos(a) * cos(e), sin(e), sin(a) * cos(e)));
+        vec3 side = normalize(cross(from, vec3(0.0, 1.0, 0.0)));
+        vec3 fall = normalize(side * (hash(seed + 3.0) - 0.5) - vec3(0.0, 0.6, 0.0));
+        vec3 head = normalize(from + fall * t * 0.22);
+        vec3 tail = normalize(from + fall * max(0.0, t - 0.28) * 0.22);
+        // Distance from dir to the segment head..tail, in radians.
+        vec3 seg = head - tail;
+        float len2 = max(1e-5, dot(seg, seg));
+        float u = clamp(dot(dir - tail, seg) / len2, 0.0, 1.0);
+        vec3 near = tail + seg * u;
+        float d = length(dir - near);
+        float streak = exp(-d * 900.0) * (0.25 + 0.75 * u) * sin(t * 3.1416);
+        sky += vec3(1.0, 0.95, 0.85) * streak * uNight * 2.2;
+      }
+    }
 
     // Her dawn, low on the far edge: lit from under the horizon, and only there.
     float toward = max(0.0, dot(normalize(vec3(dir.x, 0.0, dir.z)), uDawn));
     float low = exp(-max(0.0, dir.y) * 9.0);
     vec3 dawn = mix(vec3(0.95, 0.58, 0.30), vec3(0.45, 0.40, 0.58), clamp(dir.y * 6.0, 0.0, 1.0));
     sky = mix(sky, dawn, pow(toward, 3.0) * low * uDawnStrength * uNight);
+
+    /*
+      Hills on the horizon: a low dark range all round, its top a slow noise
+      of bearing, sitting a few degrees over the edge — darker than the sky,
+      never lighter, and nearly flat, which is what a range a kilometre off
+      actually looks like (see world/Horizon for the argument). Under the
+      dawn it is a silhouette, which is the Stars' horizon exactly.
+    */
+    {
+      float bearing = atan(dir.x, dir.z);
+      float ridge = 0.012 + 0.018 * (sin(bearing * 3.0 + 0.4) * 0.5 + 0.5) + 0.012 * (sin(bearing * 7.3 + 2.0) * 0.5 + 0.5) + 0.006 * sin(bearing * 19.0);
+      float hill = 1.0 - smoothstep(ridge - 0.004, ridge + 0.004, dir.y);
+      vec3 hillColour = mix(sky * 0.55, vec3(0.05, 0.06, 0.09), uNight * 0.6);
+      sky = mix(sky, hillColour, hill * step(-0.02, dir.y));
+    }
 
     // Written for the screen: back through the curve the road is drawn with.
     gl_FragColor = vec4(sky * 0.62, 1.0);

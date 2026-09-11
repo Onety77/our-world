@@ -915,9 +915,58 @@ Where each piece lives:
   Nightfall is in that check's stage list; `STAGES=nightfall npm run
   tyre-contact` runs it alone.
 
-Measured on the desktop frame (900×560): 60–125 thousand triangles on the road,
-220 thousand in the thick of the walk; on a phone-portrait frame 86–106 thousand
-and 219 thousand in the walk. The heaviest single thing is the great tree, at
+Then the road was lived on, the way the other four were: every stretch rendered
+and its weakness named. The road was the Harmattan's red dirt with a green plane
+either side; the valley was a smooth trench with a ruler's top; the knoll a
+folded-card tent; the passages plain brown; the plain a black floor with two
+lights in mid-air; the walk the only stretch that already worked. Nothing was
+far and nothing moved.
+
+- **The Meadow's path** is grass — trodden, dry and cropped — with the earth
+  line worn through it along the racing line (`TRACK_GRASS`, `ROAD_OF` in
+  `Nightfall`); grass thick to the verge and thinning to forty metres, bushes,
+  and swallows in loops low over it while there is light.
+- **A treeline and hills.** A belt of silhouette cards round the meadow, the
+  valley's rim and, thinly, the plain (`plantTreeline`, `TREECARD_*` in
+  `Nightlife`), where the ground ran out and the sky began with an edge; the
+  land falls away under it over its last fifty metres; and a low range in the
+  sky shader all round, darker than the sky, a silhouette under her dawn. The
+  sky has two star fields and the galaxy's dust now, and a shooting star every
+  twenty-odd seconds.
+- **The Wellspring** (`nightfallProps`): boulders down both banks and scree
+  behind them, stones standing in the shallows with their heads above the
+  water, the spring itself as a stone-rimmed pool where the water rises, scree
+  at the foot of the road's cut bank; the water in the garden's own two colours
+  with four ripples at odd angles (the ladder is gone); mist lying on it,
+  thickest at the fords.
+- **The Hollow**: the knoll kneaded upward in proportion to its rise, its mouths
+  cut by each cell's own distance to the road (`SROAD`) rather than by discs,
+  outcrops on its steep flanks and scrub; beds in the rock (`uStrata`, top
+  0.88); stalactites and the wood's roots through the vault, nothing under four
+  metres over the road; seat stones round the hearth; smoke off it into the
+  dome, lit from underneath; bats at both mouths and up in the dome; and the
+  Hollow's own ore — the road's vein term, amber, in the room only, as much of
+  it as the room has earned (`seasonedBy` → `GardenCounts.ore`).
+- **The Stars**: the garden's own landmark at the bend — a low ring of boulders
+  and a leaning pillar of slabs with the two lights over it, warm and cool,
+  close and never level (`dressNightfall` puts the lamps there; `nightfallProps`
+  builds the cairn under them; `Nightlife` breathes halos on them); pale
+  waymarkers along both verges so the road has an edge a headlamp finds; the
+  message lights in the colour of whoever said each, a hearted one bigger.
+- **The Walk**: the landmark's gateway — two uprights and a lintel — where the
+  lane begins; ferns; motes drifting round each lantern in its own colour;
+  leaves coming down through the wood and landing; and the finish's two stone
+  stacks with the fire on top, which no builder had drawn.
+- **Both hearths** in a ring of stones.
+
+`Nightair.tsx` is everything that moves, animated on the GPU from the clock:
+flyers on loops (chevrons, wings beating, jink for the bats), soft points that
+lie or rise (mist, smoke, motes), and leaves that fall, turn and land.
+
+Measured on the desktop frame (900×560): 57–110 thousand triangles on the
+road, 148 thousand at the plain's bend, 190–215 thousand in the thick of the
+walk; on a phone-portrait frame 76–95 thousand, 170 thousand at the bend and
+182 thousand in the walk. The heaviest single thing is the great tree, at
 28 thousand.
 
 ## The car is tuned from the control room, not from here

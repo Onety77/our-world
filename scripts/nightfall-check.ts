@@ -156,7 +156,11 @@ const stretch = (m: { from: number; to: number }) => [Math.round(m.from), Math.r
 {
   const on = (m: { from: number; to: number }) => track.lanterns.filter((l) => l.s > m.from && l.s < m.to)
   ok('the hearth burns in the ring', on(NIGHTFALL.ring).some((l) => l.fire), `${on(NIGHTFALL.ring).length} lights`)
-  ok('two lights hang over the plain, one warm, one cool', on(NIGHTFALL.stars).filter((l) => l.y > 5).length === 2 && on(NIGHTFALL.stars).some((l) => l.warm === 1) && on(NIGHTFALL.stars).some((l) => l.warm === 0))
+  const pair = on(NIGHTFALL.stars).filter((l) => !l.fire)
+  ok('two lights stand over the cairn at the bend, one warm, one cool, close and not touching',
+    pair.length === 2 && pair.some((l) => l.warm === 1) && pair.some((l) => l.warm === 0) &&
+      pair.every((l) => Math.abs(l.s - NIGHTFALL.starsBend - 30) < 1) &&
+      Math.abs(pair[0].n - pair[1].n) > 1 && Math.abs(pair[0].n - pair[1].n) < 2 && pair[0].y !== pair[1].y)
   ok('the walk is lit by lanterns', on(NIGHTFALL.walk).length > 30, `${on(NIGHTFALL.walk).length}`)
   ok('and the Meadow by nothing but the sky', on(NIGHTFALL.meadow).filter((l) => l.s > 40).length === 0)
 }

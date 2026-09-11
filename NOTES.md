@@ -40,6 +40,40 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 11 Sep · Claude · the Nightfall, lived on
+
+The same pass the other four roads got, on the fifth: every stretch rendered
+at speed on desktop and phone, the weak thing named, then built out of the
+garden's own vocabulary (what each place is in the README's **The Nightfall,
+which is the garden**). New: `nightfallProps.ts` (what stands), `Nightair.tsx`
+(what moves), `GardenCounts` grew `messages[]` by author with hearts and `ore`
+from `seasonedBy`, `dev-span` takes `lookn=` and `ore=`. Track, lanes and
+corners untouched; the two plain lights moved onto the cairn (dressing), and
+`npm run nightfall` says so. All checks pass.
+
+- **The preview I am shown is not the PNG.** Twice I chased a "hole" and a
+  "pale river" that pixel sampling showed as a two-pixel sliver and a
+  (58,56,81) slate blue. Judge shape from the picture and brightness from
+  `pixels.mjs` (a point list, `map`, or `crop:x,y,w,h` enlarged 2×), never the
+  other way round.
+- **`flat` and `round` are GLSL's**, as `half` is. A name that compiles in
+  TypeScript can be a keyword or a built-in in the shader, and the error names
+  the wrong line.
+- **Discs cut a scalloped ridge.** The mouths' cuttings were per-ring discs a
+  few metres across reaching a little way into the hill, and the union of them
+  is a row of scallops. Cut by each cell's own distance to the road (the grid's
+  `NEAR`, with the nearest road's metre in `SROAD` so the roof over the vault
+  is never cut) and the wall is smooth along the road.
+- **A quad is a card, not a bird.** Flyers as plain quads read as flying
+  rectangles from the road; sweeping the wingtips back into a chevron in the
+  vertex shader is the whole difference.
+- **Soft points in a dark room need the fire.** Smoke lit by the ambient alone
+  was invisible over the hearth; the soft shader takes the lamp window now, so
+  smoke over a fire is lit from underneath and mist by the lamp at the ford.
+- **Ore everywhere is a lava lamp.** The vein term over the whole Hollow at
+  full strength painted dashes on every wall; it is the room's only, and it
+  scales with what the room has earned.
+
 ## 11 Sep · Claude · the Nightfall — a fifth road that is the garden itself
 
 Asked for: "a garden-inspired level — the Tree of Thoughts, the river, the
