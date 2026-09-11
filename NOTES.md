@@ -40,6 +40,64 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 11 Sep · Claude · the Harmattan, a place in the dust
+
+The last road in the series: looks and world only. `track.ts`, `physics.ts`,
+`tuning.ts`, `model.ts`, `harmattanSurface.ts` and `tyreContact.ts` are untouched
+(`git diff HEAD` is empty for all six). The story is in the ember-rally README
+under **The Harmattan, a place in the dust**; this is the index.
+
+**What was wrong, measured.** A strip of road with nothing past it, so bends
+showed sky under the ground and the scarp's switchbacks hung in the air. A warm
+sun and sky on warm ground: through the tone curve the plain was `#a8672a`, the
+road `#821f07` and indigo `#0e1726` (black). The cave's vein colour never turned
+off. Baobabs read as windmills, mounds as pyramids, stones as bricks, palms as
+insects, banners as planks.
+
+**What moved**
+
+- `harmattanLand.ts` (new) — `landFor(track)`: plain, wadi, escarpment and
+  plateau, a ledge carved in three passes, tiles, `heightAt`/`slopeAt`/
+  `roadDistance`/`colourAt`. Also `harmattanVerge`, where the drawn road stops.
+- `sahelProps.ts` (new) — baobab, termite mound, ironstone, doum palm, built in
+  world space into a chunk's mesh through a `Builder`.
+- `Sahellife.tsx` (new) — acacias, bush, grass, banner cloth, caravans, vultures,
+  dust devils, smoke, the start hearth; `window.__sahel` under `?shot=1`.
+- `Harmattan.tsx` — a 17-wide drawn cross-section (berm, skirt down to the
+  ground), props stood on the land, doors and windows, pits above the verge,
+  colours, the baked banner cloth removed, the sky regraded with inselbergs;
+  `HarmattanWorld` takes `rock`, draws the land and mounts `Sahellife`.
+- `Race.tsx` — a Harmattan light branch (`HAZE_SUN`/`SKY`/`OPEN`/`SHADE`/`FOG`),
+  veins off, `uStrata` with `uStrataTop` 0.8, the background, `rock` passed in.
+- `materials.ts` — `uStrataTop`, default 2, so no other road changes.
+
+**Traps worth knowing**
+
+- **A function too big to optimise runs at the slow tier.** The land builder as
+  one long function took 636 ms warm; split into small ones, 143. A tsx profile
+  shows every line as `:2` — bundle with esbuild (`--format=cjs --external:three`)
+  and read `positionTicks` from `node --cpu-prof` instead.
+- **`half` is a reserved word in GLSL.** The sky shader failed to compile and the
+  road quietly fell back to its background colour.
+- **The road material draws front faces only**, and `addRound`'s drums are wound
+  inward (you see their far inside wall). New solids are wound outward; anything
+  as thin as a leaf is laid twice with its own normals.
+- **Banked edges.** Ground measured from the road's middle left slots of sky
+  under the high side of every banked corner; the ledge uses each side's height.
+- **The random stream in `buildHarmattan` is order-sensitive.** Every rebuilt
+  placement draws its numbers in the old order, so the farms and yards dealt after
+  them have not moved.
+
+**For Codex.** `npm run harmattan` fails two checks — "the corrugation costs real
+time on a straight" and "because the corrugated road has a lower top speed". It
+imports only `track.ts` and `physics.ts`, both unchanged, so that predates this
+work. The drawn verge stays on the wheel-support plane out to past the wall; the
+berm only rises beyond it.
+
+**Measured.** Desktop 900×560: 70–82k triangles and 46–54 draw calls, from
+32–45k and 23–28. Phone portrait: 63–79k and 40–47. Race chunk 323.7 kB (109.5
+gzipped), from 280.8 (93.8). Typecheck, the shader sweep and the build pass.
+
 ## 11 Sep · Claude · the Stormcrown, with a mountain under it
 
 The third road in the same series: looks and world only. `track.ts`,

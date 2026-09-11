@@ -718,6 +718,77 @@ untouched. Measured on the desktop frame (900×560) from the start to the finish
 a phone-portrait frame: 44–80 thousand and 36–41. The heaviest single thing is the
 nearest cedar grove, at 14 thousand.
 
+### The Harmattan, a place in the dust
+
+The road was a strip laid on nothing. Past twenty to thirty-five metres of drawn
+ground either side there was no world at all: on the open plain the haze passed
+for a horizon, but on every bend the edge showed as a pale band under the ground,
+and on the scarp — where the switchbacks stack twenty metres over each other —
+each shelf of road hung in the air with a dark wedge beneath it. The light was an
+orange filter. A warm sun and a warm sky falling on warm ground multiply, so
+through the tone curve the plain came out `#a8672a`, the road `#821f07`, the walls
+the same orange as both, and indigo — the one cool colour the road is built round
+— `#0e1726`, which is black. The Rootway's mineral veins had never been switched
+off and drew pale scribbles over the ground. And at a hundred metres the things
+standing on it were other things: the baobabs were windmills, the termite
+cathedrals pyramids, the ironstone bricks, the doum palms insects and the banners
+blue planks. Nothing moved in the wind but the dust in front of your face.
+
+What it is now, and where each piece lives:
+
+- **Dust light, graded through the tone curve** (`HAZE_*` in `Race`). The sun is
+  nearly white and the sky's fill is the dust lit from above, so the plain shows
+  as dust (`#a97a43`), the laterite stays red (`#842a0f`) and indigo is blue
+  (`#142e5e`). The sky's horizon is exactly the colour the fog shows as, `#ccbb9d`,
+  so the plain dissolves into it with no line, and the granite inselbergs of the
+  northern plains stand in it as ghosts — drawn into the sky, because at that
+  distance a silhouette is all that is left of them. The veins are off.
+- **Ground to the haze** (`harmattanLand.ts`), built out of the road as the
+  Stormcrown's mountain is: a plain level with the road that rolls once it is well
+  away from it, patched with straw and bare laterite; the wadi cut into it, so the
+  bed is a trench with the plain standing on both banks; an escarpment under every
+  metre of the climb, a plateau on top, and the scarp running off across the
+  country either side. The road's ledge is carved in three passes — a floor at
+  each banked edge's own height, a cutting beyond it, and a clearance under
+  everything drawn. Checked in Node: none of 57,222 points across the drawn road
+  has ground within a quarter of a metre of it. It builds in 143 ms warm; written
+  first as one long function it took 636, because the engine will not optimise a
+  function that size.
+- **The drawn road stops in a berm** (`harmattanVerge`). Across the road and the
+  verge the surface is exactly the plane `tyreContact` holds the wheels up on;
+  past the verge, where the physics never lets the car go, a grader's windrow
+  rises and a skirt runs down to wherever the ground is — on the scarp a battered
+  retaining wall of laterite blocks, holding one switchback up over the cutting of
+  the next.
+- **Beds in the escarpment, not in the town.** `uStrataTop`, a new switch in the
+  shared rock shader, stops the beds short of anything as rough as mud plaster.
+  It sits above every roughness on the other three roads, so nothing else changes.
+- **The things that stand** (`sahelProps.ts`), built in the world on the ground
+  where they are. The baobab is a fluted bottle with a crown of thick limbs that
+  fork and climb. The cathedral mounds are fluted, leaning, with smaller spires off
+  their shoulders, in red laterite earth. Ironstone is a lump as wide as the
+  strike the physics has always given it, on the verge or on the ground. The doum
+  palm forks, with a ball of fans on each fork over a skirt of dead ones.
+- **The town has doors**, dark in raised frames of paler plaster, and windows on
+  the upper storeys; the torons are weathered grey-brown instead of black dashes.
+  And the **dye pits show their indigo** at last: the dye was sunk under the drawn
+  verge, so they had only ever rendered as brown rims round ordinary ground.
+- **What lives there** (`Sahellife.tsx`). Acacias standing alone on the plain —
+  the winter thorn is the one tree in the Sahel that comes into leaf in harmattan
+  — grey-green bush, and dry grass, all bending the same way in one wind. The
+  banners are cloth: flying, fluttering harder where the road is exposed, and dyed
+  with the resist rings of adire. Three camel caravans walk the plain — pacing, as
+  camels do, both legs on one side together — some carrying riders veiled in
+  indigo. Vultures turn over the ruin, the wadi and the scarp; dust devils rise
+  off the open ground ahead and walk downwind; grey cooking smoke lies bent over
+  the compounds and the brassfire; and the hearth you leave from is burning.
+
+Nothing new is on the road or solid, the stones strike exactly where they always
+did, and the track, the lanes and the corners are unchanged. Measured on the
+desktop frame (900×560): 70–82 thousand triangles and 46–54 draw calls, from
+32–45 thousand and 23–28. On a phone-portrait frame: 63–79 thousand and 40–47.
+The heaviest single thing is a batch of bushes, at 6.5 thousand.
+
 ## The car is tuned from the control room, not from here
 
 **Roughly forty of the numbers that used to be constants in `physics.ts`,

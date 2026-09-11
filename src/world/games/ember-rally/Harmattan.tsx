@@ -70,7 +70,7 @@
  * =============================================================================
  */
 
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
   BackSide,
@@ -93,9 +93,23 @@ import {
   type Track,
 } from './track'
 import { HarmattanSound } from './HarmattanSound'
-import { HARMATTAN_RING as RING, HARMATTAN_PROFILE as PROFILE, harmattanProfile } from './harmattanSurface'
+import { HARMATTAN_RING as RING } from './harmattanSurface'
+import { HARMATTAN_SKIRT, harmattanVerge, landFor } from './harmattanLand'
+import { Sahellife } from './Sahellife'
+import { baobab, doumPalm, ironstone, termiteMound } from './sahelProps'
 
 const CHUNK = 60
+
+/** Vertices across the drawn road: four each side outside it, and the road's own nine. */
+const DRAWN = 17
+/** The road's nine, across and up — the same crown `harmattanProfile` supports the wheels on. */
+const ROAD_ACROSS = [-1, -0.92, -0.62, -0.31, 0, 0.31, 0.62, 0.92, 1]
+const ROAD_CROWN = [0.02, 0.05, 0.075, 0.092, 0.1, 0.092, 0.075, 0.05, 0.02]
+
+const smooth01 = (from: number, to: number, value: number) => {
+  const t = Math.max(0, Math.min(1, (value - from) / (to - from)))
+  return t * t * (3 - 2 * t)
+}
 
 /* ---- the palette, which is iron oxide and one blue ------------------------ */
 
@@ -106,7 +120,7 @@ const ROAD_WORN = new Color('#b37a54')
 /** Blown sand lying on the road. Pale, and the thing you have to see coming. */
 const SAND = new Color('#dcb87f')
 /** The shoulder: dust, and looser than the road. */
-const VERGE = new Color('#a06a3c')
+const VERGE = new Color('#a27952')
 /**
  * The berm — the windrow of spoil a grader leaves down both sides of a road.
  *
@@ -121,7 +135,7 @@ const VERGE = new Color('#a06a3c')
  * sand is deepest, you can still see exactly where the road goes, because you
  * are not looking at the road — you are looking at its two edges.
  */
-const BERM = new Color('#71401f')
+const BERM = new Color('#835b3a')
 /**
  * Open ground away from the road, bleached by the haze.
  *
@@ -135,16 +149,16 @@ const BERM = new Color('#71401f')
 const GROUND = new Color('#a8865e')
 /** Ironstone. The rubble the rain left standing on the plain. */
 const STONE = new Color('#6d3f26')
-/** Termite earth — the mounds are darker and greyer than the plain. */
-const MOUND = new Color('#9a6a41')
-/** Baobab bark: silver-grey, and the only pale thing growing. */
-const BARK = new Color('#a49a86')
-/** Its canopy in harmattan, which is nothing. A baobab in dust is bare. */
-const BOUGH = new Color('#8e8471')
+/* The mounds', the baobabs' and the palms' colours live with their shapes, in `sahelProps`. */
 /** Rendered earth on a wall, lighter than the ground it is made of. */
 const WALL = new Color('#b58150')
 /** The torons — palm beams, weathered nearly black. */
-const TORON = new Color('#3b2a1c')
+/*
+  Grey-brown, not black. Nearly black, every beam end seen square-on read as a
+  black dash painted on the wall — a street of barcodes. Palm wood weathers
+  pale, and a pale stick with a shadow under it is a stick.
+*/
+const TORON = new Color('#7a6552')
 /** Indigo. The banners and the pits, and the only cool colour on the road. */
 const INDIGO = new Color('#243a6b')
 /** Indigo in the sun, on cloth rather than in a pit. */
@@ -166,20 +180,16 @@ const THATCH_SHADE = new Color('#7c6237')
 const RENDER = new Color('#c39a6a')
 /** A flat mud roof, packed and swept. Darker than the walls it sits on. */
 const ROOF = new Color('#8d6339')
-/**
- * A doum palm's fronds.
- *
- * **The one green in the game, and it is barely green.** The single-colour law
- * at the top of this file is not decorative — indigo earns its place by being
- * the only cool thing on the road, and a palm the colour of a palm would take
- * that away. A doum in harmattan is genuinely this: grey, dust-loaded, more
- * olive than leaf. Held at a saturation low enough that it reads as *dry*.
- */
-const FROND = new Color('#8a8663')
 /** Dead thorn, and the stalk screens. Bone, weathered out of every colour. */
-const THORN = new Color('#9a8e78')
+const THORN = new Color('#847865')
 /** Undyed cotton on a drying line — warm, so it never competes with the indigo. */
 const CLOTH = new Color('#d8cbb0')
+/**
+ * Dry-laid laterite blocks, where the road's edge has to be held up — the
+ * retaining walls under the scarp's switchbacks. Cut from the same iron as the
+ * road, so darker and redder than the dust over the plain.
+ */
+const RETAINING = new Color('#8a5b3d')
 
 function hash3(a: number, b: number, c: number): number {
   const value = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453
@@ -395,89 +405,12 @@ function addBeam(
   mesh.quad(base + 4, base + 5, base + 6, base + 7)
 }
 
-/**
- * A baobab.
- *
- * The one silhouette on this continent nobody mistakes for anything else: an
- * enormously fat trunk that barely tapers, then a sudden stop, then a handful
- * of stubby branches thrown out sideways. In harmattan it is bare — the leaves
- * go with the rains — which is why the branches are drawn and no canopy is.
- * Upside-down-looking is the point; getting it wrong would look like an oak.
- */
-function addBaobab(
-  mesh: CourseMesh,
-  road: ReturnType<typeof emptyRoad>,
-  basis: RoadBasis,
-  n: number,
-  seed: number,
-) {
-  const big = 0.8 + hash3(seed, 1, 3) * 0.7
-  const trunk = 5.4 * big
-  const fat = 1.5 * big
-  addTaper(mesh, road, basis, n, 0, trunk, fat, fat * 0.72, BARK)
-  // Three to five limbs, short, thick, and going out rather than up.
-  const limbs = 3 + Math.floor(hash3(seed, 2, 9) * 3)
-  for (let i = 0; i < limbs; i++) {
-    const spin = (i / limbs) * Math.PI * 2 + hash3(seed, i, 4) * 1.1
-    const reach = (1.5 + hash3(seed, i, 5) * 1.5) * big
-    const rise = (1.1 + hash3(seed, i, 6) * 1.5) * big
-    const base = mesh.count
-    const thick = 0.3 * big
-    for (const [dy, r, outN, outS] of [
-      [0, thick, 0, 0],
-      [rise, thick * 0.55, Math.cos(spin) * reach, Math.sin(spin) * reach],
-    ] as const) {
-      for (const [ds, dn] of [[-r, -r], [r, -r], [r, r], [-r, r]] as const) {
-        roadPoint(road, n + dn + outN, trunk * 0.86 + dy, point, basis)
-        point.x += basis.fx * (ds + outS)
-        point.y += basis.fy * (ds + outS)
-        point.z += basis.fz * (ds + outS)
-        mesh.vertex(point, BOUGH, 0, 0.9)
-      }
-    }
-    for (let k = 0; k < 4; k++) {
-      const a = base + k
-      const b = base + ((k + 1) % 4)
-      mesh.quad(a, b, b + 4, a + 4)
-    }
-  }
-}
-
-/**
- * A termite mound.
- *
- * Cathedral mounds: a metre or two across at the foot and four or five high,
- * with buttresses and spires. Drawn as a steep taper with two or three smaller
- * ones leaning on it, which is enough — at a hundred and thirty kilometres an
- * hour through dust, a mound is a silhouette and a silhouette is a shape.
- *
- * They are the only thing on this road that will stop a car, so they are kept
- * on the verge and never over it.
- */
-function addMound(
-  mesh: CourseMesh,
-  road: ReturnType<typeof emptyRoad>,
-  basis: RoadBasis,
-  n: number,
-  seed: number,
-) {
-  const high = 3.2 + hash3(seed, 7, 1) * 2.4
-  const foot = 0.85 + hash3(seed, 7, 2) * 0.6
-  addTaper(mesh, road, basis, n, 0, high, foot, foot * 0.12, MOUND)
-  const spires = 2 + Math.floor(hash3(seed, 7, 3) * 2)
-  for (let i = 0; i < spires; i++) {
-    const spin = hash3(seed, i, 11) * Math.PI * 2
-    const out = foot * (0.7 + hash3(seed, i, 12) * 0.6)
-    tint.copy(MOUND).multiplyScalar(0.86 + hash3(seed, i, 13) * 0.22)
-    addTaper(
-      mesh, road, basis,
-      n + Math.cos(spin) * out, 0,
-      high * (0.42 + hash3(seed, i, 14) * 0.34),
-      foot * 0.42, foot * 0.06, tint,
-      Math.cos(spin) * 0.3,
-    )
-  }
-}
+/*
+  The baobab and the termite mound used to be built here out of four-sided
+  tapers, in the road's frame, at the road's height. The baobab came out a
+  windmill and the mound a pyramid. Both are in `sahelProps` now, built in the
+  world and stood on the ground.
+*/
 
 /**
  * A run of town wall, with its torons.
@@ -557,31 +490,12 @@ function addBanner(
   addTaper(mesh, road, basis, n, high, 0.26, 0.15, 0.02, BRASS, 0, 0.12)
 
   /*
-    The cloth. A flat strip hanging from the top of the pole and blown out to
-    one side — the lean is a constant here rather than animated, because this
-    is baked geometry and a banner that flaps would have to be its own draw
-    call fifty times over. The wind on this road is a *steady* one; a harmattan
-    blows for six weeks. A banner standing at a constant angle is what that
-    actually looks like, and it is also the honest thing to draw.
+    The cloth is not drawn here any more. It was — a flat strip at a fixed
+    lean, because baked geometry cannot move — and it read as a blue plank
+    nailed to the pole. It flies now, one instanced draw for every banner on
+    the road, wider and dyed: see the banners in `Sahellife`, which finds this
+    pole with the same hash.
   */
-  const drop = 3.1 + hash3(seed, 5, 2) * 0.9
-  const blow = 1.3 + hash3(seed, 5, 3) * 0.6
-  const base = mesh.count
-  // Wide enough to be a *shape* at a hundred metres through dust rather than a
-  // blue line. This is the one thing on the road that has to be legible when
-  // nothing else is, so it is drawn bigger than a real banner would be.
-  const wide = 0.62
-  for (const [dy, out] of [[0, 0], [-drop, blow]] as const) {
-    for (const ds of [-wide, wide]) {
-      roadPoint(road, n + out * 0.35, high - 0.35 + dy, point, basis)
-      point.x += basis.fx * (ds + out)
-      point.y += basis.fy * (ds + out)
-      point.z += basis.fz * (ds + out)
-      mesh.vertex(point, dy === 0 ? INDIGO_LIT : INDIGO, 0, 0.75)
-    }
-  }
-  mesh.quad(base, base + 1, base + 3, base + 2)
-  mesh.quad(base + 2, base + 3, base + 1, base)
 }
 
 /** The rim of a dye pit: a low ring of packed earth around a disc of indigo. */
@@ -595,16 +509,26 @@ function addPit(
 ) {
   const sides = 9
   const rimBase = mesh.count
-  // The dye itself: a flat disc, sunk a little, and very dark.
-  roadPoint(road, n, -0.12, point, basis)
-  mesh.vertex(point, INDIGO, 1, 0.02)
+  /*
+    The dye itself: a flat disc, glossy, inside its rim.
+
+    It used to be sunk twelve centimetres, which put it *under* the drawn verge
+    it sits in — so the pits rendered as their brown rims round a patch of
+    ordinary ground, and the one place the road's indigo was meant to arrive in
+    quantity showed none. Just above the verge now, inside a rim a third of a
+    metre high, it reads as a full vat. And a shade brighter than the banners'
+    indigo, because a wet surface darkens and this one is wet.
+  */
+  const dye = new Color('#2d4f98')
+  roadPoint(road, n, 0.07, point, basis)
+  mesh.vertex(point, dye, 0.5, 0.05)
   for (let k = 0; k <= sides; k++) {
     const a = (k / sides) * Math.PI * 2
-    roadPoint(road, n + Math.cos(a) * radius, -0.12, point, basis)
+    roadPoint(road, n + Math.cos(a) * radius, 0.07, point, basis)
     point.x += basis.fx * Math.sin(a) * radius
     point.y += basis.fy * Math.sin(a) * radius
     point.z += basis.fz * Math.sin(a) * radius
-    mesh.vertex(point, INDIGO, 1, 0.02)
+    mesh.vertex(point, dye, 0.5, 0.05)
   }
   for (let k = 1; k <= sides; k++) mesh.index.push(rimBase, rimBase + k, rimBase + k + 1)
 
@@ -857,11 +781,34 @@ function addHouse(
     }
   }
 
-  // Beams on anything tall enough to be re-rendered from a ladder.
+  /*
+    A way in, and a way to see out, on the face toward the road.
+
+    Without them a house of any shape was a crate — the horns made the roofline
+    a house and the walls stayed a box. A dark doorway in a raised frame of
+    paler plaster is the whole of it: the frame is where a Hausa house carries
+    its decoration, and it is what makes a dark rectangle read as a door rather
+    than a hole.
+  */
+  const side = Math.sign(n) || 1
+  const face = n - side * across
+  const opening = new Color('#2a1f18')
+  const along_ = (ds: number) => ({ ...at, x: at.x + basis.fx * ds, y: at.y + basis.fy * ds, z: at.z + basis.fz * ds })
+  if (hash3(seed, 13, 5) > 0.2) {
+    const doorway = along_((hash3(seed, 13, 6) - 0.5) * Math.max(0, along - 0.75) * 2)
+    tint.copy(RENDER).multiplyScalar(1.1)
+    addBox(mesh, doorway, basis, face - side * 0.02, 0, 0.64, 0.025, 2.45, tint, 0.9)
+    addBox(mesh, doorway, basis, face - side * 0.05, 0, 0.44, 0.03, 2.05, opening, 0.97)
+  }
   if (storeys > 1) {
-    const side = Math.sign(n) || 1
+    for (const k of [0, 1]) {
+      if (hash3(seed, 13, 7 + k) < 0.35) continue
+      const pane = along_((k - 0.5) * along * 0.9)
+      addBox(mesh, pane, basis, face - side * 0.04, high * 0.68, 0.24, 0.03, 0.42, opening, 0.97)
+    }
+    // Beams on anything tall enough to be re-rendered from a ladder.
     for (const ds of [-along * 0.5, along * 0.5]) {
-      addBeam(mesh, at, basis, n - side * across, high * 0.62, ds, -side, 0, 0.5, 0.09)
+      addBeam(mesh, at, basis, face, high * 0.62, ds, -side, 0, 0.5, 0.09)
     }
   }
 }
@@ -1066,76 +1013,13 @@ function addRack(
   }
 }
 
-/**
- * A doum palm — the one tree of the wadi.
- *
- * It is here because of a fact about the plant that happens to be perfect: the
- * doum is the only palm in the world that **forks**, repeatedly, so it reads as
- * a tree rather than as a post with a mop on it. And it grows where the water
- * table is close, which on this road means exactly one place — the dry river —
- * so a stand of them is the landscape telling you the wadi is coming before the
- * banks do.
- *
- * The fronds are drawn as flat blades radiating from each fork, dust-coloured
- * rather than green. See `FROND` for why that is not a compromise.
- */
-function addPalm(
-  mesh: CourseMesh,
-  road: ReturnType<typeof emptyRoad>,
-  basis: RoadBasis,
-  n: number,
-  s: number,
-  seed: number,
-) {
-  const at = { ...road, x: road.x + basis.fx * s, y: road.y + basis.fy * s, z: road.z + basis.fz * s }
-  const trunk = 3.2 + hash3(seed, 29, 1) * 2.2
-  tint.copy(BARK).multiplyScalar(0.72 + hash3(seed, 29, 2) * 0.2)
-  addTaper(mesh, at, basis, n, 0, trunk, 0.26, 0.2, tint, 0, 0.92)
-
-  // Two limbs out of the fork, at an angle to each other.
-  const spread = 0.9 + hash3(seed, 29, 3) * 0.5
-  for (const dir of [-1, 1]) {
-    const limb = trunk * (0.55 + hash3(seed, 29, dir + 4) * 0.3)
-    addTaper(mesh, at, basis, n + dir * spread * 0.35, trunk, limb, 0.18, 0.14, tint, dir * spread, 0.92)
-
-    /*
-      The crown: five blades around the top of each limb, drooping.
-
-      Flat quads, because a frond seen through a hundred metres of dust is a
-      streak and nothing more — and because the alternative, a real pinnate
-      leaf, is forty triangles for a shape the haze deletes.
-    */
-    const topN = n + dir * spread * 1.35
-    const topY = trunk + limb
-    /*
-      Seven blades, and wide.
-
-      The first pass drew five narrow ones and the palms came out looking like
-      insects on sticks — a frond at sixteen centimetres across is a *wire* at
-      any distance, and seven wires on a pole is an antenna. A doum's leaf is a
-      fan a metre and a half wide. Drawn at the width it actually is, the crown
-      becomes a mass, which is the only thing that survives the dust.
-    */
-    for (let k = 0; k < 7; k++) {
-      const a = (k / 7) * Math.PI * 2 + hash3(seed, 29, dir * 9 + k) * 0.9
-      const len = 2.1 + hash3(seed, 29, k + 12) * 1.2
-      const base = mesh.count
-      tint.copy(FROND).multiplyScalar(0.78 + hash3(seed, 29, k + 20) * 0.34)
-      for (const [t, dy] of [[0, 0], [1, -0.5]] as const) {
-        for (const w of [-0.32, 0.32]) {
-          roadPoint(at, topN + Math.sin(a) * len * t + Math.cos(a) * w, topY + dy * len, point, basis)
-          const along = Math.cos(a) * len * t - Math.sin(a) * w
-          point.x += basis.fx * along
-          point.y += basis.fy * along
-          point.z += basis.fz * along
-          mesh.vertex(point, tint, 0, 0.9)
-        }
-      }
-      mesh.quad(base, base + 1, base + 3, base + 2)
-      mesh.quad(base + 2, base + 3, base + 1, base)
-    }
-  }
-}
+/*
+  The doum palm used to be built here: a forked post with seven flat blades on
+  each fork, which came out as insects on sticks however wide the blades were
+  drawn. It is in `sahelProps` now — a ball of fans on each fork, over a skirt
+  of dead ones — and it still grows in the wadi and nowhere else, because the
+  wadi is the only place on this road the water table is close.
+*/
 
 /**
  * A stalk screen, or a thorn fence — the cheapest thing on the road and one of
@@ -1233,6 +1117,29 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
   const spans: { from: number; to: number }[] = []
   const road = emptyRoad()
   const basis: RoadBasis = { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 }
+  const land = landFor(track)
+  /*
+    The cross-section, drawn — and past the verge it is no longer the one the
+    wheels use.
+
+    Across the road and the verge this is exactly `harmattanProfile`'s plane,
+    the surface `tyreContact` holds the wheels up on. That profile carried on at
+    the same slope for up to thirty-five metres and ended in a one-metre skirt
+    with the sky under it. There is ground under everything now (see
+    `harmattanLand`), so the drawn road stops a couple of metres past the verge
+    instead. Out there, where the physics never lets the car go, the grader's
+    windrow rises and drops to a lip, and a skirt goes down from the lip *to
+    wherever the ground actually is*: a hand's breadth on the plain, and on the
+    scarp — where one switchback's edge stands over the cutting of the one
+    below — a battered retaining wall of laterite blocks, which is what holds
+    up a road cut into a face.
+
+    Seventeen across, outside in: foot, lip, berm crest, verge, then the road's
+    own nine, then the same four the other way.
+  */
+  const offsets = new Float32Array(DRAWN)
+  const heights = new Float32Array(DRAWN)
+  const skirt = [0, 0]
 
   for (let chunk = 0; chunk < chunkCount; chunk++) {
     const mesh = meshes[chunk]
@@ -1245,7 +1152,34 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
       roadAt(track, s, road)
       basisAt(road, basis)
 
-      const { offsets, heights } = harmattanProfile(road, s)
+      const verge = harmattanVerge(road, s)
+      const lip = verge.grade(verge.edge)
+      for (let k = 0; k < 9; k++) {
+        offsets[4 + k] = ROAD_ACROSS[k] * road.width
+        heights[4 + k] = ROAD_CROWN[k]
+      }
+      for (const side of [-1, 1]) {
+        const out = side < 0 ? 0 : DRAWN - 1
+        const mirror = (k: number) => (side < 0 ? k : DRAWN - 1 - k)
+        offsets[mirror(1)] = side * verge.edge
+        heights[mirror(1)] = lip
+        offsets[mirror(2)] = side * (verge.wall + 1)
+        heights[mirror(2)] = verge.grade(verge.wall + 1) + verge.berm
+        offsets[mirror(3)] = side * (verge.wall + 0.3)
+        heights[mirror(3)] = verge.grade(verge.wall + 0.3)
+        // Down to the ground, measured just outside the lip and just inside it.
+        roadPoint(road, side * verge.edge, lip, point, basis)
+        const top = point.y
+        roadPoint(road, side * (verge.edge + 0.8), 0, point, basis)
+        let ground = land.heightAt(point.x, point.z)
+        roadPoint(road, side * (verge.edge - 1.5), 0, point, basis)
+        ground = Math.min(ground, land.heightAt(point.x, point.z))
+        const drop = Math.max(HARMATTAN_SKIRT, top - ground + 0.4)
+        // Battered: a retaining wall leans back into what it holds.
+        offsets[out] = side * (verge.edge + Math.max(0, drop - HARMATTAN_SKIRT) * 0.22)
+        heights[out] = lip - drop
+        skirt[side < 0 ? 0 : 1] = drop
+      }
       const base = mesh.count
 
       /*
@@ -1260,11 +1194,12 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
       */
       const ripple = road.ruts * (ring % 2 === 0 ? 1 : 0)
 
-      for (let k = 0; k < PROFILE; k++) {
+      for (let k = 0; k < DRAWN; k++) {
         roadPoint(road, offsets[k], heights[k], point, basis)
-        const surface = k >= 2 && k <= 10
-        const edge = k === 2 || k === 10
-        const shoulder = k === 1 || k === 11
+        const surface = k >= 4 && k <= 12
+        const edge = k === 4 || k === 12
+        const loose = k === 3 || k === 13
+        const shoulder = k === 2 || k === 14
         let color = GROUND
         let rough = 0.95
         let wet = 0
@@ -1273,6 +1208,12 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
           color = tint
           rough = 0.7
           wet = road.wet * 0.6
+        } else if (loose) {
+          // The verge: loose dust over the laterite, and the drift lies on it too.
+          tint.copy(VERGE).lerp(SAND, road.sand * 0.35).multiplyScalar(0.88 + hash3(ring, k, 7) * 0.2)
+          color = tint
+          rough = 0.9
+          wet = road.wet * 0.5
         } else if (surface) {
           const away = Math.abs(offsets[k] - road.line)
           const worn = 1 - Math.min(1, Math.max(0, (away - 0.3) / 1.25))
@@ -1306,15 +1247,26 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
           rough = 0.9
           wet = road.wet * 0.4
         } else {
-          tint.copy(GROUND).multiplyScalar(0.84 + hash3(ring, k, 8) * 0.26)
+          /*
+            The lip and the foot of the skirt: the ground's own colour, so the
+            road meets the land without a seam — or laterite blocks, where the
+            skirt has become a wall holding a switchback up.
+          */
+          land.colourAt(point.x, point.z, tint)
+          const high = skirt[k < DRAWN / 2 ? 0 : 1]
+          const wall = smooth01(1.6, 2.6, high)
+          tint.lerp(RETAINING, wall * 0.85)
+          if (k === 0 || k === DRAWN - 1) tint.multiplyScalar(0.9 - wall * 0.1)
           color = tint
+          // Coursed, where it is a wall: rough enough for the rock shader's beds.
+          rough = 0.92 - wall * 0.2
         }
         mesh.vertex(point, color, wet, rough)
       }
 
       if (ring > first) {
-        const previous = base - PROFILE
-        for (let k = 0; k < PROFILE - 1; k++) {
+        const previous = base - DRAWN
+        for (let k = 0; k < DRAWN - 1; k++) {
           mesh.quad(previous + k, previous + k + 1, base + k + 1, base + k)
         }
       }
@@ -1340,20 +1292,43 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
     Baobab Bend is placed rather than dealt because a corner named after a tree
     should have the tree on it.
   */
-  for (let s = 30; s < HARMATTAN.cathedrals.from; s += 52 + rng() * 60) {
+  /*
+    Stood on the ground, not at the road's height: everything past the drawn
+    edge is on the land now, and a tree on the scarp is on the slope.
+
+    The random numbers are drawn in exactly the order they always were, so
+    every farm, mound and palm dealt after these lands where it always did.
+  */
+  const standing = (s: number, n: number) => {
     const { at, frame } = frameAt(s)
+    roadPoint(at, n, 0, point, frame)
+    point.y = land.heightAt(point.x, point.z)
+    return point
+  }
+  for (let s = 30; s < HARMATTAN.cathedrals.from; s += 52 + rng() * 60) {
+    const { at } = frameAt(s)
     const side = rng() < 0.5 ? -1 : 1
-    addBaobab(meshes[chunkFor(s)], at, frame, side * (at.width + 6 + rng() * 16), rng() * 900)
+    // Clear of the berm: a trunk two and a half metres across wants room.
+    const n = side * (at.width + vergeWidth(at.room) + 7 + rng() * 16)
+    const seed = rng() * 900
+    const foot = standing(s, n)
+    baobab(meshes[chunkFor(s)], foot.x, foot.y, foot.z, 0.8 + hash3(seed, 1, 3) * 0.7, seed)
   }
   {
     const s = HARMATTAN.baobabBend + 18
-    const { at, frame } = frameAt(s)
-    addBaobab(meshes[chunkFor(s)], at, frame, at.width + 5.5, 42)
+    const { at } = frameAt(s)
+    const foot = standing(s, at.width + vergeWidth(at.room) + 6.5)
+    // The one the corner is named for, and the biggest on the road.
+    baobab(meshes[chunkFor(s)], foot.x, foot.y, foot.z, 1.55, 42)
   }
   // A few more thinning out along the scarp, because the plain is still there.
   for (let s = HARMATTAN.scarp.from; s < track.length - 40; s += 90 + rng() * 80) {
-    const { at, frame } = frameAt(s)
-    addBaobab(meshes[chunkFor(s)], at, frame, -(at.width + 9 + rng() * 12), rng() * 900)
+    const { at } = frameAt(s)
+    const n = -(at.width + vergeWidth(at.room) + 9 + rng() * 12)
+    const seed = rng() * 900
+    const foot = standing(s, n)
+    if (land.slopeAt(foot.x, foot.z) > 0.7) continue
+    baobab(meshes[chunkFor(s)], foot.x, foot.y, foot.z, 0.8 + hash3(seed, 1, 3) * 0.5, seed)
   }
 
   /*
@@ -1375,8 +1350,19 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
       would ever see. Thirteen metres of quiet is what makes it readable.
     */
     if (side < 0 && Math.abs(s - RUIN_AT) < 13) continue
-    const out = at.width + vergeWidth(at.room) + 0.4 + rng() * rng() * 7
-    addMound(meshes[chunkFor(s)], at, frame, side * out, rng() * 900)
+    const spread = rng() * rng() * 7
+    const seed = rng() * 900
+    const high = 3.2 + hash3(seed, 7, 1) * 2.4
+    /*
+      Out by its own foot as well as the verge. The old taper's foot was a
+      metre and a bit wide and stood on the verge's edge, so half of it was on
+      ground the car can drive over; a cathedral is only a wall if you cannot
+      drive through the bottom of it.
+    */
+    const out = at.width + vergeWidth(at.room) + 0.3 + high * 0.3 + spread
+    roadPoint(at, side * out, 0, point, frame)
+    const foot = { x: point.x, z: point.z, y: Math.max(land.heightAt(point.x, point.z), at.y - 0.1) }
+    termiteMound(meshes[chunkFor(s)], foot.x, foot.y, foot.z, high, seed)
   }
 
   /*
@@ -1668,9 +1654,12 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
     // A granary with the thatch long gone: the drum on its own, and broken.
     tint.copy(RENDER).multiplyScalar(0.7)
     addRound(mesh, shift(0.5), frame, -(back + 3.2), 0, 1.5, 0.78, 0.7, 6, tint, 0.96)
-    // And the mound that took it, standing in what used to be the yard.
-    addMound(mesh, shift(-0.5), frame, -(back + 1.2), 610)
-    addMound(mesh, shift(4.5), frame, -(back + 5.4), 611)
+    // And the mounds that took it, standing in what used to be the yard.
+    for (const [along, out, seed] of [[-0.5, back + 1.2, 610], [4.5, back + 5.4, 611]] as const) {
+      roadPoint(shift(along), -out, 0, point, frame)
+      const ground = Math.max(land.heightAt(point.x, point.z), at.y - 0.1)
+      termiteMound(mesh, point.x, ground, point.z, 3.2 + hash3(seed, 7, 1) * 2.4, seed)
+    }
   }
 
   /*
@@ -1694,11 +1683,13 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
     const inBed = s > HARMATTAN.riverBed.from - 40 && s < HARMATTAN.riverBed.to + 40
     if (!inBed && rng() > 0.45) continue
     const side = rng() < 0.5 ? -1 : 1
-    addPalm(
-      mesh, at, frame,
-      side * (at.width + vergeWidth(at.room) + 3.5 + rng() * 9), rng() * 8 - 4,
-      Math.round(s * 3 + side),
-    )
+    const n = side * (at.width + vergeWidth(at.room) + 3.5 + rng() * 9)
+    const ds = rng() * 8 - 4
+    roadPoint(at, n, 0, point, frame)
+    point.x += frame.fx * ds
+    point.z += frame.fz * ds
+    // On the ground behind the bank, so the crown stands over the bank top.
+    doumPalm(mesh, point.x, land.heightAt(point.x, point.z), point.z, Math.round(s * 3 + side))
   }
   for (const s of [HARMATTAN.riverBed.from - 34, HARMATTAN.riverBed.to + 30]) {
     const { at, frame } = frameAt(s)
@@ -1916,11 +1907,17 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
   /* Ironstone, from the track's boulders, so the physics and the eye agree. */
   for (const stone of track.boulders) {
     const { at, frame } = frameAt(stone.s)
-    tint.copy(STONE).multiplyScalar(0.8 + hash3(stone.seed, 1, 2) * 0.35)
-    addBox(
-      meshes[chunkFor(stone.s)], at, frame, stone.n, -0.1,
-      stone.size * 0.8, stone.size, stone.size * 0.75, tint, 0.92,
-    )
+    /*
+      A lump, not a brick, at exactly the place and width the physics strikes
+      you with it. On the drawn verge it sits on the verge; past the edge, where
+      the ground has taken over, it sits on the ground — on the scarp the old
+      boxes hung in the air over the drop.
+    */
+    const verge = harmattanVerge(at, stone.s)
+    roadPoint(at, stone.n, verge.grade(stone.n), point, frame)
+    if (Math.abs(stone.n) > verge.edge) point.y = land.heightAt(point.x, point.z)
+    const across = Math.hypot(frame.rx, frame.rz) || 1
+    ironstone(meshes[chunkFor(stone.s)], point.x, point.y, point.z, stone.size, frame.rx / across, frame.rz / across, stone.seed)
   }
 
   return meshes.map((mesh, index) => {
@@ -1966,25 +1963,51 @@ const SKY_FRAG = /* glsl */ `
   uniform float uTime;
   uniform float uSun;
 
+  float dome(float az, float centre, float spread, float height) {
+    float d = abs(mod(az - centre + 3.14159, 6.28318) - 3.14159) / spread;
+    return d < 1.0 ? height * pow(1.0 - d * d, 0.55) : 0.0;
+  }
+
   void main() {
     vec3 dir = normalize(vDirection);
-    float up = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
 
-    // Ochre at the ground line, warmer and paler overhead. Thirty degrees of
-    // hue across the whole sky, which is what makes it read as air rather than
-    // as a gradient somebody chose.
-    vec3 low  = vec3(0.784, 0.560, 0.353);
-    vec3 high = vec3(0.867, 0.706, 0.494);
-    vec3 sky = mix(low, high, pow(up, 0.75));
+    /*
+      Dust at the ground line, paler overhead. The horizon is exactly the colour
+      the fog shows as through the tone curve (#ccbb9d), so the plain dissolves
+      into the sky with no line — the haze has no horizon, and neither does this.
 
-    // The sun: low, ahead, and flat. \`uSun\` fades it where the scarp or the
-    // town wall would be between you and it.
+      It was ochre (#c88f5a) and the fog a different ochre. Harmattan air is pale
+      before it is orange: the dust scatters the blue away and what is left is
+      the colour of the dust, lit.
+    */
+    vec3 horizon = vec3(0.800, 0.733, 0.616);
+    vec3 zenith  = vec3(0.878, 0.835, 0.749);
+    vec3 sky = mix(horizon, zenith, pow(clamp(dir.y, 0.0, 1.0), 0.6));
+
+    /*
+      The inselbergs. Northern Nigeria's plains are stood with granite domes —
+      Dala Hill inside Kano, Kufena, the Zuma rock — and in harmattan they are
+      the one thing past the dust you can still just make out: a rounder, cooler
+      shape standing in the glare with no base to it. Drawn into the sky rather
+      than built, because they are kilometres off and the only thing left of
+      them at that distance is the silhouette, and it must never move against
+      the plain as you drive.
+    */
+    float az = atan(dir.x, dir.z);
+    float hills = max(max(dome(az, 0.55, 0.16, 0.052), dome(az, 0.78, 0.09, 0.03)),
+                  max(max(dome(az, 2.35, 0.22, 0.04), dome(az, -1.9, 0.13, 0.062)),
+                      max(dome(az, -2.6, 0.08, 0.028), dome(az, -0.35, 0.11, 0.022))));
+    float ghost = step(dir.y, hills) * smoothstep(-0.02, 0.004, dir.y);
+    sky = mix(sky, horizon * vec3(0.88, 0.87, 0.9), ghost * 0.3);
+
+    // The sun: low, ahead, and flat — a pale disc you can look at. \`uSun\`
+    // fades it where the scarp or the town wall would be between you and it.
     vec3 toSun = normalize(vec3(0.34, 0.20, -0.92));
     float near = dot(dir, toSun);
     float disc = smoothstep(0.9975, 0.9990, near);
     float wash = smoothstep(0.86, 1.0, near) * 0.22;
-    sky += vec3(0.30, 0.24, 0.13) * wash * uSun;
-    sky = mix(sky, vec3(0.98, 0.93, 0.80), disc * 0.85 * uSun);
+    sky += vec3(0.16, 0.14, 0.10) * wash * uSun;
+    sky = mix(sky, vec3(1.0, 0.975, 0.92), disc * 0.9 * uSun);
 
     // Dust moving across it. Very slight — the sky is not meant to have detail,
     // it is meant to have none, and this is only enough to stop it looking like
@@ -2021,7 +2044,7 @@ const DUST_FRAG = /* glsl */ `
     vec2 d = gl_PointCoord - 0.5;
     float round = 1.0 - smoothstep(0.22, 0.5, length(d));
     if (round <= 0.01) discard;
-    gl_FragColor = vec4(0.86, 0.71, 0.49, round * vFade * 0.5);
+    gl_FragColor = vec4(0.88, 0.8, 0.66, round * vFade * 0.5);
   }
 `
 
@@ -2037,9 +2060,15 @@ const GRAINS = 900
  * distance is not here at all — it is the scene fog, set from `Race`, because
  * fog is what every other object on the road has to agree with.
  */
-export function HarmattanWorld({ track }: { track: Track }) {
+export function HarmattanWorld({ track, rock }: { track: Track; rock: ShaderMaterial }) {
   const skyRef = useRef<Mesh>(null)
   const dustRef = useRef<Points>(null)
+  /*
+    The ground, drawn with the road's own material, so the sun, the haze and the
+    town's shade fall on the plain exactly as they fall on the road across it.
+  */
+  const land = useMemo(() => landFor(track), [track])
+  const tileRefs = useRef<Mesh[]>([])
 
   const middle = useMemo(() => {
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
@@ -2099,14 +2128,37 @@ export function HarmattanWorld({ track }: { track: Track }) {
     if (skyRef.current) skyRef.current.position.copy(camera.position)
     // The dust rides with the camera so nine hundred grains cover a whole road.
     if (dustRef.current) dustRef.current.position.set(camera.position.x, camera.position.y - 4, camera.position.z)
+    /*
+      Only the ground there is to see. Past the haze a tile is the fog's colour
+      and nothing else, so it is not drawn at all.
+    */
+    const far = rock.uniforms.uFogFar.value as number
+    for (let i = 0; i < land.tiles.length; i++) {
+      const mesh = tileRefs.current[i]
+      if (!mesh) continue
+      const tile = land.tiles[i]
+      mesh.visible = camera.position.distanceTo(tile.centre) - tile.radius < far * 1.05
+    }
   })
+  useEffect(() => () => land.tiles.forEach((tile) => tile.geometry.dispose()), [land])
 
   return (
     <group>
       <mesh ref={skyRef} material={sky} position={[middle.x, middle.y, middle.z]} renderOrder={-10}>
         <sphereGeometry args={[middle.size * 0.5, 24, 16]} />
       </mesh>
+      {land.tiles.map((tile, i) => (
+        <mesh
+          key={`ground-${i}`}
+          ref={(node) => {
+            if (node) tileRefs.current[i] = node
+          }}
+          geometry={tile.geometry}
+          material={rock}
+        />
+      ))}
       <points ref={dustRef} geometry={grains} material={dust} frustumCulled={false} />
+      <Sahellife track={track} rock={rock} />
       <HarmattanSound track={track} />
     </group>
   )

@@ -135,6 +135,13 @@ export function createLights(): RallyLights {
       */
       uGlowWorms: { value: 0 },
       uStrata: { value: 0 },
+      /*
+        How rough a surface can be and still show beds. Above every roughness on
+        every road but one: on the Harmattan the escarpment is banded sandstone
+        and the town is smooth mud plaster, and roughness is the only thing that
+        tells the shader which is which.
+      */
+      uStrataTop: { value: 2 },
       uFogColor: { value: new Color('#0a0908') },
       uFogNear: { value: 22 },
       uFogFar: { value: 118 },
@@ -199,6 +206,7 @@ const LIGHT_HEAD = /* glsl */ `
   uniform vec3 uVeinColor;
   uniform float uGlowWorms;
   uniform float uStrata;
+  uniform float uStrataTop;
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
@@ -517,7 +525,7 @@ ${LIGHT_BODY}
       */
       float beds = sin(h * 2.1) * 0.6 + sin(h * 5.3 + 1.7) * 0.4;
       float seam = 1.0 - smoothstep(0.0, 0.12, abs(sin(h * 2.1 + 0.9)));
-      float stone = smoothstep(0.3, 0.6, vSurface.y) * uStrata;
+      float stone = smoothstep(0.3, 0.6, vSurface.y) * (1.0 - smoothstep(uStrataTop - 0.06, uStrataTop, vSurface.y)) * uStrata;
       albedo *= mix(1.0, (0.93 + beds * 0.07) * (1.0 - seam * 0.18), stone);
     }
 

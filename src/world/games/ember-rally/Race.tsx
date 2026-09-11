@@ -435,6 +435,18 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       next.uniforms.uFogFar.value = 205
       next.uniforms.uHeadColor.value.set('#ffe0b2')
       next.uniforms.uSpotColor.value.set('#dcecef')
+    } else if (track.stage === 'harmattan') {
+      next.uniforms.uSunColor.value.copy(HAZE_SUN)
+      next.uniforms.uSkyColor.value.copy(HAZE_SKY)
+      next.uniforms.uAmbient.value.copy(HAZE_OPEN)
+      next.uniforms.uFogColor.value.copy(HAZE_FOG)
+      // No veins. The cave's mineral green was never turned off here, and on a
+      // sunlit plain it drew pale scribbles over every metre of the ground.
+      next.uniforms.uVeinColor.value.set('#000000')
+      // Beds in the escarpment's sandstone, and none in anything as rough as
+      // mud plaster or a termite mound. See `uStrataTop`.
+      next.uniforms.uStrata.value = 1
+      next.uniforms.uStrataTop.value = 0.8
     }
     return next
   }, [track.stage])
@@ -612,7 +624,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
                 distance away is *bright*, and a dark behind a bright sky would
                 put a black rim round every hill on the plain.
               */
-              ? '#c69466'
+              ? '#c9ae8a'
               : track.stage === 'stormcrown'
                 ? '#172126'
                 : '#050403',
@@ -621,7 +633,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {track.stage === 'stormcrown' ? <StormcrownWorld track={track} rock={rockMaterial} /> : null}
-      {track.stage === 'harmattan' ? <HarmattanWorld track={track} /> : null}
+      {track.stage === 'harmattan' ? <HarmattanWorld track={track} rock={rockMaterial} /> : null}
       {/*
         The Rootway has no world component of its own — the tunnel, the lamps
         and the fires are all built inline above — so its soundscape mounts
@@ -825,11 +837,26 @@ const stormRoad = emptyRoad()
 const rootRoad = emptyRoad()
 /** Scratch for the Harmattan's look-ahead, so a frame allocates nothing. */
 const dustRoad = emptyRoad()
+/*
+  The Harmattan's light, graded through the tone curve rather than by eye.
+
+  It used to be a warm sun and a warm sky falling on warm ground, and the three
+  multiply: the plain came out #a8672a, the road #821f07 and the walls the same
+  orange as both, so the whole road read as one filter — and indigo, the one
+  cool colour the place is built around, came out #0e1726, which is black. Dust
+  in the air is pale before it is orange. With the light taken most of the way
+  to neutral, the ground is dust (#a97a43), the laterite stays red (#842a0f),
+  and indigo is blue again (#142e5e).
+*/
+/** The sun, whitened by the dust rather than yellowed by it. */
+const HAZE_SUN = new Color('#fff0d8')
+/** The sky's fill, which is the dust lit from above. */
+const HAZE_SKY = new Color('#b8a58c')
 /** The plain in full sun, and the same plain from inside the town's shade. */
-const HAZE_OPEN = new Color('#b98a5e')
-const HAZE_SHADE = new Color('#6b4a33')
-/** What the distance goes to, which is the haze and not a darkness. */
-const HAZE_FOG = new Color('#c69466')
+const HAZE_OPEN = new Color('#ad9a82')
+const HAZE_SHADE = new Color('#665646')
+/** What the distance goes to, which is the haze and not a darkness. Shows as #ccbb9d. */
+const HAZE_FOG = new Color('#c9ae8a')
 /**
  * One frame of the race, as the music hears it.
  *

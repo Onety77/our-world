@@ -1627,6 +1627,18 @@ handling changed.
       see — onto the lightning rods now and then — the stormfire at both
       hearths, and stone posts at the edge. A ledge is carved for the road so
       nothing lies across it; no change to the road, the lanes or the corners
+- [x] **The Harmattan, a place in the dust.** It was a strip of road laid on
+      nothing, under an orange filter that turned the one indigo on it black,
+      with switchbacks hanging in the air on the scarp, windmills for baobabs,
+      pyramids for termite mounds, bricks for stones and planks for banners.
+      Now the land runs to the haze — a rolling plain, a wadi cut into it, an
+      escarpment with a plateau on top and retaining walls under the
+      switchbacks — in pale dust light with the laterite red and the indigo
+      blue, granite inselbergs ghosting in the sky, real baobabs, fluted termite
+      cathedrals, doum palms, acacias and grass bending in one wind, banners of
+      adire cloth flying, camel caravans with riders veiled in indigo, vultures,
+      dust devils, cooking smoke, doors on the houses and indigo in the dye pits.
+      No change to the road, the lanes or the corners
 - [x] **The Glasshouse, the fifth place.** An iron conservatory built out of
       every picture the two of you keep: one instanced quad per memory in its
       own average colour for the whole building, the real photograph for the
