@@ -742,12 +742,9 @@ export function buildWheel(): BufferGeometry {
   /*
     The tyre.
 
-    A lathe with a real shoulder, and a tread that alternates *both* radius and
-    width every other segment. Alternating radius alone gives a cog; adding the
-    width step gives blocks with grooves between them, which at the size a
-    wheel is ever on screen is the difference between a tyre and a black
-    doughnut. The shoulder blocks are what you actually see, because a
-    cornering car shows you the outside of its tyre and not the tread.
+    A rounded rubber shoulder with separate tread blocks below. Keep the
+    sidewall colour continuous: alternating bright/dark sectors alias into
+    a strobe under Harmattan's direct sun.
   */
   const profile: [number, number][] = [
     [-0.128, 0.215], [-0.142, 0.262], [-0.138, 0.315],
@@ -757,14 +754,8 @@ export function buildWheel(): BufferGeometry {
   const base = body.count
   for (let k = 0; k < SIDES; k++) {
     const a = (k / SIDES) * Math.PI * 2
-    const block = k % 2 === 0
-    const tread = 1
     for (const [x, r] of profile) {
-      const shoulder = r > 0.3
-      const rr = shoulder ? r * tread : r
-      // The blocks are also narrower than the grooves between them.
-      const xx = x
-      body.vertex(xx, Math.sin(a) * rr, Math.cos(a) * rr, shoulder && !block ? RUBBER_LIT : RUBBER, MATTE)
+      body.vertex(x, Math.sin(a) * r, Math.cos(a) * r, RUBBER, MATTE)
     }
   }
   for (let k = 0; k < SIDES; k++) {

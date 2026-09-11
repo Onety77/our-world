@@ -821,6 +821,9 @@ ${LIGHT_BODY}
     float wearable = (1.0 - step(0.88, gloss)) *
       (1.0 - step(0.01, vFinish.y + vFinish.z + vFinish.w));
     vec3 p = vCarPosition;
+    // A wheel rotates around X. Its accumulated dirt must be annular, not a
+    // bright upper half that flashes past the camera every revolution.
+    p = mix(p, vec3(p.x, length(p.yz), 0.0), uWheel);
     vec2 grainUV = (p.xz + p.y * vec2(.37, .71)) * 35.0;
     vec2 cell = floor(grainUV), blend = fract(grainUV);
     blend = blend * blend * (3.0 - 2.0 * blend);
@@ -828,7 +831,7 @@ ${LIGHT_BODY}
     vec4 grains = fract(sin(grainSeeds) * 43758.5453);
     float grain = mix(mix(grains.x, grains.y, blend.x), mix(grains.z, grains.w, blend.x), blend.y);
     float wearPatch = 0.55 + 0.45 * sin(p.z * 6.1 + sin(p.x * 8.7) + p.y * 4.0);
-    float top = smoothstep(-0.1, 0.8, vCarNormal.y);
+    float top = mix(smoothstep(-0.1, 0.8, vCarNormal.y), .65, uWheel);
     float dust = uWear.x * (0.3 + top * 0.55) * (0.65 + grain * 0.35) * wearable;
     float low = mix(1.0 - smoothstep(0.25, 0.85, p.y), 0.8, uWheel);
     float mud = uWear.z * low * smoothstep(0.15, 0.7, wearPatch + grain * 0.25) * wearable;
