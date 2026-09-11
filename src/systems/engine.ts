@@ -636,14 +636,17 @@ export function createEngineVoice(
       // Keep the engine intelligible during the burn, and release smoothly.
       const left = Math.max(0, Math.min(1, state.boostLeft))
       const burn = state.boost ? smoothstep(0, .18, left) : 0
-      boostLow.frequency.setTargetAtTime(950 + revs * 650, now, .12)
-      boostGain.gain.setTargetAtTime(burn * (.018 + throttle * .012) * wake,
-        now, state.boost ? .09 : .16)
+      // A distinct pressure rush must remain audible beside the loaded engine.
+      // Broad, gently filtered noise supplies that presence without a resonant
+      // whistle. Do not rely on the engine's small gain lift to announce boost.
+      boostLow.frequency.setTargetAtTime(1700 + revs * 700, now, .09)
+      boostGain.gain.setTargetAtTime(burn * (.14 + throttle * .06) * wake,
+        now, state.boost ? .035 : .12)
       if (state.boost && !lastBoost) {
-        // One rounded intake gulp, followed by the engine's stronger exhaust.
-        noiseBurst(now, .038, .16, 'lowpass', 1100, .55, .8, out)
+        // Immediate ignition, then the sustained rush above takes over.
+        noiseBurst(now, .24, .22, 'lowpass', 1750, .55, .8, out)
       } else if (!state.boost && lastBoost) {
-        noiseBurst(now, .018, .19, 'bandpass', 850, .55, .7, out)
+        noiseBurst(now, .065, .19, 'bandpass', 1100, .55, .7, out)
       }
       lastBoost = state.boost
 

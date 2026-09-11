@@ -55,8 +55,13 @@ export async function renderEngineReference(moduleUrl = '/src/systems/engine.ts'
     return { rms: Math.sqrt(energy / count), highRms: Math.sqrt(highEnergy / count), peak }
   }
   const result = { all: stats(0, seconds), idle: stats(1, 2), cruise: stats(5.5, 6.5),
-    attack: stats(7, 7.4), boost: stats(8, 10), release: stats(11, 11.5) }
+    ignition: stats(7, 7.08), attack: stats(7, 7.4), boost: stats(8, 10), release: stats(11, 11.5) }
   if (result.all.peak >= .98) throw Error('Car mix clips')
-  if (result.boost.rms <= result.cruise.rms) throw Error('Boost has no audible increase in power')
+  // A small engine gain lift passed the old check even when the dedicated
+  // nitro sound was masked. Require a prompt onset and a distinct sustained
+  // broadband layer. These are mix regressions, not a substitute for listening.
+  if (result.ignition.rms < result.cruise.rms * 1.25) throw Error('Nitro ignition is masked by the engine')
+  if (result.boost.rms < result.cruise.rms * 1.35) throw Error('Nitro sustain is masked by the engine')
+  if (result.boost.highRms < result.cruise.highRms * 1.5) throw Error('Nitro rush lacks a distinct layer')
   return { result, buffer }
 }
