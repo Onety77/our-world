@@ -1,6 +1,6 @@
 import type { StageId } from './model'
 
-export const ROAD_ORDER: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown', 'harmattan']
+export const ROAD_ORDER: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown', 'harmattan', 'nightfall']
 export const ROAD_INFO: Record<
   StageId,
   {
@@ -17,7 +17,7 @@ export const ROAD_INFO: Record<
     landscape: 'Beneath the garden',
     character: 'Technical · enclosed',
     description: 'Warm lanterns, close stone walls, and a road that keeps changing direction.',
-    tip: 'Start here. Brake before the bend, then accelerate as the road opens.',
+    tip: 'Amber lights follow the main road. Cold lights on the right mark a narrower, quicker cut.',
     accent: '#e6ae65',
   },
   moonbreak: {
@@ -44,5 +44,14 @@ export const ROAD_INFO: Record<
     description: 'Red earth, deep sand, and a road disappearing into the dust of a daylight rally.',
     tip: 'Pale ground means deep sand. Keep the steering calm when visibility drops.',
     accent: '#edb88a',
+  },
+  nightfall: {
+    name: 'The Nightfall',
+    landscape: 'Through the garden',
+    character: 'Everything · at once',
+    description:
+      'From the tree at dusk, down to the river, through the Hollow, out under the stars and home along the lanterns.',
+    tip: 'Carry speed round the tree, brake for the hearth, and save the lanterns for last.',
+    accent: '#e9c48a',
   },
 }

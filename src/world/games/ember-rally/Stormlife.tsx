@@ -258,10 +258,49 @@ function plantForest(track: Track, mountain: Mountain, share: number): Grove[] {
       }
     }
   }
+  /*
+    And the road itself, every two metres, by cell — because the coarse map
+    is not good enough near the road. It records each cell's distance from
+    its *centre*, and a tree can stand eleven metres from that centre: on the
+    last run, where the road folds back past itself, that put cedars in the
+    middle of the tarmac. Anything within forty metres is measured against
+    the road's own samples.
+  */
+  const samples = new Map<number, number[]>()
+  const walls: number[] = []
+  const roadX: number[] = []
+  const roadZ: number[] = []
+  for (let s = 0; s < track.length; s += 2) {
+    roadAt(track, s, road)
+    const k = Math.round((road.z - z0) / CELL) * nx + Math.round((road.x - x0) / CELL)
+    let list = samples.get(k)
+    if (!list) samples.set(k, (list = []))
+    list.push(roadX.length)
+    roadX.push(road.x)
+    roadZ.push(road.z)
+    walls.push(road.width + vergeWidth(road.room))
+  }
   const distanceAt = (x: number, z: number) => {
     const i = Math.max(0, Math.min(nx - 1, Math.round((x - x0) / CELL)))
     const j = Math.max(0, Math.min(nz - 1, Math.round((z - z0) / CELL)))
-    return [near[j * nx + i], wallNear[j * nx + i]]
+    const coarse = near[j * nx + i]
+    if (coarse > 40) return [coarse, wallNear[j * nx + i]]
+    let best = Infinity
+    let wall = 6
+    for (let dj = -3; dj <= 3; dj++) {
+      for (let di = -3; di <= 3; di++) {
+        const list = samples.get((j + dj) * nx + i + di)
+        if (!list) continue
+        for (const p of list) {
+          const d = Math.hypot(roadX[p] - x, roadZ[p] - z)
+          if (d < best) {
+            best = d
+            wall = walls[p]
+          }
+        }
+      }
+    }
+    return [best, wall]
   }
 
   const rng = random(track.seed ^ 0x3ed4)
@@ -274,7 +313,8 @@ function plantForest(track: Track, mountain: Mountain, share: number): Grove[] {
       const jz = z + (rng() - 0.5) * STEP
       const roll = rng()
       const [d, wall] = distanceAt(jx, jz)
-      if (d > REACH || d < wall + 5) continue
+      // A cedar's skirt is half its height: clear of the verge by that and more.
+      if (d > REACH || d < wall + 9) continue
       const keep = (d < 50 ? 0.5 : 0.5 - (d - 50) / 300) * share
       if (roll > keep || hash(Math.round(jx), Math.round(jz), 5) > 0.8 + share * 0.2) continue
       const y = mountain.heightAt(jx, jz)

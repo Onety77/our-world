@@ -30,7 +30,7 @@
  */
 
 import { Matrix4, Quaternion, Vector3 } from 'three'
-import { buildWheel, SPRING_MOUNT_Y, SPRING_POSITIONS, WHEEL_POSITIONS, WHEEL_RADIUS } from './car'
+import { buildWheel, WHEEL_POSITIONS } from './car'
 import type { CarRig } from './rig'
 import { surfaceOf, type RoadSurface, type Support } from './roadSurface'
 import type { Track } from './track'
@@ -278,13 +278,7 @@ export function poseTyreContact(rig: CarRig) {
       centre.addScaledVector(up, lift)
       if (Math.abs(lift) < 0.0002) break
     }
-    // The top mount belongs to the rolling body; the bottom follows this hub.
-    const spring = rig.springs[i]
-    const [sx, sy, sz] = SPRING_POSITIONS[i]
-    rig.body.updateMatrix()
-    point.set(sx, sy, sz).applyMatrix4(rig.body.matrix)
-    const span = SPRING_MOUNT_Y - WHEEL_RADIUS
-    spring.scale.y = Math.max(0.5, Math.min(1.7, (point.y - hub.position.y) / span))
   }
+
   rig.root.updateMatrixWorld(true)
 }

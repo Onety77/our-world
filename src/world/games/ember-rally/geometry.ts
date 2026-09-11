@@ -192,9 +192,7 @@ const ROCK_HIGH = new Color('#4a433d')
 const ROOT_BARK = new Color('#4a3a2c')
 const ROOT_TIP = new Color('#5e4b38')
 const CAIRN = new Color('#4a4239')
-const SHORTCUT_STONE = new Color('#4b4238')
-const ROOTWAKE_MOUTH = new Color('#71583f')
-const CHASM_WALL = new Color('#171310')
+const SHORTCUT_STONE = new Color('#615b53')
 const ROOTWAKE_OCHRE = new Color('#6e452d')
 const ROOTWAKE_QUARTZ = new Color('#736b5d')
 const scratchColor = new Color()
@@ -562,6 +560,102 @@ export interface TunnelChunk {
   tread?: number[]
 }
 
+/** Both mouths are a union of the two cave sections, with one shared floor.
+ * The rock between them grows down from the vault as the roads separate.
+ * No overlapping decks, invisible side wall, or tube pushed through a tube. */
+function buildRootForkTunnel(track: Track, spans: { from: number; to: number }[]): TunnelChunk[] {
+  const split = track.split
+  if (!split) return []
+  const chunks: TunnelChunk[] = []
+  const origin = roadAt(track, split.from), main = emptyRoad(), cut = emptyRoad()
+  const sh = Math.sin(origin.heading), ch = Math.cos(origin.heading)
+  const offset = new Float64Array(PROFILE), height = new Float64Array(PROFILE)
+  for (const span of spans) {
+    const from = Math.max(span.from, split.from), to = Math.min(span.to, split.to)
+    if (to <= from) continue
+    for (const shortcut of [false, true]) {
+      const mesh = new Mesh()
+      let previous = -1, previousOpen = false
+      for (let s = from; s <= to + .001; s += RING) {
+        roadAt(track, s, main); shortcutRoadAt(split, s, cut)
+        const m = -(main.x - origin.x) * ch + (main.z - origin.z) * sh
+        const c = -(cut.x - origin.x) * ch + (cut.z - origin.z) * sh
+        const mw = (main.width + vergeWidth(main.room)) / Math.cos(main.heading - origin.heading)
+        const cw = (cut.width + vergeWidth(cut.room)) / Math.cos(cut.heading - origin.heading)
+        const seam = (m + mw + c - cw) / 2
+        const open = m + mw >= c - cw
+        const roofAt = (centre: number, half: number, ceiling: number) =>
+          ceiling * (.8 + .2 * Math.sqrt(Math.max(0, 1 - ((seam - centre) / half) ** 2)))
+        const roof = Math.max(roofAt(m, mw, main.ceiling), roofAt(c, cw, cut.ceiling))
+        const road = shortcut ? cut : main, centre = shortcut ? c : m
+        const along = (main.x - origin.x) * sh + (main.z - origin.z) * ch
+        const scale = 1 / Math.cos(road.heading - origin.heading)
+        crossSection(road, Math.round(s / RING), offset, height)
+        for (let k = 0; k < PROFILE; k++) offset[k] *= scale
+        // The separating rock has a precise edge; independent wall bulges
+        // must not protrude through the neighbouring tunnel at the nose.
+        for (let k = shortcut ? 16 : 9; k <= (shortcut ? 21 : 14); k++) {
+          const wall = shortcut ? cw : mw
+          offset[k] = Math.max(-wall, Math.min(wall, offset[k]))
+        }
+        if (open) {
+          const edge = seam - centre
+          // Divide the common floor at exactly the same world-space seam.
+          for (let k = 0; k < ROAD_POINTS; k++) {
+            const t = k / (ROAD_POINTS - 1)
+            offset[k] = shortcut ? edge * (1 - t) + road.width * scale * t
+              : -road.width * scale * (1 - t) + edge * t
+            height[k] = .055
+          }
+          if (shortcut) {
+            for (let k = 16; k <= 21; k++) { offset[k] = edge; height[k] = k === 21 ? .055 : roof }
+          } else {
+            for (let k = 9; k <= 14; k++) { offset[k] = edge; height[k] = k === 9 ? .055 : roof }
+          }
+        }
+        const base = mesh.count
+        for (let k = 0; k < PROFILE; k++) {
+          const n = offset[k]
+          const floor = k < 10 || k > 19
+          scratchColor.copy(floor ? (shortcut && !open ? SHORTCUT_STONE : STONE_ROAD) : ROCK_MID)
+          if (!floor) scratchColor.multiplyScalar(.87 + hash3(Math.round(s / RING), k, 19) * .22)
+          if (shortcut && !floor && Math.abs(s - split.hardAt) < 18) scratchColor.lerp(ROOTWAKE_OCHRE, .45)
+          if (shortcut && !floor && Math.abs(s - split.veryHardAt) < 14) scratchColor.lerp(ROOTWAKE_QUARTZ, .35)
+          mesh.vertex(origin.x + sh * along - ch * (centre + n), road.y + height[k],
+            origin.z + ch * along + sh * (centre + n),
+            scratchColor, road.wet, floor ? .2 : .7)
+        }
+        if (previous >= 0) for (let k = 0; k < PROFILE; k++) {
+          if (open && previousOpen && k === (shortcut ? 20 : 9)) continue
+          const next = (k + 1) % PROFILE
+          if (k < 9 || k >= 20) mesh.deck(previous + k, previous + next, base + next, base + k)
+          else mesh.quad(previous + k, previous + next, base + next, base + k)
+        }
+        previous = base; previousOpen = open
+      }
+      if (shortcut) {
+        for (const lamp of track.lanterns) {
+          if (!lamp.shortcut || lamp.s < from || lamp.s >= to) continue
+          const r = shortcutRoadAt(split, lamp.s)
+          addBlob(mesh, roadPoint(r, lamp.n, .15, new Vector3()), .42, 1.7,
+            Math.round(lamp.s), CAIRN, .3)
+        }
+        for (let s = Math.ceil(from / 34) * 34; s < to; s += 34) {
+          if (s < split.separateAt + 24 || s > split.to - 190) continue
+          const r = shortcutRoadAt(split, s), path: Vector3[] = []
+          for (let k = 0; k <= 6; k++) {
+            const t = k / 6, n = (t * 2 - 1) * (r.width + .8)
+            path.push(roadPoint(r, n, r.ceiling * (.76 + Math.sin(t * Math.PI) * .17), new Vector3()))
+          }
+          addTube(mesh, path, t => .08 + Math.sin(t * Math.PI) * .06, () => ROOT_BARK, .45)
+        }
+      }
+      chunks.push({ from, to, shortcut, geometry: mesh.build(), tread: mesh.tread })
+    }
+  }
+  return chunks
+}
+
 export function buildTunnel(track: Track): TunnelChunk[] {
   const rings = Math.floor(track.length / RING) + 1
   const chunkCount = Math.ceil(track.length / CHUNK)
@@ -642,14 +736,7 @@ export function buildTunnel(track: Track): TunnelChunk[] {
         const previous = base - PROFILE
         for (let k = 0; k < PROFILE; k++) {
           const k2 = (k + 1) % PROFILE
-          const junctionOpen = track.split && (
-            (s >= track.split.commitAt - 2 &&
-              s <= track.split.separateAt + 12) ||
-            (s >= track.split.rejoinAt - 48 && s <= track.split.to + 5)
-          )
-          // The right wall opens twice: into the hidden throat and where that
-          // throat returns. Everywhere between, this remains a closed cave.
-          if (junctionOpen && k >= 9 && k <= 13) continue
+          if (track.split && s > track.split.from && s <= track.split.to) continue
           // The floor — the road and both verges — is what the wheels stand on.
           if (k < ROAD_POINTS || k === 20 || k === 21) mesh.deck(previous + k, previous + k2, base + k2, base + k)
           else mesh.quad(previous + k, previous + k2, base + k2, base + k)
@@ -662,111 +749,7 @@ export function buildTunnel(track: Track): TunnelChunk[] {
   capEnd(meshes[0], track, 0, -1)
   capEnd(meshes[chunkCount - 1], track, (rings - 1) * RING, 1)
 
-  const shortcutChunks: TunnelChunk[] = []
-
-  /* The Rootwake is now a second swept cave, not a strip inside this one. */
-  if (track.split) {
-    const split = track.split
-    for (let chunk = 0; chunk < chunkCount; chunk++) {
-      const from = Math.max(split.from, span[chunk].from)
-      const to = Math.min(split.to, span[chunk].to)
-      if (to <= from) continue
-
-      const mesh = new Mesh()
-      let previous = -1
-      const first = Math.ceil(from / RING) * RING
-      for (let s = first; s <= to + 0.001; s += RING) {
-        shortcutRoadAt(split, s, road)
-        basisAt(road, basis)
-        crossSection(road, Math.round(s / RING) + 17000, offset, height)
-        const base = mesh.count
-        const hardScar = Math.max(0, 1 - Math.abs(s - split.hardAt) / 12)
-        const blindScar = Math.max(0, 1 - Math.abs(s - split.veryHardAt) / 7)
-
-        for (let k = 0; k < PROFILE; k++) {
-          const n = offset[k]
-          const y = height[k]
-          roadPoint(road, n, y, point, basis)
-          let colour = CHASM_WALL
-          let wet = road.wet * 0.72
-          let rough = 0.95
-          if (k < ROAD_POINTS) {
-            const edge = Math.min(1, Math.max(0, (Math.abs(n) / road.width - 0.62) / 0.38))
-            const inMouth = s < split.separateAt
-            scratchColor
-              .copy(inMouth ? ROOTWAKE_MOUTH : SHORTCUT_STONE)
-              .lerp(EARTH, edge * 0.52)
-            const worn = Math.max(0, 1 - Math.abs(n - road.line) / 1.25)
-            scratchColor.lerp(STONE_WORN, worn * 0.38)
-            scratchColor.multiplyScalar(
-              (inMouth ? 0.92 : 0.74) + hash3(Math.round(s), k, 91) * (inMouth ? 0.12 : 0.22),
-            )
-            colour = scratchColor
-            wet = road.wet
-            rough = 0.42
-          } else if (k === 9 || k === 10 || k === 20 || k === 21) {
-            scratchColor.copy(EARTH).multiplyScalar(0.58 + hash3(Math.round(s), k, 72) * 0.2)
-            colour = scratchColor
-          } else {
-            const inMouth = s < split.separateAt
-            scratchColor
-              .copy(inMouth ? ROCK_LOW : CHASM_WALL)
-              .lerp(ROCK_MID, hash3(Math.round(s / 2), k, 63) * (inMouth ? 0.52 : 0.38))
-            // Headlights catch two natural scars before the demanding bends:
-            // ochre through the hard S, one cold quartz rib at the blind
-            // reverse. They are landmarks, not a luminous racing line.
-            if (hardScar > 0) {
-              scratchColor.lerp(ROOTWAKE_OCHRE, hardScar * 0.54)
-            }
-            if (blindScar > 0) {
-              scratchColor.lerp(ROOTWAKE_QUARTZ, blindScar * 0.68)
-            }
-            colour = scratchColor
-          }
-          mesh.vertex(point.x, point.y, point.z, colour, wet, rough)
-        }
-
-        if (previous >= 0) {
-          for (let k = 0; k < PROFILE; k++) {
-            const k2 = (k + 1) % PROFILE
-            // The broad main chamber is the only floor until the right-hand
-            // lane has actually moved beyond its edge.
-            if (s < split.commitAt) continue
-            const entranceOpen = s < split.separateAt
-            const exitOpen = s >= split.rejoinAt - 48
-            /*
-              While the lane is leaving the chamber, draw only its outer half:
-              half a worn deck and the outside wall. The inner half is still
-              the common floor, and drawing it twice is the overlap that made
-              flat black polygons appear across the road.
-
-              Once the centres are thirteen metres apart the full tunnel closes
-              around Rootwake, with its inside wall left open briefly to make a
-              natural junction rather than a capped tube.
-            */
-            // Only the outer half-shell exists in the open chamber: half the
-            // worn deck, its wall, and the roof up to the shared centre seam.
-            // The missing inner half is supplied by the main cave.
-            if (entranceOpen && (k < 4 || k >= 16)) continue
-            if (
-              s >= split.separateAt &&
-              s < split.separateAt + 14 &&
-              k >= 16 && k <= 21
-            ) continue
-            // At the far merge only the branch's inside half needs to open.
-            if (exitOpen && k >= 16 && k <= 21) continue
-            if (k < ROAD_POINTS || k === 20 || k === 21) mesh.deck(previous + k, previous + k2, base + k2, base + k)
-            else mesh.quad(previous + k, previous + k2, base + k2, base + k)
-          }
-        }
-        previous = base
-      }
-
-      const geometry = mesh.build()
-      if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
-      shortcutChunks.push({ from, to, geometry, shortcut: true, tread: mesh.tread })
-    }
-  }
+  const shortcutChunks = buildRootForkTunnel(track, span)
 
   // --- the finish, as two standing stones ----------------------------------
   for (const stone of track.gate) {

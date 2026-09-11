@@ -27,7 +27,7 @@
 import { StrictMode, useMemo, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Color, Vector3, type Mesh } from 'three'
+import { Color, Raycaster, Vector2, Vector3, type Mesh } from 'three'
 import { buildMoonbreak, MoonbreakWorld } from '@/world/games/ember-rally/Moonbreak'
 import { MOON } from '@/world/games/ember-rally/moonlight'
 import { buildTunnel } from '@/world/games/ember-rally/geometry'
@@ -47,6 +47,8 @@ import {
 } from '@/world/games/ember-rally/materials'
 import { placeCar, poseGhostWheels, useCarRig } from '@/world/games/ember-rally/rig'
 import { buildHarmattan, HarmattanWorld } from '@/world/games/ember-rally/Harmattan'
+import { buildNightfall, NightfallWorld } from '@/world/games/ember-rally/Nightfall'
+import { NIGHTFALL } from '@/world/games/ember-rally/track'
 import { laySurface } from '@/world/games/ember-rally/roadSurface'
 import { BoxGeometry } from 'three'
 
@@ -55,6 +57,7 @@ const STAGE = (new URLSearchParams(location.search).get('stage') ?? 'moonbreak')
   | 'rootway'
   | 'stormcrown'
   | 'harmattan'
+  | 'nightfall'
 const track = makeTrack(7, STAGE)
 const params = new URLSearchParams(location.search)
 /** Where along the road to stand, and how far into the swing. */
@@ -72,6 +75,9 @@ const BACK = Number(params.get('back') ?? 13)
  */
 const YAW = Number(params.get('yaw') ?? 0)
 const SPREAD = Number(params.get('spread') ?? 2.4)
+/** The body's own roll and heave, as if cornering hard: for looking at the tyres under the arches. */
+const ROLL = Number(params.get('roll') ?? 0)
+const HEAVE = Number(params.get('heave') ?? 0)
 
 export default function Span() {
   const lights = useMemo(() => createLights(), [])
@@ -83,7 +89,9 @@ export default function Span() {
         ? buildStormcrown(track)
         : STAGE === 'harmattan'
           ? buildHarmattan(track)
-          : buildTunnel(track)
+          : STAGE === 'nightfall'
+            ? buildNightfall(track)
+            : buildTunnel(track)
     // So the three cars stand on the drawn deck as the race's would.
     laySurface(track, built)
     return built
@@ -109,6 +117,12 @@ export default function Span() {
     const to = roadPoint(ahead, 0, 1.6, new Vector3(), basisAt(ahead))
     return [from, to]
   }, [])
+
+  // For a headless probe: what the scene is and where the camera stands, so a
+  // script can raycast at a pixel and name what it sees.
+  useFrame(({ scene, camera }) => {
+    ;(window as unknown as { __span: unknown }).__span = { scene, camera, Raycaster, Vector2 }
+  })
 
   useFrame((_, delta) => {
     if (MOVING) held.current += delta
@@ -170,6 +184,43 @@ export default function Span() {
       lights.uniforms.uStrataTop.value = 0.8
       lights.uniforms.uFogNear.value = 16
       lights.uniforms.uFogFar.value = 108
+    } else if (STAGE === 'nightfall') {
+      // The place's own light, as `Race` blends it: `?light=meadow|wellspring|hollow|stars|walk`.
+      const which = params.get('light') ?? (AT < NIGHTFALL.meadow.to ? 'meadow' : AT < NIGHTFALL.wellspring.to ? 'wellspring' : AT < NIGHTFALL.hollow.to ? 'hollow' : AT < NIGHTFALL.stars.to ? 'stars' : 'walk')
+      const light = {
+        meadow: { daylight: 0.85, sun: '#ffb478', sky: '#8d8cae', ambient: '#6e6878', fog: '#9c8890', near: 70, far: 360 },
+        wellspring: { daylight: 0.42, sun: '#f2955c', sky: '#6c6d8e', ambient: '#52506a', fog: '#5f5a70', near: 28, far: 170 },
+        hollow: { daylight: 0, sun: '#000000', sky: '#000000', ambient: '#8a6a4e', fog: '#241b15', near: 14, far: 90 },
+        stars: { daylight: 0, sun: '#000000', sky: '#000000', ambient: '#2e3856', fog: '#0b1020', near: 90, far: 720 },
+        walk: { daylight: 0, sun: '#000000', sky: '#000000', ambient: '#33392c', fog: '#0f130d', near: 22, far: 115 },
+      }[which as 'meadow'] ?? { daylight: 0.85, sun: '#ffb478', sky: '#8d8cae', ambient: '#6e6878', fog: '#9c8890', near: 70, far: 360 }
+      lights.uniforms.uDaylight.value = light.daylight
+      lights.uniforms.uSunDir.value.set(-0.55, 0.2, -0.8).normalize()
+      lights.uniforms.uSunColor.value.set(light.sun)
+      lights.uniforms.uSkyColor.value.set(light.sky)
+      lights.uniforms.uAmbient.value.set(light.ambient)
+      lights.uniforms.uFogColor.value.set(light.fog)
+      lights.uniforms.uFogNear.value = light.near
+      lights.uniforms.uFogFar.value = light.far
+      lights.uniforms.uVeinColor.value.set('#000000')
+      // The lanterns near here, lit as the race lights them.
+      let slot = 0
+      for (const lantern of track.lanterns) {
+        if (lantern.s < AT - 30 || lantern.s > AT + 115 || slot >= 10) continue
+        const at = roadAt(track, lantern.s)
+        const p = roadPoint(at, lantern.n, lantern.y, new Vector3(), basisAt(at))
+        const power = lantern.fire ? 2.2 : lantern.size * 0.85
+        lights.lamps[slot * 4] = p.x
+        lights.lamps[slot * 4 + 1] = p.y
+        lights.lamps[slot * 4 + 2] = p.z
+        lights.lamps[slot * 4 + 3] = lantern.fire ? 24 : 2.4 + lantern.size * (lantern.warm > 0.4 ? 7 : 3.4)
+        const [r, g, b] = lantern.warm > 0.4 ? [0.95, 0.46, 0.17] : [0.4, 0.5, 0.9]
+        lights.lampColors[slot * 3] = r * power
+        lights.lampColors[slot * 3 + 1] = g * power
+        lights.lampColors[slot * 3 + 2] = b * power
+        slot++
+      }
+      for (; slot < 10; slot++) lights.lamps[slot * 4 + 3] = 0.0001
     } else {
       lights.uniforms.uAmbient.value.set(params.has('day') ? '#9fb3c4' : '#4a5b72')
       lights.uniforms.uFogNear.value = 60
@@ -202,7 +253,7 @@ export default function Span() {
       storm.wind = galeStrengthAt(where, AT, held.current)
     }
     rigs.forEach((rig, i) => {
-      placeCar(rig, track, AT + 6 + i * 16, (i - 1) * SPREAD, YAW, 0, 0, 0, 0, false, held.current)
+      placeCar(rig, track, AT + 6 + i * 16, (i - 1) * SPREAD, YAW, ROLL, 0, HEAVE, 0, false, held.current)
       // And the tyres settled on the drawn road, as a race's would be.
       poseGhostWheels(rig, 0, 0, 0, false, delta, 0)
     })
@@ -213,6 +264,18 @@ export default function Span() {
       {STAGE === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {STAGE === 'stormcrown' ? <StormcrownWorld track={track} rock={rock} /> : null}
       {STAGE === 'harmattan' ? <HarmattanWorld track={track} rock={rock} /> : null}
+      {STAGE === 'nightfall' ? (
+        // No garden here to read, so a garden of the size one might be after a season.
+        <NightfallWorld
+          track={track}
+          rock={rock}
+          garden={{
+            thoughts: Number(params.get('thoughts') ?? 60),
+            memories: Array.from({ length: Number(params.get('memories') ?? 18) }, (_, i) => ({ at: i, tint: ['#8a6f5a', '#5e7a8a', '#9a7a86', '#7d8a5e', '#a08a60'][i % 5] })),
+            messages: Number(params.get('messages') ?? 140),
+          }}
+        />
+      ) : null}
       {chunks.map((chunk, i) => (
         <mesh
           key={i}

@@ -345,6 +345,7 @@ function realRoad() {
     ['rootway 1234', 1234, 'rootway'],
     ['moonbreak', 1, 'moonbreak'],
     ['stormcrown', 1, 'stormcrown'],
+    ['nightfall', 1, 'nightfall'],
   ]
   for (const [name, seed, stage] of roads) {
     const track = makeTrack(seed, stage)
@@ -418,7 +419,7 @@ function realRoad() {
 function howFarItLiesOver(): string {
   const out: string[] = []
   let worst = 0
-  for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as const) {
+  for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan', 'nightfall'] as const) {
     const track = makeTrack(1, stage)
     const car = createCar(track)
     const drive = spiritDriver(track, 0x4c21)
@@ -1120,55 +1121,21 @@ function metersSurviveRestart(): string {
   return rows.join(NEWLINE)
 }
 
-/**
- * There is no fork, and that is now the thing worth checking.
- *
- * ---------------------------------------------------------------------------
- * Rootwake was nine hundred metres of hidden tunnel and it came out of the road
- * the day the ordinary corners were sharpened. A tunnel is a curve drawn
- * between two points on the main road, and a main road with real corners in it
- * brings those two points close together in a straight line while leaving them
- * just as far apart along the tarmac — so the tunnel came out a third of the
- * length its features were drawn for and folded, down to a three metre radius
- * in the throat.
- *
- * This used to prove the fork was worth taking. It now proves the road has
- * none, because a fork half-removed is worse than either — and it counts what
- * the road got back instead: the mouth was two hundred and fifty metres of wide
- * gentle cavern, and every metre of it is dealt as ordinary road now.
- * ---------------------------------------------------------------------------
- */
+/** The authored fork must remain shorter and must never fold when the seed changes. */
 function theSplit(): string {
   const rows: string[] = []
-  const FLAT = 69
   for (const seed of [1, 42, 90210]) {
-    const track = makeTrack(seed, 'rootway')
-    if (track.split !== null) {
-      return '  THERE IS STILL A FORK ON THE ROOTWAY — it was taken out on purpose'
+    const track = makeTrack(seed, 'rootway'), split = track.split
+    if (!split) return '  MISSING ROOTWAY FORK'
+    const radius = 1 / Math.max(...Array.from(split.curv, Math.abs))
+    if (radius < 45 || split.shortcutLength >= split.mainLength || Math.min(...split.metric) < .5) {
+      return '  ROOTWAY FORK HAS FOLDED OR LOST ITS TIME ADVANTAGE'
     }
-    const corners: number[] = []
-    let run: number[] = []
-    for (let i = 4; i < track.curv.length - 4; i++) {
-      const k = Math.abs(track.curv[i])
-      if (k > 1 / 140) run.push(1 / k)
-      else { if (run.length > 12) corners.push(Math.min(...run)); run = [] }
-    }
-    if (run.length > 12) corners.push(Math.min(...run))
-    const braked = corners.filter((r) => r < FLAT).length
-    const tightest = Math.min(...corners)
-    rows.push(
-      `  seed ${String(seed).padEnd(6)} no fork · ${String(corners.length).padStart(2)} corners · ` +
-        `${String(braked).padStart(2)} need the brake · tightest r${tightest.toFixed(0)}m`,
-    )
+    rows.push(`  seed ${seed}: ${split.mainLength.toFixed(0)}m main / ${split.shortcutLength.toFixed(0)}m cut, tightest r${radius.toFixed(0)}m`)
   }
-  rows.push('')
-  rows.push(
-    '  anything opener than r69m is flat out in this car, so a corner under it',
-  )
-  rows.push('  is one you have to do something about')
+  rows.push('  Detailed joins, route choice and driving comparisons: npm run root-fork')
   return rows.join(NEWLINE)
 }
-
 const sections: [string, () => string][] = [
   ['A straight', straightLine],
   ['The two pedals, and reverse', pedals],

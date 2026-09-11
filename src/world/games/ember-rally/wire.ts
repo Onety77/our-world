@@ -37,6 +37,8 @@ import {
   SAMPLE_SLIDE,
   type RunSample,
 } from './model'
+import { blendRoutePosition } from './routeSample'
+import type { Track } from './track'
 
 /** Longest a `driving` field may be. The database rules refuse more. */
 export const DRIVING_MAX = 64
@@ -352,7 +354,7 @@ export class Rolling {
   }
 
   /** Where to draw her, or null if she has gone quiet or never arrived. */
-  at(now: number): RollingSample | null {
+  at(now: number, track?: Track): RollingSample | null {
     const seen = this.seen
     if (seen.length === 0) return null
     const newest = seen[seen.length - 1]
@@ -467,6 +469,7 @@ export class Rolling {
     out.braking = near.braking
     out.spinning = near.spinning
     out.shortcut = near.shortcut
+    if (track) blendRoutePosition(track, a.sample, b.sample, u, out)
     return out
   }
 

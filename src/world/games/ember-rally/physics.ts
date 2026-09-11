@@ -1924,34 +1924,35 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
 
   const split = track.split
   if (split) {
-    // The choice happens in the shared stone before the tunnels pull apart.
-    if (
-      !car.shortcut &&
-      car.s >= split.from + 4 &&
-      car.s <= split.commitAt &&
-      car.n > split.portalN
-    ) {
-      /*
-        Preserve the car's world-space pose as the right lane becomes its own
-        centreline. Merely flipping `shortcut` made the car inherit the new
-        road with its old lateral coordinate, which is a sideways jump once a
-        real, visibly separated fork exists.
-      */
-      roadAt(track, car.s, road)
-      const oldHeading = road.heading
-      const worldX = road.x - Math.cos(oldHeading) * car.n
-      const worldZ = road.z + Math.sin(oldHeading) * car.n
-      const worldHeading = oldHeading - car.psi
-      car.shortcut = true
-      car.struck.clear()
-      roadAtRoute(track, car.s, true, road)
-      car.n =
-        (worldX - road.x) * -Math.cos(road.heading) +
-        (worldZ - road.z) * Math.sin(road.heading)
-      car.psi = road.heading - worldHeading
-      if (car.psi > Math.PI) car.psi -= Math.PI * 2
-      else if (car.psi < -Math.PI) car.psi += Math.PI * 2
+    // Choose within the shared floor by proximity, with a little hysteresis.
+    // The driver can change their mind until the rock actually separates it.
+    if (car.s >= split.from + 4 && car.s <= split.commitAt) {
+      const current = roadAtRoute(track, car.s, car.shortcut)
+      const worldX = current.x - Math.cos(current.heading) * car.n
+      const worldZ = current.z + Math.sin(current.heading) * car.n
+      const worldHeading = current.heading - car.psi
+      const main = roadAt(track, car.s)
+      const branch = roadAtRoute(track, car.s, true)
+      const gap = Math.hypot(main.x - branch.x, main.z - branch.z)
+      const mainN = (worldX - main.x) * -Math.cos(main.heading) + (worldZ - main.z) * Math.sin(main.heading)
+      const chooseCut = mainN > Math.max(car.shortcut ? .8 : split.portalN,
+        (gap + main.width - branch.width) * .5 + (car.shortcut ? -.3 : .3))
+      if (chooseCut !== car.shortcut) {
+        car.shortcut = chooseCut
+        // Project into the new road frame, preserving world position and
+        // heading. Merely changing a flag creates a sideways camera jump.
+        for (let iteration = 0; iteration < 4; iteration++) {
+          roadAtRoute(track, car.s, chooseCut, road)
+          const along = (worldX - road.x) * Math.sin(road.heading) + (worldZ - road.z) * Math.cos(road.heading)
+          car.s += along / road.metric
+        }
+        roadAtRoute(track, car.s, chooseCut, road)
+        car.n = (worldX - road.x) * -Math.cos(road.heading) + (worldZ - road.z) * Math.sin(road.heading)
+        car.psi = road.heading - worldHeading
+        car.struck.clear()
+      }
     }
+    if (car.shortcut && car.s < split.from + 2) car.shortcut = false
     // Both centrelines and headings are already the same again here. Changing
     // route is therefore a topological change, not a teleport or a correction.
     if (car.shortcut && car.s >= split.rejoinAt) {

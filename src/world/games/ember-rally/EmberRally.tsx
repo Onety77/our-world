@@ -22,6 +22,8 @@ import { TouchDriving } from './TouchDriving'
 import { CameraSwitch } from './CameraSwitch'
 import { drivingWithThumbs } from './touch'
 import { gapLabel, useBest } from './best'
+import { completePersonalRun, personalKey, usePersonalBest } from './personalBest'
+import { PersonalSplit } from './PersonalSplit'
 import {
   moveRun,
   timeLabel,
@@ -46,7 +48,7 @@ import {
 
 type View = 'courses' | 'road' | 'replay'
 type RaceKind = 'qualifying' | 'chase'
-const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown', 'harmattan']
+const STAGES: readonly StageId[] = ['rootway', 'moonbreak', 'stormcrown', 'harmattan', 'nightfall']
 
 /** Old saved rounds may still name a road that no longer exists. */
 function availableStage(value: unknown): StageId {
@@ -95,6 +97,11 @@ const COURSES = {
     name: ROAD_INFO.harmattan.name,
     spirit: 'the dust-spirit',
     cleanWord: 'across the Harmattan',
+  },
+  nightfall: {
+    name: ROAD_INFO.nightfall.name,
+    spirit: 'the garden-spirit',
+    cleanWord: 'through the Nightfall',
   },
 }
 
@@ -275,6 +282,12 @@ export default function EmberRally({
   const [attempt, setAttempt] = useState(0)
   const [kind, setKind] = useState<RaceKind>('qualifying')
   const [lastRun, setLastRun] = useState<RallyRun | null>(null)
+  // Freeze the opponent for this attempt, including while its result is shown.
+  const personal = useMemo(() => {
+    if (!solo) return null
+    const key = personalKey(track)
+    return usePersonalBest.getState().records.find(r => r.key === key) ?? null
+  }, [solo, track, attempt, view])
   const [saving, setSaving] = useState(false)
   const [fault, setFault] = useState('')
 
@@ -449,14 +462,15 @@ export default function EmberRally({
       in a live round there is no ghost at all, and the second car on the road
       comes from presence instead: `wheelToWheel` below, and `wire.ts`.
     */
-    const ghost = (live ? null : solo ? spirit : kind === 'chase' ? theirLine : null) ?? null
-    const ghostName = solo ? course.spirit : theirName
+    const ghost = (live ? null : solo ? personal?.run ?? spirit : kind === 'chase' ? theirLine : null) ?? null
+    const ghostName = solo ? personal ? 'your best' : course.spirit : theirName
     return (
       <Road
         attempt={attempt}
         track={track}
         ghost={ghost}
         ghostName={ghostName}
+        personalGhost={Boolean(personal)}
         wheelToWheel={live}
         /*
           Your side of the grid, and it has to be decided by *who you are*.
@@ -547,6 +561,7 @@ function Road({
   track,
   ghost,
   ghostName,
+  personalGhost = false,
   wheelToWheel,
   grid,
   onFinish,
@@ -558,6 +573,7 @@ function Road({
   track: ReturnType<typeof makeTrack>
   ghost: RallyRun | null
   ghostName: string
+  personalGhost?: boolean
   wheelToWheel: boolean
   grid: number
   onFinish(run: RallyRun): void
@@ -622,13 +638,19 @@ function Road({
 
   useEffect(() => {
     useGameStage.getState().take(true)
+    const context = personalKey(track)
+    const previous = usePersonalBest.getState().records.find(r => r.key === context)
+    useBest.setState({ lastOffer: null })
     useRace.getState().open({
       track,
       ghost: cargo.current.ghost,
       ghostName: cargo.current.ghostName,
+      personalGhost,
       wheelToWheel,
       grid,
       onFinish: (run) => {
+        const eligible = context === personalKey(track) && completePersonalRun(track, run)
+        if (eligible) usePersonalBest.getState().offer(track, context, run)
         /*
           Offered to the board before it is handed on.
 
@@ -637,12 +659,13 @@ function Road({
           best time that only counted if you did not press "again" straight
           away is a best time nobody would trust.
         */
-        useBest.getState().offer(track.stage, {
+        if (eligible) useBest.getState().offer(track.stage, {
+          context,
           timeMs: run.timeMs,
           strikes: run.strikes,
           driftMs: run.driftMs,
           at: Date.now(),
-        })
+        }, previous ? { ...previous.run, at: previous.at, context } : undefined)
         // Across the line. The last thing the car does to your hand, and the
         // bookend to the one on `go`.
         feel(FEEL.finish)
@@ -669,6 +692,7 @@ function Road({
       <StartLights key={attempt} />
       <EmberBar />
       <Speed />
+      <PersonalSplit />
       <CameraSwitch hasResult={Boolean(children)} />
       <Pause onLeave={onLeave} onRestart={onRestart} hasResult={Boolean(children)} />
       {phone ? (
@@ -1171,7 +1195,7 @@ function BestLine() {
   const offer = useBest((s) => s.lastOffer)
   if (!offer) return null
   if (offer.beatMs === null) {
-    return <p className="rally-best first">your first time down this road</p>
+    return <p className="rally-best first">a new line to chase next time</p>
   }
   if (offer.improved) {
     return (

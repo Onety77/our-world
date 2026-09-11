@@ -248,15 +248,22 @@ road will not stay the same road, so now there is one:
   and tread blocks read off the wheel geometry, is settled on the surface under
   it and the hub slides along the suspension until it just touches; the spring
   stretches to follow. Nothing writes back to `CarState`.
+- **The body has bump stops.** It leans on its springs over wheels that stay on
+  the road, and in a hard corner the outside tyre's top used to rise through
+  the arch and out of the bonnet — a second of tyre in the driver's view from
+  the bonnet camera every time the car leaned. Now whichever wheel would enter
+  its arch, the body's roll is taken back on that side by just enough, then its
+  pitch, then the whole body lifted (`keepUnderArches` in `rig.ts`). The
+  physics is not told; it is where the picture stops short of the numbers.
 
 `npm run tyre-contact` builds all four roads with the real builders, checks the
 grid against a flat scan of the same triangles, poses the car 6,652 times — both
 seeds, four headings, the span in every phase of its swing — and measures every
 vertex of every tyre against the surface: within five millimetres, nearly all of
 which is the wheel's own forty-eight sides and its tread blocks standing two
-and a half millimetres proud of the rubber. Then it drives the racing line half a
-metre at a time and insists the fit never jumps. A pose costs about a third of a
-millisecond in Node.
+and a half millimetres proud of the rubber. It insists no tyre is ever up inside
+its arch. Then it drives the racing line half a metre at a time and insists the
+fit never jumps. A pose costs about a third of a millisecond in Node.
 
 ## The drift is a game, and the rest is a car
 
@@ -832,6 +839,87 @@ desktop frame (900×560): 70–82 thousand triangles and 46–54 draw calls, fro
 32–45 thousand and 23–28. On a phone-portrait frame: 63–79 thousand and 40–47.
 The heaviest single thing is a batch of bushes, at 6.5 thousand.
 
+### The Nightfall, which is the garden
+
+The fifth road runs *through* the place the other four are under, beside and
+above: the meadow under the Tree of Thoughts, the Wellspring's valley, the
+Hollow's firelit room, the plain under the Stars, and the Lantern Walk — in the
+order you browse them, from the last of the light to the dark. 3.1 km, 26
+corners, seed 7 only (`makeTrack(seed, 'nightfall')` lays `layNightfall()` for
+any seed, but the places are authored, so the seed only stirs the dressing).
+
+Nothing in the physics is new. Every difficulty is one the road model already
+had, chosen for the place it stands in — the Tree Turn is a 200° sweep at r22
+with the tree on the inside; the two fords are wet and wide; the Hearth Ring is
+275° at r15 in a room lit from its own centre; the Stars is the fastest
+kilometre on any road here with one real bend in it; the walk gets tighter until
+the fire. `npm run nightfall` measures each stretch against what it claims to
+be, then drives it.
+
+Where each piece lives:
+
+- **The bands and the marks** (`layNightfall` in `track.ts`, `NIGHTFALL`), and
+  the dressing (`dressNightfall`): the hearth as three fire lanterns laid
+  together so one fire lights a whole room, three small fires against its walls,
+  the two lights over the plain — hers and yours, warm and cool — and the
+  lanterns of the walk, alternating, on the outside of every corner.
+- **The ground** (`nightfallLand.ts`), built out of the road as the Harmattan's
+  is: meadow that rolls, the valley cut with the river in it — the Wellspring
+  runs down the left bank, crosses the road at the first ford and back at the
+  second, and *lies over the road* where it crosses — a knoll over the Hollow
+  with the two mouths cut into it, the plain, and the wood's litter.
+- **The road and the room** (`Nightfall.tsx`). An open cross-section that skirts
+  to the ground, a vaulted one under the knoll, and the room: a dome over a
+  bowl worn down to the hearth. The ring is drawn banked twelve degrees toward
+  the fire, so the floor is the quadratic through the hearth that meets that
+  bank at the inside verge, lips over the outside verge and comes back to the
+  level of the ways in and out; near the road the floor *is* the road, so the
+  ribbon and the floor never disagree. The road crosses itself in the room —
+  the way in and the way out meet at grade, as a rallycross track has a
+  crossing — and both branches are drawn levelled through it, easing back to
+  the model over twenty metres, because two ribbons at different heights would
+  show as a step. The passages come through the dome's foot as tubes of rock
+  with an outer skin, and the dome is opened round each and stitched to it with
+  a rounded collar, both faces drawn. `HEARTH_RISE` in `track.ts` is the one
+  number the hearth's height is grown from, so the lamps, the flame and the
+  stones all sit on the floor that is drawn.
+- **The great tree** is grown by `growTree`, the generator that grows the Tree of
+  Thoughts, from a seed of its own — the same species and weight, not the same
+  tree — and baked into the road's mesh at the centre of the Tree Turn.
+- **What the two of you have put in the garden is on it** (`Nightlife.tsx`): a
+  flower at the tree's foot for every thought, in the spiral the Tree keeps; a
+  paper on a thread for each of them hanging from the tree; a lit pane in the
+  walk's lanterns for every memory, in that memory's own tint; a light in the
+  sky over her dawn for every message, the newest hung low and the oldest nearly
+  stars. `NightlifeLive` reads the stores; `Nightlife` takes counts, which is
+  what `dev-span` gives it (`?thoughts=&memories=&messages=`). Plus the woods
+  (six trees from the garden's generator, instanced, leaves laid once because
+  the wood's material draws both sides), grass, reeds, the river's ribbon,
+  embers over the hearth, fireflies on the meadow.
+- **The light is the day ending along the road** (`NIGHT_LIGHT` in `Race`):
+  the last of the sun on the Meadow, the valley's dusk, no daylight under the
+  Hollow, the plain's deep night, the lantern-lit wood — blended by where the
+  car is and eased. The sky (`SKY_FRAG`) reads `uDaylight` back off the same
+  block, so it and the ground agree about the hour, and keeps her dawn on one
+  horizon.
+- **The sound is the garden's own.** `NightfallSound` synthesises nothing: the
+  ambient bed already has a mix per place — air and leaves on the meadow, more
+  leaves and a trace of crown under the Tree, water in the valley, fire and room
+  in the Hollow, the Stars' shimmer, the wood along the walk — and the bridge
+  tells it which place the car is passing through (`garden.ts`,
+  `gardenPlaceAt`), a little ahead of the car so the crossfade has begun when
+  the eye arrives, and puts the bed back where it was when the road is left.
+- **The tyres stand on all of it** — the ring, the bowl, the crossing, the
+  span between an open ring and a vaulted one (which was a two-metre hole in
+  the road at every mouth until `npm run tyre-contact` fell into it). The
+  Nightfall is in that check's stage list; `STAGES=nightfall npm run
+  tyre-contact` runs it alone.
+
+Measured on the desktop frame (900×560): 60–125 thousand triangles on the road,
+220 thousand in the thick of the walk; on a phone-portrait frame 86–106 thousand
+and 219 thousand in the walk. The heaviest single thing is the great tree, at
+28 thousand.
+
 ## The car is tuned from the control room, not from here
 
 **Roughly forty of the numbers that used to be constants in `physics.ts`,
@@ -955,7 +1043,15 @@ for the symptom instead. GLSL ends on a brace or a semicolon and prose ends on
 a word, so a shader that ends on a word closed itself in a comment.
 
 `npm run tyre-contact` is described under **The wheels stand on the drawn road**:
-all four roads, the real geometry, and every vertex of every tyre.
+all five roads, the real geometry, and every vertex of every tyre.
+
+`npm run nightfall` measures the fifth road against its own briefing — the five
+places in order, what each claims (the Tree Turn is one corner held for eighty
+metres, both fords are wet and the Meadow is dry, the ring goes most of the way
+round the hearth at fifteen metres, the Stars is the widest and straightest
+stretch anywhere, the walk has more braking corners per kilometre than any whole
+road), where the lights are, that the road never runs back within twenty metres
+of itself outside the room — and then drives it.
 
 ## What is not built yet
 

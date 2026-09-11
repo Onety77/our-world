@@ -40,6 +40,95 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 11 Sep · Claude · the Nightfall — a fifth road that is the garden itself
+
+Asked for: "a garden-inspired level — the Tree of Thoughts, the river, the
+cave, the stars and the memory lanterns; each stretch carries that place's
+atmosphere." Built as a road, not a picture: the five places in the order you
+browse them, out of the garden's own pieces and the garden's own data. What it
+is and where it lives is the README's **The Nightfall, which is the garden**;
+what follows is what bit.
+
+New: `track.ts` (`layNightfall`, `NIGHTFALL`, `HEARTH_RISE`, `dressNightfall`),
+`nightfallLand.ts`, `Nightfall.tsx`, `Nightlife.tsx`, `garden.ts`,
+`NightfallSound.tsx`, `scripts/nightfall-check.ts` (`npm run nightfall`), the
+stage wired through `model.ts`, `courseInfo.ts`, `EmberRally.tsx`, `index.ts`,
+`ui/Locks.tsx`, `ui/TrackArtwork.tsx`, `best.ts`, `personalBest.ts`,
+`roadMusic.ts` (`bedFor('nightfall')` — no file yet, so no music), `Race.tsx`
+(lights, chunks, world, sound), `dev-span.tsx` (`stage=nightfall`, garden counts
+as query params, and `window.__span` for a headless raycast). The other four
+roads are untouched; `npm run rally`, `drift`, `shaders`, `tyre-contact` (now
+five stages, `STAGES=` to run a subset) all pass.
+
+- **The road crosses itself in the room.** A 275° ring at r15 with a tangent
+  in and a tangent out crosses its own entry twenty metres short of the ring —
+  I had written the self-proximity check to exempt the room without noticing
+  why. Kept, as a rallycross crossing; both branches are *drawn* levelled and
+  flat through it and eased back to the model over twenty metres, since the
+  model keeps its own heights (a 15 cm difference and different banks showed as
+  a step). With sixteen metres of easing the bank came on fast enough to fail
+  the tyre check's twitch limit (29.5 mm of 30); twenty-six is 27.6 mm.
+- **A flat floor through a banked ring.** The room's floor was a disc at the
+  ring's height while the ring is drawn at twelve degrees, so the disc sliced
+  through the inside verge and the outer skirt hung a metre over it. The floor
+  is now a bowl grown from `HEARTH_RISE`, and road-following within five metres
+  of any ribbon.
+- **The dome was a solid wall across both passages** — the passages pierced it
+  as single-sided vault rings, invisible from outside, so from the room a car
+  came out of rock. The dome now has holes, the vault has an outer skin where
+  it stands inside the room, a calm profile so it is not stacked plates, and a
+  collar zipped between the hole's own vertices and the tube's skin (sorted by
+  angle about the passage, an intermediate flared loop so it is a rock lip
+  rather than blades). The collar draws **both faces on separate vertices**: no
+  single reference point wound every triangle of a funnel the right way, and
+  the slivers that faced away read as sky.
+- **`base - VAULT` was the previous ring** — until a ring laid thirteen more
+  vertices for its skin, after which every skinned ring's walls were stitched
+  to a mix of the previous ring's tail and its skin. Track the previous ring's
+  base explicitly; never derive it from the profile's size.
+- **Rings of different kinds were never joined.** Open→vault and back left a
+  two-metre hole in the road at each mouth and at both ends of the room.
+  Nothing saw it — the tyre check found it as a compass-heading assertion at
+  1098.9 m, where the stance fit had nothing to stand on. Bridged verge to
+  verge.
+- **`roadAt` without `out` hands back a shared object** — fine per call,
+  wrong the moment two are kept (`emptyRoad()` per portal, per sample).
+- **`lantern.y` is a height over the road, not a world height.** The walk's
+  posts were nine metres tall and their panes floated at y=1.8 absolute.
+- **The floor's polar grid ended exactly at the rim**, and the dome's foot
+  wanders 5% outside it 0.6 m lower: a grazing sightline saw sky between them.
+  The floor runs 8% past the rim.
+- **The wood's leaves were laid twice on the same vertices** for a material
+  that already draws both sides — which doubled the walk's triangles and
+  cancelled every leaf's normal. Once: 340 k → 219 k on a phone frame.
+- **Reading a downscaled capture, a two-pixel sliver looks like a wedge.**
+  Twice I chased a "hole" that a pixel map (`pixels.mjs map`) showed as a
+  handful of pixels. Crop and enlarge (`pixels.mjs crop:x,y,w,h`) before
+  believing an outline, and raycast the page (`window.__span` in `dev-span`)
+  to tell a culled triangle from a real gap.
+
+## 11 Sep · Claude · cedars off the Stormcrown's road; the body's bump stops
+
+Two fixes the owner asked for.
+
+- **Cedars on the last run were standing in the road.** `plantForest` in
+  `Stormlife.tsx` measured each tree's distance to the road off a 16 m cell
+  map, which records the distance from the *cell's centre*; a tree can stand
+  eleven metres from that. Where the last run folds back past itself, that
+  put trees on the tarmac. Anything within forty metres is now measured
+  against the road's own samples, and a cedar keeps nine metres outside the
+  wall (its skirt is half its height). Measured over seed 1: 3,416 cedars, none
+  inside the wall, the nearest 9.0 m outside it at 4657 m.
+- **In the bonnet view the outside front tyre came up through the bonnet in a
+  corner.** The body rolls on its springs over wheels that stay on the road, and
+  the tub's wheel opening is 9 cm above a resting tyre: roll plus squat plus a
+  tyre lifted onto a bump used it up. `keepUnderArches` in `rig.ts` is the bump
+  stop — roll is taken back on the intruding side, then pitch, then the body
+  lifted, render-only. `npm run tyre-contact` asserts no tyre is inside its
+  arch across all 6,652 poses; with its 0.15 rad test roll the stop engages.
+  Also `settle()` there now owns the tyre pass, the stop and the springs for
+  both cars. `dev-span` takes `roll=` and `heave=` to look at it.
+
 ## 11 Sep · Claude · the wheels stand on the drawn road, on all four
 
 Codex's render-only tyre contact for the Harmattan, taken to every road, and

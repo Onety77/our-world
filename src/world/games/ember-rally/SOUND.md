@@ -38,6 +38,14 @@ Nothing subscribes to anything. Each bridge acquires its voice lazily from
 gesture. `npm run sound` drives the Rootway's over a real lap against a stub
 Web Audio API.
 
+The Nightfall is the exception that proves the shape: `garden.ts` is written
+once a frame and `NightfallSound.tsx` is the bridge, but there is no
+`systems/nightfall.ts` and nothing new is synthesised. The road is the garden,
+and `ambience.ts` already keeps a mix for every place on it, so the bridge calls
+`ambience.setPlace()` with the place the car is passing through and lets the
+bed crossfade exactly as it does when you walk from the meadow to the river. It
+remembers the place it found and puts it back on unmount.
+
 ---
 
 ## What was built, and why the download list shrank

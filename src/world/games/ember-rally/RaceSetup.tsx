@@ -10,6 +10,7 @@ import { ROAD_INFO, ROAD_ORDER } from './courseInfo'
 import { moveRun, timeLabel, type RallyMove, type StageId } from './model'
 import type { Track } from './track'
 import { useBest } from './best'
+import { personalKey, usePersonalBest } from './personalBest'
 import './RaceSetup.css'
 
 type Mode = 'solo' | 'challenge' | 'live'
@@ -101,7 +102,11 @@ export function RaceSetup({
       } else onLeave()
     },
   })
-  const best = useBest((s) => s.bests[stage])
+  const summary = useBest((s) => s.bests[stage])
+  const records = usePersonalBest(s => s.records)
+  const context = personalKey(track)
+  const best = records.find(r => r.key === context)?.run ??
+    (summary?.context === context ? summary : undefined)
   const info = ROAD_INFO[stage]
   const theirLine = moveRun(theirs, 'qualifying', stage),
     myLine = moveRun(mine, 'qualifying', stage)
@@ -257,7 +262,7 @@ export function RaceSetup({
           >
             {(
               [
-                ['solo', 'Solo run', 'Race a spirit and improve your personal best.'],
+                ['solo', 'Solo run', 'Chase your best run, or meet the road’s spirit.'],
                 [
                   'challenge',
                   'Time challenge',
@@ -299,7 +304,7 @@ export function RaceSetup({
                   : myLine
                     ? `Your recorded run: ${timeLabel(myLine.timeMs)}. Set another time for ${theirName} to chase.`
                     : `${theirName} can race your recording later. You don’t need to be online together.`
-                : 'Just you and the road’s spirit. Replay as often as you like.'}
+                : 'Your best line returns as a golden ghost. Until then, the road’s spirit keeps you company.'}
           </div>
           <div className="race-start-panel" data-choice-row="start">
             <button

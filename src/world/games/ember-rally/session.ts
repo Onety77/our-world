@@ -42,6 +42,9 @@ export interface RaceSession {
   /** Whose line to run against, if anyone's. */
   ghost: RallyRun | null
   ghostName: string
+  personalGhost: boolean
+  splitLabel: HTMLElement | null
+  setSplitLabel(node: HTMLElement | null): void
   /**
    * The two of you are on this road at the same moment.
    *
@@ -110,6 +113,7 @@ export interface RaceSession {
     track: Track
     ghost: RallyRun | null
     ghostName?: string
+    personalGhost?: boolean
     wheelToWheel?: boolean
     grid?: number
     onFinish(run: RallyRun): void
@@ -140,6 +144,9 @@ export const useRace = create<RaceSession>((set) => ({
   track: null,
   ghost: null,
   ghostName: '',
+  personalGhost: false,
+  splitLabel: null,
+  setSplitLabel: splitLabel => set({ splitLabel }),
   wheelToWheel: false,
   grid: 0,
   replay: null,
@@ -175,7 +182,7 @@ export const useRace = create<RaceSession>((set) => ({
     than a race.
     ---------------------------------------------------------------------------
   */
-  open: ({ track, ghost, ghostName = '', wheelToWheel = false, grid = 0, onFinish }) => {
+  open: ({ track, ghost, ghostName = '', personalGhost = false, wheelToWheel = false, grid = 0, onFinish }) => {
     // Beside the `set` rather than inside it: an updater may be called more
     // than once for one change, and reaching outside the store from in there is
     // how you get a thing that happens twice on a good day.
@@ -188,6 +195,7 @@ export const useRace = create<RaceSession>((set) => ({
       track,
       ghost,
       ghostName,
+      personalGhost,
       wheelToWheel,
       grid,
       replay: null,
@@ -200,6 +208,7 @@ export const useRace = create<RaceSession>((set) => ({
     armRoadMusic(track.stage)
     set((s) => ({
       phase: 'replay',
+      personalGhost: false,
       paused: false,
       attempt: s.attempt + 1,
       track,
@@ -252,6 +261,7 @@ export const useRace = create<RaceSession>((set) => ({
     stopRoadMusic()
     set({
       phase: 'off',
+      personalGhost: false,
       paused: false,
       track: null,
       ghost: null,

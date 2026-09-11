@@ -3536,6 +3536,21 @@ canvas {
   touch-action: manipulation;
 }
 .rally-camera-switch:hover { color: #fff3d8; }
+.rally-personal-best {
+  position: absolute;
+  z-index: 3;
+  top: max(4.3rem, calc(env(safe-area-inset-top) + 3.3rem));
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  color: #efd8ae;
+  text-shadow: 0 2px 8px #1d1712;
+  font: 0.7rem var(--sans);
+}
+.rally-personal-best > span { opacity: .7; }
+.rally-personal-best[data-ready="true"] { top: max(9rem, calc(env(safe-area-inset-top) + 8rem)); }
+.rally-personal-best p { margin: .45rem 0; font-size: .85rem; white-space: nowrap; }
 .rally-camera-switch:focus-visible { outline: 2px solid #e9c58e; outline-offset: 2px; border-radius: 6px; }
 .rally-camera-switch kbd { font: inherit; opacity: 0.55; margin-left: 0.2rem; }
 @media (pointer: coarse) {

@@ -6,6 +6,7 @@ One file per road. Drop them here, named exactly:
     moonbreak.m4a
     stormcrown.m4a
     harmattan.m4a
+    nightfall.m4a
 
 That is the whole installation step — `../roadMusic.ts` picks them up by name at
 build time. A road with no file here is silent, which is a valid state and not

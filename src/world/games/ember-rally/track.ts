@@ -17,6 +17,7 @@
  */
 
 import { random, type StageId } from './model'
+import { dressRootFork, layRootFork } from './rootFork'
 
 /** Metres between samples. */
 export const STEP = 1
@@ -777,14 +778,9 @@ function smooth(values: Float32Array, radius: number, passes = 2): Float32Array 
   return source
 }
 
-/**
- * The Rootwake — a complete second tunnel inside the Rootway.
- *
- * Both roads share `s` only so timing, recordings and the finish remain simple.
- * Spatially they are unrelated after the mouth: Rootwake owns its centreline,
- * stone shell, width, corners and physical road metric. Solid rock and a deep
- * vertical offset keep the ordinary road completely out of view.
- */
+/** Two authored routes through one piece of Rootway. Both use shared race
+ * progress, with an explicit physical-distance metric for the shorter cut.
+ * The mouths share a floor; the middle owns a separate, narrower cave. */
 export interface RootSplit {
   /** Shared progress coordinates where the hidden road leaves and returns. */
   from: number
@@ -839,29 +835,16 @@ function rootwayBands(seed: number): Band[] {
   let dir = rng() < 0.5 ? -1 : 1
   let length = bands.reduce((sum, b) => sum + b.length, 0)
 
-  /*
-    ==========================================================================
-    There is no fork any more.
+  // A fixed fork piece, with ordinary dealt corners after it.
+  bands.push(band({ length: 60, width: 4.5, ceiling: 5.4, curv: .008 }))
+  bands.push(band({ length: 60, width: 4.5, ceiling: 5.4, curv: -.008 }))
+  bands.push(band({ length: 60, width: 4.5, ceiling: 5.4, curv: -.008 }))
+  bands.push(band({ length: 60, width: 4.5, ceiling: 5.4, curv: .008 }))
+  bands.push(band({ length: 62, width: 5.6, ceiling: 6.8, room: .15, curv: 0 }))
+  bands.push(band({ length: 640, width: 5.6, ceiling: 6.8, room: .15, curv: 0 }))
+  bands.push(band({ length: 64, width: 5.6, ceiling: 6.8, room: .15, curv: 0 }))
+  length += 1006
 
-    Rootwake was two hundred and fifty metres of dealt mouth and nine hundred
-    metres of hidden tunnel, and it came out of the road the day the ordinary
-    corners were sharpened. The tunnel is a curve drawn between two points on
-    the main road, and a main road with real corners in it brings those two
-    points close together in a straight line while leaving them just as far
-    apart along the tarmac — so the tunnel came out a third of the length its
-    features were drawn for, and every one of them folded. A three metre radius
-    in the throat, measured, on every seed.
-
-    Four separate fixes each moved the fold somewhere else rather than removing
-    it, which is what a symptom does. The cause is that the whole shape assumed
-    a road that no longer exists, and rebuilding it is its own piece of work
-    rather than a tail on this one.
-
-    What is left behind is a *better* road, not a poorer one: those two hundred
-    and fifty metres of mouth are now dealt as ordinary pieces, so the same
-    length of Rootway holds more corners than it did with the fork in it.
-    ==========================================================================
-  */
   while (length < TARGET - 120) {
     const entry = choose(rng, history, sinceChamber, length / TARGET, laidPieces)
     // Alternate handedness most of the time. Always alternating reads as a
@@ -2337,6 +2320,175 @@ function stormcrownBands(): Band[] {
 }
 
 /**
+ * The Nightfall — the garden itself, from the last of the light to the dark.
+ *
+ * =============================================================================
+ * **A road through the five places, in the order you browse them.** The other
+ * four roads are somewhere else: a cave under the garden, a causeway across a
+ * sea, a mountain, the Sahel. This one is *here*. You leave the fire at the
+ * foot of the Tree of Thoughts in the last of the sun and arrive at the far fire
+ * at the end of the Lantern Walk in the dark, and between them the road goes
+ * down to the Wellspring, into the Hollow, out under the Stars and into the
+ * wood — each stretch carrying that place's own atmosphere, and each of them
+ * showing what the two of you have actually put there.
+ *
+ * Nothing in the physics is new. Every difficulty here is one the road model
+ * already had, chosen for the place it stands in:
+ *
+ *   **the Meadow** is fast and open, and the one corner that matters goes right
+ *   round the great tree — a long constant-radius sweep you can carry speed
+ *   through, or not;
+ *
+ *   **the Wellspring** is the descent into the valley: two fords, wet and
+ *   wide, and the river bends between them, close to the water;
+ *
+ *   **the Hollow** is the Rootway's language for four hundred metres — a
+ *   passage, then the games room itself, where the road loops most of the way
+ *   round the hearth at fifteen metres before climbing out;
+ *
+ *   **the Stars** is the fastest kilometre on any road here, nearly straight
+ *   and wide under the whole sky, with one real bend in the middle of it;
+ *
+ *   **the Lantern Walk** is a wooded lane, narrow and winding, with every
+ *   corner tighter than the last until the fire.
+ * =============================================================================
+ */
+function layNightfall() {
+  const bands: Band[] = []
+  let at = 0
+  /** Open ground under the sky, unless a section says otherwise. */
+  const open = (shape: Partial<Band> & { length: number }) => {
+    bands.push(band({ width: 4.8, ceiling: 34, room: 1, wet: 0.08, ...shape }))
+    at += shape.length
+    return at
+  }
+  const here = () => at
+
+  // --- the Meadow ------------------------------------------------------------
+  const meadowFrom = here()
+  open({ length: 70, width: 5.4, curv: 0 })
+  open({ length: 90, width: 5.2, curv: -0.008 })
+  open({ length: 60, width: 5.0, curv: 0.012 })
+  open({ length: 30, width: 5.0, curv: 0.002 })
+  /*
+    The Tree Turn: two hundred degrees round the trunk at twenty-two metres,
+    with the tree on the inside. The only corner on the Meadow that asks a
+    question, and it asks it for eighty metres.
+  */
+  const treeTurnFrom = here()
+  open({ length: 80, width: 4.9, room: 0.9, curv: -0.045 })
+  const treeTurnTo = here()
+  open({ length: 40, width: 5.0, curv: -0.004 })
+  open({ length: 70, width: 5.1, curv: 0.013 })
+  open({ length: 50, width: 5.2, curv: -0.011 })
+  // The run down to the valley, and the light going with it.
+  open({ length: 90, width: 5.6, curv: 0.002, grade: -0.03 })
+  const meadowTo = here()
+
+  // --- the Wellspring --------------------------------------------------------
+  const wellspringFrom = here()
+  open({ length: 60, width: 4.6, room: 0.7, curv: 0.016, grade: -0.06, wet: 0.2 })
+  open({ length: 50, width: 4.4, room: 0.6, curv: -0.03, grade: -0.05, wet: 0.3 })
+  // The first ford: wide, flat, and the river running across it.
+  const fordOne = here()
+  open({ length: 40, width: 4.9, room: 0.6, curv: 0, grade: 0, wet: 0.78 })
+  open({ length: 55, width: 4.2, room: 0.5, curv: 0.028, wet: 0.35 })
+  open({ length: 45, width: 4.3, room: 0.5, curv: -0.01, wet: 0.3 })
+  open({ length: 60, width: 4.2, room: 0.5, curv: -0.032, wet: 0.32 })
+  open({ length: 30, width: 4.4, room: 0.55, curv: 0.004, wet: 0.4 })
+  // The second, longer, and off-camber toward the water it drains into.
+  const fordTwo = here()
+  open({ length: 45, width: 5.0, room: 0.6, curv: 0.006, wet: 0.84, camber: 0.05 })
+  open({ length: 60, width: 4.3, room: 0.55, curv: 0.024, grade: 0.04, wet: 0.3 })
+  open({ length: 50, width: 4.4, room: 0.6, curv: -0.006, grade: 0.03, wet: 0.15 })
+  const wellspringTo = here()
+
+  // --- the Hollow ------------------------------------------------------------
+  const hollowFrom = here()
+  open({ length: 50, width: 3.9, ceiling: 9, room: 0.3, curv: 0.01, grade: -0.05, wet: 0.2 })
+  open({ length: 70, width: 3.6, ceiling: 6.5, room: 0.2, curv: -0.03, grade: -0.06, wet: 0.25 })
+  open({ length: 40, width: 3.7, ceiling: 6.5, room: 0.22, curv: 0.022, grade: -0.04, wet: 0.25 })
+  open({ length: 30, width: 4.2, ceiling: 12, room: 0.4, curv: 0.004, grade: -0.01, wet: 0.15 })
+  /*
+    The Hearth Ring: the games room, with the fire in the middle and the road
+    going most of the way round it. Two hundred and seventy-five degrees at
+    fifteen metres — tighter than any corner on the Meadow and held for
+    seventy metres, in a room lit from its own centre.
+  */
+  const ringFrom = here()
+  open({ length: 72, width: 4.2, ceiling: 16, room: 0.5, curv: 0.0667, wet: 0.12 })
+  const ringTo = here()
+  open({ length: 30, width: 4.0, ceiling: 12, room: 0.4, curv: 0.01, wet: 0.15 })
+  open({ length: 60, width: 3.7, ceiling: 6.5, room: 0.2, curv: -0.012, grade: 0.07, wet: 0.2 })
+  open({ length: 50, width: 3.8, ceiling: 7, room: 0.22, curv: 0.012, grade: 0.08, wet: 0.2 })
+  open({ length: 40, width: 4.2, ceiling: 10, room: 0.4, curv: -0.004, grade: 0.05, wet: 0.15 })
+  const hollowTo = here()
+
+  // --- the Stars -------------------------------------------------------------
+  const starsFrom = here()
+  open({ length: 90, width: 5.4, curv: 0, grade: 0.02, wet: 0.04 })
+  open({ length: 140, width: 5.8, curv: 0.004, wet: 0.04 })
+  open({ length: 120, width: 5.8, curv: 0, wet: 0.04 })
+  open({ length: 110, width: 5.6, curv: -0.005, wet: 0.04 })
+  open({ length: 150, width: 5.8, curv: 0, wet: 0.04 })
+  // The one bend, at forty-five metres, flat out or not.
+  const starsBend = here()
+  open({ length: 70, width: 5.2, curv: -0.022, wet: 0.04 })
+  open({ length: 130, width: 5.6, curv: 0.004, wet: 0.04 })
+  open({ length: 100, width: 5.2, curv: 0.012, grade: -0.03, wet: 0.06 })
+  open({ length: 60, width: 4.8, curv: -0.01, grade: -0.04, wet: 0.08 })
+  const starsTo = here()
+
+  // --- the Lantern Walk ------------------------------------------------------
+  const walkFrom = here()
+  open({ length: 50, width: 4.0, room: 0.6, curv: 0.02, wet: 0.12 })
+  open({ length: 45, width: 3.6, room: 0.4, curv: -0.04, wet: 0.12 })
+  open({ length: 30, width: 3.7, room: 0.4, curv: 0.008, wet: 0.12 })
+  open({ length: 55, width: 3.5, room: 0.38, curv: 0.045, wet: 0.14 })
+  open({ length: 40, width: 3.6, room: 0.4, curv: -0.012, wet: 0.12 })
+  open({ length: 50, width: 3.5, room: 0.36, curv: -0.05, wet: 0.14 })
+  open({ length: 35, width: 3.7, room: 0.4, curv: 0.01, wet: 0.12 })
+  open({ length: 60, width: 3.6, room: 0.38, curv: 0.038, wet: 0.14 })
+  open({ length: 40, width: 3.5, room: 0.38, curv: -0.018, wet: 0.12 })
+  open({ length: 55, width: 3.4, room: 0.34, curv: -0.052, wet: 0.16 })
+  open({ length: 45, width: 3.6, room: 0.4, curv: 0.02, wet: 0.12 })
+  open({ length: 50, width: 3.8, room: 0.45, curv: 0.03, wet: 0.1 })
+  // The last of the lanterns open out, and the fire is ahead.
+  open({ length: 60, width: 4.2, room: 0.6, curv: -0.008, wet: 0.08 })
+  open({ length: 110, width: 4.8, room: 0.8, curv: 0, wet: 0.06 })
+  const walkTo = here()
+
+  return {
+    bands,
+    marks: {
+      meadow: { from: meadowFrom, to: meadowTo },
+      treeTurn: { from: treeTurnFrom, to: treeTurnTo },
+      wellspring: { from: wellspringFrom, to: wellspringTo },
+      fords: [fordOne, fordTwo],
+      hollow: { from: hollowFrom, to: hollowTo },
+      ring: { from: ringFrom, to: ringTo },
+      stars: { from: starsFrom, to: starsTo },
+      starsBend,
+      walk: { from: walkFrom, to: walkTo },
+    },
+  }
+}
+
+const NIGHT = layNightfall()
+
+export const NIGHTFALL = NIGHT.marks
+
+/**
+ * How far the hearth stands *above* the plane of the banked ring, measured at
+ * its centre, fifteen metres in. The ring is drawn banked twelve degrees
+ * toward the fire, so that plane is three metres under the road there; the
+ * hearth a metre up from it puts the fire two metres below the road, in a
+ * bowl the floor is worn into — see the room in `Nightfall.tsx`, which grows
+ * the bowl from this same number so the fire sits on the floor it draws.
+ */
+export const HEARTH_RISE = 1.0
+
+/**
  * Where the sand actually lies today.
  *
  * -----------------------------------------------------------------------------
@@ -2393,6 +2545,8 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       ? stormcrownBands()
     : stage === 'harmattan'
       ? HARM.bands
+    : stage === 'nightfall'
+      ? NIGHT.bands
       : rootwayBands(seed)
   const total = bands.reduce((sum, b) => sum + b.length, 0)
   const count = Math.floor(total / STEP) + 1
@@ -2629,14 +2783,117 @@ export function makeTrack(seed: number, stage: StageId = 'rootway'): Track {
       // Laterite and blown sand. Nothing here is bound to anything, so the car
       // writes on it just by rolling, and the marks are the deepest in the game.
       : stage === 'harmattan' ? 1
+      // Meadow earth, river gravel, cave floor, plain and a trodden lane: a
+      // garden path, which is loose enough to mark and no more.
+      : stage === 'nightfall' ? 0.6
       : 0.85,
   }
 
+  if (stage === 'rootway') track.split = layRootFork(track)
   if (stage === 'moonbreak') dressMoonbreak(track, random(seed ^ 0x6d2b79))
   else if (stage === 'stormcrown') dressStormcrown(track, random(seed ^ 0x7a36c1))
   else if (stage === 'harmattan') dressHarmattan(track, random(seed ^ 0x2fd10b))
+  else if (stage === 'nightfall') dressNightfall(track, random(seed ^ 0x4e1a73))
   else dressTrack(track, random(seed ^ 0x9c31d7))
+  if (stage === 'rootway') dressRootFork(track)
   return track
+}
+
+/**
+ * What lights the Nightfall.
+ *
+ * -----------------------------------------------------------------------------
+ * Each place lights itself the way it does in the garden. The Meadow has the
+ * last of the sun and needs nothing; the Wellspring has a lamp at each ford,
+ * where somebody would put one; the Hollow has the hearth in the middle of the
+ * room and small fires against its walls, as the games room does; the Stars
+ * has the two lights — one warm, one cool — hanging over the plain; and the
+ * Lantern Walk is lanterns, alternating along the verges, which is what the
+ * place is. The boulders are the meadow's own stones, kept to the verge.
+ * -----------------------------------------------------------------------------
+ */
+function dressNightfall(track: Track, rng: () => number) {
+  const count = track.x.length
+  const at = (s: number) => Math.max(0, Math.min(count - 1, Math.round(s / STEP)))
+
+  // A lamp on a post at each ford, on the bank you arrive from.
+  for (const s of NIGHTFALL.fords) {
+    const i = at(s - 6)
+    track.lanterns.push({ s: s - 6, n: -(track.width[i] + 1.4), y: 2.2, size: 0.6, warm: 1 })
+  }
+
+  /*
+    The hearth in the middle of the ring — the Hollow's own fire — and three
+    small fires against the walls, off to the outside of the road. The ring
+    turns right, so its inside is the positive side.
+  */
+  {
+    const mid = (NIGHTFALL.ring.from + NIGHTFALL.ring.to) / 2
+    // Heights are over the banked road's plane, as every lantern's are; the
+    // hearth's floor is `HEARTH_RISE` up from it, and the fire on that.
+    track.lanterns.push({ s: mid, n: 15, y: HEARTH_RISE + 0.6, size: 1.6, warm: 1, fire: true })
+    // The hearth lights the whole room: a fire's reach and power are fixed
+    // per light, so this one is three of them, laid together. One flame is
+    // drawn — see `Nightlife`, which draws the first.
+    track.lanterns.push({ s: mid + 0.4, n: 15, y: HEARTH_RISE + 1.4, size: 1.6, warm: 1, fire: true })
+    track.lanterns.push({ s: mid - 0.4, n: 15, y: HEARTH_RISE + 2.2, size: 1.6, warm: 1, fire: true })
+    for (const [d, out] of [[-24, 4.2], [4, 3.6], [26, 4.5]] as const) {
+      const s = mid + d
+      const i = at(s)
+      track.lanterns.push({ s, n: -(track.width[i] + vergeWidth(track.room[i]) + out), y: 0.35, size: 0.7, warm: 1 })
+    }
+  }
+
+  /*
+    The two lights over the plain: hers and yours, warm and cool, hung high
+    either side of the bend, drifting toward each other and never meeting —
+    the shape of the thing. `warm` is the whole difference between them.
+  */
+  {
+    const { from, to } = NIGHTFALL.stars
+    const bend = NIGHTFALL.starsBend
+    track.lanterns.push({ s: from + (bend - from) * 0.55, n: -22, y: 9, size: 2.4, warm: 1 })
+    track.lanterns.push({ s: bend + (to - bend) * 0.4, n: 24, y: 9, size: 2.4, warm: 0 })
+  }
+
+  // The lanterns of the walk, alternating, closer where the lane turns.
+  {
+    const { from, to } = NIGHTFALL.walk
+    let side = 1
+    for (let s = from + 8; s < to - 30; s += 13 + rng() * 4) {
+      const i = at(s)
+      const turning = Math.abs(track.curv[i]) > 0.02
+      // On the outside of a corner, where a lamp shows you the way round it.
+      const outside = turning ? Math.sign(track.curv[i]) : side
+      side = -side
+      track.lanterns.push({
+        s,
+        n: outside * (track.width[i] + vergeWidth(track.room[i]) * 0.5 + 0.35),
+        y: 1.65 + rng() * 0.15,
+        size: 0.66 + rng() * 0.14,
+        warm: 1,
+      })
+    }
+  }
+
+  // The meadow's stones, on the verge and never on the path.
+  let since = 0
+  for (let i = 8; i < count - 8; i++) {
+    since += STEP
+    if (since < 22 + rng() * 26) continue
+    since = 0
+    const s = i * STEP
+    // Not in the cave, where the floor is swept stone, and not in the fords.
+    if (s > NIGHTFALL.hollow.from && s < NIGHTFALL.hollow.to) continue
+    if (NIGHTFALL.fords.some((f) => Math.abs(s - f) < 30)) continue
+    const side = rng() < 0.5 ? -1 : 1
+    track.boulders.push({
+      s,
+      n: side * (track.width[i] + 1.0 + rng() * 1.6),
+      size: 0.3 + rng() * rng() * 0.9,
+      seed: rng() * 1000,
+    })
+  }
 }
 
 /**
@@ -3405,14 +3662,6 @@ export function roadAt(track: Track, s: number, out?: RoadAt): RoadAt {
   return r
 }
 
-/**
- * Build the hidden road as a real second centreline.
- *
- * Short alignment throats inherit only the two portal headings. Between them,
- * an authored transverse route supplies a hard S and a tighter blind reverse.
- * The road then drops more than thirty metres below the ordinary cave and is
- * sampled into the same physical quantities understood by tyres and cameras.
- */
 /** Read the hidden tunnel, whose arrays begin at `split.from`. */
 export function shortcutRoadAt(split: RootSplit, s: number, out?: RoadAt): RoadAt {
   const last = split.x.length - 1

@@ -1739,6 +1739,18 @@ handling changed.
       `systems/watching` now returns the whole tick's orders in sequence —
       stop before moving, and judge the state before touching it — and
       `npm run watch` asserts the order
+- [x] **The Nightfall — a fifth road that is the garden itself.** The meadow
+      under the Tree of Thoughts, the Wellspring's valley with the river lying
+      over the road at two fords, the Hollow's domed room with the road banked
+      round the hearth and crossing itself on the way out, the plain under the
+      Stars with her dawn on one horizon, the Lantern Walk. Built from the
+      garden's own pieces (`growTree`, the palette, the ambient bed steered by
+      place) and the garden's own data: a flower and a hanging paper per
+      thought, a lit pane per memory, a light in the sky per message.
+      `npm run nightfall` measures it against its briefing and drives it;
+      `npm run tyre-contact` covers it. Uncommitted at the time of writing;
+      no music bed yet (`music/nightfall.*` — `roadMusic` is ready for it).
+      See `ember-rally/README.md` and the NOTES entry for what bit
 - [ ] Full regression + screenshot sweep, update the in-world guide
 
 ## After that

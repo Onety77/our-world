@@ -32,6 +32,7 @@ import {
   NormalBlending,
   ShaderMaterial,
   Vector3,
+  Vector2,
   Vector4,
   type IUniform,
 } from 'three'
@@ -748,12 +749,16 @@ const CAR_VERT = /* glsl */ `
   attribute vec4 aFinish;
 
   varying vec3 vWorld;
+  varying vec3 vCarPosition;
+  varying vec3 vCarNormal;
   varying vec3 vNormal;
   varying vec3 vColor;
   varying vec4 vFinish;
   varying float vDepth;
 
   void main() {
+    vCarPosition = position;
+    vCarNormal = normal;
     vColor = aColor;
     vFinish = aFinish;
     vec4 world = modelMatrix * vec4(position, 1.0);
@@ -782,6 +787,7 @@ ${LIGHT_HEAD}
   uniform vec3 uBounce;
   uniform float uGlow;
   uniform float uGhost;
+  uniform float uGhostOpacity;
   uniform float uTint;
   uniform vec3 uGhostTint;
   /** 0..1 — the brake pedal. Lights the two red lenses in the tail. */
@@ -790,8 +796,13 @@ ${LIGHT_HEAD}
   uniform float uDisc;
   /** 0..1 — the exhaust tips, on the ember and on the overrun. */
   uniform float uPipe;
+  uniform vec4 uWear;
+  uniform vec2 uScuffs;
+  uniform float uWheel;
 
   varying vec3 vWorld;
+  varying vec3 vCarPosition;
+  varying vec3 vCarNormal;
   varying vec3 vNormal;
   varying vec3 vColor;
   varying vec4 vFinish;
@@ -805,13 +816,45 @@ ${LIGHT_BODY}
     float gloss = vFinish.x;
 
     vec3 albedo = vColor;
+    // Object-space marks stay on their panel instead of swimming over the car.
+    // Lamps, glass, hot discs and exhaust remain readable beneath the weather.
+    float wearable = (1.0 - step(0.88, gloss)) *
+      (1.0 - step(0.01, vFinish.y + vFinish.z + vFinish.w));
+    vec3 p = vCarPosition;
+    vec2 grainUV = (p.xz + p.y * vec2(.37, .71)) * 35.0;
+    vec2 cell = floor(grainUV), blend = fract(grainUV);
+    blend = blend * blend * (3.0 - 2.0 * blend);
+    vec4 grainSeeds = vec4(dot(cell, vec2(12.9898, 78.233))) + vec4(0.0, 12.9898, 78.233, 91.2228);
+    vec4 grains = fract(sin(grainSeeds) * 43758.5453);
+    float grain = mix(mix(grains.x, grains.y, blend.x), mix(grains.z, grains.w, blend.x), blend.y);
+    float wearPatch = 0.55 + 0.45 * sin(p.z * 6.1 + sin(p.x * 8.7) + p.y * 4.0);
+    float top = smoothstep(-0.1, 0.8, vCarNormal.y);
+    float dust = uWear.x * (0.3 + top * 0.55) * (0.65 + grain * 0.35) * wearable;
+    float low = mix(1.0 - smoothstep(0.25, 0.85, p.y), 0.8, uWheel);
+    float mud = uWear.z * low * smoothstep(0.15, 0.7, wearPatch + grain * 0.25) * wearable;
+    albedo = mix(albedo, vec3(0.47, 0.29, 0.13), dust);
+    albedo = mix(albedo, vec3(0.105, 0.065, 0.032), mud * 0.8);
+    float scuffSide = mix(uScuffs.x, uScuffs.y, step(0.0, p.x));
+    float scratches = (1.0 - smoothstep(0.05, 0.22, abs(sin(p.y * 95.0 + sin(p.z * 7.0))))) *
+      smoothstep(0.5, 0.78, abs(p.x)) * (1.0 - smoothstep(0.7, 0.9, p.y)) *
+      smoothstep(0.18, 0.6, wearPatch) * scuffSide * wearable * (1.0 - uWheel);
+    albedo = mix(albedo, vec3(0.43, 0.32, 0.22), scratches * .8);
+    // Wet panels darken; small beads travel backwards over the bonnet.
+    vec2 dropUV = p.xz * vec2(53.0, 37.0) + vec2(0.0, uWear.w);
+    float dropSeed = fract(sin(dot(floor(dropUV), vec2(12.9898, 78.233))) * 43758.5453);
+    vec2 bead = fract(dropUV) - vec2(.3 + dropSeed * .4, .3 + fract(dropSeed * 7.0) * .4);
+    float droplets = (1.0 - smoothstep(.04, .12, length(bead * vec2(1.0, .55)))) *
+      uWear.y * top * wearable * (1.0 - uWheel) * step(.55, dropSeed) * .35;
+    albedo *= 1.0 - uWear.y * wearable * .16;
+    gloss = clamp(gloss * (1.0 - dust * .7 - mud * .65) + uWear.y * wearable * .2 + droplets * .25, 0.0, 1.0);
     vec3 col = caveLight(vWorld, normal, albedo, gloss);
+    col += droplets * vec3(.12, .15, .18);
 
     // Broad reflected light describes curved panels and the rubber shoulders.
     // Glass reflects the sky/ceiling instead of reading as a black solid blob.
     float sky = smoothstep(-0.35, 0.85, normal.y);
     col += albedo * mix(vec3(0.09, 0.085, 0.08), vec3(0.28, 0.32, 0.39), sky);
-    float glass = smoothstep(0.88, 0.94, gloss) * (1.0 - step(0.01, vFinish.z));
+    float glass = smoothstep(0.88, 0.94, vFinish.x) * (1.0 - step(0.01, vFinish.z));
     float fresnel = 0.12 + 0.65 * pow(1.0 - max(dot(normal, view), 0.0), 4.0);
     col += glass * fresnel * mix(vec3(0.045, 0.065, 0.085), vec3(0.27, 0.38, 0.49), sky);
 
@@ -886,7 +929,7 @@ ${LIGHT_BODY}
     */
     col = mix(col, uGhostTint * (0.16 + rim * 0.7), 0.62 * uTint);
 
-    gl_FragColor = vec4(caveFog(col, vDepth), mix(1.0, 0.5 + rim * 0.4, uGhost));
+    gl_FragColor = vec4(caveFog(col, vDepth), mix(1.0, 0.5 + rim * 0.4, uGhost) * uGhostOpacity);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -935,6 +978,10 @@ function carMaterial(lights: RallyLights, whose: Whose): ShaderMaterial {
       uBrake: { value: 0 },
       uDisc: { value: 0 },
       uPipe: { value: 0 },
+      uWear: { value: new Vector4() },
+      uGhostOpacity: { value: 1 },
+      uScuffs: { value: new Vector2() },
+      uWheel: { value: 0 },
     },
   })
 }
@@ -962,7 +1009,11 @@ export function useCarMaterial(lights: RallyLights, whose: Whose = 'mine'): Shad
  */
 export function useWheelMaterials(lights: RallyLights, whose: Whose = 'mine'): ShaderMaterial[] {
   const materials = useMemo(
-    () => [0, 1, 2, 3].map(() => carMaterial(lights, whose)),
+    () => [0, 1, 2, 3].map(() => {
+      const material = carMaterial(lights, whose)
+      material.uniforms.uWheel.value = 1
+      return material
+    }),
     [lights, whose],
   )
   useEffect(() => () => materials.forEach((m) => m.dispose()), [materials])

@@ -285,16 +285,95 @@ export function poseWheels(rig: CarRig, car: Posture) {
     // And the rotation, straight off the wheel's own angular velocity — so a
     // locked wheel stops dead and a spinning one outruns the road.
     rig.spinners[MESH_FOR_WHEEL[i]].rotation.x = wheel.spin
-
-
-    const spring = rig.springs[MESH_FOR_WHEEL[i]]
-    const [sx, , sz] = SPRING_POSITIONS[MESH_FOR_WHEEL[i]]
-    const lean = car.roll * sx - car.pitch * sz
-    const length = SPRING_SPAN + car.heave + lean
-    spring.scale.y = Math.max(0.5, Math.min(1.7, length / SPRING_SPAN))
   }
-  poseTyreContact(rig)
+  settle(rig)
 }
+
+/**
+ * The tyres onto the drawn road, the body off its tyres, and the springs
+ * between them. Shared by yours and hers, after the wheels are posed.
+ */
+function settle(rig: CarRig) {
+  poseTyreContact(rig)
+  keepUnderArches(rig)
+  // The top mount belongs to the rolling body; the bottom follows each hub.
+  rig.body.updateMatrix()
+  for (let i = 0; i < 4; i++) {
+    const [sx, sy, sz] = SPRING_POSITIONS[i]
+    springTop.set(sx, sy, sz).applyMatrix4(rig.body.matrix)
+    rig.springs[i].scale.y = Math.max(0.5, Math.min(1.7, (springTop.y - rig.hubs[i].position.y) / SPRING_SPAN))
+  }
+}
+const springTop = new Vector3()
+
+/**
+ * Where the body's wheel opening is, above the road frame, at rest — the tub's
+ * cut-out over each axle (`buildCarShell`) — less a little, because a tyre
+ * touching it is a tyre seen through it.
+ */
+const ARCH = WHEEL_RADIUS + 0.43 - 0.02
+
+/**
+ * The bump stops: the body may not roll, dive or squat onto its own tyres.
+ *
+ * The body leans on its springs over wheels that stay on the road, which is
+ * right, and in a hard corner the outside wheel's top rose through the wood of
+ * the arch and out of the bonnet — a second of tyre in the driver's view every
+ * time the car leaned over. A real body cannot do that: the springs bottom out
+ * first. So whichever wheel would enter its arch, the body's roll is taken back
+ * on that side by just enough, then its pitch, then the whole body lifted, and
+ * the springs are drawn to whatever is left. The physics is not told; this is
+ * where the picture stops short of what the numbers would draw.
+ */
+function keepUnderArches(rig: CarRig) {
+  const body = rig.body
+  // How far a wheel's top is up inside its arch, as the body is actually posed.
+  const intrusion = (i: number) => {
+    const [x, , z] = WHEEL_POSITIONS[i]
+    archPoint.set(x, 0, z).applyMatrix4(body.matrix)
+    return rig.hubs[i].position.y + WHEEL_RADIUS - (archPoint.y + ARCH)
+  }
+  // Nothing to do on nearly every frame: the arches clear the tyres by a hand.
+  let worst = 0
+  let wheel = -1
+  for (let round = 0; round < 4; round++) {
+    body.updateMatrix()
+    worst = 0
+    wheel = -1
+    for (let i = 0; i < 4; i++) {
+      const over = intrusion(i)
+      if (over > worst) {
+        worst = over
+        wheel = i
+      }
+    }
+    if (wheel < 0) return
+    const [x, , z] = WHEEL_POSITIONS[wheel]
+    let over = worst
+    const roll = Math.sin(body.rotation.z)
+    const pitch = Math.sin(body.rotation.x)
+    // Roll, only ever toward level.
+    if (x * roll < 0) {
+      const eased = Math.min(over, Math.abs(x * roll))
+      body.rotation.z = Math.asin(roll + eased / x)
+      over -= eased
+    }
+    // Then pitch, the same way.
+    if (over > 0 && z * pitch > 0) {
+      const eased = Math.min(over, Math.abs(z * pitch))
+      body.rotation.x = Math.asin(pitch - eased / z)
+      over -= eased
+    }
+    // And what is left lifts the body.
+    if (over > 0) body.position.y += over
+  }
+  // The angles above are first-order; whatever a hair of rounding leaves, lift.
+  body.updateMatrix()
+  let left = 0
+  for (let i = 0; i < 4; i++) left = Math.max(left, intrusion(i))
+  if (left > 0) body.position.y += left
+}
+const archPoint = new Vector3()
 
 /**
  * Her wheels, from a recording.
@@ -334,7 +413,7 @@ export function poseGhostWheels(
     // Same negation as `poseWheels`: right is negative about Y in this scene.
     if (i < 2) rig.hubs[i].rotation.y = front
   }
-  poseTyreContact(rig)
+  settle(rig)
 }
 
 const placeRoad = emptyRoad()

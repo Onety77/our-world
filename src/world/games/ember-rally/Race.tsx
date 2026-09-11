@@ -32,6 +32,9 @@ import { useQuality } from '@/systems/quality'
 import { AXLE_FRONT, AXLE_HALF_TRACK, AXLE_REAR, WHEEL_RADIUS } from './car'
 import { ChaseCamera, planShots, type Shot } from './camera'
 import { BonnetCamera } from './bonnetCamera'
+import { CarWear } from './wear'
+import { timeAtProgress } from './personalBest'
+import { runOnTrack } from './routeSample'
 import { attachControls, type RallyControls } from './controls'
 import { spiritDriver } from './spirit'
 import { raceFrameDelta } from './frameTime'
@@ -52,6 +55,7 @@ import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
 import { MOON } from './moonlight'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { buildHarmattan, HarmattanWorld } from './Harmattan'
+import { buildNightfall, NightfallWorld } from './Nightfall'
 import { laySurface } from './roadSurface'
 import { dust, district } from './dust'
 import { deep } from './depth'
@@ -59,6 +63,8 @@ import { storm } from './weather'
 import { enclosureOf, tunnel } from './tunnel'
 import { setRaceMusic, type RaceMusicState } from './roadMusic'
 import { RootwaySound } from './RootwaySound'
+import { NightfallSound } from './NightfallSound'
+import { garden, gardenPlaceAt } from './garden'
 import { Rootlife } from './Rootlife'
 import {
   LAMP_SLOTS,
@@ -124,6 +130,7 @@ import {
 import {
   HARMATTAN,
   MOONBREAK,
+  NIGHTFALL,
   emptyRoad,
   galeStrengthAt,
   roadAt,
@@ -450,6 +457,19 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       // mud plaster or a termite mound. See `uStrataTop`.
       next.uniforms.uStrata.value = 1
       next.uniforms.uStrataTop.value = 0.8
+    } else if (track.stage === 'nightfall') {
+      // The last of the sun. Everything after this is eased along the road, per frame.
+      const meadow = NIGHT_LIGHT.meadow
+      next.uniforms.uDaylight.value = meadow.daylight
+      next.uniforms.uSunDir.value.copy(NIGHT_SUN)
+      next.uniforms.uSunColor.value.copy(meadow.sun)
+      next.uniforms.uSkyColor.value.copy(meadow.sky)
+      next.uniforms.uAmbient.value.copy(meadow.ambient)
+      next.uniforms.uFogColor.value.copy(meadow.fog)
+      next.uniforms.uFogNear.value = meadow.near
+      next.uniforms.uFogFar.value = meadow.far
+      next.uniforms.uVeinColor.value.set('#000000')
+      next.uniforms.uHeadColor.value.set('#ffd9a8')
     }
     return next
   }, [track.stage])
@@ -479,7 +499,9 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
         ? buildHarmattan(track)
         : track.stage === 'stormcrown'
           ? buildStormcrown(track)
-          : buildTunnel(track)
+          : track.stage === 'nightfall'
+            ? buildNightfall(track)
+            : buildTunnel(track)
     // The wheels stand on exactly this geometry — see `roadSurface`.
     laySurface(track, built)
     return built
@@ -636,13 +658,17 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
               ? '#c9ae8a'
               : track.stage === 'stormcrown'
                 ? '#172126'
-                : '#050403',
+                : track.stage === 'nightfall'
+                  ? '#141a2c'
+                  : '#050403',
         ]}
       />
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {track.stage === 'stormcrown' ? <StormcrownWorld track={track} rock={rockMaterial} /> : null}
       {track.stage === 'harmattan' ? <HarmattanWorld track={track} rock={rockMaterial} /> : null}
+      {track.stage === 'nightfall' ? <NightfallWorld track={track} rock={rockMaterial} /> : null}
+      {track.stage === 'nightfall' ? <NightfallSound track={track} /> : null}
       {/*
         The Rootway has no world component of its own — the tunnel, the lamps
         and the fires are all built inline above — so its soundscape mounts
@@ -755,7 +781,8 @@ function buildLanterns(track: Track) {
   const basis = flatBasis()
   const point = new Vector3()
   const warm = new Color('#ff9a45')
-  const cold = new Color('#54d3bd')
+  // The Nightfall's cool light is the garden's own (`LIGHT_COLORS.cool`), not the Moonbreak's teal.
+  const cold = new Color(track.stage === 'nightfall' ? '#9fb6e8' : '#54d3bd')
   const colour = new Color()
 
   track.lanterns.forEach((lantern, i) => {
@@ -866,6 +893,36 @@ const HAZE_OPEN = new Color('#ad9a82')
 const HAZE_SHADE = new Color('#665646')
 /** What the distance goes to, which is the haze and not a darkness. Shows as #ccbb9d. */
 const HAZE_FOG = new Color('#c9ae8a')
+
+/*
+  The Nightfall's five lights, one a place — see the frame step in `Race`.
+
+  The Meadow has the last of a low sun and a violet sky; the valley has a
+  little of it left and its own mist; the Hollow none, and a warm dark that the
+  hearth is the light in; the plain is the garden's own night, clear to a long
+  way; the wood is close and green-black, and the lanterns do the rest.
+*/
+interface NightLight {
+  daylight: number
+  sun: Color
+  sky: Color
+  ambient: Color
+  fog: Color
+  near: number
+  far: number
+}
+const NIGHT_LIGHT: Record<'meadow' | 'wellspring' | 'hollow' | 'stars' | 'walk', NightLight> = {
+  meadow: { daylight: 0.85, sun: new Color('#ffb478'), sky: new Color('#8d8cae'), ambient: new Color('#6e6878'), fog: new Color('#9c8890'), near: 70, far: 360 },
+  wellspring: { daylight: 0.42, sun: new Color('#f2955c'), sky: new Color('#6c6d8e'), ambient: new Color('#52506a'), fog: new Color('#5f5a70'), near: 28, far: 170 },
+  hollow: { daylight: 0, sun: new Color('#000000'), sky: new Color('#000000'), ambient: new Color('#8a6a4e'), fog: new Color('#241b15'), near: 14, far: 90 },
+  stars: { daylight: 0, sun: new Color('#000000'), sky: new Color('#000000'), ambient: new Color('#2e3856'), fog: new Color('#0b1020'), near: 90, far: 720 },
+  walk: { daylight: 0, sun: new Color('#000000'), sky: new Color('#000000'), ambient: new Color('#33392c'), fog: new Color('#0f130d'), near: 22, far: 115 },
+}
+/** Where the last of the sun is: low, and behind the start — the road runs away from it. */
+const NIGHT_SUN = new Vector3(-0.55, 0.2, -0.8).normalize()
+/** Scratch for the blend, so a frame allocates nothing. */
+const nightWant = { daylight: 0, near: 0, far: 0, sun: new Color(), sky: new Color(), ambient: new Color(), fog: new Color() }
+const nightScratch = new Color()
 /**
  * One frame of the race, as the music hears it.
  *
@@ -885,6 +942,10 @@ const music: RaceMusicState = {
 class Driving {
   private readonly car: CarState
   private recorder = new Recorder()
+  private readonly wear = new CarWear()
+  private nextPersonalSplit = 0
+  private shortcutDemoEntered = false
+  private splitUntil = 0
   private readonly chase = new ChaseCamera()
   private readonly bonnet = new BonnetCamera()
   private bonnetActive = false
@@ -1028,6 +1089,12 @@ class Driving {
     this.car.n = useRace.getState().grid
 
     this.recorder = new Recorder()
+    this.wear.reset()
+    this.nextPersonalSplit = 0
+    this.shortcutDemoEntered = false
+    this.splitUntil = 0
+    const splitLabel = useRace.getState().splitLabel
+    if (splitLabel) splitLabel.textContent = ''
     this.countdown = COUNTDOWN
     this.rush = 0
     this.shownRush = -1
@@ -1254,6 +1321,59 @@ class Driving {
       u.uFogFar.value += ((shade > 0.5 ? 150 : 108) - u.uFogFar.value) * ease
     }
 
+    /*
+      The Nightfall's light is the day ending along the road.
+
+      Five places, each with its own light — the last of the sun on the Meadow,
+      the valley's dusk, no daylight at all under the Hollow, the deep night of
+      the plain, the lantern-lit wood — blended by where the car is, and eased
+      so no frame is the one the light changed on. The sky reads `uDaylight`
+      back off the same block, so it and the ground agree about the hour.
+    */
+    if (this.track.stage === 'nightfall') {
+      const u = args.lights.uniforms
+      const ahead = this.car.s + 14
+      const ease = 1 - Math.exp(-2.2 * args.delta)
+      const M = NIGHTFALL
+      const weights: [NightLight, number][] = [
+        [NIGHT_LIGHT.meadow, 1 - district(ahead, M.wellspring.from, 1e9, 40)],
+        [NIGHT_LIGHT.wellspring, district(ahead, M.wellspring.from, M.hollow.from + 12, 40)],
+        [NIGHT_LIGHT.hollow, district(ahead, M.hollow.from + 12, M.hollow.to - 12, 20)],
+        [NIGHT_LIGHT.stars, district(ahead, M.hollow.to - 12, M.stars.to, 40)],
+        [NIGHT_LIGHT.walk, district(ahead, M.stars.to, 1e9, 40)],
+      ]
+      let total = 0
+      for (const [, w] of weights) total += w
+      nightWant.daylight = 0
+      nightWant.near = 0
+      nightWant.far = 0
+      nightWant.sun.set(0, 0, 0)
+      nightWant.sky.set(0, 0, 0)
+      nightWant.ambient.set(0, 0, 0)
+      nightWant.fog.set(0, 0, 0)
+      for (const [light, w] of weights) {
+        const share = w / Math.max(1e-6, total)
+        nightWant.daylight += light.daylight * share
+        nightWant.near += light.near * share
+        nightWant.far += light.far * share
+        nightWant.sun.add(nightScratch.copy(light.sun).multiplyScalar(share))
+        nightWant.sky.add(nightScratch.copy(light.sky).multiplyScalar(share))
+        nightWant.ambient.add(nightScratch.copy(light.ambient).multiplyScalar(share))
+        nightWant.fog.add(nightScratch.copy(light.fog).multiplyScalar(share))
+      }
+      u.uDaylight.value += (nightWant.daylight - u.uDaylight.value) * ease
+      u.uFogNear.value += (nightWant.near - u.uFogNear.value) * ease
+      u.uFogFar.value += (nightWant.far - u.uFogFar.value) * ease
+      u.uSunColor.value.lerp(nightWant.sun, ease)
+      u.uSkyColor.value.lerp(nightWant.sky, ease)
+      u.uAmbient.value.lerp(nightWant.ambient, ease)
+      u.uFogColor.value.lerp(nightWant.fog, ease)
+      // And for the ear: which of the garden's places this is. See `garden.ts`.
+      garden.s = this.car.s
+      garden.speed = Math.hypot(this.car.vs, this.car.vn)
+      garden.place = gardenPlaceAt(this.car.s + 24)
+    }
+
     if (this.track.stage === 'harmattan') {
       const road = roadAt(this.track, this.car.s + 12, dustRoad)
       const ease = 1 - Math.exp(-3.4 * args.delta)
@@ -1284,7 +1404,9 @@ class Driving {
       where the same ease runs in reverse and the lanterns come back.
     */
     if (this.track.stage === 'rootway' && this.track.split) {
-      const want = this.car.shortcut ? 1 : 0
+      const split = this.track.split
+      const want = this.car.shortcut ? Math.max(0, Math.min(1,
+        (this.car.s - split.separateAt) / 60, (split.to - 160 - this.car.s) / 60)) : 0
       this.hidden += (want - this.hidden) * (1 - Math.exp(-0.9 * args.delta))
       const t = this.hidden
       const u = args.lights.uniforms
@@ -1387,12 +1509,12 @@ class Driving {
       if (
         ROOTWAKE_RIDE &&
         track.split &&
-        !car.shortcut &&
+        !this.shortcutDemoEntered &&
         car.s >= track.split.from + 5 &&
-        car.s < track.split.rejoinAt
+        car.s < track.split.commitAt
       ) {
-        car.shortcut = true
-        car.n = 0
+        this.shortcutDemoEntered = true
+        car.n = 2
       }
       // The controls are told how fast the car is going, because how quickly
       // the hands may move the wheel depends on it — see `controls.ts`.
@@ -1400,8 +1522,25 @@ class Driving {
         ? this.autopilot(car, delta)
         : (this.controls?.read(speedOf(car)) ?? IDLE)
       this.input = input
+      const beforeS = car.s, beforeTime = car.elapsed
       advanceCar(track, car, input, delta)
       this.recorder.sample(car)
+      if (session.personalGhost && session.ghost && this.nextPersonalSplit < 3) {
+        const at = track.start + (track.finishAt - track.start) * (this.nextPersonalSplit + 1) / 4
+        if (car.s >= at) {
+          const then = timeAtProgress(session.ghost, at)
+          if (then !== null && session.splitLabel) {
+            const fraction = Math.max(0, Math.min(1, (at - beforeS) / Math.max(.001, car.s - beforeS)))
+            const crossed = beforeTime + (car.elapsed - beforeTime) * fraction
+            const gap = crossed * 1000 - then
+            const name = ['First split', 'Halfway', 'Last split'][this.nextPersonalSplit]
+            session.splitLabel.textContent = `${name} · ${(Math.abs(gap) / 1000).toFixed(1)}s ${gap <= 0 ? 'ahead' : 'behind'}`
+            this.splitUntil = car.elapsed + 5
+          }
+          this.nextPersonalSplit++
+        }
+      }
+      if (car.elapsed > this.splitUntil && session.splitLabel?.textContent) session.splitLabel.textContent = ''
 
       if (car.finished && !this.handedOver) {
         this.handedOver = true
@@ -1542,6 +1681,19 @@ class Driving {
     // What the car is telling you about itself: the meter, the brake lamps,
     // the discs and the pipes.
     args.materials.mine.uniforms.uGlow.value = car.ember
+    if (phase === 'running') {
+      this.wear.update(car, roadAtRoute(track, car.s, car.shortcut, shotRoad), track.stage,
+        track.stage === 'stormcrown' ? storm.rain : 0, delta)
+    }
+    args.materials.mine.uniforms.uWear.value.copy(this.wear.surface)
+    args.materials.mine.uniforms.uScuffs.value.copy(this.wear.scuffs)
+    for (const material of args.materials.mineWheels) {
+      material.uniforms.uWear.value.copy(this.wear.surface)
+      material.uniforms.uScuffs.value.copy(this.wear.scuffs)
+    }
+    const ghostTint = session.personalGhost ? '#e8b56b' : '#5cc4ff'
+    args.materials.theirs.uniforms.uGhostTint.value.set(ghostTint)
+    for (const material of args.materials.theirsWheels) material.uniforms.uGhostTint.value.set(ghostTint)
 
     /*
       The meter, written straight to its node.
@@ -1733,7 +1885,7 @@ class Driving {
     }
 
     // --- her -----------------------------------------------------------------
-    const rolling = args.live ? args.live.rolling.at(performance.now()) : null
+    const rolling = args.live ? args.live.rolling.at(performance.now(), track) : null
     const ghost = session.ghost
     if (rolling) {
       /*
@@ -1763,9 +1915,14 @@ class Driving {
       // turns a sealed run into a race: the gap you can see is the gap there
       // would have been if you had both been here at once.
       args.theirs.root.visible = phase !== 'ready'
-      const grid = Math.max(0, 1 - car.elapsed / 2.4) * -1.9
+      const grid = session.personalGhost ? 0 : Math.max(0, 1 - car.elapsed / 2.4) * -1.9
       const elapsedMs = phase === 'ready' ? 0 : car.elapsed * 1000
-      this.showGhost(args, runAt(ghost, elapsedMs), elapsedMs, grid)
+      this.showGhost(args, runOnTrack(track, ghost, elapsedMs), elapsedMs, grid)
+      const separation = args.mine.root.position.distanceTo(args.theirs.root.position)
+      const opacity = session.personalGhost ? Math.max(0, Math.min(1, (separation - .8) / 2)) : 1
+      args.materials.theirs.uniforms.uGhostOpacity.value = opacity
+      for (const material of args.materials.theirsWheels) material.uniforms.uGhostOpacity.value = opacity
+      args.lights.uniforms.uGhostPower.value *= opacity
       const near = this.ghost.shortcut === car.shortcut
         ? Math.max(0, 1 - Math.abs(this.ghost.s - car.s) / 26)
         : 0
@@ -1906,6 +2063,11 @@ class Driving {
   private stepReplay(args: FrameArgs) {
     const replay = useRace.getState().replay
     if (!replay) return
+    // A replay can reuse the race's materials after chasing a personal ghost.
+    for (const material of [args.materials.theirs, ...args.materials.theirsWheels]) {
+      material.uniforms.uGhostOpacity.value = 1
+      material.uniforms.uGhostTint.value.set('#5cc4ff')
+    }
     const { track, delta } = args
 
     const duration =
@@ -1921,8 +2083,8 @@ class Driving {
     const at = this.clock * 1000
     // In a replay this clock *is* the race clock, so the bridge follows it.
     args.lights.uniforms.uSway.value.x = this.clock
-    const me = runAt(replay.mine, at)
-    const them = runAt(replay.theirs, at)
+    const me = runOnTrack(track, replay.mine, at)
+    const them = runOnTrack(track, replay.theirs, at)
 
     /*
       Side by side rather than inside each other.
@@ -1936,7 +2098,7 @@ class Driving {
       pass you can see and two cars flickering through one another.
     */
     let split = 0
-    if (Math.abs(me.s - them.s) < 4.5) {
+    if (me.shortcut === them.shortcut && Math.abs(me.s - them.s) < 4.5) {
       const apart = Math.abs(me.n - them.n)
       if (apart < 2.1) split = ((2.1 - apart) / 2.1) * 1.15
     }
@@ -1960,7 +2122,7 @@ class Driving {
       this.spit(args.dust, args.mine, GRIT, me.drift * 0.6 + 0.2, 0.2)
     }
 
-    this.showGhost(args, runAt(replay.theirs, at), at, them.n - runAt(replay.theirs, at).n)
+    this.showGhost(args, runOnTrack(track, replay.theirs, at), at, them.n - runOnTrack(track, replay.theirs, at).n)
 
     // The camera and the chunk window both ask the car where it is, so it is
     // told — the replay has no physics but it does have a subject.
@@ -2676,27 +2838,15 @@ class Driving {
       const mesh = args.chunks[i]
       if (!mesh) continue
       const range = args.chunkRanges[i]
-      const ahead = this.track.stage === 'rootway' ? 150 : this.track.stage === 'moonbreak' ? 230 : 205
+      const ahead = this.track.stage === 'rootway' ? 150 : this.track.stage === 'moonbreak' ? 230 : this.track.stage === 'nightfall' ? 240 : 205
       const close = range.to > here - 70 && range.from < here + ahead
       if (!close) {
         mesh.visible = false
         continue
       }
-      const split = this.track.split
-      if (!split || range.shortcut === undefined) {
-        mesh.visible = true
-        continue
-      }
-      /*
-        Keep both roads drawn for the whole physical fork.
-
-        This used to stop at `from + 5`, while the route could still be chosen
-        until `commitAt` and the two shells did not finish separating until
-        `separateAt`. The unchosen road therefore vanished in the middle of the
-        decision and the junction visually collapsed back into one tunnel.
-      */
-      const atJunction = here < split.separateAt + 18 || here > split.rejoinAt - 80
-      mesh.visible = range.shortcut === this.car.shortcut || atJunction
+      // Both shells form the shared mouths. Distance and depth culling keep
+      // the other road cheap without making part of the junction disappear.
+      mesh.visible = true
     }
   }
 
@@ -2744,6 +2894,11 @@ class Driving {
         lights.lampColors[slot * 3] = 0.95 * power
         lights.lampColors[slot * 3 + 1] = 0.46 * power
         lights.lampColors[slot * 3 + 2] = 0.17 * power
+      } else if (track.stage === 'nightfall') {
+        // The Stars' cool light is hers, and it is blue — not the cave's fungus.
+        lights.lampColors[slot * 3] = 0.4 * power
+        lights.lampColors[slot * 3 + 1] = 0.5 * power
+        lights.lampColors[slot * 3 + 2] = 0.9 * power
       } else {
         lights.lampColors[slot * 3] = 0.16 * power
         lights.lampColors[slot * 3 + 1] = 0.6 * power
@@ -2944,9 +3099,9 @@ const ROOTWAY_LIT = {
 const ROOTWAKE_DARK = {
   // Not black: a cave with no ambient at all reads as nothing having been
   // drawn, which is the note already written against the cave's own shader.
-  ambient: new Color('#232c39'),
-  fogNear: 13,
-  fogFar: 68,
+  ambient: new Color('#59616b'),
+  fogNear: 20,
+  fogFar: 105,
 }
 
 /*

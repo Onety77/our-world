@@ -13,7 +13,9 @@ export function TrackArtwork({ stage }: { stage: StageId }) {
         ? '#344e63'
         : stage === 'stormcrown'
           ? '#494861'
-          : '#3b302a'
+          : stage === 'nightfall'
+            ? '#232c4a'
+            : '#3b302a'
   const accent = ROAD_INFO[stage].accent
   return (
     <svg
@@ -88,6 +90,38 @@ export function TrackArtwork({ stage }: { stage: StageId }) {
           <path d="m929 0-61 115 58-20-54 139 105-160-56 14 51-88" fill="#dfd9fa" opacity=".8" />
           {Array.from({ length: 20 }, (_, i) => (
             <path key={i} d={`m${i * 69} ${(i % 4) * 50} -90 280`} stroke="#d4cce4" opacity=".09" />
+          ))}
+        </>
+      ) : stage === 'nightfall' ? (
+        <>
+          {/* The last of the dusk, low on the left; the stars already out on the right. */}
+          <path d="M0 250q260-70 520 10V660H0Z" fill="#7a5a63" opacity=".35" />
+          {Array.from({ length: 26 }, (_, i) => (
+            <circle
+              key={i}
+              cx={520 + ((i * 137) % 680)}
+              cy={30 + ((i * 89) % 210)}
+              r={i % 5 === 0 ? 2.4 : 1.4}
+              fill="#e8e6f0"
+              opacity={0.35 + (i % 3) * 0.2}
+            />
+          ))}
+          {/* The plain, and the river cutting across in front of it. */}
+          <path d="M0 372q300-40 600-8t600-30v326H0" fill="#2b3543" />
+          <path d="M0 455q210-30 420 6t380 2 400-18v22q-190 24-400 14t-380 6-420 6Z" fill="#6d8797" opacity=".55" />
+          {/* The great tree, with its papers hanging under the crown. */}
+          <path d="M228 470 214 262h34l-8 208m-14-190-72-64m66 50 78-70m-72 52-6-96" fill="none" stroke="#3a2e28" strokeWidth="18" />
+          <path d="M84 232q10-80 96-60 42-92 118-22 88-22 108 56 10 66-64 74-52 40-114 6-76 24-128-12-28-26-16-42Z" fill="#3e4a37" />
+          <path d="M84 232q10-80 96-60 42-92 118-22" fill="none" stroke="#56634a" strokeWidth="6" />
+          {[150, 196, 236, 284, 318].map((x, i) => (
+            <g key={x}>
+              <path d={`M${x} ${262 + (i % 2) * 8}v${38 + (i % 3) * 10}`} stroke="#c9b8a0" strokeWidth="1.5" />
+              <path d={`M${x - 8} ${300 + (i % 2) * 8 + (i % 3) * 10}h16v20h-16z`} fill="#ecdfc6" />
+            </g>
+          ))}
+          {/* Flowers at its foot, one for every thought. */}
+          {Array.from({ length: 14 }, (_, i) => (
+            <circle key={i} cx={140 + ((i * 53) % 230)} cy={472 + ((i * 29) % 26)} r="4" fill={['#c6a7ad', '#b6bda8', '#d8ccb2', '#a99ab2'][i % 4]} />
           ))}
         </>
       ) : (

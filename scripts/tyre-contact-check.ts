@@ -16,9 +16,10 @@ import assert from 'node:assert/strict'
 import { Group, Vector3 } from 'three'
 import { buildHarmattan } from '../src/world/games/ember-rally/Harmattan'
 import { buildMoonbreak } from '../src/world/games/ember-rally/Moonbreak'
+import { buildNightfall } from '../src/world/games/ember-rally/Nightfall'
 import { buildStormcrown } from '../src/world/games/ember-rally/Stormcrown'
 import { buildTunnel, type TunnelChunk } from '../src/world/games/ember-rally/geometry'
-import { buildWheel, WHEEL_POSITIONS } from '../src/world/games/ember-rally/car'
+import { buildWheel, WHEEL_POSITIONS, WHEEL_RADIUS } from '../src/world/games/ember-rally/car'
 import { createCar } from '../src/world/games/ember-rally/physics'
 import { placeCar, poseWheels, poseGhostWheels, type CarRig } from '../src/world/games/ember-rally/rig'
 import { laySurface, type Support } from '../src/world/games/ember-rally/roadSurface'
@@ -171,7 +172,11 @@ const builders: Record<StageId, (track: ReturnType<typeof makeTrack>) => TunnelC
   moonbreak: buildMoonbreak,
   stormcrown: buildStormcrown,
   harmattan: buildHarmattan,
+  nightfall: buildNightfall,
 }
+
+/** Every road, or the ones named in `STAGES=rootway,nightfall`. */
+const STAGES = ((process.env.STAGES?.split(',').filter(Boolean) as StageId[] | undefined) ?? ['rootway', 'moonbreak', 'stormcrown', 'harmattan', 'nightfall']) as StageId[]
 
 let poses = 0
 let worstSink = 0
@@ -181,8 +186,11 @@ let poseTime = 0
 let unsupported = 0
 let shortcutPoses = 0
 let swayingPoses = 0
+let archMargin = Infinity
+/** The tub's cut-out over each axle, less the margin `rig.ts` keeps. */
+const ARCH = WHEEL_RADIUS + 0.43 - 0.02
 
-for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as StageId[]) {
+for (const stage of STAGES) {
   for (const seed of [7, 1234]) {
     const track = makeTrack(seed, stage)
     const chunks = builders[stage](track)
@@ -239,10 +247,18 @@ for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as Stage
           else poseGhostWheels(rig, 30, 0.8, yaw, true, 1 / 60, yaw * 0.65)
           poseTime += performance.now() - started
           point.set(0, 0, 1).transformDirection(ground.matrixWorld)
-          assert(Math.abs(Math.sin(Math.atan2(point.x, point.z) - (road.heading - yaw))) < 1e-8, 'The visible compass heading must follow the driving simulation')
+          assert(Math.abs(Math.sin(Math.atan2(point.x, point.z) - (road.heading - yaw))) < 1e-8, `${stage}/${seed}: the visible compass heading must follow the driving simulation (s=${s.toFixed(1)} yaw=${yaw} off by ${Math.sin(Math.atan2(point.x, point.z) - (road.heading - yaw)).toExponential(2)})`)
           assert.equal(JSON.stringify(car), before, 'Rendering must not change physics state')
           if (road.sway > 0.002) swayingPoses++
           if (shortcut) shortcutPoses++
+          // The body never comes down onto a tyre: no wheel's top is inside its arch.
+          for (let i = 0; i < 4; i++) {
+            const [x, , z] = WHEEL_POSITIONS[i]
+            const floor = body.position.y + x * Math.sin(body.rotation.z) - z * Math.sin(body.rotation.x) * Math.cos(body.rotation.z)
+            const top = rig.hubs[i].position.y + WHEEL_RADIUS
+            assert(top <= floor + ARCH + 1e-4, `${stage}/${seed}: wheel ${i} at s=${s.toFixed(1)} is ${((top - floor - ARCH) * 1000).toFixed(1)} mm up inside its arch`)
+            archMargin = Math.min(archMargin, floor + ARCH - top)
+          }
           for (let i = 0; i < 4; i++) {
             let gap = Infinity
             for (let v = 0; v < rubber.length; v += 3) {
@@ -308,15 +324,15 @@ for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as Stage
     }
     assert(worstJump < 0.03, `${stage}/${seed}: the fitted height jumps ${(worstJump * 1000).toFixed(0)} mm in half a metre at ${jumpAt.toFixed(1)}`)
     assert(worstTwist < 0.05, `${stage}/${seed}: the fitted tilt twists ${(worstTwist * 57.3).toFixed(1)}° in half a metre`)
-    console.log(`  driven along the line: the fit moves at most ${(worstJump * 1000).toFixed(1)} mm and ${(worstTwist * 57.3).toFixed(2)}° more than the road does in half a metre.`)
+    console.log(`  driven along the line: the fit moves at most ${(worstJump * 1000).toFixed(1)} mm (at ${jumpAt.toFixed(1)} m) and ${(worstTwist * 57.3).toFixed(2)}° more than the road does in half a metre.`)
     for (const chunk of chunks) chunk.geometry.dispose()
   }
 }
 console.log(`${poses} poses (${shortcutPoses} on the Rootwake, ${swayingPoses} on the Swaying Span), all four complete wheel meshes: sink ${(worstSink * 1000).toFixed(3)} mm, gap ${(worstGap * 1000).toFixed(3)} mm; maximum suspension adjustment ${(maxTravel * 100).toFixed(1)} cm; ${unsupported} wheels over nothing drawn.`)
-console.log(`Average render pose cost: ${(poseTime / poses).toFixed(2)} ms on this machine.`)
+console.log(`Average render pose cost: ${(poseTime / poses).toFixed(2)} ms on this machine. Closest a tyre came to its arch: ${(archMargin * 1000).toFixed(1)} mm.`)
 
 // 3. Without a surface laid — the studio, or a road nobody has built — the written stance stands.
-for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as StageId[]) {
+for (const stage of STAGES) {
   const track = makeTrack(3, stage)
   const road = roadAt(track, 120)
   placeCar(rig, track, 120, 1, 0.8, 0.1, 0.05)

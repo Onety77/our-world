@@ -30,8 +30,10 @@
 
 import { create } from 'zustand'
 import type { StageId } from './model'
+import { usePersonalBest } from './personalBest'
 
 export interface Best {
+  context?: string
   /** Milliseconds. */
   timeMs: number
   /** How many times the rock was hit on that run. Context, not a filter. */
@@ -50,7 +52,7 @@ function clean(raw: unknown): Bests {
   if (raw === null || typeof raw !== 'object') return {}
   const source = raw as Record<string, unknown>
   const out: Bests = {}
-  for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan'] as const) {
+  for (const stage of ['rootway', 'moonbreak', 'stormcrown', 'harmattan', 'nightfall'] as const) {
     const value = source[stage]
     if (value === null || typeof value !== 'object') continue
     const it = value as Record<string, unknown>
@@ -59,6 +61,7 @@ function clean(raw: unknown): Bests {
     // A zero or negative time is a bug upstream, not a very good lap.
     if (timeMs <= 0) continue
     out[stage] = {
+      context: typeof it.context === 'string' ? it.context : undefined,
       timeMs,
       strikes: Math.max(0, Math.round(num(it.strikes))),
       driftMs: Math.max(0, num(it.driftMs)),
@@ -116,7 +119,7 @@ interface BestState {
    * the end-of-run screen say *"a new best, by 1.4 s"* without either side
    * keeping a second copy of the old number.
    */
-  offer(stage: StageId, run: Best): boolean
+  offer(stage: StageId, run: Best, previous?: Best): boolean
   forget(stage: StageId): void
   forgetAll(): void
 }
@@ -125,9 +128,10 @@ export const useBest = create<BestState>((set, get) => ({
   bests: read(),
   lastOffer: null,
 
-  offer(stage, run) {
+  offer(stage, run, previous) {
     if (!Number.isFinite(run.timeMs) || run.timeMs <= 0) return false
-    const had = get().bests[stage]
+    const saved = get().bests[stage]
+    const had = previous ?? (saved?.context === run.context ? saved : undefined)
     const beatMs = had ? had.timeMs : null
     const byMs = had ? run.timeMs - had.timeMs : 0
     if (had && had.timeMs <= run.timeMs) {
@@ -141,6 +145,7 @@ export const useBest = create<BestState>((set, get) => ({
   },
 
   forget(stage) {
+    usePersonalBest.getState().forget(stage)
     const bests = { ...get().bests }
     delete bests[stage]
     write(bests)
@@ -148,6 +153,7 @@ export const useBest = create<BestState>((set, get) => ({
   },
 
   forgetAll() {
+    usePersonalBest.getState().forget()
     write({})
     set({ bests: {} })
   },

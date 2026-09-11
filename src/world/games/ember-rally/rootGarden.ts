@@ -464,6 +464,7 @@ export function dressCave(
     roadAt(track, s, road)
     const pick = rng()
     const seed = Math.floor(rng() * 10000)
+    if (track.split && s >= track.split.from - 16 && s <= track.split.to + 16) continue
     if (road.room > 0.35) continue
     const side = pick < 0.5 ? -1 : 1
     const wall = road.width + vergeWidth(road.room)
