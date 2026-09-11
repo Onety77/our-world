@@ -312,8 +312,10 @@ function recompute(): void {
 
   DERIVED.nominalLoad = (TUNE.weight * TUNE.gravity) / 4
 
-  DERIVED.steerRate = 7.5 * TUNE.steerSpeed
-  DERIVED.steerRateFast = 7.5 * TUNE.steerSpeed * TUNE.steerWeight
+  // The physics already smooths the rack. Avoid another half-second of
+  // virtual-hand delay before a fast corner can begin to load the tyres.
+  DERIVED.steerRate = 12 * TUNE.steerSpeed
+  DERIVED.steerRateFast = 12 * TUNE.steerSpeed * TUNE.steerWeight
 
   // A float of 1 is the original set. Below 1 everything answers slower and
   // the car reads as heavier; above 1 it snaps and reads as a go-kart.

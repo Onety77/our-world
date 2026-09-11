@@ -51,7 +51,7 @@ import { TUNE } from './tuning'
 import { emptyRoad, roadAtRoute, type RoadAt, type Track } from './track'
 
 const FOV_STILL = 56
-const FOV_FLAT_OUT = 66
+const FOV_FLAT_OUT = 70
 
 /**
  * The screen shape these two numbers were chosen against.
@@ -238,7 +238,7 @@ export class ChaseCamera {
     // tight around you, which is the entire feeling down here.
     const phone = portraitAmount(camera.aspect)
     const wantBack =
-      (6.8 + fast * 0.65 + (car.boostLeft > 0 ? 0.35 : 0)) *
+      (6.8 + fast * 0.15 + (car.boostLeft > 0 ? 0.35 : 0)) *
         TUNE.cameraDistance *
         (1 - phone * 0.38) *
         (1 + settle * 0.5) +
@@ -246,7 +246,7 @@ export class ChaseCamera {
     // And it settles a little on the springs with the car: down as the nose
     // comes up under power, up as the car dives onto its brakes.
     const wantLift =
-      (2.65 + fast * 0.1) * TUNE.cameraHeight * (1 - phone * 0.2) * (1 + settle * 0.75) -
+      (2.65 - fast * 0.5) * TUNE.cameraHeight * (1 - phone * 0.2) * (1 + settle * 0.75) -
       lag * 0.16
     /*
       Quick enough to follow, slow enough to be behind.

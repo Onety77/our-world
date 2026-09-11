@@ -33,6 +33,7 @@ import { AXLE_FRONT, AXLE_HALF_TRACK, AXLE_REAR, WHEEL_RADIUS } from './car'
 import { ChaseCamera, planShots, type Shot } from './camera'
 import { attachControls, type RallyControls } from './controls'
 import { spiritDriver } from './spirit'
+import { raceFrameDelta } from './frameTime'
 import {
   flatBasis,
   placeCar,
@@ -581,7 +582,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
 
   useFrame((_, rawDelta) => {
     drive.current!.frame({
-      delta: Math.min(0.05, rawDelta),
+      delta: raceFrameDelta(rawDelta),
       camera: camera as PerspectiveCamera,
       lights,
       lanternAt: lanterns.at,

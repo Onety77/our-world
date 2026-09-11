@@ -87,6 +87,7 @@ import {
   type Track,
 } from './track'
 import { DERIVED, TUNE } from './tuning'
+import { raceFrameDelta } from './frameTime'
 
 // Re-exported because it lived here first and half the racer imports it from
 // here. It belongs to the road — see the note beside it in track.ts.
@@ -681,9 +682,9 @@ const SLIP_MARGIN = 0.05
  * steering ratio follows, instead of a table quietly going out of date.
  * ---------------------------------------------------------------------------
  */
-function maxSteer(v: number, catching = 0): number {
+function maxSteer(v: number, catching = 0, lateralGrip = 1): number {
   // Floored, or standing still asks for infinite lock.
-  const usable = (WHEELBASE * TUNE.grip * TUNE.gravity) / Math.max(30, v * v)
+  const usable = (WHEELBASE * TUNE.grip * lateralGrip * TUNE.gravity) / Math.max(30, v * v)
   const gripping = (usable + SLIP_MARGIN) * TUNE.turnInBite
   /*
     ==========================================================================
@@ -856,6 +857,12 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     a number that takes a seventh of a second to move.
   */
   const drift = car.driftBlend
+  // A modest lateral-only reserve for fast grip driving. Longitudinal traction,
+  // engine power and braking stay unchanged, and sand/wet/ruts still reduce
+  // the tyre budget. Fade out as the dedicated drift model takes over.
+  const gripSpeed = Math.max(0, Math.min(1, (v - 16) / 18))
+  const lateralGrip = 1 + 0.24 * gripSpeed * gripSpeed * (3 - 2 * gripSpeed) *
+    (input.handbrake ? 0 : 1 - drift)
 
   // --- steering ------------------------------------------------------------
   // The wheels take a moment to get there. Without this the car changes
@@ -871,7 +878,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
   const assist = input.handbrake ? 0.12 * TUNE.autoCountersteer : Math.min(0.9, TUNE.autoCountersteer * 2)
   const counter = beta * recovery * assist * Math.min(1, v / 8)
   const wanted = Math.max(-TUNE.steerLock, Math.min(TUNE.steerLock,
-    steerCommand * maxSteer(v, catching) + counter))
+    steerCommand * maxSteer(v, catching, lateralGrip) + counter))
   car.steerAngle += (wanted - car.steerAngle) * (1 - Math.exp(-18 * dt))
   car.caught = recovery > 0.5 && !input.handbrake
   const delta = car.steerAngle
@@ -1156,7 +1163,7 @@ function integrate(track: Track, car: CarState, input: CarInput, dt: number) {
     const demand = Math.max(1e-6, Math.hypot(qx, qy))
     const saturation = Math.tanh(demand)
     const fx = budget * saturation * qx / demand
-    const fy = budget * saturation * qy / demand
+    const fy = budget * lateralGrip * saturation * qy / demand
     wheel.used = saturation
 
     // --- the wheel itself --------------------------------------------------
@@ -2167,7 +2174,7 @@ export function advanceCar(
 ): void {
   // A tab that was in the background hands back a huge delta. Simulating it is
   // both slow and wrong; the honest thing is to drop the missing time.
-  let left = Math.min(0.1, delta)
+  let left = raceFrameDelta(delta)
   // Edge-triggered, so holding the key does not empty the meter in one frame.
   const once: CarInput = { ...input }
   while (left > 0) {

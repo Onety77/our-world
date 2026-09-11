@@ -11,6 +11,7 @@
     "rules": "node scripts/rules.mjs",
     "rally": "npx --yes tsx scripts/rally-check.ts",
     "handling": "npx --yes tsx scripts/handling-check.ts",
+    "grip-corners": "npx --yes tsx scripts/grip-corner-check.ts",
     "tris": "npx --yes tsx scripts/tri-count.ts",
     "scatter": "npx --yes tsx scripts/scatter-check.ts",
     "shaders": "npx --yes tsx scripts/shader-check.ts",
