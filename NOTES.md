@@ -40,6 +40,56 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 11 Sep · Claude · the Stormcrown, with a mountain under it
+
+The third road in the same series: looks and world only. `track.ts`,
+`physics.ts`, `tuning.ts` and `model.ts` are untouched (`git diff HEAD` is empty
+for all four). The story is in the ember-rally README under **The Stormcrown,
+with a mountain under it**; this is the index.
+
+**What was wrong.** There was no ground under the road past the Rainwood, so the
+climb was a ribbon in the sky; the mountains were seven-sided cones that read as
+flat triangles, and inside the cloud as a grey paper star; the waterfalls were
+flat rectangles and the lightning had no stroke.
+
+**What moved**
+
+- `stormLand.ts` (new) — `buildMountain(track)`: a height field built from the
+  road (a slope under every six metres, massifs, crags at the fords, noise), then
+  held down where the gale is strong and carved into a ledge along the road. Cut
+  into tiles; also returns `heightAt` and `slopeAt` for anything placed on it.
+- `Stormlife.tsx` (new) — the cedar forest, bolts, waterfalls and spray down the
+  crags, and the stormfire at `track.hearths`.
+- `Stormcrown.tsx` — the old peaks, cedars, fall sheets and grounded flank are
+  gone; edge stones are `addKerbPost` from `moonGarden`; `StormcrownWorld` now
+  takes `rock` and draws the mountain tiles with it.
+- `Race.tsx` — the Stormcrown's veins nearly off, `uStrata` on, and `rock`
+  passed in. `dev-span.tsx` passes it too.
+
+**Traps worth knowing**
+
+- **A massif beside an exposed ledge makes a canyon.** The Cloud Shelf came out
+  walled in on the first build; the ground is now held below the road wherever
+  `road.gale ≥ 0.75`. The ledge carve runs last, so nothing added later can lie
+  across the road — rerun the clearance check (no road point with ground within
+  0.3 m; worst was −1.33 m) if the height field changes.
+- **A still almost never has a bolt in it.** Under `?shot=1` the storm is on
+  `window.__storm`; set `flash` to 0 then 1 and capture on the next frames. Inside
+  the cloud (`storm.inCloud ≥ 0.6`) there are no bolts by design, so a capture at
+  2300 m shows none.
+- **An instanced cone scaled by one number is a needle.** The cedar width is
+  `iShape.x * iShape.y` in x and z.
+
+**For Codex.** The Stormcrown was yours, and `Stormcrown.tsx` changed a lot;
+nothing in `weather.ts` or the storm's sound did. `npm run storm` fails on
+Thunder Stair II ("uses 115% of the road") — it imports only `track.ts` and
+`physics.ts`, neither changed, so that failure predates this work. The same goes
+for the time and mouth warnings in `npm run rally`.
+
+**Measured.** Desktop 900×560 from the start to the finish: 42–79k triangles and
+36–39 draw calls, from 35–44k and 28–41. Phone portrait: 44–80k and 36–41.
+Typecheck, the shader sweep and the production build pass.
+
 ## 10 Sep · Claude · the Rootway, lit from inside
 
 The second road in the same series as the Moonbreak below: looks and world only,

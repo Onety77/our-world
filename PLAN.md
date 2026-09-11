@@ -1616,6 +1616,17 @@ handling changed.
       sparks off both hearths. All of it placed from the road itself, because the
       road is dealt from a seed; nothing on the driveable stone; no change to the
       road
+- [x] **The Stormcrown, with a mountain under it.** The road climbed a hundred
+      and thirty-nine metres up nothing — a slab with a skirt, laid in the sky,
+      with seven-sided cones for mountains, flat blue rectangles for waterfalls
+      and a white flash for lightning. Now a mountain built out of the road
+      itself, cliffs where the road runs the windward face and a forest floor
+      under the Rainwood, the Thunder Stair stacked on one hillside, ridged
+      massifs snowed down to the cloud top, crags over the fords with the falls
+      coming down their faces, a cedar forest leaning in the gale, bolts you can
+      see — onto the lightning rods now and then — the stormfire at both
+      hearths, and stone posts at the edge. A ledge is carved for the road so
+      nothing lies across it; no change to the road, the lanes or the corners
 - [x] **The Glasshouse, the fifth place.** An iron conservatory built out of
       every picture the two of you keep: one instanced quad per memory in its
       own average colour for the whole building, the real photograph for the

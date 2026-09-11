@@ -34,6 +34,9 @@ import {
 } from './track'
 import { storm } from './weather'
 import { StormcrownSound } from './StormcrownSound'
+import { buildMountain } from './stormLand'
+import { Stormlife } from './Stormlife'
+import { addKerbPost } from './moonGarden'
 
 const RING = 2
 const CHUNK = 60
@@ -46,12 +49,6 @@ const ROAD_FALL = new Color('#303a3d')
 const EDGE = new Color('#aab0ae')
 const SHOULDER = new Color('#283331')
 const CLIFF = new Color('#161d20')
-const PEAK = new Color('#2b3538')
-/** What the tops go above the cloud line. Not white: starlight on old snow. */
-const SNOW = new Color('#8e9aa6')
-const CEDAR = new Color('#132b27')
-const CEDAR_PALE = new Color('#25413a')
-const BARK = new Color('#332d2a')
 const ROD = new Color('#84999e')
 
 function hash3(a: number, b: number, c: number): number {
@@ -130,162 +127,6 @@ function addBox(
   mesh.quad(base, base + 1, base + 3, base + 2)
 }
 
-function addCedarTier(
-  mesh: CourseMesh,
-  road: ReturnType<typeof emptyRoad>,
-  basis: RoadBasis,
-  n: number,
-  y: number,
-  radius: number,
-  high: number,
-  color: Color,
-) {
-  const sides = 6
-  const base = mesh.count
-  for (let k = 0; k < sides; k++) {
-    const angle = (k / sides) * Math.PI * 2
-    roadPoint(road, n + Math.cos(angle) * radius, y + Math.sin(angle) * radius * 0.1, point, basis)
-    point.x += basis.fx * Math.sin(angle) * radius
-    point.y += basis.fy * Math.sin(angle) * radius
-    point.z += basis.fz * Math.sin(angle) * radius
-    mesh.vertex(point, color, 0.42, 1)
-  }
-  roadPoint(road, n, y + high, point, basis)
-  mesh.vertex(point, color, 0.35, 1)
-  for (let k = 0; k < sides; k++) mesh.triangle(base + k, base + ((k + 1) % sides), base + sides)
-}
-
-function addCedar(mesh: CourseMesh, track: Track, s: number, side: number, seed: number) {
-  const road = roadAt(track, s)
-  const basis = basisAt(road, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
-  const n = side * (road.width + vergeWidth(road.room) + 2.2 + hash3(seed, 2, 4) * 5.2)
-  const height = 8 + hash3(seed, 5, 7) * 8
-  addBox(mesh, road, basis, n, -0.3, 0.22, 0.22, height * 0.54, BARK, 1)
-  for (let tier = 0; tier < 4; tier++) {
-    const t = tier / 4
-    addCedarTier(
-      mesh,
-      road,
-      basis,
-      n,
-      height * (0.18 + t * 0.16),
-      height * (0.22 - t * 0.028),
-      height * (0.48 - t * 0.055),
-      (seed + tier) % 3 === 0 ? CEDAR_PALE : CEDAR,
-    )
-  }
-}
-
-/**
- * The mountains, which are the only thing on this road you cannot drive to.
- *
- * ---------------------------------------------------------------------------
- * **A cone is not a mountain. It is a triangle, and at any distance it reads as
- * exactly that: one flat shape, one flat colour, pasted on the sky.**
- *
- * These were seven-sided cones with a single apex, and at the summit — the one
- * place on this road where you can see anything at all — the nearest of them
- * was a black triangle sitting in a starfield. Three things fix it, and they
- * are all about refusing to be one shape:
- *
- *   a ridge, not a peak   three summits of different heights on one massif,
- *                         the tallest off-centre. A real mountain seen from
- *                         one side is a *line* with high points in it
- *   an uneven skirt       eleven sides at varying radius, so no two facets
- *                         catch the light alike and the silhouette has
- *                         shoulders in it
- *   snow above the cloud  the upper slopes go pale, and — the part that
- *                         matters — the line where they do is the same height
- *                         the cloud tops out at. So from up in the clear the
- *                         peaks are the only other things above the weather,
- *                         and they are lit like you are
- *
- * That last one is why they are worth having at all: without it, a mountain in
- * the dark is a hole in the sky. With it, it is the thing that tells you how
- * high you have come.
- * ---------------------------------------------------------------------------
- */
-function addPeak(mesh: CourseMesh, track: Track, s: number, side: number, seed: number) {
-  const road = roadAt(track, s)
-  const basis = basisAt(road, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
-  const SIDES = 11
-  const FOOT = -12
-
-  // Well beyond the edge-stone rhythm: at forty metres these fill the frame.
-  const radius = 38 + hash3(seed, 3, 8) * 40
-  const n = side * (road.width + 135 + hash3(seed, 8, 2) * 120)
-  const high = 62 + hash3(seed, 9, 4) * 58
-
-  /*
-    How pale the rock is at a given height.
-
-    Zero below the cloud tops and climbing to nearly white above them. The
-    comparison is against the *world's* cloud height rather than against this
-    mountain's own summit, so a low hill stays dark and a tall one is capped —
-    which is the difference between snow and a gradient.
-  */
-  const paleAt = (y: number) => {
-    const above = (road.y + y - CLOUD_TOP) / 26
-    return Math.max(0, Math.min(1, above))
-  }
-
-  const put = (offN: number, offF: number, y: number, jitter: number) => {
-    roadPoint(road, n + offN, y, point, basis)
-    point.x += basis.fx * offF
-    point.z += basis.fz * offF
-    tint
-      .copy(PEAK)
-      .lerp(SNOW, paleAt(y) * 0.86)
-      .multiplyScalar(0.76 + jitter * 0.3)
-    mesh.vertex(point, tint, 0.35, 1)
-    return mesh.count - 1
-  }
-
-  // The skirt: eleven points, none of them at the same distance out.
-  const skirt: number[] = []
-  for (let k = 0; k < SIDES; k++) {
-    const angle = (k / SIDES) * Math.PI * 2
-    const r = radius * (0.72 + hash3(seed, k, 5) * 0.62)
-    skirt.push(put(Math.cos(angle) * r, Math.sin(angle) * r, FOOT, hash3(seed, k, 1)))
-  }
-
-  /*
-    Three summits along one line, and the line is not square to the road.
-
-    Set across the massif on a bearing of its own so the ridge is seen at an
-    angle from the car rather than end-on or broadside — end-on is a cone
-    again, and broadside is a wall.
-  */
-  const bearing = hash3(seed, 2, 7) * Math.PI
-  const spread = radius * 0.52
-  const tops: number[] = []
-  for (let i = 0; i < 3; i++) {
-    const along = (i - 1) * spread
-    // Tallest off-centre, and the other two well below it.
-    const drop = i === 1 ? 0 : 0.24 + hash3(seed, i, 11) * 0.26
-    const y = high * (1 - drop)
-    tops.push(
-      put(
-        Math.cos(bearing) * along + (hash3(seed, i, 3) - 0.5) * 9,
-        Math.sin(bearing) * along,
-        y,
-        hash3(seed, i, 9),
-      ),
-    )
-  }
-
-  // Skirt to whichever summit is nearest round the ring, so the slopes fall
-  // away toward the shoulders rather than all meeting at one point.
-  for (let k = 0; k < SIDES; k++) {
-    const next = (k + 1) % SIDES
-    const share = Math.floor((k / SIDES) * 3 + 0.5) % 3
-    mesh.triangle(skirt[k], skirt[next], tops[share])
-  }
-  // And the ridge itself, closing the gaps between the three.
-  mesh.triangle(tops[0], tops[1], skirt[Math.floor(SIDES * 0.15)])
-  mesh.triangle(tops[1], tops[2], skirt[Math.floor(SIDES * 0.65)])
-}
-
 /** The mountain road in the same cullable format as the other two courses. */
 export function buildStormcrown(track: Track): TunnelChunk[] {
   const rings = Math.floor(track.length / RING) + 1
@@ -305,15 +146,21 @@ export function buildStormcrown(track: Track): TunnelChunk[] {
       const s = ring * RING
       roadAt(track, s, road)
       basisAt(road, basis)
-      const grounded = s < STORMCROWN.cloudShelf.from || s > STORMCROWN.stormfall.to
-      const wall = road.width + vergeWidth(road.room) + (grounded ? 8 : 0)
+      /*
+        The flank only has to reach the ground now, because there is ground:
+        the mountain under the road lies a couple of metres below its surface
+        right the way along (see `stormLand`). It used to be a flat black slab
+        eight metres wide in the forest and a three-metre skirt over nothing
+        everywhere else.
+      */
+      const wall = road.width + vergeWidth(road.room)
       const offsets = [
         -wall, -wall, -road.width, -road.width * 0.92, -road.width * 0.62,
         -road.width * 0.31, 0,
         road.width * 0.31, road.width * 0.62, road.width * 0.92, road.width,
         wall, wall,
       ]
-      const drop = grounded ? -0.52 : -3.8
+      const drop = -3.2
       const heights = [drop, 0.06, 0.025, 0.04, 0.052, 0.062, 0.068, 0.062, 0.052, 0.04, 0.025, 0.06, drop]
       const base = mesh.count
 
@@ -354,41 +201,20 @@ export function buildStormcrown(track: Track): TunnelChunk[] {
   }
 
   const chunkFor = (s: number) => Math.max(0, Math.min(chunkCount - 1, Math.floor(s / CHUNK)))
-  const rng = random(track.seed ^ 0x2d7619)
 
-  // The close forest falls away as the road reaches cloud, then returns low.
-  let treeSeed = 1
-  for (let s = 28; s < track.finishAt - 30; s += 24 + rng() * 24) {
-    const forest = s < STORMCROWN.cloudShelf.from - 60 || s > STORMCROWN.stormfall.to - 40
-    if (!forest) continue
-    const side = rng() < 0.5 ? -1 : 1
-    addCedar(meshes[chunkFor(s)], track, s, side, treeSeed++)
-    if (s < STORMCROWN.rainwood.to && rng() > 0.46) {
-      const other = Math.min(track.finishAt - 40, s + 8 + rng() * 13)
-      addCedar(meshes[chunkFor(other)], track, other, -side, treeSeed++)
-    }
-  }
+  /*
+    The cedars and the far peaks are not built here any more. The peaks are
+    massifs in the mountain itself, and the cedars a forest on its slopes —
+    both in `stormLand`, because both stand on the ground rather than beside
+    the road, and there was no ground until there was a mountain.
+  */
 
-  // Low, irregular edge stones: visible consequence without a modern rail.
+  // Edge posts along the exposed road: weathered, not cut yesterday. See `addKerbPost`.
   for (let s = STORMCROWN.cloudShelf.from; s < STORMCROWN.stormfall.to; s += 17) {
-    const at = roadAt(track, s)
-    const frame = basisAt(at, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
     for (const side of [-1, 1]) {
       if (hash3(s, side, 9) < 0.2) continue
-      addBox(
-        meshes[chunkFor(s)], at, frame,
-        side * (at.width + vergeWidth(at.room) - 0.2),
-        0.02, 0.28 + hash3(s, side, 2) * 0.28, 0.2,
-        0.42 + hash3(s, side, 3) * 0.52, EDGE,
-      )
+      addKerbPost(meshes[chunkFor(s)], track, s, side, hash3(s, side, 3) > 0.55)
     }
-  }
-
-  // Distant silhouettes repeat slowly enough to establish scale, not clutter.
-  let peakSeed = 400
-  for (let s = STORMCROWN.cloudShelf.from + 70; s < STORMCROWN.lastRun.from; s += 235) {
-    const side = peakSeed % 2 === 0 ? -1 : 1
-    addPeak(meshes[chunkFor(s)], track, s, side, peakSeed++)
   }
 
   // Slender old rods are both lightning landmarks and metre-reading at speed.
@@ -623,34 +449,21 @@ const RAIN_FRAG = /* glsl */ `
     float line = 1.0 - smoothstep(0.06, 0.18, abs(p.x));
     float ends = smoothstep(0.5, 0.28, abs(p.y));
     // A little softer as it eases off, on top of there being fewer of them.
-    float body = 0.30 + vRain * 0.16;
+    float body = 0.42 + vRain * 0.2;
     gl_FragColor = vec4(0.66, 0.78, 0.82, line * ends * body);
   }
 `
 
-const FALL_FRAG = /* glsl */ `
-  precision mediump float;
-  varying vec2 vUv;
-  uniform float uTime;
-  float hash(vec2 p) { return fract(sin(dot(floor(p), vec2(127.1, 311.7))) * 43758.5453); }
-  void main() {
-    float stream = hash(vec2(floor(vUv.x * 38.0), floor((vUv.y + uTime * 0.55) * 28.0)));
-    float threads = smoothstep(0.56, 0.9, stream) * smoothstep(0.02, 0.14, vUv.x) * smoothstep(0.98, 0.84, vUv.x);
-    float fade = smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.72, vUv.y);
-    gl_FragColor = vec4(0.52, 0.72, 0.76, (0.12 + threads * 0.44) * fade);
-  }
-`
-
-const FALL_VERT = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
-
 /** Sky, cloud ocean, near-camera rain and the three Stormfall ribbons. */
-export function StormcrownWorld({ track }: { track: Track }) {
+export function StormcrownWorld({ track, rock }: { track: Track; rock: ShaderMaterial }) {
+  /*
+    The mountain, drawn with the road's own material so the headlamps, the
+    lanterns, the fog and every lightning flash light it exactly as they light
+    the road standing on it.
+  */
+  const mountain = useMemo(() => buildMountain(track), [track])
+  useEffect(() => () => mountain.tiles.forEach((tile) => tile.geometry.dispose()), [mountain])
+  const tileRefs = useRef<Mesh[]>([])
   const rainRef = useRef<Points>(null)
   const cloudRef = useRef<Mesh>(null)
   const skyRef = useRef<Mesh>(null)
@@ -710,14 +523,6 @@ export function StormcrownWorld({ track }: { track: Track }) {
     depthWrite: false,
     uniforms: { uTime: { value: 0 }, uRain: { value: 0 }, uWind: { value: new Vector2() } },
   }), [])
-  const fall = useMemo(() => new ShaderMaterial({
-    vertexShader: FALL_VERT,
-    fragmentShader: FALL_FRAG,
-    side: DoubleSide,
-    transparent: true,
-    depthWrite: false,
-    uniforms: { uTime: { value: 0 } },
-  }), [])
   const rainGeometry = useMemo(() => {
     /*
       Enough drops, close enough, to actually be rain.
@@ -757,28 +562,18 @@ export function StormcrownWorld({ track }: { track: Track }) {
     geometry.setAttribute('position', new BufferAttribute(positions, 3))
     return geometry
   }, [track.seed])
-  const falls = useMemo(() => STORMCROWN.waterfalls.map((s, index) => {
-    const road = roadAt(track, s)
-    const basis = basisAt(road, { fx: 0, fy: 0, fz: 1, rx: -1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 })
-    const side = index % 2 === 0 ? -1 : 1
-    const at = roadPoint(road, side * (road.width + 10 + index * 2), 11, new Vector3(), basis)
-    return { at: at.toArray() as [number, number, number], rotation: road.heading - Math.PI / 2, width: 11 + index * 4 }
-  }), [track])
-
   useEffect(() => () => {
     sky.dispose()
     cloud.dispose()
     rain.dispose()
-    fall.dispose()
     rainGeometry.dispose()
-  }, [sky, cloud, rain, fall, rainGeometry])
+  }, [sky, cloud, rain, rainGeometry])
 
   useFrame(({ camera }, delta) => {
     const step = Math.min(0.05, delta)
     sky.uniforms.uTime.value += step
     cloud.uniforms.uTime.value += step
     rain.uniforms.uTime.value += step
-    fall.uniforms.uTime.value += step
     rainRef.current?.position.copy(camera.position)
     skyRef.current?.position.copy(camera.position)
 
@@ -826,6 +621,20 @@ export function StormcrownWorld({ track }: { track: Track }) {
     */
     cloudRef.current?.position.setY(bounds.floorY)
     if (cloudRef.current) cloudRef.current.visible = storm.inCloud < 0.92
+
+    /*
+      Only the ground there is to see. Under the cloud the fog closes at sixty
+      metres and a tile past that is pure fog colour; above it, a tile lying
+      wholly under the cloud sea is under the cloud.
+    */
+    const far = rock.uniforms.uFogFar.value as number
+    for (let i = 0; i < mountain.tiles.length; i++) {
+      const mesh = tileRefs.current[i]
+      if (!mesh) continue
+      const tile = mountain.tiles[i]
+      const away = camera.position.distanceTo(tile.centre) - tile.radius
+      mesh.visible = away < far * 1.05 && !(storm.above > 0.5 && tile.top < bounds.floorY - 8)
+    }
   })
 
   return (
@@ -844,6 +653,16 @@ export function StormcrownWorld({ track }: { track: Track }) {
       <mesh ref={skyRef} frustumCulled={false} material={sky}>
         <sphereGeometry args={[1600, 28, 16]} />
       </mesh>
+      {mountain.tiles.map((tile, i) => (
+        <mesh
+          key={`ground-${i}`}
+          ref={(node) => {
+            if (node) tileRefs.current[i] = node
+          }}
+          geometry={tile.geometry}
+          material={rock}
+        />
+      ))}
       <mesh
         position={[bounds.x, bounds.y, bounds.z]}
         ref={cloudRef}
@@ -853,17 +672,8 @@ export function StormcrownWorld({ track }: { track: Track }) {
       >
         <planeGeometry args={[bounds.size, bounds.size, 1, 1]} />
       </mesh>
-      {falls.map((waterfall, index) => (
-        <mesh
-          key={STORMCROWN.waterfalls[index]}
-          position={waterfall.at}
-          rotation={[0, waterfall.rotation, 0]}
-          material={fall}
-          renderOrder={1}
-        >
-          <planeGeometry args={[waterfall.width, 31 + index * 5, 1, 1]} />
-        </mesh>
-      ))}
+      {/* The forest, the bolts, the falls down the crags and the stormfire. */}
+      <Stormlife track={track} mountain={mountain} rock={rock} />
       <points ref={rainRef} geometry={rainGeometry} material={rain} frustumCulled={false} renderOrder={4} />
     </>
   )

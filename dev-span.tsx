@@ -184,7 +184,7 @@ export default function Span() {
   return (
     <>
       {STAGE === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
-      {STAGE === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
+      {STAGE === 'stormcrown' ? <StormcrownWorld track={track} rock={rock} /> : null}
       {chunks.map((chunk, i) => (
         <mesh
           key={i}

@@ -425,7 +425,11 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       next.uniforms.uSpotColor.value.set('#e8f2ff')
     } else if (track.stage === 'stormcrown') {
       next.uniforms.uAmbient.value.set('#86999d')
-      next.uniforms.uVeinColor.value.set('#bdd9dc')
+      // Nearly off. A pale vein colour on dark mountain rock is a starfield of
+      // glitter across every cliff and every cedar.
+      next.uniforms.uVeinColor.value.set('#1d2a2c')
+      // A mountain is laid down in beds as a cave is. See `uStrata`.
+      next.uniforms.uStrata.value = 1
       next.uniforms.uFogColor.value.set('#172126')
       next.uniforms.uFogNear.value = 48
       next.uniforms.uFogFar.value = 205
@@ -616,7 +620,7 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
       />
 
       {track.stage === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
-      {track.stage === 'stormcrown' ? <StormcrownWorld track={track} /> : null}
+      {track.stage === 'stormcrown' ? <StormcrownWorld track={track} rock={rockMaterial} /> : null}
       {track.stage === 'harmattan' ? <HarmattanWorld track={track} /> : null}
       {/*
         The Rootway has no world component of its own — the tunnel, the lamps

@@ -658,6 +658,66 @@ the cairns always were, and everything larger stands past the edge the physics
 stops the car at. Measured at the countdown on the desktop frame: 41–45 thousand
 triangles and 27–30 draw calls, from 35–40 thousand and 24–26 before.
 
+### The Stormcrown, with a mountain under it
+
+The road climbed a hundred and thirty-nine metres up nothing. Under the Rainwood
+it was a flat black slab with a three-metre skirt, and under the climb, the Cloud
+Shelf, the Thunder Stair and the ridge there was no ground at all — from the Eye
+it was a toy track hanging over a cloud sea. The mountains were seven-sided cones
+standing some way off, and inside the cloud the fog flattened the nearest into a
+grey paper star beside the road. The forest was a few flat cones along the verge,
+the waterfalls were flat blue rectangles standing in the fog, the lightning was
+the world going white with nothing in the sky to cause it, and the edge stones
+were the pale cubes the Moonbreak used to have.
+
+What it is now, and where each piece lives:
+
+- **A mountain built out of the road** (`stormLand.ts`). A slope falls away from
+  every six metres of road: steep where the road runs the windward face, so the
+  Cloud Shelf and the Crown are cut into cliffs, and barely a slope in the
+  Rainwood, which is what a forest floor is. Taking the highest of them at each
+  point stacks the Thunder Stair's switchbacks on one hillside instead of floating
+  them past each other. Ridged massifs stand where the old cones stood, snow on
+  their gentle slopes from just under the cloud top, so from up in the clear they
+  are the only other things above the weather. A crag stands over every ford.
+- **Two carves keep the road the road.** Where the gale is strong the ground is
+  held below the road for a long way out, so a massif cannot turn an exposed ledge
+  into a canyon — the first build did exactly that to the Cloud Shelf. Then a
+  ledge is cut every three metres: flat for a few metres past the edge the car is
+  stopped at, then up at a cutting's angle. Checked in Node: nowhere along the
+  road does ground come within 0.3 m of the surface, and the nearest lies 1.33 m
+  under it.
+- **Drawn in tiles.** 108 of them, 74 thousand triangles in all, built in 60–140
+  ms. Below the cloud only the tiles inside the fog are drawn; above it, the tiles
+  lying wholly under the cloud sea are left out, because the cloud is over them.
+- **The Rainwood is a forest** (`Stormlife.tsx`). Instanced cedars, five drooping
+  ragged tiers each, on every slope under the cloud gentle enough to hold them —
+  thick at the road, thinning out to 170 m, leaning in the gale. Groves are culled
+  by the fog and dropped above the cloud; a quarter fewer trees on medium quality,
+  over half fewer on low.
+- **Lightning you can see.** A flash now has a stroke in it: a branching bolt of
+  camera-facing ribbons, fired when the flash jumps, aimed into the frame. Under
+  the cloud it comes down out of the base — and when a lightning rod stands in view
+  up the road, half the time onto the rod, which is what the rods are for. Above
+  the cloud it crawls through the top of the cloud sea below you. Inside the cloud
+  there is none, because there you could not see one.
+- **Waterfalls down the rock.** Each is draped down the real face of its crag to
+  the road edge, with spray where it lands. The sheet that used to be laid across
+  the road is gone: at a ford it drew grey stripes over the asphalt.
+- **The stormfire** burns at both hearths, which the finish avenue has always
+  walked you toward and which was never drawn.
+- **Stone, not sugar.** The edge stones are the Moonbreak's weathered kerb posts;
+  the rock is laid in beds (`uStrata`), and the veins are turned nearly off, since
+  a pale vein colour on dark mountain rock is glitter across every cliff.
+
+Everything lit reads the road's own light block — `StormcrownWorld` takes the rock
+material as `rock` — so a flash lights a cedar at the same instant as the stone.
+Nothing stands on the driveable road, and `track.ts` and `physics.ts` are
+untouched. Measured on the desktop frame (900×560) from the start to the finish:
+42–79 thousand triangles and 36–39 draw calls, from 35–44 thousand and 28–41. On
+a phone-portrait frame: 44–80 thousand and 36–41. The heaviest single thing is the
+nearest cedar grove, at 14 thousand.
+
 ## The car is tuned from the control room, not from here
 
 **Roughly forty of the numbers that used to be constants in `physics.ts`,
