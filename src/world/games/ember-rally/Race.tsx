@@ -31,6 +31,7 @@ import { ambience, type EngineVoice } from '@/systems/ambience'
 import { useQuality } from '@/systems/quality'
 import { AXLE_FRONT, AXLE_HALF_TRACK, AXLE_REAR, WHEEL_RADIUS } from './car'
 import { ChaseCamera, planShots, type Shot } from './camera'
+import { BonnetCamera } from './bonnetCamera'
 import { attachControls, type RallyControls } from './controls'
 import { spiritDriver } from './spirit'
 import { raceFrameDelta } from './frameTime'
@@ -577,8 +578,12 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
   useEffect(() => {
     const perspective = camera as PerspectiveCamera
     const was = perspective.fov
+    const near = perspective.near
+    const up = perspective.up.clone()
     return () => {
       perspective.fov = was
+      perspective.near = near
+      perspective.up.copy(up)
       perspective.updateProjectionMatrix()
     }
   }, [camera])
@@ -881,6 +886,8 @@ class Driving {
   private readonly car: CarState
   private recorder = new Recorder()
   private readonly chase = new ChaseCamera()
+  private readonly bonnet = new BonnetCamera()
+  private bonnetActive = false
   private controls: RallyControls | null = null
   private engine: EngineVoice | null = null
 
@@ -1077,6 +1084,11 @@ class Driving {
 
   frame(args: FrameArgs) {
     const session = useRace.getState()
+    if (session.phase === 'replay' && this.bonnetActive) {
+      this.bonnet.restore(args.camera)
+      this.bonnetActive = false
+      this.chase.reset()
+    }
     if (session.attempt !== this.attempt) this.restart(session.attempt)
     if (!this.cleared) {
       this.cleared = true
@@ -1766,6 +1778,16 @@ class Driving {
     if (car.slam > 0.02) this.chase.jolt(car.slam * 1.1)
     if (car.hitStone) this.chase.jolt(0.5)
     this.settle += ((phase === 'finished' ? 1 : 0) - this.settle) * (1 - Math.exp(-1.6 * delta))
+    const bonnet = session.cameraView === 'bonnet' && phase !== 'finished'
+    if (bonnet !== this.bonnetActive) {
+      this.bonnet.restore(args.camera)
+      this.chase.reset()
+      this.bonnetActive = bonnet
+    }
+    if (bonnet) {
+      this.bonnet.update(args.camera, args.mine.body, car, delta)
+      return
+    }
     this.chase.update(
       args.camera,
       track,

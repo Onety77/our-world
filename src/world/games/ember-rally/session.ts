@@ -25,6 +25,8 @@ export type RacePhase = 'off' | 'ready' | 'running' | 'finished' | 'replay'
 
 export interface RaceSession {
   phase: RacePhase
+  cameraView: 'chase' | 'bonnet'
+  toggleCamera(): void
   /**
    * Which go this is. Counts up every time a road is opened.
    *
@@ -132,6 +134,8 @@ export interface RaceSession {
 
 export const useRace = create<RaceSession>((set) => ({
   phase: 'off',
+  cameraView: 'chase',
+  toggleCamera: () => set(s => ({ cameraView: s.cameraView === 'chase' ? 'bonnet' : 'chase' })),
   attempt: 0,
   track: null,
   ghost: null,

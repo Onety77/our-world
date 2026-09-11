@@ -91,7 +91,7 @@ const FOV_REFERENCE_ASPECT = 1.78
  * already has an opinion about that case. One of them is enough.
  * ---------------------------------------------------------------------------
  */
-function fitToScreen(vertical: number, aspect: number): number {
+export function fitToScreen(vertical: number, aspect: number): number {
   if (!Number.isFinite(aspect) || aspect <= FOV_REFERENCE_ASPECT) return vertical
   const radians = (vertical * Math.PI) / 180
   const horizontal = 2 * Math.atan(Math.tan(radians / 2) * FOV_REFERENCE_ASPECT)
