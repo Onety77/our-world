@@ -51,6 +51,7 @@ import { buildMoonbreak, MoonbreakWorld } from './Moonbreak'
 import { MOON } from './moonlight'
 import { buildStormcrown, StormcrownWorld } from './Stormcrown'
 import { buildHarmattan, HarmattanWorld } from './Harmattan'
+import { laySurface } from './roadSurface'
 import { dust, district } from './dust'
 import { deep } from './depth'
 import { storm } from './weather'
@@ -470,16 +471,18 @@ function RallyCourse({ track, mode }: { track: Track; mode: 'race' | 'replay' })
   const markMaterial = useMarkMaterial(lights)
 
   // --- the road ------------------------------------------------------------
-  const chunks = useMemo(
-    () => track.stage === 'moonbreak'
+  const chunks = useMemo(() => {
+    const built = track.stage === 'moonbreak'
       ? buildMoonbreak(track)
       : track.stage === 'harmattan'
         ? buildHarmattan(track)
         : track.stage === 'stormcrown'
           ? buildStormcrown(track)
-          : buildTunnel(track),
-    [track],
-  )
+          : buildTunnel(track)
+    // The wheels stand on exactly this geometry — see `roadSurface`.
+    laySurface(track, built)
+    return built
+  }, [track])
   useEffect(() => () => chunks.forEach((chunk) => chunk.geometry.dispose()), [chunks])
   const chunkMeshes = useRef<Mesh[]>([])
 

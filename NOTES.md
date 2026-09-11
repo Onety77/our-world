@@ -40,6 +40,54 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 11 Sep · Claude · the wheels stand on the drawn road, on all four
+
+Codex's render-only tyre contact for the Harmattan, taken to every road, and
+rebuilt on the way. Physics, controls, handling and drift untouched (`npm run
+drift` and `npm run rally` unchanged; `physics.ts`, `tuning.ts`, `track.ts` have
+no diff). The story is in the ember-rally README under **The wheels stand on the
+drawn road**; this is the index.
+
+**Why rebuilt.** `harmattanSurface.ts` reconstructed the Harmattan's mesh a
+second time, and its check assumed thirteen vertices a ring; the road went to
+seventeen the next day and the check failed. One road, two descriptions.
+
+**What moved**
+
+- `roadSurface.ts` (new) — `laySurface(track, chunks)` indexes the triangles
+  the builders mark as drivable; `surfaceOf(track)`; `supportAt(x, z, s, near,
+  window, elapsed)`. Applies the span's `aSwing`/`aSwayPhase` with the shader's
+  own formula.
+- `tyreContact.ts` — generic: stance fitted to the surface under four wheel
+  footprints, eased (`SETTLE` 0.05 s); tyres settled as rings read off
+  `buildWheel`, sampled every 10° round the bottom. No stage gate.
+- `geometry.ts`, `Moonbreak.tsx`, `Stormcrown.tsx`, `Harmattan.tsx` — each
+  mesh class has `deck()` (and Moonbreak `standOn()` for the boards); chunks
+  carry `tread`. `TunnelChunk.tread` added.
+- `harmattanSurface.ts` — down to `harmattanProfile`, the drawing's shape.
+- `rig.ts` — `placeTyreContact(rig, track, s, drop, elapsed)`.
+- `Race.tsx`, `dev-span.tsx` — `laySurface` where the chunks are built.
+  dev-span now takes `stage=harmattan`, `yaw=`, `spread=`, and settles tyres.
+- `scripts/tyre-contact-check.ts` — all four roads, grid vs flat scan, 6,652
+  poses, the driven-line continuity sweep, the no-surface fallback.
+
+**Traps worth knowing**
+
+- **The Rootway crosses itself on seed 7** at 2106 m / 1220 m, floors 55 cm
+  apart. A height window cannot separate them; the chunk's metres can.
+- **`track.split` is never set** anywhere at the moment, so the Rootwake is
+  not built and the check reports 0 poses on it. Its deck is tagged for when
+  it is.
+- **The Rootway's floor has ±1.75 cm of vertex grain.** A body that follows
+  every grain reads as jitter; hence the eased stance.
+- **The span's stance must sample a footprint, not a point:** a wheel centre
+  over the gap between two boards dropped the body six centimetres.
+
+**Measured.** All four roads, both seeds: every tyre vertex within 2.2 mm of
+sinking and 4.3 mm of floating (the block-on-a-plank-edge case); on a flat
+road a fraction of a millimetre. 0.29 ms a pose in Node, from 0.99 with the
+full 832-vertex tread. Race chunk 327.4 kB (111.0 gz), from 323.7.
+
 ## 11 Sep · Claude · the Harmattan, a place in the dust
 
 The last road in the series: looks and world only. `track.ts`, `physics.ts`,

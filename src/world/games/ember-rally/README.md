@@ -216,6 +216,48 @@ played one-handed. That is why the assists above existed: a driver who cannot
 lift cannot slow down for a corner, so every corner had to be survivable flat
 out. Giving the throttle back removed the reason for all of them.
 
+### The wheels stand on the drawn road
+
+The car used to be placed from one sample of the road under its middle — the
+written height, grade and bank — with every wheel at its resting height. The
+road as drawn is not quite that: it has a crown, the verge rises to a lip, a
+hairpin is banked, and the Swaying Span's deck rolls in the shader. So the tyres
+spent their time a few centimetres into the stone or hovering over it, worst on
+a slope or turned across a camber.
+
+The first correction, on the Harmattan, rebuilt that road's cross-section a
+second time in a separate file and stood the wheels on the copy. It worked until
+the road was redrawn a day later and the copy was not. Two descriptions of one
+road will not stay the same road, so now there is one:
+
+- **Every road builder marks what a wheel may stand on** — the road, the verge,
+  the deck boards of the span; not the walls, the vault or the skirts — and
+  hands those triangles over with the chunk (`TunnelChunk.tread`).
+- **`roadSurface.ts` indexes them** in a grid over the ground and answers "how
+  high is the drawn surface here". Every triangle remembers which stretch of
+  road it was built for, because roads cross and stack: the Thunder Stair's
+  switchbacks lie twenty metres over each other, the Rootwake thirty under the
+  Rootway, and on one seed the Rootway crosses *itself* with half a metre
+  between the floors. Triangles that carry the span's `aSwing` are moved by the
+  rock shader's own line, so the wheels ride the deck as it is on this frame.
+- **`tyreContact.ts` stands the car on it**, render-only. The road frame the
+  wheels hang off is fitted to the surface under the four wheels — a plane,
+  with the simulation's compass heading kept exactly — and eased over a
+  twentieth of a second, so the Rootway's drawn grain does not hop the whole
+  body at sixty frames a second. Then each tyre, as the rings of its own lathe
+  and tread blocks read off the wheel geometry, is settled on the surface under
+  it and the hub slides along the suspension until it just touches; the spring
+  stretches to follow. Nothing writes back to `CarState`.
+
+`npm run tyre-contact` builds all four roads with the real builders, checks the
+grid against a flat scan of the same triangles, poses the car 6,652 times — both
+seeds, four headings, the span in every phase of its swing — and measures every
+vertex of every tyre against the surface: within five millimetres, nearly all of
+which is the wheel's own forty-eight sides and its tread blocks standing two
+and a half millimetres proud of the rubber. Then it drives the racing line half a
+metre at a time and insists the fit never jumps. A pose costs about a third of a
+millisecond in Node.
+
 ## The drift is a game, and the rest is a car
 
 **This is the one place the simulation is switched off, on purpose.**
@@ -755,7 +797,8 @@ What it is now, and where each piece lives:
   first as one long function it took 636, because the engine will not optimise a
   function that size.
 - **The drawn road stops in a berm** (`harmattanVerge`). Across the road and the
-  verge the surface is exactly the plane `tyreContact` holds the wheels up on;
+  verge the surface is exactly `harmattanProfile`'s plane, the one cross-section
+  the road is drawn from;
   past the verge, where the physics never lets the car go, a grader's windrow
   rises and a skirt runs down to wherever the ground is — on the scarp a battered
   retaining wall of laterite blocks, holding one switchback up over the cutting of
@@ -910,6 +953,9 @@ it has cost real time four times now. The check cannot look for a backtick
 *inside* the template, because by definition there is never one there; it looks
 for the symptom instead. GLSL ends on a brace or a semicolon and prose ends on
 a word, so a shader that ends on a word closed itself in a comment.
+
+`npm run tyre-contact` is described under **The wheels stand on the drawn road**:
+all four roads, the real geometry, and every vertex of every tyre.
 
 ## What is not built yet
 

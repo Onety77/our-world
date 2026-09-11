@@ -142,6 +142,20 @@ class Mesh {
     this.index.push(a, b, c)
   }
 
+  /**
+   * Which of the index a wheel may stand on, as [from, to) pairs. A quad laid
+   * with `deck` is drivable; the walls and the vault are not. The wheels are
+   * placed on exactly these triangles — see `roadSurface`.
+   */
+  readonly tread: number[] = []
+
+  deck(a: number, b: number, c: number, d: number) {
+    const at = this.index.length
+    this.quad(a, b, c, d)
+    if (this.tread.length && this.tread[this.tread.length - 1] === at) this.tread[this.tread.length - 1] = at + 6
+    else this.tread.push(at, at + 6)
+  }
+
   build(): BufferGeometry {
     const geo = new BufferGeometry()
     geo.setAttribute('position', new BufferAttribute(new Float32Array(this.position), 3))
@@ -544,6 +558,8 @@ export interface TunnelChunk {
   geometry: BufferGeometry
   /** Present only on the Rootway, so the other tunnel can be culled. */
   shortcut?: boolean
+  /** Which of the geometry's index the wheels may stand on, as [from, to) pairs. See `roadSurface`. */
+  tread?: number[]
 }
 
 export function buildTunnel(track: Track): TunnelChunk[] {
@@ -634,7 +650,9 @@ export function buildTunnel(track: Track): TunnelChunk[] {
           // The right wall opens twice: into the hidden throat and where that
           // throat returns. Everywhere between, this remains a closed cave.
           if (junctionOpen && k >= 9 && k <= 13) continue
-          mesh.quad(previous + k, previous + k2, base + k2, base + k)
+          // The floor — the road and both verges — is what the wheels stand on.
+          if (k < ROAD_POINTS || k === 20 || k === 21) mesh.deck(previous + k, previous + k2, base + k2, base + k)
+          else mesh.quad(previous + k, previous + k2, base + k2, base + k)
         }
       }
     }
@@ -737,7 +755,8 @@ export function buildTunnel(track: Track): TunnelChunk[] {
             ) continue
             // At the far merge only the branch's inside half needs to open.
             if (exitOpen && k >= 16 && k <= 21) continue
-            mesh.quad(previous + k, previous + k2, base + k2, base + k)
+            if (k < ROAD_POINTS || k === 20 || k === 21) mesh.deck(previous + k, previous + k2, base + k2, base + k)
+            else mesh.quad(previous + k, previous + k2, base + k2, base + k)
           }
         }
         previous = base
@@ -745,7 +764,7 @@ export function buildTunnel(track: Track): TunnelChunk[] {
 
       const geometry = mesh.build()
       if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
-      shortcutChunks.push({ from, to, geometry, shortcut: true })
+      shortcutChunks.push({ from, to, geometry, shortcut: true, tread: mesh.tread })
     }
   }
 
@@ -903,7 +922,7 @@ export function buildTunnel(track: Track): TunnelChunk[] {
     // long, and that is fine: it is a coarse "is this anywhere near the
     // frame", and the real saving is the per-frame fog cut in the Stage.
     if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
-    return { from: span[i].from, to: span[i].to, geometry, shortcut: false }
+    return { from: span[i].from, to: span[i].to, geometry, shortcut: false, tread: mesh.tread }
   })
   return [...mainChunks, ...shortcutChunks]
 }

@@ -1639,6 +1639,13 @@ handling changed.
       adire cloth flying, camel caravans with riders veiled in indigo, vultures,
       dust devils, cooking smoke, doors on the houses and indigo in the dye pits.
       No change to the road, the lanes or the corners
+- [x] **The wheels stand on the drawn road.** On all four roads and the
+      Swaying Span as it swings: the road builders mark what is drivable, one
+      sampler indexes the rendered triangles, the car's road frame is fitted to
+      the surface under its four wheels and eased, and each tyre is settled on
+      what is under it to a few millimetres. Render-only; the physics, the
+      handling and the drift are untouched. `npm run tyre-contact` proves it on
+      6,652 poses
 - [x] **The Glasshouse, the fifth place.** An iron conservatory built out of
       every picture the two of you keep: one instanced quad per memory in its
       own average colour for the whole building, the real photograph for the

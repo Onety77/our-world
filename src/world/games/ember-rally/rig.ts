@@ -426,5 +426,11 @@ export function placeCar(
   rig.ground.rotation.set(-road.grade, 0, road.bank + swaying)
   rig.body.rotation.set(pitch, 0, roll)
   rig.body.position.y = heave
-  placeTyreContact(rig, track, s, drop)
+  /*
+    And then, where the road has been drawn, the picture corrects the notes:
+    the ground's tilt and height are refitted to the surface actually under
+    the four wheels. Everything above — bank, grade, the span's lift — is the
+    fallback for a car with no drawn road under it. See `tyreContact`.
+  */
+  placeTyreContact(rig, track, s, drop, elapsed)
 }

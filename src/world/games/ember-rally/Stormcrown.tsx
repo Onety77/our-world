@@ -80,6 +80,17 @@ class CourseMesh {
     this.index.push(a, b, c)
   }
 
+  /** Which of the index the wheels may stand on, as [from, to) pairs. See `roadSurface`. */
+  readonly tread: number[] = []
+
+  /** A quad a wheel may stand on: the road, its verge, and nothing that drops away. */
+  deck(a: number, b: number, c: number, d: number) {
+    const at = this.index.length
+    this.quad(a, b, c, d)
+    if (this.tread.length && this.tread[this.tread.length - 1] === at) this.tread[this.tread.length - 1] = at + 6
+    else this.tread.push(at, at + 6)
+  }
+
   build() {
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(this.position), 3))
@@ -195,7 +206,11 @@ export function buildStormcrown(track: Track): TunnelChunk[] {
 
       if (ring > first) {
         const previous = base - PROFILE
-        for (let k = 0; k < PROFILE - 1; k++) mesh.quad(previous + k, previous + k + 1, base + k + 1, base + k)
+        for (let k = 0; k < PROFILE - 1; k++) {
+          // Everything but the two drops is drivable: the verge tops and the road between.
+          if (k === 0 || k === PROFILE - 2) mesh.quad(previous + k, previous + k + 1, base + k + 1, base + k)
+          else mesh.deck(previous + k, previous + k + 1, base + k + 1, base + k)
+        }
       }
     }
   }
@@ -236,7 +251,7 @@ export function buildStormcrown(track: Track): TunnelChunk[] {
   return meshes.map((mesh, index) => {
     const geometry = mesh.build()
     if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
-    return { ...spans[index], geometry }
+    return { ...spans[index], geometry, tread: mesh.tread }
   })
 }
 

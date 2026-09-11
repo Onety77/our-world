@@ -102,7 +102,7 @@ const CHUNK = 60
 
 /** Vertices across the drawn road: four each side outside it, and the road's own nine. */
 const DRAWN = 17
-/** The road's nine, across and up — the same crown `harmattanProfile` supports the wheels on. */
+/** The road's nine, across and up — the same crown as `harmattanProfile`. */
 const ROAD_ACROSS = [-1, -0.92, -0.62, -0.31, 0, 0.31, 0.62, 0.92, 1]
 const ROAD_CROWN = [0.02, 0.05, 0.075, 0.092, 0.1, 0.092, 0.075, 0.05, 0.02]
 
@@ -219,6 +219,17 @@ class CourseMesh {
   /** For fanning a cone or a cap, where a quad would have a corner to spare. */
   tri(a: number, b: number, c: number) {
     this.index.push(a, b, c)
+  }
+
+  /** Which of the index the wheels may stand on, as [from, to) pairs. See `roadSurface`. */
+  readonly tread: number[] = []
+
+  /** A quad a wheel may stand on: the road, its verge and the berm, and not the skirt. */
+  deck(a: number, b: number, c: number, d: number) {
+    const at = this.index.length
+    this.quad(a, b, c, d)
+    if (this.tread.length && this.tread[this.tread.length - 1] === at) this.tread[this.tread.length - 1] = at + 6
+    else this.tread.push(at, at + 6)
   }
 
   build() {
@@ -1123,7 +1134,7 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
     wheels use.
 
     Across the road and the verge this is exactly `harmattanProfile`'s plane,
-    the surface `tyreContact` holds the wheels up on. That profile carried on at
+    the one cross-section the road is drawn from. That profile carried on at
     the same slope for up to thirty-five metres and ended in a one-metre skirt
     with the sky under it. There is ground under everything now (see
     `harmattanLand`), so the drawn road stops a couple of metres past the verge
@@ -1267,7 +1278,9 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
       if (ring > first) {
         const previous = base - DRAWN
         for (let k = 0; k < DRAWN - 1; k++) {
-          mesh.quad(previous + k, previous + k + 1, base + k + 1, base + k)
+          // The two skirts go down to the ground; everything between them is drivable.
+          if (k === 0 || k === DRAWN - 2) mesh.quad(previous + k, previous + k + 1, base + k + 1, base + k)
+          else mesh.deck(previous + k, previous + k + 1, base + k + 1, base + k)
         }
       }
     }
@@ -1923,7 +1936,7 @@ export function buildHarmattan(track: Track): TunnelChunk[] {
   return meshes.map((mesh, index) => {
     const geometry = mesh.build()
     if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
-    return { ...spans[index], geometry }
+    return { ...spans[index], geometry, tread: mesh.tread }
   })
 }
 

@@ -115,11 +115,11 @@ function mixInto(out: Float32Array, at: number, colour: Color, t: number) {
 /**
  * Where the drawn road stops, and what it does on the way.
  *
- * The wheels are held up by `harmattanProfile` — a plane from the road's edge
- * out to the end of that profile — and this keeps to that plane across the
- * whole verge, so a wheel on the loose ground sits on exactly what is drawn.
- * Only past the verge, where the physics never lets the car go, does the berm
- * rise and the ground take over.
+ * Across the road and the verge this keeps to `harmattanProfile`'s plane — the
+ * one cross-section the road is drawn from — so the drawn verge is the same
+ * gentle slope the physics thinks it is. Only past the verge, where the physics
+ * never lets the car go, does the berm rise and the ground take over. (The
+ * wheels stand on whatever is drawn, wherever they are: see `roadSurface`.)
  *
  * No berm in the town, where the street runs to the house fronts, or in the
  * wadi, where the banks stand at the edge of the verge.

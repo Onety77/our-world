@@ -45,13 +45,16 @@ import {
   useRockMaterial,
   useWheelMaterials,
 } from '@/world/games/ember-rally/materials'
-import { placeCar, useCarRig } from '@/world/games/ember-rally/rig'
+import { placeCar, poseGhostWheels, useCarRig } from '@/world/games/ember-rally/rig'
+import { buildHarmattan, HarmattanWorld } from '@/world/games/ember-rally/Harmattan'
+import { laySurface } from '@/world/games/ember-rally/roadSurface'
 import { BoxGeometry } from 'three'
 
 const STAGE = (new URLSearchParams(location.search).get('stage') ?? 'moonbreak') as
   | 'moonbreak'
   | 'rootway'
   | 'stormcrown'
+  | 'harmattan'
 const track = makeTrack(7, STAGE)
 const params = new URLSearchParams(location.search)
 /** Where along the road to stand, and how far into the swing. */
@@ -62,19 +65,29 @@ const MOVING = params.get('still') === null
 const OUT = Number(params.get('out') ?? -6.4)
 const UP = Number(params.get('up') ?? 2.7)
 const BACK = Number(params.get('back') ?? 13)
+/**
+ * The cars' heading off the road, in radians, and how far apart across it they
+ * stand. For looking at the tyres: a car turned across a banked corner is where
+ * a wheel placed from the road's notes rather than its drawing shows first.
+ */
+const YAW = Number(params.get('yaw') ?? 0)
+const SPREAD = Number(params.get('spread') ?? 2.4)
 
 export default function Span() {
   const lights = useMemo(() => createLights(), [])
   const rock = useRockMaterial(lights)
-  const chunks = useMemo(
-    () =>
-      STAGE === 'moonbreak'
-        ? buildMoonbreak(track)
-        : STAGE === 'stormcrown'
-          ? buildStormcrown(track)
-          : buildTunnel(track),
-    [],
-  )
+  const chunks = useMemo(() => {
+    const built = STAGE === 'moonbreak'
+      ? buildMoonbreak(track)
+      : STAGE === 'stormcrown'
+        ? buildStormcrown(track)
+        : STAGE === 'harmattan'
+          ? buildHarmattan(track)
+          : buildTunnel(track)
+    // So the three cars stand on the drawn deck as the race's would.
+    laySurface(track, built)
+    return built
+  }, [])
   const held = useRef(CLOCK)
   // Three cars across the deck: the middle of the road and both edges, which is
   // where a car floating off a rolling deck would show it first.
@@ -145,12 +158,24 @@ export default function Span() {
       deep.fog.copy(lights.uniforms.uFogColor.value)
       deep.near = lights.uniforms.uFogNear.value
       deep.far = lights.uniforms.uFogFar.value
+    } else if (STAGE === 'harmattan') {
+      // The race's open-plain daylight — see `HAZE_*` in `Race`.
+      lights.uniforms.uDaylight.value = 1
+      lights.uniforms.uSunColor.value.set('#fff0d8')
+      lights.uniforms.uSkyColor.value.set('#b8a58c')
+      lights.uniforms.uAmbient.value.set('#ad9a82')
+      lights.uniforms.uFogColor.value.set('#c9ae8a')
+      lights.uniforms.uVeinColor.value.set('#000000')
+      lights.uniforms.uStrata.value = 1
+      lights.uniforms.uStrataTop.value = 0.8
+      lights.uniforms.uFogNear.value = 16
+      lights.uniforms.uFogFar.value = 108
     } else {
       lights.uniforms.uAmbient.value.set(params.has('day') ? '#9fb3c4' : '#4a5b72')
       lights.uniforms.uFogNear.value = 60
       lights.uniforms.uFogFar.value = 460
     }
-    lights.uniforms.uHeadPower.value = params.has('day') ? 0 : 1
+    lights.uniforms.uHeadPower.value = params.has('day') || STAGE === 'harmattan' ? 0 : 1
     // Otherwise they stay at the world origin, lighting the start line from
     // wherever the camera happens to be parked.
     lights.headLeft.copy(eye)
@@ -177,7 +202,9 @@ export default function Span() {
       storm.wind = galeStrengthAt(where, AT, held.current)
     }
     rigs.forEach((rig, i) => {
-      placeCar(rig, track, AT + 6 + i * 16, (i - 1) * 2.4, 0, 0, 0, 0, 0, false, held.current)
+      placeCar(rig, track, AT + 6 + i * 16, (i - 1) * SPREAD, YAW, 0, 0, 0, 0, false, held.current)
+      // And the tyres settled on the drawn road, as a race's would be.
+      poseGhostWheels(rig, 0, 0, 0, false, delta, 0)
     })
   })
 
@@ -185,6 +212,7 @@ export default function Span() {
     <>
       {STAGE === 'moonbreak' ? <MoonbreakWorld track={track} /> : null}
       {STAGE === 'stormcrown' ? <StormcrownWorld track={track} rock={rock} /> : null}
+      {STAGE === 'harmattan' ? <HarmattanWorld track={track} rock={rock} /> : null}
       {chunks.map((chunk, i) => (
         <mesh
           key={i}

@@ -200,6 +200,24 @@ class CourseMesh {
     this.index.push(a, b, c, a, c, d)
   }
 
+  /** Which of the index the wheels may stand on, as [from, to) pairs. See `roadSurface`. */
+  readonly tread: number[] = []
+
+  /** A quad a wheel may stand on: the road and its verge, and the boards of the span. */
+  deck(a: number, b: number, c: number, d: number) {
+    const at = this.index.length
+    this.quad(a, b, c, d)
+    this.standOn(at)
+  }
+
+  /** Mark everything laid since `from` as drivable — a board, say, built out of six quads. */
+  standOn(from: number) {
+    const to = this.index.length
+    if (to <= from) return
+    if (this.tread.length && this.tread[this.tread.length - 1] === from) this.tread[this.tread.length - 1] = to
+    else this.tread.push(from, to)
+  }
+
   build() {
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(this.position), 3))
@@ -410,6 +428,8 @@ function addSpanDeck(
     // One board in nine is a replacement, and paler for it.
     if (board % 9 === 4) tint.lerp(DECK_WORN, 0.6)
     tint.multiplyScalar(0.9 + hash3(board, 7, 2) * 0.16)
+    // The wheels ride the boards, not the dark under them.
+    const laid = mesh.index.length
     addBox(
       mesh,
       road,
@@ -433,6 +453,7 @@ function addSpanDeck(
       */
       0.16,
     )
+    mesh.standOn(laid)
     board++
     mesh.onSolidGround()
   }
@@ -1021,7 +1042,9 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
       if (ring > first) {
         const previous = base - PROFILE
         for (let k = 0; k < PROFILE - 1; k++) {
-          mesh.quad(previous + k, previous + k + 1, base + k + 1, base + k)
+          // The two flanks drop away; everything between them is drivable.
+          if (k === 0 || k === PROFILE - 2) mesh.quad(previous + k, previous + k + 1, base + k + 1, base + k)
+          else mesh.deck(previous + k, previous + k + 1, base + k + 1, base + k)
         }
       }
     }
@@ -1233,7 +1256,7 @@ export function buildMoonbreak(track: Track): TunnelChunk[] {
   return meshes.map((mesh, index) => {
     const geometry = mesh.build()
     if (!geometry.boundingSphere) geometry.boundingSphere = new Sphere()
-    return { ...spans[index], geometry }
+    return { ...spans[index], geometry, tread: mesh.tread }
   })
 }
 
