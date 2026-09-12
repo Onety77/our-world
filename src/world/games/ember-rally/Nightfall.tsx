@@ -853,7 +853,8 @@ export function buildNightfall(track: Track): TunnelChunk[] {
         const soot = 1 - smooth01(2.5, 9, r)
         tint.copy(STONE).lerp(STONE_WORN, 0.35 + soot * 0.5).multiplyScalar(0.86 + hash3(i, k, 1) * 0.2)
         point.set(x, room.floorAt(x, z), z)
-        mesh.vertex(point, tint, 0.05, 0.5)
+        // Swept stone: smooth enough that the ore stays in the walls.
+        mesh.vertex(point, tint, 0.05, 0.3)
       }
     }
     const laid = mesh.index.length
@@ -878,7 +879,14 @@ export function buildNightfall(track: Track): TunnelChunk[] {
       const radius = room.rim * Math.cos(phi)
       for (let k = 0; k < SEG; k++) {
         const a = (k / SEG) * Math.PI * 2
-        const bump = 1 + (hash3(r, k, 9) - 0.5) * 0.1 * (1 - t)
+        /*
+          Kneaded, the way the Hollow's own room is (world/cave/Cave): a
+          smooth sphere reads as built, and a dome displaced by a few
+          octaves of slow waves reads as dug. Smooth across neighbours — a
+          hash per vertex is a spike — and less toward the crown.
+        */
+        const knead = Math.sin(a * 5.3 + r * 1.7) * 0.5 + Math.sin(a * 11.1 + r * 2.9 + 1.0) * 0.3 + Math.sin(a * 2.1 - r * 3.1 + 2.0) * 0.2
+        const bump = 1 + knead * 0.085 * (1 - t * 0.6) + (hash3(r, k, 9) - 0.5) * 0.03 * (1 - t)
         const x = room.x + Math.cos(a) * radius * bump
         const z = room.z + Math.sin(a) * radius * bump
         const y = r === 0 ? room.floorAt(x, z) - 0.6 : rimY + 0.3 + Math.sin(phi) * room.height

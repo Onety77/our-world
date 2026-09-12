@@ -72,6 +72,9 @@ const KNOLL_ROCK = ['#5c5449', '#4e4840', '#6a6156', '#57504a'].map((c) => new C
 const ROOT = new Color('#3b2f24')
 const ROOT_PALE = new Color('#5a4a3a')
 const TIMBER = new Color('#1a140f')
+/** A willow's strands: grey-green, paler at the top. */
+const WILLOW_HIGH = new Color('#6f7a4e')
+const WILLOW_LOW = new Color('#4e5a3a')
 /** Stalactite: the vault's stone, wet at the tip. */
 const DRIP = new Color('#5e564c')
 const DRIP_TIP = new Color('#3e3a36')
@@ -288,6 +291,60 @@ export function layProps(track: Track, land: Land, room: Room, meshFor: (s: numb
         }
       }
     }
+    // Willows along the water: a leaning trunk and a fall of long strands to
+    // just over the surface. The wood's generator has no weeping species, so
+    // this is the one tree on the road built by hand — a few, on the bank
+    // away from the road, where a willow stands.
+    for (let i = 4; i < pts.length - 4; i += 9 + Math.floor(rng() * 8)) {
+      const p = pts[i]
+      const q = pts[i + 1]
+      let dx = q.x - p.x
+      let dz = q.z - p.z
+      const len = Math.hypot(dx, dz) || 1
+      dx /= len
+      dz /= len
+      // On whichever bank is farther from the road: `away` is the sign that puts (-dz, dx) on that side.
+      const away = exactDistance(p.s, p.x - dz * (RIVER_HALF + 3), p.z + dx * (RIVER_HALF + 3)) > exactDistance(p.s, p.x + dz * (RIVER_HALF + 3), p.z - dx * (RIVER_HALF + 3)) ? 1 : -1
+      // At the water's edge, feet in the wet bank, not up the valley wall behind it.
+      const d = RIVER_HALF + 0.2 + rng() * 0.9
+      const x = p.x - dz * d * away
+      const z = p.z + dx * d * away
+      if (exactDistance(p.s, x, z) < wallAt(p.s) + 5) continue
+      const mesh = meshFor(p.s)
+      const foot = new Vector3(x, Math.min(land.heightAt(x, z), p.y + 0.6) - 0.3, z)
+      const height = 4.5 + rng() * 2.5
+      // The trunk leans over the water.
+      const crown = new Vector3(x + dz * away * 1.4, foot.y + height, z - dx * away * 1.4)
+      tube(mesh, foot, crown, 0.32, 0.18, ROOT, ROOT_PALE, 300 + i)
+      // Strands fanning out from near the crown and drooping outward, in two
+      // pieces each so they bow rather than hang like a comb.
+      const strands = 26 + Math.floor(rng() * 10)
+      for (let k = 0; k < strands; k++) {
+        const a = rng() * Math.PI * 2
+        const reach = 1.4 + rng() * 2.6
+        const top = crown.y + 0.4 - rng() * 0.6
+        const bottom = Math.max(p.y + 0.3, top - 3.5 - rng() * 3)
+        const w = 0.05 + rng() * 0.05
+        // Three points down the strand: out from the crown, over, and down.
+        const px = (t: number) => crown.x + Math.cos(a) * reach * Math.sin(t * Math.PI * 0.5)
+        const pz = (t: number) => crown.z + Math.sin(a) * reach * Math.sin(t * Math.PI * 0.5)
+        const py = (t: number) => top - (top - bottom) * (1 - Math.cos(t * Math.PI * 0.5))
+        const base = mesh.count
+        for (const [t, c] of [[0, WILLOW_HIGH], [0.45, WILLOW_HIGH], [1, WILLOW_LOW]] as const) {
+          for (const side of [-1, 1]) {
+            point.set(px(t) - Math.sin(a) * w * side, py(t), pz(t) + Math.cos(a) * w * side)
+            tint.copy(c).multiplyScalar(0.85 + rng() * 0.3)
+            mesh.vertex(point, tint, 0, 0.6)
+          }
+        }
+        // Both faces: the road's material draws front faces only.
+        mesh.quad(base, base + 1, base + 3, base + 2)
+        mesh.quad(base + 2, base + 3, base + 5, base + 4)
+        mesh.quad(base + 2, base + 3, base + 1, base)
+        mesh.quad(base + 4, base + 5, base + 3, base + 2)
+      }
+    }
+
     // The spring: where the water rises, a ring of stones round a pool, and one standing.
     if (pts.length) {
       const p = pts[0]
@@ -373,17 +430,21 @@ export function layProps(track: Track, land: Land, room: Room, meshFor: (s: numb
           drip(mesh, point.x, point.y, point.z, length, 0.12 + rng() * 0.28, Math.round(s * 3))
         }
       } else {
-        // A root: three or four bends coming down and sideways out of the roof.
+        // A root: out of the roof and down in a slow curve, six short pieces,
+        // wandering sideways and thinning to a pale tip.
         let from = roadPoint(road, n, roof + 0.2, new Vector3(), frame)
         let r = 0.14 + rng() * 0.12
-        const bends = 3 + Math.floor(rng() * 2)
-        const drift = (rng() - 0.5) * 2.2
-        for (let b = 0; b < bends; b++) {
-          const t = (b + 1) / bends
-          const to = roadPoint(road, n + drift * t + (rng() - 0.5) * 0.6, Math.max(CLEAR + 0.2, roof + 0.2 - t * Math.min(roof - CLEAR, 1.5 + rng() * 2.5)), new Vector3(), frame)
-          tube(mesh, from, to, r, r * 0.55, ROOT, b === bends - 1 ? ROOT_PALE : ROOT, Math.round(s) + b)
+        const pieces = 6
+        const drift = (rng() - 0.5) * 2.4
+        const drop = Math.min(roof - CLEAR, 1.5 + rng() * 2.5)
+        const wobble = rng() * 6.28
+        for (let b = 0; b < pieces; b++) {
+          const t = (b + 1) / pieces
+          const ease = t * t * (3 - 2 * t)
+          const to = roadPoint(road, n + drift * ease + Math.sin(t * 5 + wobble) * 0.25, roof + 0.2 - drop * (1 - Math.cos(t * Math.PI * 0.5)), new Vector3(), frame)
+          tube(mesh, from, to, r, r * 0.82, ROOT, b === pieces - 1 ? ROOT_PALE : ROOT, Math.round(s) + b)
           from = to
-          r *= 0.6
+          r *= 0.82
         }
       }
     }

@@ -936,14 +936,17 @@ far and nothing moved.
 - **The Wellspring** (`nightfallProps`): boulders down both banks and scree
   behind them, stones standing in the shallows with their heads above the
   water, the spring itself as a stone-rimmed pool where the water rises, scree
-  at the foot of the road's cut bank; the water in the garden's own two colours
+  at the foot of the road's cut bank, willows at the water's edge on the far
+  bank (built by hand — the wood's generator has no weeping species); the
+  water in the garden's own two colours
   with four ripples at odd angles (the ladder is gone); mist lying on it,
   thickest at the fords.
 - **The Hollow**: the knoll kneaded upward in proportion to its rise, its mouths
   cut by each cell's own distance to the road (`SROAD`) rather than by discs,
   outcrops on its steep flanks and scrub; beds in the rock (`uStrata`, top
   0.88); stalactites and the wood's roots through the vault, nothing under four
-  metres over the road; seat stones round the hearth; smoke off it into the
+  metres over the road; the dome kneaded as the Hollow's own room is, so it
+  reads as dug rather than built; seat stones round the hearth; smoke off it into the
   dome, lit from underneath; bats at both mouths and up in the dome; and the
   Hollow's own ore — the road's vein term, amber, in the room only, as much of
   it as the room has earned (`seasonedBy` → `GardenCounts.ore`).
