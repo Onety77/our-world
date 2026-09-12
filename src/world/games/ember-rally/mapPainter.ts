@@ -17,8 +17,13 @@ export const rallyMap: { draw: ((frame: MapFrame) => void) | null } = { draw: nu
 /** World metres -> right/forward metres; independent of road progress or branch. */
 export function mapOffset(point: MapPosition, origin: MapPosition, heading: number) {
   const x = point.x - origin.x, z = point.z - origin.z
-  return { x: x * Math.cos(heading) - z * Math.sin(heading),
+  // The driving camera looks along +Z: its screen-right is (-cos h, 0, sin h).
+  return { x: -x * Math.cos(heading) + z * Math.sin(heading),
     y: -(x * Math.sin(heading) + z * Math.cos(heading)) }
+}
+
+export function mapBearing(carHeading: number, mapHeading: number) {
+  return mapHeading - carHeading
 }
 
 export function routePoints(x: Float32Array, z: Float32Array): MapPosition[] {
@@ -87,7 +92,7 @@ export function createMapPainter(canvas: HTMLCanvasElement, track: Track) {
     fade.addColorStop(0, '#fff'); fade.addColorStop(1, 'transparent')
     ctx.fillStyle = fade; ctx.fillRect(0, 0, size, height)
     ctx.globalCompositeOperation = 'source-over'
-    ctx.save(); ctx.translate(ox, oy); ctx.rotate(frame.heading + frame.yaw - heading)
+    ctx.save(); ctx.translate(ox, oy); ctx.rotate(mapBearing(frame.heading + frame.yaw, heading))
     ctx.shadowColor = '#ffcb7d'; ctx.shadowBlur = 9
     ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6.5, 6); ctx.lineTo(0, 2); ctx.lineTo(-6.5, 6); ctx.closePath()
     ctx.fillStyle = '#fff0cf'; ctx.fill(); ctx.shadowBlur = 0
