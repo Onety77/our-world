@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react'
+import { rallyMap } from './mapPainter'
 import { useFrame, useThree } from '@react-three/fiber'
 import { knock } from '@/systems/haptics'
 import {
@@ -1936,6 +1937,14 @@ class Driving {
     } else {
       args.lights.uniforms.uGhostPower.value = 0
       this.engine?.pressure(0)
+    }
+
+    if (rallyMap.draw) {
+      const road = roadAtRoute(track, car.s, car.shortcut, shotRoad)
+      rallyMap.draw({ track, position: args.mine.root.position, heading: road.heading,
+        yaw: args.mine.root.rotation.y - road.heading,
+        rival: args.theirs.root.visible && (rolling || ghost) ? args.theirs.root.position : null,
+        personal: session.personalGhost, delta })
     }
 
     if (car.slam > 0.02) this.chase.jolt(car.slam * 1.1)

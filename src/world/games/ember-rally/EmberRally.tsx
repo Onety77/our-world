@@ -20,6 +20,7 @@ import { RaceSetup } from './RaceSetup'
 import { ROAD_INFO } from './courseInfo'
 import { TouchDriving } from './TouchDriving'
 import { CameraSwitch } from './CameraSwitch'
+import { Minimap } from './Minimap'
 import { drivingWithThumbs } from './touch'
 import { gapLabel, useBest } from './best'
 import { completePersonalRun, personalKey, usePersonalBest } from './personalBest'
@@ -694,6 +695,7 @@ function Road({
       <Speed />
       <PersonalSplit />
       <CameraSwitch hasResult={Boolean(children)} />
+      <Minimap key={`map-${attempt}`} track={track} hasResult={Boolean(children)} />
       <Pause onLeave={onLeave} onRestart={onRestart} hasResult={Boolean(children)} />
       {phone ? (
         <TouchDriving />

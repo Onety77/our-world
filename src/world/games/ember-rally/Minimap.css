@@ -1,0 +1,38 @@
+.rally-minimap {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 90px);
+  right: max(12px, env(safe-area-inset-right, 0px));
+  width: clamp(150px, 19vw, 220px);
+  z-index: 5;
+  pointer-events: none;
+  color: #f2e4c9;
+}
+.rally-minimap canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.1;
+  background: radial-gradient(ellipse, rgba(22, 25, 24, .32), transparent 69%);
+}
+.rally-minimap button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-left: auto;
+  min-height: 44px;
+  padding: 5px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: .7rem var(--sans);
+  text-shadow: 0 1px 5px #151c1d;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.rally-minimap button:hover { color: #fff8e8; }
+.rally-minimap button:focus-visible { outline: 2px solid #e9c58e; outline-offset: 2px; border-radius: 8px; }
+.rally-minimap kbd { font: inherit; opacity: .55; }
+@media (pointer: coarse) { .rally-minimap kbd { display: none; } }
+@media (max-height: 500px) {
+  .rally-minimap { top: calc(env(safe-area-inset-top, 0px) + 82px); width: 145px; }
+}

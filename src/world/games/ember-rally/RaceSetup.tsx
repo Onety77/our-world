@@ -18,19 +18,28 @@ function RouteMap({ track }: { track: Track }) {
   const route = useMemo(() => {
     const points: [number, number][] = []
     for (let i = 0; i < track.x.length; i += 8) points.push([track.x[i], track.z[i]])
-    const xs = points.map((p) => p[0]),
-      zs = points.map((p) => p[1])
+    points.push([track.x.at(-1)!, track.z.at(-1)!])
+    const branch: [number, number][] = []
+    if (track.split) {
+      for (let i = 0; i < track.split.x.length; i += 8) branch.push([track.split.x[i], track.split.z[i]])
+      branch.push([track.split.x.at(-1)!, track.split.z.at(-1)!])
+    }
+    const all = [...points, ...branch]
+    const xs = all.map((p) => p[0]),
+      zs = all.map((p) => p[1])
     const minX = Math.min(...xs),
       minZ = Math.min(...zs)
     const dx = Math.max(...xs) - minX,
       dz = Math.max(...zs) - minZ
     const scale = Math.min(160 / Math.max(1, dx), 110 / Math.max(1, dz))
-    const mapped = points.map(([x, z]) => [
+    const project = ([x, z]: [number, number]) => [
       20 + (160 - dx * scale) / 2 + (x - minX) * scale,
       15 + (110 - dz * scale) / 2 + (z - minZ) * scale,
-    ])
+    ]
+    const mapped = points.map(project)
     return {
       path: mapped.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '),
+      branch: branch.map(project).map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '),
       first: mapped[0],
       last: mapped.at(-1)!,
     }
@@ -50,6 +59,7 @@ function RouteMap({ track }: { track: Track }) {
         strokeLinejoin="round"
       />
       <circle cx={route.first[0]} cy={route.first[1]} r="4" fill="currentColor" />
+      {route.branch && <path d={route.branch} fill="none" stroke="#92d5ce" strokeWidth="2" strokeLinecap="round" />}
       <circle
         cx={route.last[0]}
         cy={route.last[1]}
