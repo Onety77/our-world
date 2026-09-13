@@ -12,6 +12,8 @@ import { GAMES } from '@/world/games/registry'
 import { useStandings } from '@/world/games/useRound'
 import { TrackArtwork } from './TrackArtwork'
 import { useChoiceKeys } from './useChoiceKeys'
+import { useChoiceSwipe } from './useChoiceSwipe'
+import { useBackCloses } from '@/systems/backstop'
 import './HollowLobby.css'
 
 // Keep your place when a game temporarily takes over the world.
@@ -41,6 +43,8 @@ export function HollowLobby() {
     }
   }
   const setSelected = (selected: string | null) => useHollowMenu.setState({ selected })
+  useBackCloses(selected !== null, () => setSelected(null), 5)
+  const swipe = useChoiceSwipe(browseGame, !selected)
   const back = () => {
     if (selected) setSelected(null)
     else {
@@ -167,7 +171,7 @@ export function HollowLobby() {
               <h1>Stay for a game.</h1>
               <p>A quick word duel, a road worth racing, or something to play together.</p>
             </header>
-            <div className="hollow-library hollow-library-paged" data-choice-row="games" data-choice-paged>
+            <div className="hollow-library hollow-library-paged" data-choice-row="games" data-choice-paged {...swipe}>
               <button className="hollow-page-previous" aria-label="Previous game" onClick={() => browseGame(-1)} disabled={library.length < 2}>← <span>Previous</span></button>
               {library.slice(gameIndex, gameIndex + 1)
                 .map((g) => {
@@ -204,7 +208,7 @@ export function HollowLobby() {
                         <strong>{g.name}</strong>
                         <span className="hollow-tile-description">
                           {g.id === 'ember-rally'
-                            ? 'Four worlds. Your car. Find your next favourite corner.'
+                            ? 'Your car. Find your next favourite corner.'
                             : say(g.blurb)}
                         </span>
                         <span className="hollow-tile-meta">
@@ -231,6 +235,7 @@ export function HollowLobby() {
               <button className="hollow-page-next" aria-label="Next game" onClick={() => browseGame(1)} disabled={library.length < 2}><span>Next</span> →</button>
             </div>
             <p className="hollow-page-count" aria-live="polite" aria-atomic="true">{library[gameIndex]?.name} · {gameIndex + 1} of {library.length}</p>
+            <p className="choice-swipe-hint">Swipe to discover another game</p>
             {listed.some(g => g.id === library[gameIndex]?.id) && <section className="hollow-activity" aria-label="Your shared games">
               <div>
                 <span className="hollow-eyebrow">between the two of you</span>

@@ -16,6 +16,7 @@ import { slide, slidePosition, useSections } from '@/systems/sections'
 import { grabbed } from '@/systems/swipe'
 import { useSay } from '@/systems/useSay'
 import { onActivity } from '@/systems/activity'
+import { useBackCloses } from '@/systems/backstop'
 
 export function Places() {
   const say = useSay()
@@ -27,6 +28,7 @@ export function Places() {
   const leave = useSections((s) => s.leave)
   const next = useSections((s) => s.next)
   const previous = useSections((s) => s.previous)
+  useBackCloses(entered, leave, 0)
 
   // Arrow keys, because a keyboard should be able to do what a thumb can.
   useEffect(() => {

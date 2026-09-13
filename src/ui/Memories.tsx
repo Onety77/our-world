@@ -30,6 +30,7 @@ import { toTheNewest } from '@/sections/lanterns/walk'
 // Named apart from this file's own `say`, which puts words on the glass.
 import { MemoryViewer } from './MemoryViewer'
 import { prepare } from '@/systems/picture'
+import { useBackCloses } from '@/systems/backstop'
 
 /** How long the glass takes to form, in milliseconds. Matches the shader. */
 const FORMING_MS = 2400
@@ -127,6 +128,10 @@ export function LeavingAMemory() {
     setTurns(0)
   }, [setHanging])
 
+  useBackCloses(hanging, () => {
+    if (busy) return false
+    close()
+  })
   useEffect(() => {
     if (!hanging) return
     const root = document.getElementById('root')

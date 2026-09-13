@@ -8,6 +8,7 @@ import { usePublishedTuning } from './tuningSync'
 import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
 import { useMenuKeys } from '@/ui/useMenuKeys'
 import { useChoiceKeys } from '@/ui/useChoiceKeys'
+import { useBackCloses } from '@/systems/backstop'
 import { useLobby } from '@/systems/useLobby'
 import { useStayAwake } from '@/systems/awake'
 import { useHoldOrientation } from '@/systems/orientation'
@@ -329,6 +330,7 @@ export default function EmberRally({
     setLastRun(null)
     setView('courses')
   }
+  useBackCloses(view !== 'courses' && !live, backToFire, 20)
 
   /*
     ===========================================================================

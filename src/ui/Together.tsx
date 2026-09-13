@@ -38,6 +38,7 @@ import {
   type CSSProperties,
 } from 'react'
 import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
+import { useBackCloses } from '@/systems/backstop'
 // One sentence, in one place: no pronoun of its own and no ellipsis. The rules
 // it has to keep are checked in `npm run typing`, not remembered here.
 import { writingLine } from '@/systems/typing'
@@ -1573,6 +1574,7 @@ export function Together() {
     }
   }
 
+  useBackCloses(open, () => live ? fold() : tuck())
   const fold = () => {
     leaveImmersion()
     setMiniControls(false)

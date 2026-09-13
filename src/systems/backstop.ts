@@ -1,115 +1,90 @@
-/**
- * The phone's back button, which until now did nothing at all.
- *
- * ---------------------------------------------------------------------------
- * **The garden has no URLs, and that is a decision, not an oversight.** You do
- * not navigate to the Hollow; you walk to it, and the address bar stays where
- * it was. That is right for a world, and it left one thing broken that nobody
- * on a keyboard would ever notice.
- *
- * Escape closes things. A game, a letter, a photograph, the pause screen —
- * every one of them listens for Escape and nothing else. **A phone has no
- * Escape key.** So the way out of a game on a phone was whatever button
- * happened to be drawn on that particular screen, and on the screens that
- * forgot to draw one there was no way out at all: not the on-screen control,
- * because there wasn't one, and not the system back button, because a
- * single-page app that never touches history has nothing for it to go back to.
- * Pressing it leaves the garden entirely.
- *
- * So: anything that takes over the screen puts one entry on the history stack
- * while it is open, and takes it off again when it closes. The back gesture
- * then means "close this", which is what it means everywhere else on a phone,
- * and it never leaves the garden until there is nothing left to close.
- *
- * **A stack, because these nest.** A game opens over the garden and a paused
- * screen opens over the game. Back should close the innermost thing, once, and
- * leave the rest alone.
- * ---------------------------------------------------------------------------
- */
-
 import { useEffect, useRef } from 'react'
 
-/** Innermost last. Only the last one hears a back gesture. */
-const stack: { id: number; close: () => void }[] = []
-let nextId = 1
-/**
- * True while we are the ones calling `history.back()` to tidy up.
- *
- * Closing something from a button inside the app has to consume the history
- * entry too, or the back gesture afterwards is a no-op that eats one press.
- * Consuming it means calling `history.back()`, which fires `popstate` again —
- * and without this flag that second event would close whatever is *underneath*
- * as well, so one tap on a button would close two screens.
- */
-let tidying = false
+type Entry = { id: number; order: number; priority: number; active: boolean; pushed: boolean; consumed: boolean; close(): void | boolean }
+const entries = new Map<number, Entry>()
+let nextId = Date.now()
+let current: number | null = null
+let travelling = false
+let scheduled = false
+let nextOrder = 1
 
-function onPop() {
-  if (tidying) {
-    tidying = false
+// Removed parents remain until history reaches them, so Back never lands on a
+// dead layer. New layers wait for asynchronous cleanup before pushing entries.
+function reconcile() {
+  scheduled = false
+  if (travelling) return
+  const top = current === null ? undefined : entries.get(current)
+  if (top && (!top.active || top.consumed)) {
+    travelling = true
+    window.history.back()
     return
   }
-  const top = stack.pop()
-  if (!top) return
-  top.close()
+  const waiting = [...entries.values()]
+    .filter(entry => entry.active && !entry.pushed && !entry.consumed)
+    .sort((a, b) => a.priority - b.priority || a.id - b.id)
+  for (const entry of waiting) {
+    window.history.pushState({ ...window.history.state, backstop: entry.id }, '')
+    entry.pushed = true
+    entry.order = nextOrder++
+    current = entry.id
+  }
+}
+
+function schedule() {
+  if (scheduled) return
+  scheduled = true
+  // Let React finish replacing layers before changing browser history.
+  window.setTimeout(reconcile, 0)
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('popstate', onPop)
+  // A reload starts a fresh UI. Its current entry becomes that UI's base,
+  // rather than masquerading as a layer owned by the previous JS session.
+  if (window.history.state?.backstop !== undefined) {
+    const { backstop: _old, ...rest } = window.history.state
+    window.history.replaceState(Object.keys(rest).length ? rest : null, '')
+  }
+  window.addEventListener('popstate', () => {
+    const previous = current === null ? undefined : entries.get(current)
+    const target = window.history.state?.backstop as number | undefined
+    current = target ?? null
+    const cleanup = travelling
+    travelling = false
+    if (!cleanup && previous?.active && !previous.consumed && (entries.get(target ?? -1)?.order ?? 0) < previous.order) {
+      previous.pushed = false
+      previous.consumed = true
+      // A pending write can decline dismissal without losing its Back boundary.
+      if (previous.close() === false) previous.consumed = false
+    }
+    schedule()
+  })
 }
 
-/**
- * While `open` is true, the back gesture calls `close` instead of leaving.
- *
- * `close` is held in a ref rather than being a dependency, so a handler that
- * is rebuilt every render — which is nearly all of them — does not push and
- * pop a history entry on every frame.
- */
-export function useBackCloses(open: boolean, close: () => void): void {
+/** Native Back dismisses the top layer. Buttons retire the same history entry. */
+export function useBackCloses(open: boolean, close: () => void | boolean, priority = 30): void {
   const latest = useRef(close)
   latest.current = close
   const generation = useRef(0)
-  const owned = useRef<{ id: number; closed: boolean; close(): void } | null>(null)
-
+  const owned = useRef<Entry | null>(null)
   useEffect(() => {
-    if (!open || typeof window === 'undefined') return
+    if (!open) return
     const turn = ++generation.current
     const entry = owned.current ?? {
-      id: nextId++,
-      closed: false,
-      close: () => {
-        entry.closed = true
-        latest.current()
-      },
+      id: nextId++, order: 0, priority, active: true, pushed: false, consumed: false,
+      close: () => latest.current(),
     }
-    if (!owned.current) {
-      owned.current = entry
-      stack.push(entry)
-      window.history.pushState({ backstop: entry.id }, '')
-    }
-
-    // React Strict Mode replays setup immediately after cleanup. Reuse the
-    // owned entry in that case; an asynchronous history.back() cannot be undone.
-    return () =>
-      queueMicrotask(() => {
-        if (generation.current !== turn) return
-        owned.current = null
-        const at = stack.findIndex((item) => item.id === entry.id)
-        if (at >= 0) stack.splice(at, 1)
-        /*
-        Closed from inside the app rather than by a back gesture, so our
-        history entry is still sitting there and has to be taken off. If the
-        back gesture is what closed us, it has already been consumed and
-        calling `back` again would step past something else.
-      */
-        if (!entry.closed && window.history.state?.backstop === entry.id) {
-          tidying = true
-          window.history.back()
-          // If the browser declines to move — no entry, a blocked history — the
-          // flag would stay set and swallow the *next* real back gesture.
-          window.setTimeout(() => {
-            tidying = false
-          }, 400)
-        }
-      })
-  }, [open])
+    owned.current = entry
+    entries.set(entry.id, entry)
+    schedule()
+    return () => queueMicrotask(() => {
+      // Strict Mode immediately replays setup and still owns the same entry.
+      if (generation.current !== turn) return
+      owned.current = null
+      entry.active = false
+      // Retain only the lightweight tombstone for browser Forward; release the
+      // callback so old components and their data are not held by history.
+      entry.close = () => {}
+      schedule()
+    })
+  }, [open, priority])
 }

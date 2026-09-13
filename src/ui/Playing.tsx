@@ -63,7 +63,7 @@ function Runner({
     no drawn control, and a back press that left the garden entirely because
     nothing in this app had ever touched the history stack.
   */
-  useBackCloses(true, onClose)
+  useBackCloses(true, onClose, 10)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement

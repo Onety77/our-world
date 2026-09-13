@@ -6,6 +6,7 @@ import { useMemories } from '@/systems/memories'
 import { useTrouble } from '@/systems/trouble'
 import { useSay } from '@/systems/useSay'
 import './MemoryViewer.css'
+import { useBackCloses } from '@/systems/backstop'
 
 /** The original photograph gets the viewport; the walk waits behind it. */
 export function MemoryViewer() {
@@ -64,6 +65,10 @@ export function MemoryViewer() {
   }, [data, id])
 
   const showing = Boolean(memory)
+  useBackCloses(showing, () => {
+    if (busy) return false
+    open(null)
+  })
   useEffect(() => {
     if (!showing) return
     returnFocus.current = document.activeElement as HTMLElement | null

@@ -283,7 +283,7 @@ body,
   height: 100%;
   margin: 0;
   background: #0d1512;
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -4614,7 +4614,7 @@ canvas {
   height: var(--talking-height, 100dvh);
   pointer-events: auto;
   touch-action: none;
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
   -webkit-user-select: none;
   user-select: none;
   z-index: 6;
@@ -10561,7 +10561,7 @@ body:has(.talking) .leave-place {
 /* A Glasshouse drag belongs to the aisle, not to browser overscroll. */
 body.on-the-walk .surface {
   touch-action: none;
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
 }
 
 /* ---- a phone ---- */

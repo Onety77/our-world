@@ -6,6 +6,8 @@ import { roadKey, useDoorman } from '@/systems/locks'
 import { raceKey, readSitting, stageOfKey } from '@/systems/lobby'
 import { TrackArtwork } from '@/ui/TrackArtwork'
 import { useChoiceKeys } from '@/ui/useChoiceKeys'
+import { useChoiceSwipe } from '@/ui/useChoiceSwipe'
+import { useBackCloses } from '@/systems/backstop'
 import { ROAD_INFO, ROAD_ORDER } from './courseInfo'
 import { moveRun, timeLabel, type RallyMove, type StageId } from './model'
 import type { Track } from './track'
@@ -102,6 +104,7 @@ export function RaceSetup({
   const [mode, setMode] = useState<Mode>(solo ? 'solo' : 'challenge')
   const [controls, setControls] = useState(false)
   const controlsToggle = useRef<HTMLButtonElement>(null)
+  useBackCloses(controls, () => setControls(false))
   const choices = useChoiceKeys({
     screen: 'race-setup',
     initial: '.race-track-tabs .selected',
@@ -128,6 +131,9 @@ export function RaceSetup({
   const roomStage = room ? stageOfKey(room, '') : ''
   const joining = mode === 'live' && room && ROAD_ORDER.includes(roomStage as StageId) ? room : null
   const locked = shut(roadKey(stage))
+  const swipe = useChoiceSwipe(step => {
+    onSelect(ROAD_ORDER[(ROAD_ORDER.indexOf(stage) + step + ROAD_ORDER.length) % ROAD_ORDER.length])
+  }, !joining)
   useEffect(() => {
     if (joining) onSelect(roomStage as StageId)
   }, [joining, roomStage, onSelect])
@@ -177,7 +183,7 @@ export function RaceSetup({
           <h1>Choose your road.</h1>
         </div>
         <p>
-          Four different worlds.
+          Every road, a different world.
           <br />
           One car that’s yours to master.
         </p>
@@ -216,7 +222,7 @@ export function RaceSetup({
         </section>
       )}
       <div className="race-setup-layout">
-        <div className="race-track-side">
+        <div className="race-track-side" {...swipe}>
           <div
             className="race-track-tabs"
             data-choice-row="tracks"
@@ -243,6 +249,7 @@ export function RaceSetup({
             ))}
             <button aria-label="Next track" onClick={() => onSelect(ROAD_ORDER[(ROAD_ORDER.indexOf(stage) + 1) % ROAD_ORDER.length])} disabled={Boolean(joining)}>Next →</button>
           </div>
+          <p className="choice-swipe-hint">{joining ? 'Your shared road is set' : 'Swipe to discover another road'}</p>
           <div className="race-track-hero" key={stage}>
             <TrackArtwork stage={stage} />
             <div className="race-track-caption">
@@ -266,6 +273,11 @@ export function RaceSetup({
             <span>a word for the road</span>
             {info.tip}
           </p>
+          <details className="race-mobile-notes" key={`notes-${stage}`}>
+            <summary>About this road</summary>
+            <p>{info.description}</p>
+            <p><em>A word for the road.</em> {info.tip}</p>
+          </details>
         </div>
         <aside className="race-options">
           <span className="race-eyebrow">your kind of evening</span>

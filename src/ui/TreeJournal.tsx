@@ -4,6 +4,7 @@ import { stillSealed } from '@/data/types'
 import { useReading } from '@/systems/reading'
 import { findThoughts, thoughtUnread, type ThoughtFilter } from '@/systems/thoughts'
 import { usePaperDialog } from './usePaperDialog'
+import { useBackCloses } from '@/systems/backstop'
 import './TreeJournal.css'
 
 export function TreeJournal() {
@@ -20,6 +21,7 @@ export function TreeJournal() {
   const scrollTop = useRef(0)
   const [now, setNow] = useState(() => data.now())
   const active = browsing && !reading
+  useBackCloses(browsing, close, 15)
   const root = usePaperDialog(active, close, '#tree-journal-title')
   useEffect(() => {
     if (!active) return

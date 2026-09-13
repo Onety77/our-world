@@ -19,6 +19,7 @@ import { thoughtSpot } from '@/sections/tree/layout'
 import { sealUntil, stillSealed } from '@/data/types'
 import { useDismissOutside } from './useDismissOutside'
 import { usePaperDialog } from './usePaperDialog'
+import { useBackCloses } from '@/systems/backstop'
 import { findThoughts } from '@/systems/thoughts'
 
 function when(at: number): string {
@@ -90,6 +91,7 @@ export function LetterReader() {
   }, [openId, data])
   const waiting = letter ? stillSealed(letter, me, now) : false
   const dialog = usePaperDialog(Boolean(letter), close)
+  useBackCloses(Boolean(letter), close)
   const ordered = findThoughts(letters, me, now, 'all')
   const index = ordered.findIndex(item => item.id === openId)
   const go = (step: number) => {
@@ -355,6 +357,10 @@ export function Writing() {
   const pending = useRef(false)
   const [saveError, setSaveError] = useState('')
   const dialog = usePaperDialog(composing, () => { if (!pending.current) stopWriting() })
+  useBackCloses(composing, () => {
+    if (pending.current) return false
+    stopWriting()
+  })
 
   /**
    * Every character puts a stroke of a pen on the paper.

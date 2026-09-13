@@ -91,7 +91,9 @@ const until = async (expression) => {
     if (await ev(expression)) return
     await wait(100)
   }
-  throw Error('Timed out: ' + expression)
+  const screen = await page('Page.captureScreenshot', { format: 'png' })
+  writeFileSync(join(tmpdir(), 'hollow-failed.png'), Buffer.from(screen.data, 'base64'))
+  throw Error('Timed out: ' + expression + '\n' + await ev('document.body.innerText.slice(-1600)'))
 }
 let touching = false
 const click = async (selector) => {
@@ -103,6 +105,7 @@ const click = async (selector) => {
       type: 'touchStart',
       touchPoints: [{ ...point, id: 1 }],
     })
+    await wait(60)
     await page('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   } else await ev(`document.querySelector(${JSON.stringify(selector)}).click()`)
   await wait(220)
@@ -132,6 +135,16 @@ const press = async (key, repeat = false) => {
   })
   await wait(160)
 }
+const swipe = async (selector, direction) => {
+  const point = await ev(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'center'});const b=el.getBoundingClientRect();return {x:b.x+b.width/2,y:Math.max(70,Math.min(innerHeight-80,b.y+b.height/2))}})()`)
+  const travel = Math.min(95, point.x - 35)
+  await page('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: point.x + travel * direction, y: point.y, id: 1 }] })
+  for (let i = 1; i <= 8; i++) {
+    await page('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: point.x + travel * direction * (1 - i / 4), y: point.y, id: 1 }] })
+  }
+  await page('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await wait(250)
+}
 const check = (value, label) => {
   assert(value, label)
   console.log('PASS ' + label)
@@ -149,7 +162,7 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
       ['desktop', 1440, 900, false],
       ['phone', 393, 852, true],
       ['landscape', 852, 393, true],
-    ]) {
+    ].filter(([, , , mobile]) => !process.env.HOLLOW_MOBILE_ONLY || mobile)) {
   touching = mobile
   await page('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile })
   await page('Emulation.setTouchEmulationEnabled', { enabled: mobile, maxTouchPoints: 5 })
@@ -169,6 +182,12 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
     name + ' library shows one game without horizontal overflow',
   )
   await capture(name + '-library')
+  if (mobile) {
+    await swipe('.hollow-game-tile', 1)
+    check(await ev(`!!document.querySelector('.hollow-game-tile.word-duel') && !document.querySelector('.hollow-modes')`), name + ' touch swipe advances game without launching it')
+    await swipe('.hollow-game-tile', -1)
+    check(await ev(`!!document.querySelector('.hollow-game-tile.ember-rally')`), name + ' reverse swipe returns to previous game')
+  }
   await click('.hollow-game-tile.ember-rally')
   await until(`!!document.querySelector('.race-setup')`)
   check(
@@ -177,7 +196,8 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
     ),
     name + ' one click opens a single track with previous/next and race modes',
   )
-  await click('.race-track-tabs button[aria-label="Next track"]')
+  if (mobile) await swipe('.race-track-hero', 1)
+  else await click('.race-track-tabs button[aria-label="Next track"]')
   check(
     await ev(
       `document.querySelector('.race-track-caption h2').textContent==='The Moonbreak' && !!document.querySelector('.race-route svg path').getAttribute('d')`,
@@ -189,13 +209,17 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
     await ev(`document.querySelector('.race-setup').scrollWidth<=innerWidth+1`),
     name + ' race setup has no horizontal overflow',
   )
-  if (mobile)
+  if (mobile && height > width)
     check(
       await ev(
         `document.querySelector('.race-launch').getBoundingClientRect().bottom<=innerHeight && document.querySelector('.race-launch').getBoundingClientRect().top>0`,
       ),
       name + ' start action stays visible',
     )
+  await click('[aria-controls="race-controls"]')
+  await ev('history.back()')
+  await until(`!document.querySelector('#race-controls')`)
+  check(await ev(`!!document.querySelector('.race-setup')`), name + ' native Back closes controls without leaving track selection')
   await click('.race-mode-list button:nth-child(2)')
   check(
     await ev(`import('/scripts/hollow-browser.js').then(m=>!m.inspectRace().solo)`),
@@ -265,6 +289,26 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
     await ev(`location.href.startsWith(${JSON.stringify(base)})`),
     name + ' browser Back returns to the Hollow without leaving the site',
   )
+  await ev('history.back()')
+  await until(`import('/src/systems/sections.ts').then(m=>!m.useSections.getState().entered)`)
+  check(true, name + ' next native Back returns to the garden')
+}
+// Every place uses the same native Back boundary, including places without games.
+if (!process.env.HOLLOW_KEYS_ONLY) {
+  const results = await ev(`(async()=>{
+    const {useSections}=await import('/src/systems/sections.ts');
+    const {SECTIONS}=await import('/src/sections/registry.ts');
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const passed=[];
+    for(let i=0;i<SECTIONS.length;i++){
+      useSections.getState().go(i);useSections.getState().enter();await wait(900);
+      history.back();await wait(900);
+      if(useSections.getState().entered)throw Error('Back failed in '+SECTIONS[i].name);
+      passed.push(SECTIONS[i].name);
+    }
+    return passed;
+  })()`)
+  for (const place of results) check(true, 'native Back returns ' + place + ' to the garden')
 }
 // A complete trip using real keys: no DOM clicks or scripted focus.
 touching = false

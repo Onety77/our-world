@@ -129,6 +129,8 @@ body:has(.hollow-hub, .race-setup, .wheel)
   min-width: 0;
   isolation: isolate;
 }
+/* The entire illustrated choice is one tap target, including its overlaid caption. */
+.hollow-game-tile > span { pointer-events: none; user-select: none; }
 .hollow-game-tile:nth-child(2) {
   margin-top: 78px;
 }
@@ -471,4 +473,91 @@ body:has(.hollow-hub, .race-setup, .wheel)
 }
 @media (max-width: 600px) {
   .hollow-page-previous span, .hollow-page-next span { display: none; }
+}
+
+.choice-swipe-hint { display: none; }
+.hollow-library-paged, .race-track-side { touch-action: pan-y pinch-zoom; }
+@media (pointer: coarse) {
+  .hollow-key-hint { display: none; }
+  .choice-swipe-hint {
+    display: block;
+    text-align: center;
+    font: italic 12px/1.5 var(--serif);
+    color: #b9b09b;
+    margin: 4px 0 18px;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 1000px) and (max-height: 500px) {
+  .hollow-key-hint { display: none; }
+  .hollow-hub { padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right)); }
+  .hollow-top { min-height: 44px; }
+  .hollow-content { padding-top: 0; }
+  .hollow-heading h1 { font-size: 28px; margin: 5px 0; }
+  .hollow-heading > :is(p, .hollow-eyebrow) { display: none; }
+  .hollow-library.hollow-library-paged { margin-top: 0; }
+  .hollow-library-paged .hollow-game-tile { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 16px; padding-bottom: 6px; }
+  .hollow-library-paged .hollow-tile-art { height: 185px; }
+  .hollow-tile-body { padding-top: 0; }
+  .hollow-tile-body > strong, .ember-rally .hollow-tile-body > strong { font-size: 28px; }
+  .hollow-tile-description { font-size: 12px; line-height: 1.4; margin: 8px 0; }
+  .hollow-tile-enter { margin-top: 10px; }
+  .hollow-page-count { margin: 0 0 4px; }
+  .hollow-activity { margin-top: 20px; }
+}
+
+/* A phone gets one open, full-width scene with its paging controls below it. */
+@media (max-width: 600px) {
+  .hollow-hub {
+    padding: env(safe-area-inset-top) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    overflow-x: clip;
+  }
+  .hollow-key-hint { display: none; }
+  .choice-swipe-hint { display: block; text-align: center; font: italic 12px/1.5 var(--serif); color: #b9b09b; margin: 4px 0 18px; }
+  .hollow-top { min-height: 56px; gap: 12px; }
+  .hollow-presence { font-size: 11px; text-align: right; }
+  .hollow-content { padding-top: 12px; }
+  .hollow-heading h1 { font-size: 34px; margin: 8px 0; }
+  .hollow-heading > .hollow-eyebrow { display: none; }
+  .hollow-heading > p { max-width: 285px; font-size: 13px; line-height: 1.5; }
+  .hollow-library.hollow-library-paged {
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
+    margin-top: 10px;
+  }
+  .hollow-library-paged .hollow-game-tile {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin: 0;
+    padding: 0 4px 8px;
+    min-height: 345px;
+    justify-content: center;
+  }
+  .hollow-library-paged .hollow-page-previous { grid-column: 1; grid-row: 2; justify-self: end; }
+  .hollow-library-paged .hollow-page-next { grid-column: 2; grid-row: 2; justify-self: start; }
+  .hollow-library-paged :is(.hollow-page-previous, .hollow-page-next) { min-width: 60px; }
+  .hollow-library-paged .hollow-tile-art { height: clamp(145px, 23svh, 195px); }
+  .hollow-tile-body { padding-top: 8px; }
+  .hollow-tile-body > strong, .ember-rally .hollow-tile-body > strong { font-size: 32px; }
+  .hollow-tile-description { margin: 8px 0 10px; max-width: 290px; line-height: 1.5; }
+  .hollow-tile-enter { margin-top: 14px; font-size: 16px; gap: 10px; }
+  .hollow-page-count { margin: 2px 0 6px; font-size: 12px; }
+  .hollow-activity { margin-top: 24px; }
+  .hollow-activity > div:first-child { display: none; }
+  .hollow-activity button { flex-wrap: wrap; gap: 8px; }
+  .hollow-activity strong { font-size: 15px; }
+  .hollow-modes { gap: 6px; margin: 20px 0 0; }
+  .hollow-modes > button {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    width: 100%; max-width: 390px;
+    padding: 16px 8px; column-gap: 14px;
+    text-align: left;
+    align-items: start;
+  }
+  .hollow-mode-icon { grid-column: 1; grid-row: 1 / 5; margin: 6px 0 0; }
+  .hollow-modes :is(small, strong, p, .hollow-mode-action) { grid-column: 2; }
+  .hollow-modes strong { font-size: 24px; margin-top: 5px; }
+  .hollow-modes p { font-size: 13px; line-height: 1.5; margin: 8px 0 12px; }
+  .hollow-mode-action { font-size: 14px; }
 }

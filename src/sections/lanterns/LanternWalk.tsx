@@ -25,6 +25,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Color, Group, Matrix4, Raycaster, Vector2, Vector3 } from 'three'
 import { useData } from '@/data/provider'
 import { useMemories } from '@/systems/memories'
+import { useBackCloses } from '@/systems/backstop'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { useQuality } from '@/systems/quality'
 import { useLanternLight } from '@/systems/lanternLight'
@@ -243,6 +244,7 @@ export default function LanternWalk() {
    * ---------------------------------------------------------------------------
    */
   const [focused, setFocused] = useState<number | null>(null)
+  useBackCloses(focused !== null, () => setFocused(null), 15)
   const focusTarget = useRef<number | null>(null)
   useEffect(() => () => { focus.open = 0 }, [])
   useEffect(() => {
