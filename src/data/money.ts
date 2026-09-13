@@ -85,16 +85,28 @@ export const manualRates: RateProvider = {
 }
 
 export function format(m: Money, opts: { compact?: boolean } = {}): string {
-  const majors = m.minor / minorUnitsPerMajor(m.currency)
+  const per = minorUnitsPerMajor(m.currency)
+  const majors = m.minor / per
+  /*
+    "₦12,000", not "NGN 12,000.00".
+
+    The symbol rather than the code: a locale that is not Nigeria's spells the
+    naira out as three capitals, and the two of them are in Kano and Shanghai.
+    And whole amounts stay whole — the kobo are kept to the last one in the
+    data, but a river's worth of ".00" is a bank statement, not a place.
+  */
+  const whole = m.minor % per === 0
   try {
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency: m.currency,
+      currencyDisplay: 'narrowSymbol',
       notation: opts.compact ? 'compact' : 'standard',
+      minimumFractionDigits: opts.compact || whole ? 0 : undefined,
       maximumFractionDigits: opts.compact ? 1 : undefined,
     }).format(majors)
   } catch {
-    return `${majors.toFixed(2)} ${m.currency}`
+    return `${whole ? majors.toFixed(0) : majors.toFixed(2)} ${m.currency}`
   }
 }
 

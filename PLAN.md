@@ -1759,6 +1759,18 @@ handling changed.
       Stars' cairn under the two lights and waymarkers down the plain, the
       walk's gateway, motes and falling leaves, swallows and bats. `nightfallProps.ts`
       and `Nightair.tsx`. Measured: 57–215k triangles desktop, 76–182k phone
+- [x] **The Wellspring, given its due.** The pot could be added to and
+      nothing else: no way to say what it was for (the data had the goal from
+      day one, nothing wrote it), no way to see what went in, the figure hidden
+      behind a condition the overlay could never meet, "NGN 0.00". Now: a goal
+      sheet and a record sheet (`ui/Pot`, `systems/pot`), each of you in your
+      colours on the threshold, ₦ and whole amounts, a stone in the shallows
+      per contribution, and the place itself rebuilt — a river that bends and
+      rises at a spring and comes toward you, banks that follow it, reeds,
+      willows, leaves on the current at the river's own speed, fish rings,
+      dragonflies by day and fireflies by night, mist when the sun is low
+      (`sections/river/River.tsx`, `Riverlife.tsx`, `layout.ts`). The water
+      layer of the ambient bed follows fullness
 - [ ] Full regression + screenshot sweep, update the in-world guide
 
 ## After that

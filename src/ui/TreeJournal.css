@@ -1,0 +1,28 @@
+.tree-journal .sheet-body { width: 100%; padding: clamp(24px, 5vw, 52px); }
+.tree-journal .sheet { height: min(78dvh, 48rem); max-height: calc(100dvh - 100px); }
+.tree-journal .addressed { margin-bottom: 8px; }
+.tree-journal .tree-journal-intro { margin: 6px 0; }
+.tree-journal .thought-search { margin-top: 14px; }
+.tree-journal .thought-results { margin: 6px 0; }
+.tree-journal h1 { font: 400 clamp(27px, 4vw, 38px)/1.15 var(--serif); color: #473d2e; margin: 10px 0; }
+.tree-journal-intro, .thought-results { font: italic 14px/1.5 var(--serif); color: #776a54; }
+.thought-search { display: grid; gap: 6px; margin: 24px 0 12px; font: 12px var(--sans); color: #6c604c; }
+.thought-search input { width: 100%; background: transparent; border: 0; border-bottom: 1px solid #a2957b; padding: 10px 0; color: #3b3428; font: 17px var(--serif); border-radius: 0; }
+.thought-filters { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.thought-filters button, .thought-more { border: 0; background: none; color: #74664e; font: 14px var(--serif); min-height: 44px; cursor: pointer; padding: 5px 0; }
+.thought-filters button[aria-pressed="true"] { color: #3b3020; text-decoration: underline; text-underline-offset: 7px; }
+.thought-leaf { display: block; width: 100%; text-align: left; border: 0; background: none; color: #443b2c; padding: 18px 8px; cursor: pointer; }
+.thought-leaf:nth-child(even) { padding-left: 20px; }
+.thought-leaf:hover { background: rgba(134, 110, 69, .07); }
+.thought-leaf-meta { display: flex; flex-wrap: wrap; gap: 12px; font: 12px var(--sans); color: #786747; }
+.thought-leaf.cool .thought-leaf-meta { color: #666478; }
+.thought-leaf-meta em { color: #905526; }
+.thought-leaf-words { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin-top: 10px; font: 19px/1.55 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tree-journal button:focus-visible, .thought-search input:focus-visible { outline: 2px solid #9c7943; outline-offset: 4px; }
+.tree-reader-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px 24px; }
+.tree-reader-actions .put-back { margin: 8px 0; }
+.thought-draft-note { color: #796b53; font: italic 13px/1.5 var(--serif); }
+.thought-save-error { color: #893f2e; font: 14px/1.5 var(--serif); }
+.thought-seal-controls { border: 0; margin: 0; padding: 0; min-width: 0; }
+.tree-threshold .tree-memory-count { display: block; font: italic 13px var(--serif); color: #dbcfaf; margin-bottom: 8px; }
+.tree-threshold .tree-revisit { display: block; margin: 8px 0; font: 16px var(--serif); }

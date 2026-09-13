@@ -76,6 +76,7 @@ import { watchForTrouble } from '@/systems/trouble'
 import { PotForm } from '@/ui/Pot'
 import { ProfileSheet } from '@/ui/Profile'
 import { LetterReader, Writing } from '@/ui/Letters'
+import { TreeJournal } from '@/ui/TreeJournal'
 import { Glasshouse } from '@/ui/Memories'
 import { Questions, QuestionSeedNotice } from '@/ui/Questions'
 /*
@@ -554,6 +555,7 @@ function Garden() {
       <Threshold />
       <Overlay />
       <LetterReader />
+      <TreeJournal />
       <Writing />
       <PotForm />
       <ProfileSheet />

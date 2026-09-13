@@ -14,13 +14,10 @@ import { useData, useWorldSlice } from '@/data/provider'
 import { USER_IDS } from '@/data/types'
 import { LIGHT_COLORS } from '@/systems/palette'
 import { formatDistance, greatCircleKm } from '@/systems/geo'
-import { potTotal } from '@/data/local'
-import { format, progressToward } from '@/data/money'
 import { likelyAsleep, localHourIn, localTimeLabel, partOfDay } from '@/systems/time'
 import { useProfileSheet } from '@/systems/profileSheet'
 import { useTakenOver } from '@/systems/attention'
 import { useSections } from '@/systems/sections'
-import { SECTIONS } from '@/sections/registry'
 
 export function Overlay() {
   const takenOver = useTakenOver()
@@ -28,21 +25,13 @@ export function Overlay() {
   const me = useData().me
   const profiles = useWorldSlice((s) => s.profiles)
   const presence = useWorldSlice((s) => s.presence)
-  const world = useWorldSlice((s) => s)
   const showProfile = useProfileSheet((s) => s.show)
-
-  const index = useSections((s) => s.index)
-  const here = SECTIONS[index]
 
   const [tick, setTick] = useState(() => Date.now())
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), 20_000)
     return () => clearInterval(id)
   }, [])
-
-  const total = potTotal(world)
-  const goal = world.pot.goal
-  const potProgress = progressToward(total, goal?.amount ?? null)
 
   const [warm, cool] = USER_IDS
   const apartKm =
@@ -128,24 +117,12 @@ export function Overlay() {
           <span className="thread" />
         </div>
         {person(cool)}
-
         {/*
-          Only at the river, where it is the subject. Elsewhere a running total
-          of money is just noise over somebody's thought.
-
-          Never the word "saved" — it is not a piggy bank, it is the two of
-          you having something. So: ours.
+          The pot's figure used to be here "only at the river" — behind a
+          condition this overlay can never meet, since it returns nothing at
+          all once a place is entered. The Wellspring's own threshold leads
+          with the number now, which is where it belongs; see `ui/Threshold`.
         */}
-        {entered && here.id === 'river' && (
-          <div className="saved">
-            <span className="saved-amount">{format(total)}</span>
-            <span className="saved-label">
-              {goal && potProgress !== null
-                ? `${Math.round(potProgress * 100)}% of ${goal.label || 'it'}`
-                : 'ours'}
-            </span>
-          </div>
-        )}
       </div>
     </div>
   )

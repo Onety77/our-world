@@ -81,23 +81,30 @@ const BLOOM_VERT = /* glsl */ `
   attribute vec3 iColor;
   attribute float iPhase;
   attribute float iScale;
+  attribute float iUnread;
+  attribute float iOpenAfter;
+  attribute float iBornAfter;
   /** 0 stem and leaf, 1 petal, 2 centre. See bloomBase. */
   attribute float aPart;
 
-  uniform float uTime;
+  uniform highp float uTime;
   uniform float uWind;
+  uniform float uAge;
 
   varying vec3 vColor;
   varying float vUp;
   varying float vDepth;
   varying float vPart;
+  varying float vUnread;
 
   void main() {
     vColor = iColor;
     vPart = aPart;
+    vUnread = iUnread * step(iOpenAfter, uAge);
     vUp = normalize(normal).y * 0.5 + 0.5;
 
-    vec3 p = position * iScale;
+    float growth = mix(.12, 1.0, smoothstep(0.0, 1.4, uAge - iBornAfter));
+    vec3 p = position * iScale * growth;
 
     // sway from the base, so the head moves and the root doesn't
     float sway = sin(uTime * 1.1 + iPhase) * 0.5 + sin(uTime * 2.3 + iPhase * 1.7) * 0.2;
@@ -117,10 +124,12 @@ const BLOOM_FRAG = /* glsl */ `
   uniform float uFogNear;
   uniform float uFogFar;
   uniform float uLight;
+  uniform highp float uTime;
   varying vec3 vColor;
   varying float vUp;
   varying float vDepth;
   varying float vPart;
+  varying float vUnread;
 
   void main() {
     // Stem and leaf hold their own green whatever colour the flower is; the
@@ -130,6 +139,10 @@ const BLOOM_FRAG = /* glsl */ `
     vec3 tint = vPart < 0.5 ? stem : (vPart < 1.5 ? vColor : heart);
 
     vec3 col = tint * (0.62 + vUp * 0.5) * uLight;
+    // Unread thoughts hold a little light in the flower, even after dusk.
+    // It belongs to the petals and centre, never to the stem or a closed seal.
+    col += vUnread * step(.5, vPart) * mix(vColor, vec3(1.0, .84, .48), .45)
+      * (.24 + .1 * sin(uTime * 1.5));
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
     col = mix(col, uFogColor, fog);
     gl_FragColor = vec4(col, 1.0);
@@ -143,13 +156,15 @@ const WARM_BLOOMS = ['#e8a04a', '#e0784e', '#e8c05a', '#d9834f']
 const COOL_BLOOMS = ['#9aa8e0', '#b48ad8', '#7fb0d8', '#a88ad0']
 
 function Blooms() {
+  const data = useData()
+  const epoch = useRef(data.now())
   const { palette } = useSceneEnv()
   const letters = useWorldSlice((s) => s.letters)
 
   // Only the thoughts, oldest first — the spiral has to be stable, so a new
   // thought must never renumber the ones already in the ground.
   const thoughts = useMemo(
-    () => letters.filter((l) => l.placeId === 'tree').sort((a, b) => a.at - b.at),
+    () => letters.filter((l) => l.placeId === 'tree').sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)),
     [letters],
   )
 
@@ -167,11 +182,14 @@ function Blooms() {
           phase: (h % 628) / 100,
           // 1.35–1.85 of the base plant, which is about 0.8 m — so a thought
           // stands 1.1 to 1.5 m tall and clears meadow grass that reaches 0.76.
-          scale: 1.35 + ((h >> 8) % 50) / 100,
+          scale: 1.35 + ((h >>> 8) % 50) / 100,
+          unread: t.by !== data.me && t.readAt === null ? 1 : 0,
+          openAfter: t.openAt === null ? 0 : Math.max(0, (t.openAt - epoch.current) / 1000),
+          bornAfter: (t.at - epoch.current) / 1000,
         }
       }),
     )
-  }, [thoughts])
+  }, [thoughts, data.me])
 
   const material = useMemo(
     () =>
@@ -181,6 +199,7 @@ function Blooms() {
         side: DoubleSide,
         uniforms: {
           uTime: { value: 0 },
+          uAge: { value: 0 },
           uWind: { value: 1 },
           uFogColor: { value: new Color('#c3cebe') },
           uFogNear: { value: 16 },
@@ -207,6 +226,7 @@ function Blooms() {
   useFrame((_, delta) => {
     t.current += delta
     material.uniforms.uTime.value = t.current
+    material.uniforms.uAge.value = (data.now() - epoch.current) / 1000
   })
 
   /**
@@ -253,8 +273,11 @@ function Blooms() {
 
       thoughts.forEach((thought, i) => {
         const [x, y, z] = thoughtSpot(i)
+        let hash = 0
+        for (const ch of thought.id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+        const height = .78 * (1.35 + ((hash >>> 8) % 50) / 100)
         // aimed at the head of the plant, which is where the eye goes
-        consider(thought.id, [x, y + 0.72, z], 0.7)
+        consider(thought.id, [x, y + height, z], 0.55)
         /*
           And at the sheet — which is *not* where the thread is tied.
 
@@ -299,7 +322,7 @@ function Hanging() {
     () =>
       letters
         .filter((l) => l.placeId === 'tree')
-        .sort((a, b) => a.at - b.at)
+        .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))
         .map((letter, i) => hungFrom(letter, i)),
     [letters],
   )
@@ -414,6 +437,9 @@ function buildBlooms(
     color: string
     phase: number
     scale: number
+    unread: number
+    openAfter: number
+    bornAfter: number
   }[],
 ): InstancedBufferGeometry {
   const solid = bloomBase()
@@ -428,6 +454,9 @@ function buildBlooms(
   const color = new Float32Array(n * 3)
   const phase = new Float32Array(n)
   const scale = new Float32Array(n)
+  const unread = new Float32Array(n)
+  const openAfter = new Float32Array(n)
+  const bornAfter = new Float32Array(n)
   const c = new Color()
 
   items.forEach((it, i) => {
@@ -436,12 +465,18 @@ function buildBlooms(
     color.set([c.r, c.g, c.b], i * 3)
     phase[i] = it.phase
     scale[i] = it.scale
+    unread[i] = it.unread
+    openAfter[i] = it.openAfter
+    bornAfter[i] = it.bornAfter
   })
 
   geo.setAttribute('iOffset', new InstancedBufferAttribute(offset, 3))
   geo.setAttribute('iColor', new InstancedBufferAttribute(color, 3))
   geo.setAttribute('iPhase', new InstancedBufferAttribute(phase, 1))
   geo.setAttribute('iScale', new InstancedBufferAttribute(scale, 1))
+  geo.setAttribute('iUnread', new InstancedBufferAttribute(unread, 1))
+  geo.setAttribute('iOpenAfter', new InstancedBufferAttribute(openAfter, 1))
+  geo.setAttribute('iBornAfter', new InstancedBufferAttribute(bornAfter, 1))
   geo.instanceCount = items.length
   solid.dispose()
   return geo

@@ -18,6 +18,8 @@ import { useReading } from '@/systems/reading'
 import { thoughtSpot } from '@/sections/tree/layout'
 import { sealUntil, stillSealed } from '@/data/types'
 import { useDismissOutside } from './useDismissOutside'
+import { usePaperDialog } from './usePaperDialog'
+import { findThoughts } from '@/systems/thoughts'
 
 function when(at: number): string {
   const date = new Date(at)
@@ -74,11 +76,27 @@ export function LetterReader() {
   const profiles = useWorldSlice((s) => s.profiles)
   const openId = useReading((s) => s.openLetterId)
   const close = useReading((s) => s.close)
+  const browsing = useReading(s => s.browsing)
 
   const letter = openId ? letters.find((l) => l.id === openId) : undefined
   const sheet = useRef<HTMLDivElement>(null)
 
-  const waiting = letter ? stillSealed(letter, me, Date.now()) : false
+  const [now, setNow] = useState(() => data.now())
+  useEffect(() => {
+    if (!openId) return
+    setNow(data.now())
+    const timer = setInterval(() => setNow(data.now()), 1000)
+    return () => clearInterval(timer)
+  }, [openId, data])
+  const waiting = letter ? stillSealed(letter, me, now) : false
+  const dialog = usePaperDialog(Boolean(letter), close)
+  const ordered = findThoughts(letters, me, now, 'all')
+  const index = ordered.findIndex(item => item.id === openId)
+  const go = (step: number) => {
+    if (index < 0) return
+    const next = ordered[index + step]
+    if (next) useReading.getState().open(next.id)
+  }
 
   /*
     The words of a sealed thought, fetched when the paper is opened.
@@ -106,7 +124,7 @@ export function LetterReader() {
       differently below, and discarding this left the second one showing the
       first one's ellipsis forever.
     */
-    void data.readSealedLetter(id).then((body) => {
+    void data.readSealedLetter(id).catch(() => null).then((body) => {
       if (dropped) return
       setOpened((held) => ({ ...held, [id]: body }))
     })
@@ -121,21 +139,23 @@ export function LetterReader() {
     on a paper that said nothing, and `readAt` can never be set twice.
   */
   useEffect(() => {
-    if (!letter || letter.readAt !== null || waiting) return
-    const id = setTimeout(() => void data.markLetterRead(letter.id), 700)
+    if (!letter || letter.by === me || letter.readAt !== null || waiting || (needsWords && !already)) return
+    const id = setTimeout(() => void attempt('the read mark did not reach the tree', () => data.markLetterRead(letter.id)), 700)
     return () => clearTimeout(id)
-  }, [letter, data, waiting])
+  }, [letter, data, waiting, needsWords, already, me])
 
   useEffect(() => {
     if (!letter) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault(); go(e.key === 'ArrowLeft' ? -1 : 1)
+      }
     }
     window.addEventListener('keydown', onKey)
-    // start at the top even if the last letter was scrolled
-    sheet.current?.scrollTo({ top: 0 })
     return () => window.removeEventListener('keydown', onKey)
-  }, [letter, close])
+  }, [openId, letters])
+  useEffect(() => { sheet.current?.scrollTo({ top: 0 }) }, [openId])
 
   if (!letter) return null
 
@@ -143,7 +163,7 @@ export function LetterReader() {
   const mine = letter.by === me
 
   return (
-    <div className="reader" onClick={close} role="presentation">
+    <div className="reader" ref={dialog} onClick={close} role="dialog" aria-modal="true" aria-label="Read a thought" tabIndex={-1}>
       <div
         className="sheet"
         // clicking the paper itself shouldn't put it back
@@ -169,20 +189,12 @@ export function LetterReader() {
                 <span>. it is not open yet.</span>
               </p>
             ) : needsWords && already === null ? (
-              /*
-                The day has come, the words were asked for, and nothing came
-                back. Rare, and it should now be impossible to create — the two
-                documents are written in one batch — but a thought sealed before
-                that was true could have landed without its words, and they
-                cannot be written again: the rules refuse every update.
-
-                An ellipsis here would say "still coming", which is the one
-                thing that is certainly false.
-              */
-              <p className="ink sealed">
-                <span>{author.name} sealed this for today, but the words did not </span>
-                <span>arrive with it. they cannot be recovered.</span>
-              </p>
+              // A refused or failed fetch is retryable; it is not proof that
+              // the stored words are gone, and must not consume the read mark.
+              <div className="ink sealed" role="status">
+                <p>The words couldn’t be opened just now. The thought is still here.</p>
+                <button type="button" onClick={() => setOpened(held => { const next = { ...held }; delete next[letter.id]; return next })}>try again</button>
+              </div>
             ) : (
               <p className="ink">{letter.body || already || '…'}</p>
             )}
@@ -194,9 +206,11 @@ export function LetterReader() {
         </div>
       </div>
 
-      <button type="button" className="put-back" onClick={close}>
-        put it back
-      </button>
+      <div className="tree-reader-actions" onClick={e => e.stopPropagation()}>
+        {index >= 0 && <button type="button" className="put-back quiet" disabled={index === 0} onClick={() => go(-1)}>← newer</button>}
+        <button type="button" className="put-back" onClick={close}>{browsing ? 'back to the thoughts' : 'put it back'}</button>
+        {index >= 0 && <button type="button" className="put-back quiet" disabled={index === ordered.length - 1} onClick={() => go(1)}>older →</button>}
+      </div>
     </div>
   )
 }
@@ -329,7 +343,18 @@ export function Writing() {
   const composing = useReading((s) => s.composing)
   const stopWriting = useReading((s) => s.stopWriting)
 
-  const [body, setBody] = useState('')
+  const draftKey = `tree-thought-draft:${data.me}`
+  const [draft] = useState(() => {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(draftKey) ?? '{}')
+      return { body: typeof value.body === 'string' ? value.body.slice(0, 8000) : '', day: typeof value.day === 'string' ? value.day : '' }
+    } catch { return { body: '', day: '' } }
+  })
+  const [body, setBody] = useState(draft.body)
+  const [saving, setSaving] = useState(false)
+  const pending = useRef(false)
+  const [saveError, setSaveError] = useState('')
+  const dialog = usePaperDialog(composing, () => { if (!pending.current) stopWriting() })
 
   /**
    * Every character puts a stroke of a pen on the paper.
@@ -364,16 +389,24 @@ export function Writing() {
     which is exactly the sort of disagreement that ends with a thought sealed
     for a date nobody picked.
   */
-  const [day, setDay] = useState('')
+  const [day, setDay] = useState(draft.day)
   const sealedFor = day === '' ? null : sealUntil(day)
   const field = useRef<HTMLTextAreaElement>(null)
   const [rising, setRising] = useState<string | null>(null)
+  const risingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (risingTimer.current) clearTimeout(risingTimer.current) }, [])
   const sheet = useRef<HTMLDivElement>(null)
   const actions = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    try {
+      if (body || day) sessionStorage.setItem(draftKey, JSON.stringify({ body, day }))
+      else sessionStorage.removeItem(draftKey)
+    } catch { /* A private browser may refuse draft storage; the open sheet still keeps it. */ }
+  }, [body, day, draftKey])
 
   // An untouched sheet is disposable. Once there are words on it, closing is
   // kept explicit so a stray tap cannot hide work in progress.
-  useDismissOutside(composing && body.trim() === '', stopWriting, [sheet, actions])
+  useDismissOutside(composing && !saving && body.trim() === '', stopWriting, [sheet, actions])
 
   const them = profiles[data.me === 'warm' ? 'cool' : 'warm']
 
@@ -383,7 +416,7 @@ export function Writing() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && composing) stopWriting()
+      if (e.key === 'Escape' && composing && !pending.current) stopWriting()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -391,7 +424,14 @@ export function Writing() {
 
   async function plantIt() {
     const text = body.trim()
-    if (text === '') return
+    if (text === '' || pending.current) return
+    if (day && (sealedFor === null || sealedFor <= data.now())) {
+      setSaveError('Choose a future day, or let this thought open now.')
+      return
+    }
+    pending.current = true
+    setSaving(true)
+    setSaveError('')
     const index = letters.filter((l) => l.placeId === 'tree').length
     const planted = await attempt('that thought didn’t take', () =>
       data.writeLetter({
@@ -403,7 +443,9 @@ export function Writing() {
     )
     // The words stay in the box if it failed. Clearing them first would mean a
     // bad connection quietly ate something somebody had just written.
-    if (!planted) return
+    pending.current = false
+    setSaving(false)
+    if (!planted) { setSaveError('The thought has not been planted. Your words are still here; try again when you’re ready.'); return }
     ambience.cue('root', 0.85)
     setBody('')
     setDay('')
@@ -414,10 +456,11 @@ export function Writing() {
       the only thing that tells you, so they have to be the true ones.
     */
     setRising(sealedFor === null ? 'it took root' : 'it will keep until then')
-    setTimeout(() => setRising(null), 2600)
+    if (risingTimer.current) clearTimeout(risingTimer.current)
+    risingTimer.current = setTimeout(() => setRising(null), 2600)
   }
 
-  if (rising) {
+  if (rising && !composing) {
     return (
       <div className="rising">
         <span>{rising}</span>
@@ -428,7 +471,7 @@ export function Writing() {
   if (!composing) return null
 
   return (
-    <div className="reader composing">
+    <div className="reader composing" ref={dialog} role="dialog" aria-modal="true" aria-label="Plant a thought" aria-busy={saving} tabIndex={-1}>
       <div ref={sheet} className="sheet" role="presentation">
         <PaperGrain />
         <div className="sheet-scroll">
@@ -438,12 +481,17 @@ export function Writing() {
               ref={field}
               className="ink"
               value={body}
+              aria-label="Your thought"
+              maxLength={8000}
+              disabled={saving}
               onChange={(e) => write(e.target.value)}
-              placeholder="&hellip;"
+              placeholder="Something you noticed. Something you miss. Something you want them to know…"
               spellCheck
               rows={10}
             />
-            <Sealing day={day} setDay={setDay} them={them.name} />
+            <fieldset className="thought-seal-controls" disabled={saving}><Sealing day={day} setDay={setDay} them={them.name} /></fieldset>
+            {body && <p className="thought-draft-note">Your draft stays in this tab until you plant it.{body.length > 7000 ? ` ${body.length} / 8000 characters.` : ''}</p>}
+            {saveError && <p className="thought-save-error" role="alert">{saveError}</p>}
           </div>
         </div>
       </div>
@@ -453,12 +501,12 @@ export function Writing() {
           type="button"
           className="put-back"
           onClick={() => void plantIt()}
-          disabled={body.trim() === ''}
+          disabled={body.trim() === '' || saving}
         >
-          plant it
+          {saving ? 'taking root…' : 'plant it'}
         </button>
-        <button type="button" className="put-back quiet" onClick={stopWriting}>
-          not now
+        <button type="button" className="put-back quiet" disabled={saving} onClick={stopWriting}>
+          {body.trim() ? 'keep for later' : 'not now'}
         </button>
       </div>
     </div>

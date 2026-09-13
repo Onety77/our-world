@@ -13618,6 +13618,119 @@ body.on-the-road .broke-what {
   text-transform: uppercase;
 }
 
+/*
+  Each of you, under the figure: two small amounts in your two colours, side by
+  side. Not a scoreboard — the same size, the same weight, and "you" rather
+  than a name for whichever is yours.
+*/
+.river-each {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+  margin: -0.55rem 0 0.9rem;
+  color: rgba(242, 239, 230, 0.78);
+  font-family: var(--sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+.river-each-one {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.river-each-spark,
+.pot-each-spark,
+.pot-entry-spark {
+  display: inline-block;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0.5rem currentColor;
+}
+
+.river-rituals {
+  margin-top: 0.3rem;
+}
+
+.threshold:not(.river-threshold) .river-rituals {
+  align-items: center;
+}
+
+/* The goal sheet's name line, and the fixed currency beside the amount. */
+.reader.composing input.pot-goal-label {
+  width: 100%;
+  margin-bottom: 1rem;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+}
+
+.pot-currency-fixed {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: rgba(74, 58, 38, 0.7);
+}
+
+/* The record: each of you at the top, then every entry, newest first. */
+.pot-each {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.4rem;
+  margin: 0 0 0.2rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: rgba(74, 58, 38, 0.8);
+}
+
+.pot-each-one {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.pot-each b {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.pot-entries {
+  list-style: none;
+  margin: 1.4rem 0 0;
+  padding: 0;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: rgba(74, 58, 38, 0.85);
+}
+
+.pot-entries li {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.42rem 0;
+  border-top: 1px solid rgba(74, 58, 38, 0.12);
+}
+
+.pot-entry-when {
+  color: rgba(74, 58, 38, 0.55);
+}
+
+.pot-entry-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pot-entry-amount small {
+  display: block;
+  font-size: 0.6rem;
+  color: rgba(74, 58, 38, 0.5);
+}
+
 /* ---------------------------------------------------------------------------
    The next question, growing.
 

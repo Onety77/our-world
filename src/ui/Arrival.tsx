@@ -265,8 +265,8 @@ export function Arrival({ name }: { name: string }) {
         <p className="arrival-what">
           Five places, and the two of you. A tree that keeps what you think, a
           river that runs on what you have put by, a fire with something to
-          play, a sky wide enough to talk across, and a glasshouse built out of
-          every picture worth keeping.
+          play, a sky wide enough to talk across, and a lane of lanterns, one
+          lit for every picture worth keeping.
         </p>
         <button type="button" ref={way} onClick={open}>
           come in

@@ -3,7 +3,9 @@ import { SECTIONS } from '@/sections/registry'
 import { useSections } from '@/systems/sections'
 import { useReading } from '@/systems/reading'
 import { usePot } from '@/systems/pot'
-import { potTotal } from '@/data/local'
+import { potByPerson, potTotal } from '@/data/local'
+import { USER_IDS, type UserId } from '@/data/types'
+import { LIGHT_COLORS } from '@/systems/palette'
 import { format, progressToward } from '@/data/money'
 import { useTakenOver } from '@/systems/attention'
 import { standing, useMemories } from '@/systems/memories'
@@ -11,6 +13,7 @@ import { useQuestions } from '@/systems/questions'
 import { until } from '@/systems/time'
 import { useMenuKeys } from './useMenuKeys'
 import { HollowLobby } from './HollowLobby'
+import { thoughtUnread } from '@/systems/thoughts'
 
 function TheLanternWalk() {
   const start = useMemories((s) => s.leaveOne)
@@ -73,17 +76,19 @@ export function Threshold() {
   const { entered, section: index } = useSections((s) => s.shown)
   const write = useReading((s) => s.startWriting)
   const tend = usePot((s) => s.show)
+  const showGoal = usePot((s) => s.showGoal)
+  const showRecord = usePot((s) => s.showRecord)
   const takenOver = useTakenOver()
   const questions = useWorldSlice((state) => state.questions)
   const world = useWorldSlice((state) => state)
   const id = SECTIONS[index].id
   const treeCount =
-    1 +
+    2 +
     (questions.current ? 1 : 0) +
     (questions.availableSeeds > 0 ? 1 : 0) +
     (questions.history.length > 1 ? 1 : 0)
   const thresholdKeys = useMenuKeys(
-    id === 'tree' ? treeCount : id === 'river' ? 1 : 0,
+    id === 'tree' ? treeCount : id === 'river' ? 2 + (world.contributions.length > 0 ? 1 : 0) : 0,
     true,
     entered && !takenOver && (id === 'tree' || id === 'river'),
     id === 'tree' ? 'vertical' : 'both',
@@ -92,11 +97,14 @@ export function Threshold() {
   if (!entered || takenOver) return null
 
   if (id === 'tree') {
+    const thoughts = world.letters.filter(letter => letter.placeId === 'tree')
+    const unread = thoughts.filter(letter => thoughtUnread(letter, data.me, data.now())).length
     const current = questions.current
     const mine = current?.answered[data.me] ?? false
     const both = Boolean(current?.answered.warm && current?.answered.cool)
     return (
       <div className="threshold tree-threshold">
+        <span className="tree-memory-count">{thoughts.length ? `${thoughts.length} ${thoughts.length === 1 ? 'thought' : 'thoughts'} taking root${unread ? ` · ${unread} unread` : ''}` : 'Your first thought grows the first flower'}</span>
         <button
           ref={thresholdKeys.ref(0)}
           type="button"
@@ -174,6 +182,9 @@ export function Threshold() {
             {until(questions.nextAt, data.now())}
           </p>
         ) : null}
+        <button className="tree-revisit" ref={thresholdKeys.ref(treeCount - 1)}
+          onFocus={() => thresholdKeys.choose(treeCount - 1)}
+          onClick={useReading.getState().browse}>revisit the thoughts</button>
         <span className="tree-turn-guide">
           <span className="tree-turn-pointer">drag / scroll to turn · home resets</span>
           <span className="tree-turn-touch">drag sideways to turn · pinch to zoom</span>
@@ -199,8 +210,12 @@ export function Threshold() {
       =====================================================================
     */
     const total = potTotal(world)
+    const each = potByPerson(world)
     const goal = world.pot.goal
     const progress = progressToward(total, goal?.amount ?? null)
+    const reached = progress !== null && progress >= 1
+    const count = world.contributions.length
+    const name = (id: UserId) => (id === data.me ? 'you' : world.profiles[id].name)
     return (
       <div className="threshold river-threshold">
         <p className="river-total">
@@ -208,14 +223,52 @@ export function Threshold() {
           <span>
             between you
             {goal && progress !== null
-              ? ` \u00b7 ${Math.round(progress * 100)}% of ${goal.label || 'the goal'}`
+              ? reached
+                ? ` \u00b7 ${goal.label ? `${goal.label} \u2014 ` : ''}you got there`
+                : ` \u00b7 ${Math.round(progress * 100)}% of ${goal.label || 'the goal'}`
               : null}
           </span>
         </p>
-        <span className="threshold-whisper">make the water rise</span>
+        {/*
+          Each of you, in your own colour. Information, not a contest: two
+          figures side by side, and the one that is yours says "you".
+        */}
+        {count > 0 ? (
+          <p className="river-each">
+            {USER_IDS.map((id) => (
+              <span key={id} className="river-each-one">
+                <span className="river-each-spark" style={{ background: LIGHT_COLORS[id] }} />
+                {format(each[id])} {name(id)}
+              </span>
+            ))}
+          </p>
+        ) : null}
+        <span className="threshold-whisper">{reached ? 'and it keeps running' : 'make the water rise'}</span>
         <button ref={thresholdKeys.ref(0)} type="button" onClick={tend}>
           add to ours
         </button>
+        <div className="tree-rituals river-rituals">
+          <button
+            ref={thresholdKeys.ref(1)}
+            type="button"
+            className={thresholdKeys.selected === 1 ? 'is-selected' : undefined}
+            onFocus={() => thresholdKeys.choose(1)}
+            onClick={showGoal}
+          >
+            <span aria-hidden="true">{'\u25c7'}</span> {goal ? `for ${goal.label || format(goal.amount)}` : 'say what it is for'}
+          </button>
+          {count > 0 ? (
+            <button
+              ref={thresholdKeys.ref(2)}
+              type="button"
+              className={thresholdKeys.selected === 2 ? 'is-selected' : undefined}
+              onFocus={() => thresholdKeys.choose(2)}
+              onClick={showRecord}
+            >
+              <span aria-hidden="true">{'\u2726'}</span> what went in {'\u00b7'} {count}
+            </button>
+          ) : null}
+        </div>
       </div>
     )
   }

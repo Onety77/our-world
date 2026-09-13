@@ -11,6 +11,9 @@ import { create } from 'zustand'
 import { clearFocus, focusOn } from './focus'
 
 interface ReadingState {
+  browsing: boolean
+  browse(): void
+  closeBrowse(): void
   /** Open, and filling the screen. Set by tapping; cleared by closing. */
   openLetterId: string | null
   /** Under the pointer right now, so it can show it's reachable. */
@@ -34,6 +37,9 @@ interface ReadingState {
 }
 
 export const useReading = create<ReadingState>((set, get) => ({
+  browsing: false,
+  browse: () => { clearFocus(); set({ browsing: true, openLetterId: null, composing: false }) },
+  closeBrowse: () => set({ browsing: false }),
   openLetterId: null,
   hoveredLetterId: null,
   atHollow: false,
@@ -45,7 +51,7 @@ export const useReading = create<ReadingState>((set, get) => ({
   },
   startWriting: () => {
     clearFocus()
-    set({ composing: true, openLetterId: null })
+    set({ composing: true, openLetterId: null, browsing: false })
   },
   stopWriting: () => set({ composing: false }),
   close: () => {

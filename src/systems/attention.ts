@@ -49,7 +49,7 @@ export function useTakenOver(): boolean {
   // meadow behind it.
   const shut = useArrival((s) => s.shut)
   const playing = usePlaying((s) => s.gameId !== null)
-  const reading = useReading((s) => s.openLetterId !== null)
+  const reading = useReading((s) => s.openLetterId !== null || s.browsing)
   const composing = useReading((s) => s.composing)
   const pot = usePot((s) => s.open)
   const profile = useProfileSheet((s) => s.open)
@@ -74,6 +74,7 @@ export function takenOverNow(): boolean {
     useArrival.getState().shut ||
     usePlaying.getState().gameId !== null ||
     useReading.getState().openLetterId !== null ||
+    useReading.getState().browsing ||
     useReading.getState().composing ||
     usePot.getState().open ||
     useProfileSheet.getState().open ||

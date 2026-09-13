@@ -40,6 +40,55 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 13 Sep · Claude · the Wellspring, given its due
+
+The owner: "the two that lack our attention — the Tree (Codex) and the
+Wellspring (you)." Rendered it first (`garden.mjs` in the scratchpad opens
+`?mock=1&shot=1&section=river` through the door and seeds the pot from
+localStorage), and it was a straight teal ribbon down a trench, pale boulders
+floating on a brown bank, one button, and "NGN 0.00".
+
+**Logic, which was the bigger half.**
+- `Pot.goal` had been in the type since day one and *nothing wrote it* — so
+  the river only ever ran on the no-goal curve and "55% of the trip" was a
+  sentence the place could not say. `ui/Pot` has a goal sheet now (name and
+  amount, either of you, clearable), `systems/pot` grew `sheet`.
+- Every contribution is kept with who and when, and *nothing showed them*.
+  A record sheet (newest first, each of you at the top) and, in the world,
+  one stone in the shallows per contribution — sized by what it was, in its
+  keeper's colour, newest nearest you, oldest up toward the spring.
+- The Overlay's "only at the river" figure was behind `entered &&`, inside a
+  component that returns nothing once entered — dead since the rule that
+  hides the overlay in a place. Removed; the threshold leads with the number.
+- `money.format` says ₦ and drops ".00" on whole amounts: the two of them are
+  in Kano and Shanghai and neither locale spells the naira as a symbol.
+- The threshold shows each of you in your two colours (information, not a
+  scoreboard) and says "you got there" when the goal is reached; the ambient
+  water layer follows fullness (`setShade`), so an empty pot is a trickle.
+
+**The place.** The channel bends (meander 8 in a bed of 13; the shape lives
+in `layout.ts` so the camera can stand over the water's own middle, which it
+did not once the river bent); it rises at a spring — a horseshoe of wet rock
+with the same water stood on end pouring over it — forty metres up the
+valley, and comes toward you; boulders and scree follow the banks off
+`bankAt`, wet stone at the edge, stones standing in the current; reed beds
+in clumps at the water's edge; willows leaning over the water; and
+`Riverlife.tsx`: leaves riding the current at the river's own speed (the one
+thing that shows how *fast* it runs), rings where a fish rose, dragonflies by
+day that are fireflies by night, mist when the sun is low.
+
+- **A camera at x = 0 stands on the bank once the river bends.** The section
+  camera reads `channelXAt(z)` now.
+- **`precision mediump` in a fragment that shares a uniform with the vertex
+  stage fails to link, silently** — the water's own note, walked into again
+  with `uLight`. Every fragment in `Riverlife` is highp.
+- **Reeds at ten centimetres are fence posts** at a camera three metres over
+  the water; a reed is a finger, and it grows in a clump with its feet wet.
+- **A wide flat crown over hanging strands is a palm.** The willow's head is
+  small and inside the fountain of strands.
+- **Chop 2.4 was a ladder** — the water file's own warning; 1.5.
+- The arrival text still said "a glasshouse"; it says the lane of lanterns.
+
 ## 11 Sep · Claude · the Nightfall, lived on
 
 The same pass the other four roads got, on the fifth: every stretch rendered
