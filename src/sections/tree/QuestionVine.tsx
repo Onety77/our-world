@@ -11,10 +11,12 @@ import { useThree } from '@react-three/fiber'
 import {
   BufferAttribute,
   CatmullRomCurve3,
+  CircleGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
   IcosahedronGeometry,
+  LatheGeometry,
   Raycaster,
   ShaderMaterial,
   TubeGeometry,
@@ -31,7 +33,8 @@ import { treeGestureUsed } from '@/systems/treeOrbit'
 import { takenOverNow } from '@/systems/attention'
 import { useSections } from '@/systems/sections'
 import { useSceneEnv } from '@/world/SceneEnv'
-import { MEADOW_X, MEADOW_Y, MEADOW_Z } from './layout'
+import { ambientLightLevel } from '@/world/forms'
+import { budSpot, greatTree, trunkAt } from './greatTree'
 
 const SHOWN = 72
 
@@ -51,11 +54,13 @@ const FRAG = /* glsl */ `
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
+  /* The garden's light level: without it the vine and its blossoms stayed at noon while the tree went to dusk. */
+  uniform float uLight;
   varying vec3 vColor;
   varying float vDepth;
   void main() {
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
-    gl_FragColor = vec4(mix(vColor, uFogColor, fog), 1.0);
+    gl_FragColor = vec4(mix(vColor * (0.25 + uLight * 0.75), uFogColor, fog), 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -73,30 +78,67 @@ function paint(geometry: BufferGeometry, color: string): BufferGeometry {
   return solid
 }
 
+/**
+ * Where the nth paired answer blooms: on the bark itself, spiralling up the
+ * trunk from knee height to the crotch.
+ *
+ * It was a fixed spiral a little under a metre from the tree's centre — which
+ * the old, thin trunk was about the size of. The great tree is an old tree now,
+ * a metre and more through with buttresses at its foot, and a vine at that
+ * radius would be growing inside the wood. So it asks the trunk where the bark is.
+ */
 function vineSpot(index: number): [number, number, number] {
   const slot = ((index % SHOWN) + SHOWN) % SHOWN
-  const angle = slot * 0.86 - 0.7
-  const radius = 0.86 + Math.sin(slot * 1.7) * 0.08
-  return [
-    MEADOW_X + Math.cos(angle) * radius,
-    MEADOW_Y + 0.85 + (slot / (SHOWN - 1)) * 7.2,
-    MEADOW_Z + Math.sin(angle) * radius,
-  ]
+  /*
+    Spaced on a square root, so the first answers climb quickly and later ones
+    pack in above: evenly, fourteen answers were a knot of blossom in the
+    first half metre off the ground.
+  */
+  const y = 0.9 + Math.sqrt(slot / (SHOWN - 1)) * 2.4
+  // Climbing, not ringing: a turn every eighty centimetres or so. Flatter and it read as straps.
+  const angle = slot * 0.25 + 1.2
+  const trunk = trunkAt(y)
+  const radius = trunk.radius + 0.07 + Math.sin(slot * 1.7) * 0.02
+  return [trunk.x + Math.cos(angle) * radius, greatTree.foot[1] + y, trunk.z + Math.sin(angle) * radius]
 }
 
+/**
+ * A paired answer's blossom, open on the bark: six rounded petals, warm and cool
+ * alternating — both of you — facing out from the trunk. They were cones
+ * pointing every way, which at the foot of the tree read as a spiky ball.
+ */
 function flowerAt(position: [number, number, number], phase: number): BufferGeometry {
   const pieces: BufferGeometry[] = []
+  // Facing out from the trunk's axis.
+  const trunk = trunkAt(position[1] - greatTree.foot[1])
+  const out = Math.atan2(position[2] - trunk.z, position[0] - trunk.x)
   for (let petal = 0; petal < 6; petal++) {
-    const geometry = new ConeGeometry(0.105, 0.34, 5)
-    geometry.translate(0, 0.17, 0)
-    geometry.rotateZ(1.02)
-    geometry.rotateY((petal / 6) * Math.PI * 2 + phase)
-    geometry.translate(position[0], position[1], position[2])
-    pieces.push(paint(geometry, petal % 2 === 0 ? '#dfa05e' : '#98a9d8'))
+    const shape = new CircleGeometry(0.075, 7)
+    shape.scale(0.62, 1, 1)
+    shape.translate(0, 0.085, 0.004)
+    shape.rotateZ((petal / 6) * Math.PI * 2 + phase)
+    // Cupped a little toward the viewer.
+    shape.rotateX(-0.25)
+    shape.rotateY(Math.PI / 2 - out)
+    shape.translate(position[0], position[1], position[2])
+    const solid = paint(shape, petal % 2 === 0 ? '#dfa05e' : '#98a9d8')
+    // The back of it too: the vine is seen from all the way round.
+    const back = solid.clone()
+    const idx = back.attributes.position
+    for (let i = 0; i < idx.count; i += 3) {
+      const x = idx.getX(i), y = idx.getY(i), z = idx.getZ(i)
+      idx.setXYZ(i, idx.getX(i + 2), idx.getY(i + 2), idx.getZ(i + 2))
+      idx.setXYZ(i + 2, x, y, z)
+    }
+    pieces.push(solid, back)
   }
-  const centre = new IcosahedronGeometry(0.095, 1)
+  const centre = new IcosahedronGeometry(0.035, 1)
   centre.translate(position[0], position[1], position[2])
   pieces.push(paint(centre, '#efe0ad'))
+  for (const piece of pieces) {
+    if (piece.getAttribute('uv')) piece.deleteAttribute('uv')
+    if (piece.getAttribute('normal')) piece.deleteAttribute('normal')
+  }
   const merged = mergeGeometries(pieces, false)
   for (const piece of pieces) piece.dispose()
   if (!merged) throw new Error('A paired answer failed to bloom.')
@@ -111,27 +153,78 @@ function buildFlowers(indices: number[]): BufferGeometry | null {
   return merged
 }
 
-function buildVine(): BufferGeometry {
-  const points = Array.from({ length: SHOWN + 1 }, (_, index) => {
-    const slot = Math.min(SHOWN - 1, index)
+/**
+ * The vine, as far as it has grown: from the grass to a little past the newest
+ * blossom. It used to be drawn to its full height from the first answer, which
+ * is a vine that was planted grown.
+ */
+function buildVine(count: number): BufferGeometry {
+  const reach = Math.min(SHOWN - 1, count + 1)
+  const [bx, , bz] = vineSpot(0)
+  const points = [new Vector3(bx, greatTree.foot[1] - 0.05, bz)]
+  for (let slot = 0; slot <= reach; slot++) {
     const [x, y, z] = vineSpot(slot)
-    return new Vector3(x, y - 0.04, z)
-  })
-  return paint(new TubeGeometry(new CatmullRomCurve3(points), 180, 0.026, 5, false), '#465b36')
+    points.push(new Vector3(x, y - 0.04, z))
+  }
+  return paint(new TubeGeometry(new CatmullRomCurve3(points), Math.max(24, reach * 6), 0.022, 5, false), '#465b36')
 }
 
+/**
+ * The question, as a bud that has not opened.
+ *
+ * It was six cones leaning out from a stem — orange and blue, alternating —
+ * which from the path read as a small striped dress standing at the tree's
+ * foot. A bud is one closed shape: fat low down and drawn to a point, its
+ * petals wrapped round each other, sitting in a cup of sepals. The two
+ * colours stay, as the two petals wrapped round each other in a spiral —
+ * the question is for both of you.
+ */
 function buildBud(position: [number, number, number]): BufferGeometry {
   const pieces: BufferGeometry[] = []
-  const stem = new CylinderGeometry(0.026, 0.045, 0.88, 6)
-  stem.translate(position[0], position[1] + 0.44, position[2])
+  const stem = new CylinderGeometry(0.022, 0.04, 0.82, 7)
+  stem.translate(position[0], position[1] + 0.41, position[2])
   pieces.push(paint(stem, '#52643c'))
-  for (let petal = 0; petal < 6; petal++) {
-    const geometry = new ConeGeometry(0.22, 0.82, 6)
-    geometry.rotateZ(0.3)
-    geometry.rotateY((petal / 6) * Math.PI * 2)
-    geometry.translate(position[0], position[1] + 0.98, position[2])
-    pieces.push(paint(geometry, petal % 2 === 0 ? '#c9824e' : '#8295c6'))
+
+  // The bud: a lathe, widest a third of the way up, closed at the tip.
+  const profile: Vector2[] = []
+  const STEPS = 12
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS
+    const r = Math.sin(Math.pow(t, 0.75) * Math.PI) * 0.19 * (1 - t * 0.25) + 0.004
+    profile.push(new Vector2(r, t * 0.62))
   }
+  const bud = new LatheGeometry(profile, 20).toNonIndexed()
+  const warm = new Color('#c9824e')
+  const cool = new Color('#8295c6')
+  const colours = new Float32Array(bud.attributes.position.count * 3)
+  const p = bud.attributes.position
+  const mixed = new Color()
+  for (let i = 0; i < p.count; i++) {
+    const a = Math.atan2(p.getZ(i), p.getX(i))
+    const y = p.getY(i)
+    // Two petals wrapped round each other: a spiral seam from the base to the tip.
+    const s = Math.sin(a + y * 7.5)
+    mixed.copy(warm).lerp(cool, s * 0.5 + 0.5)
+    // Darker where the petals overlap, at the seam.
+    mixed.multiplyScalar(0.82 + Math.abs(s) * 0.22)
+    colours.set([mixed.r, mixed.g, mixed.b], i * 3)
+  }
+  bud.setAttribute('color', new BufferAttribute(colours, 3))
+  bud.deleteAttribute('uv')
+  bud.rotateZ(0.08)
+  bud.translate(position[0], position[1] + 0.8, position[2])
+  pieces.push(bud)
+
+  // Sepals: a green cup the bud sits in.
+  for (let i = 0; i < 5; i++) {
+    const sepal = new ConeGeometry(0.05, 0.24, 4)
+    sepal.translate(0, 0.12, 0)
+    sepal.rotateX(0.55)
+    sepal.rotateY((i / 5) * Math.PI * 2)
+    sepal.translate(position[0], position[1] + 0.78, position[2])
+    pieces.push(paint(sepal, '#4f6338'))
+  }
+  for (const piece of pieces) if (piece.getAttribute('uv')) piece.deleteAttribute('uv')
   const merged = mergeGeometries(pieces, false)
   for (const piece of pieces) piece.dispose()
   if (!merged) throw new Error('The question bud failed to form.')
@@ -152,6 +245,7 @@ export function QuestionVine() {
       uFogColor: { value: new Color('#c3cebe') },
       uFogNear: { value: 16 },
       uFogFar: { value: 150 },
+      uLight: { value: 1 },
     },
   }), [])
 
@@ -162,11 +256,11 @@ export function QuestionVine() {
     [shown, first],
   )
   const flowers = useMemo(() => buildFlowers(indices), [indices])
-  const vine = useMemo(() => questions.history.length > 0 ? buildVine() : null, [questions.history.length])
-  const budPosition = useMemo<[number, number, number]>(
-    () => [MEADOW_X + 1.5, MEADOW_Y + 0.08, MEADOW_Z + 0.75],
-    [],
+  const vine = useMemo(
+    () => (questions.history.length > 0 ? buildVine(Math.min(SHOWN, questions.history.length)) : null),
+    [questions.history.length],
   )
+  const budPosition = useMemo<[number, number, number]>(() => [budSpot[0], budSpot[1] + 0.02, budSpot[2]], [])
   const bud = useMemo(
     () => questions.current ? buildBud(budPosition) : null,
     [questions.current, budPosition],
@@ -176,6 +270,7 @@ export function QuestionVine() {
     material.uniforms.uFogColor.value.set(palette.fogColor)
     material.uniforms.uFogNear.value = palette.fogNear
     material.uniforms.uFogFar.value = palette.fogFar
+    material.uniforms.uLight.value = ambientLightLevel(palette)
   }, [material, palette])
   useEffect(() => () => material.dispose(), [material])
   useEffect(() => () => flowers?.dispose(), [flowers])

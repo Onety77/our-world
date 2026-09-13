@@ -395,7 +395,18 @@ export function useFormMaterial(
     sway = 0.3,
     flatten = 0,
     doubleSided = false,
-  }: { sway?: number; flatten?: number; doubleSided?: boolean } = {},
+    hazeReach = 1,
+  }: {
+    sway?: number
+    flatten?: number
+    doubleSided?: boolean
+    /**
+     * How far the haze reaches before it has everything, as a multiple of the
+     * palette's. Above 1 for a far treeline that should stay a dark silhouette
+     * against the sky rather than dissolve into a white wall of its own colour.
+     */
+    hazeReach?: number
+  } = {},
 ) {
   const material = useMemo(
     () =>
@@ -437,11 +448,11 @@ export function useFormMaterial(
     u.uFogColor.value.set(palette.fogColor)
     u.uSunColor.value.set(palette.sunColor)
     u.uFogNear.value = palette.fogNear
-    u.uFogFar.value = palette.fogFar
+    u.uFogFar.value = palette.fogFar * hazeReach
     u.uSun.value = Math.min(1, palette.sunIntensity)
     u.uLight.value = ambientLightLevel(palette)
     u.uWind.value = palette.wind
-  }, [material, palette])
+  }, [material, palette, hazeReach])
 
   return material
 }

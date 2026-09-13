@@ -64,6 +64,8 @@ export interface TreesProps {
    * not shape.
    */
   woodDetail?: number
+  /** See `hazeReach` on `useFormMaterial`: above 1 keeps a far wood a silhouette. */
+  hazeReach?: number
 }
 
 export function Trees({
@@ -79,6 +81,7 @@ export function Trees({
   heights = [5.2, 11.4],
   leafDetail = 1,
   woodDetail = 1,
+  hazeReach = 1,
 }: TreesProps) {
   const openingKey = openings.map((o) => o.toFixed(3)).join(',')
   const centreKey = `${centre[0]},${centre[1]}`
@@ -179,8 +182,8 @@ export function Trees({
 
   // Metres of travel at ten metres up. The bole holds; the leaf mass, hung out
   // on the ends of the limbs, goes nearly twice as far.
-  const woodMat = useFormMaterial(palette, { sway: 0.32, flatten })
-  const leafMat = useFormMaterial(palette, { sway: 0.58, flatten, doubleSided: true })
+  const woodMat = useFormMaterial(palette, { sway: 0.32, flatten, hazeReach })
+  const leafMat = useFormMaterial(palette, { sway: 0.58, flatten, doubleSided: true, hazeReach })
 
   const t = useRef(0)
   useFrame((_, delta) => {

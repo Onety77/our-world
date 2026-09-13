@@ -25,6 +25,7 @@ import {
   Float32BufferAttribute,
   Uint16BufferAttribute,
   Vector2,
+  Vector3,
 } from 'three'
 import type { SkyPalette } from '@/systems/palette'
 import { makeRng, seedFrom } from '@/systems/rng'
@@ -264,11 +265,20 @@ const VERT = /* glsl */ `
   uniform float uFadeEnd;
   /** Metres over which the layer comes in from the camera. See Layer.from. */
   uniform float uFadeIn;
+  /*
+    A tree standing in the meadow, if there is one: where it is, and
+    (x) how far its crown's shade reaches, (y) how dark, (z) how wide its foot
+    is. The blades under the crown are in shade — dappled — and none grow out of
+    the trunk. All zero everywhere but the Tree of Thoughts.
+  */
+  uniform vec2 uShadeAt;
+  uniform vec3 uShade;
 
   varying float vH;
   varying float vTint;
   varying float vDepth;
   varying float vLean;
+  varying float vShade;
 
   void main() {
     vH = uv.y;
@@ -276,6 +286,10 @@ const VERT = /* glsl */ `
 
     vec2 world = tileAround(iPos, uCentre, uTile);
     float away = distance(world, uCentre);
+
+    float fromTree = distance(world, uShadeAt);
+    float dapple = sin(world.x * 1.9 + sin(world.y * 1.3)) * sin(world.y * 2.3 + sin(world.x * 0.9)) * 0.5 + 0.5;
+    vShade = uShade.y * (1.0 - smoothstep(uShade.x * 0.45, uShade.x, fromTree)) * (1.0 - smoothstep(0.55, 0.9, dapple) * 0.6);
 
     // Fade to nothing at the rim rather than stopping at a line — a hard edge
     // is what would give away that the meadow is a disc following you around.
@@ -286,6 +300,8 @@ const VERT = /* glsl */ `
     fade *= uFadeIn > 0.0 ? smoothstep(uFadeIn * 0.3, uFadeIn, away) : 1.0;
     // nothing grows in the river
     float height = iScale.x * fade * dryLand(world);
+    // Nothing grows out of the trunk's foot.
+    if (uShade.z > 0.0) height *= smoothstep(uShade.z * 0.85, uShade.z * 1.25, fromTree);
 
     vec3 p = position;
     p.x *= iScale.y;
@@ -335,6 +351,7 @@ const FRAG = /* glsl */ `
   varying float vTint;
   varying float vDepth;
   varying float vLean;
+  varying float vShade;
 
   void main() {
     vec3 col = mix(uBase, uTip, pow(vH, 0.72));
@@ -345,8 +362,9 @@ const FRAG = /* glsl */ `
     // blades leaning into the light catch it
     col += uSunColor * (abs(vLean) * 0.10 * uSun * vH);
 
-    // sunlight warms the tips only
-    col = mix(col, col * uSunColor * 1.18, 0.30 * uSun * pow(vH, 1.4));
+    // sunlight warms the tips only — and not under a tree
+    col = mix(col, col * uSunColor * 1.18, 0.30 * uSun * pow(vH, 1.4) * (1.0 - vShade));
+    col *= 1.0 - vShade * 0.5 * uSun;
 
     float fog = smoothstep(uFogNear, uFogFar, vDepth);
     col = mix(col, uFogColor, fog);
@@ -358,14 +376,24 @@ const FRAG = /* glsl */ `
 `
 
 /** One layer of the meadow: its own instances, its own reach, one draw call. */
+/** A tree's shade on the meadow, and the foot nothing grows out of. */
+export interface GrassShade {
+  at: [number, number]
+  radius: number
+  strength: number
+  foot: number
+}
+
 function Blades({
   count,
   layer,
   palette,
+  shade,
 }: {
   count: number
   layer: Layer
   palette: SkyPalette
+  shade?: GrassShade
 }) {
   const radius = radiusFor(count, layer)
   const tile = radius * 2
@@ -395,9 +423,11 @@ function Blades({
           uFogNear: { value: 16 },
           uFogFar: { value: 150 },
           uSun: { value: 1 },
+          uShadeAt: { value: new Vector2(shade?.at[0] ?? 0, shade?.at[1] ?? 0) },
+          uShade: { value: new Vector3(shade?.radius ?? 1, shade?.strength ?? 0, shade?.foot ?? 0) },
         },
       }),
-    [tile, radius, layer],
+    [tile, radius, layer, shade],
   )
 
   useEffect(() => () => geometry.dispose(), [geometry])
@@ -445,11 +475,11 @@ function Blades({
  * treeline; how that budget is divided is this file's business and nowhere
  * else's, which is the only reason the split could be changed at all.
  */
-export function Grass({ count, palette }: { count: number; palette: SkyPalette }) {
+export function Grass({ count, palette, shade }: { count: number; palette: SkyPalette; shade?: GrassShade }) {
   return (
     <>
       {LAYERS.map((layer) => (
-        <Blades key={layer.seed} count={count} layer={layer} palette={palette} />
+        <Blades key={layer.seed} count={count} layer={layer} palette={palette} shade={shade} />
       ))}
     </>
   )

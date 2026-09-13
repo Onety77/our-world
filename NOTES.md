@@ -40,6 +40,72 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 13 Sep · Claude · the Tree of Thoughts: a solid old tree, and threads that are ropes
+
+The owner, after Codex's pass: "still meh — obvious novice mistakes on the tree
+and the surroundings", and specifically: the threads swing straight through
+the branches; the tree should be solid and a thread that meets a branch should
+lie on it and swing on from there.
+
+**What was wrong, found by rendering.** The great tree was the wood's generator
+grown bigger: every limb two closed boxes, so steps up the trunk, sticks passing
+through each other at the joints, a bole that ran bare for six metres and stood
+on the grass like a post. The leaves bent in the wind at nearly twice the wood's
+rate, so the crown slid off its twigs. The thread was a stripe drawn inside the
+paper's quad and swung by a sine about a knot that never moved — through any
+branch in the way, and off its limb whenever the tree bent. Grass grew through
+the trunk and was lit to noon under the crown. The treeline opened toward the
+camera, which could now circle, so a bald fog wedge swung into view; behind the
+ring was a flat white wall. The paired-answer vine hung at a fixed radius that
+was *inside* the new trunk, its blossoms were spiky cones in a knot at the base,
+and its material ignored dusk. The question bud was six striped cones. The
+garden's landmark was a different tree from a different seed with ball leaves.
+
+**What it is now.**
+- `sections/tree/greatTree.ts` grows an *old* tree its own way: a short massive
+  trunk that splits low into a leader and five scaffold limbs, limbs as curves
+  that climb, level and droop, branches leaving along their length, surface
+  roots — and exports its solid wood as capsules, its leaf sprays, and hang
+  points chosen for a clear fall and ordered farthest-first round the crown.
+- `world/TreeOfLetters.tsx` sweeps one continuous tube along every limb
+  (parallel-transported frames, children start inside parents — no seams),
+  flares the trunk into buttresses over the roots with bark ridges and moss,
+  bakes the leaves with the crown's own shade, lays dappled shade on the meadow.
+  Bark and leaves share one bend (`world/treeWind.ts`), read by the threads too.
+- `world/threads.ts` + `world/Letters.tsx`: each thread is a Verlet rope under
+  gravity and wind, held to its length, tied to a knot that rides its branch;
+  every limb thicker than 4 cm is solid, with friction, and the meadow too. A
+  thread swung into a branch lies over it and the rest swings on. Papers are
+  smaller notes, soft-shaded, turned about their own thread; the tap reads
+  where each sheet actually is (`livePapers`).
+- `npm run threads` (new): 126 threads, three and a half minutes of breeze, gale
+  and calm — worst penetration 0.2 mm, no knot off its branch, six threads tied
+  above heavy limbs all drape and still swing 80–117 cm, 1.1–1.6 ms a step.
+- Grass: shade and dapple under the crown, nothing growing out of the trunk
+  (`GrassShade` in `world/Grass.tsx`, zero everywhere else).
+- Surroundings: treeline closed and smaller than the great tree, a far belt of
+  trees to 125 m kept a silhouette (`hazeReach` on `useFormMaterial`).
+- Thoughts' flowers: shaped, cupped petals from throat to tip, sepals, leaves.
+- Vine: climbs the real bark (`trunkAt`), square-root spacing, grows only as far
+  as the answers, open blossoms facing out, dims at dusk. Bud: a closed lathe
+  with the two colours wrapped round each other, in a cup of sepals, set between
+  two roots in front of the tree (`budSpot`).
+- The landmark is the same tree, same seed, at 45% leaf detail.
+
+- **Two copies of one tree must not both advance a shared clock.** `treeClock.t`
+  is set from the renderer's elapsed time, not accumulated.
+- **A collision check that nothing ever touches proves nothing.** The hang
+  points are chosen to fall clear, so `threads-check` adds threads tied above
+  heavy limbs on purpose and asserts they drape *and* keep swinging.
+- **Stretch is measured over a whole thread**, not per segment: a segment
+  folding over a branch is briefly long and invisible; the thread's length is
+  what the eye reads.
+- **SwiftShader needs 30–45 s** for this section's first frame at 1200×700; an
+  earlier capture came back as the veil and looked like a crash.
+
+Codex had edited `Tree.tsx` today; my changes there are additive (props, shade,
+wood rings, bloom shape) and the reading/threshold code is untouched.
+
 ## 13 Sep · Claude · Her Morning is gone from the Stars
 
 The owner asked for it out: "just let us have our normal default stars theme."

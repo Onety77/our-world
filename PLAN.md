@@ -1771,6 +1771,13 @@ handling changed.
       dragonflies by day and fireflies by night, mist when the sun is low
       (`sections/river/River.tsx`, `Riverlife.tsx`, `layout.ts`). The water
       layer of the ambient bed follows fullness
+- [x] **The Tree of Thoughts is a solid old tree, and the threads are ropes.**
+      One continuous bark surface with buttresses, roots and a low spreading
+      crown (`greatTree.ts`, `TreeOfLetters.tsx`); threads simulated as ropes
+      that catch on branches and swing on (`threads.ts`, `Letters.tsx`,
+      `npm run threads`); shade and dapple in the grass; closed treeline and a
+      far wood; shaped flowers; the vine on the real bark; a proper bud; the
+      landmark is the same tree
 - [ ] Full regression + screenshot sweep, update the in-world guide
 
 ## After that

@@ -48,6 +48,7 @@
     "archive": "npx --yes tsx scripts/archive-check.ts",
     "offline": "node scripts/offline-check.mjs",
     "sealed": "npx --yes tsx scripts/sealed-check.ts",
+    "threads": "npx --yes tsx scripts/threads-check.ts",
     "colour": "npx --yes tsx scripts/colour-check.ts"
   },
   "dependencies": {
