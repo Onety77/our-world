@@ -441,3 +441,34 @@ body:has(.hollow-hub, .race-setup, .wheel)
     outline-offset: 3px;
   }
 }
+
+/* The same game artwork and typography, browsed one page at a time. */
+.hollow-library.hollow-library-paged {
+  grid-template-columns: minmax(44px, 1fr) minmax(0, 440px) minmax(44px, 1fr);
+  align-items: center;
+  gap: clamp(8px, 3vw, 35px);
+  max-width: 850px;
+  margin-inline: auto;
+}
+.hollow-library-paged .hollow-game-tile {
+  grid-column: 2;
+  width: 100%;
+  max-width: none;
+  margin-top: 0;
+}
+.hollow-library-paged .hollow-page-previous,
+.hollow-library-paged .hollow-page-next {
+  min-height: 44px;
+  padding: 8px;
+  font: 15px var(--serif);
+  color: #c9c2ae;
+}
+.hollow-page-count {
+  text-align: center;
+  color: #aaa38f;
+  font: italic 13px var(--serif);
+  margin: 8px 0 24px;
+}
+@media (max-width: 600px) {
+  .hollow-page-previous span, .hollow-page-next span { display: none; }
+}

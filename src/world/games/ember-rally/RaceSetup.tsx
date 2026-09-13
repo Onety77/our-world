@@ -105,6 +105,9 @@ export function RaceSetup({
   const choices = useChoiceKeys({
     screen: 'race-setup',
     initial: '.race-track-tabs .selected',
+    onBrowse: step => {
+      if (!joining) onSelect(ROAD_ORDER[(ROAD_ORDER.indexOf(stage) + step + ROAD_ORDER.length) % ROAD_ORDER.length])
+    },
     onBack: () => {
       if (controls) {
         setControls(false)
@@ -217,24 +220,28 @@ export function RaceSetup({
           <div
             className="race-track-tabs"
             data-choice-row="tracks"
+            data-choice-paged
             role="group"
             aria-label="Choose a track"
           >
-            {ROAD_ORDER.map((road, i) => (
+            <button aria-label="Previous track" onClick={() => onSelect(ROAD_ORDER[(ROAD_ORDER.indexOf(stage) - 1 + ROAD_ORDER.length) % ROAD_ORDER.length])} disabled={Boolean(joining)}>← Previous</button>
+            {ROAD_ORDER.filter(road => road === stage).map((road) => (
               <button
                 key={road}
                 aria-pressed={stage === road}
                 data-choice-preview
+                data-choice-current
                 data-choice-next="modes"
                 disabled={Boolean(joining && stage !== road)}
                 onClick={() => onSelect(road)}
                 className={stage === road ? 'selected' : ''}
               >
-                <span>0{i + 1}</span>
+                <span>{ROAD_ORDER.indexOf(road) + 1} of {ROAD_ORDER.length}</span>
                 {ROAD_INFO[road].name.replace('The ', '')}
                 {shut(roadKey(road)) && <small>Unavailable</small>}
               </button>
             ))}
+            <button aria-label="Next track" onClick={() => onSelect(ROAD_ORDER[(ROAD_ORDER.indexOf(stage) + 1) % ROAD_ORDER.length])} disabled={Boolean(joining)}>Next →</button>
           </div>
           <div className="race-track-hero" key={stage}>
             <TrackArtwork stage={stage} />

@@ -19,6 +19,7 @@ const useHollowMenu = create<{ selected: string | null; lastGame: string }>(() =
   selected: null,
   lastGame: 'ember-rally',
 }))
+const library = [...GAMES].sort((a, b) => Number(b.id === 'ember-rally') - Number(a.id === 'ember-rally'))
 
 export function HollowLobby() {
   const data = useData(),
@@ -29,6 +30,16 @@ export function HollowLobby() {
   const them = otherUser(data.me),
     name = profiles[them].name
   const { selected, lastGame } = useHollowMenu()
+  const gameIndex = Math.max(0, library.findIndex(g => g.id === lastGame))
+  const browseGame = (step: number) => {
+    for (let offset = 1; offset <= library.length; offset++) {
+      const next = library[(gameIndex + step * offset + library.length * 2) % library.length]
+      if (!shut(gameKey(next.id))) {
+        useHollowMenu.setState({ lastGame: next.id })
+        return
+      }
+    }
+  }
   const setSelected = (selected: string | null) => useHollowMenu.setState({ selected })
   const back = () => {
     if (selected) setSelected(null)
@@ -39,8 +50,9 @@ export function HollowLobby() {
   }
   const choices = useChoiceKeys({
     screen: selected ?? 'library',
-    initial: selected ? '.hollow-modes button:not(:disabled)' : `.hollow-game-tile.${lastGame}`,
+    initial: selected ? '.hollow-modes button:not(:disabled)' : '.hollow-game-tile',
     onBack: back,
+    onBrowse: browseGame,
   })
   const game = GAMES.find((g) => g.id === selected)
   const listed = useMemo(
@@ -155,9 +167,9 @@ export function HollowLobby() {
               <h1>Stay for a game.</h1>
               <p>A quick word duel, a road worth racing, or something to play together.</p>
             </header>
-            <div className="hollow-library" data-choice-row="games">
-              {[...GAMES]
-                .sort((a, b) => Number(b.id === 'ember-rally') - Number(a.id === 'ember-rally'))
+            <div className="hollow-library hollow-library-paged" data-choice-row="games" data-choice-paged>
+              <button className="hollow-page-previous" aria-label="Previous game" onClick={() => browseGame(-1)} disabled={library.length < 2}>← <span>Previous</span></button>
+              {library.slice(gameIndex, gameIndex + 1)
                 .map((g) => {
                   const locked = shut(gameKey(g.id)),
                     turn = turns[g.id]
@@ -165,6 +177,7 @@ export function HollowLobby() {
                     <button
                       key={g.id}
                       className={`hollow-game-tile ${g.id}`}
+                      data-choice-current
                       disabled={locked}
                       onClick={() => openGame(g.id)}
                       onPointerEnter={() => {
@@ -215,14 +228,16 @@ export function HollowLobby() {
                     </button>
                   )
                 })}
+              <button className="hollow-page-next" aria-label="Next game" onClick={() => browseGame(1)} disabled={library.length < 2}><span>Next</span> →</button>
             </div>
-            <section className="hollow-activity" aria-label="Your shared games">
+            <p className="hollow-page-count" aria-live="polite" aria-atomic="true">{library[gameIndex]?.name} · {gameIndex + 1} of {library.length}</p>
+            {listed.some(g => g.id === library[gameIndex]?.id) && <section className="hollow-activity" aria-label="Your shared games">
               <div>
                 <span className="hollow-eyebrow">between the two of you</span>
                 <h2>Your shared games</h2>
               </div>
               <div data-choice-row="shared" data-choice-axis="vertical">
-                {listed.map((g) => {
+                {listed.filter(g => g.id === library[gameIndex]?.id).map((g) => {
                   const status = turns[g.id]
                   return (
                     <button key={g.id} onClick={() => start(g.id, false)}>
@@ -245,7 +260,7 @@ export function HollowLobby() {
                   )
                 })}
               </div>
-            </section>
+            </section>}
           </>
         )}
       </div>

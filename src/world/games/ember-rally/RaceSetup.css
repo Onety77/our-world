@@ -97,8 +97,13 @@
   font: 17px var(--serif);
   color: #b5b1a5;
 }
-.race-track-tabs button:nth-child(even) {
+.race-track-tabs:not([data-choice-paged]) button:nth-child(even) {
   transform: translateY(7px);
+}
+.race-track-tabs[data-choice-paged] { align-items: center; }
+.race-track-tabs[data-choice-paged] button:not(.selected) {
+  font-size: 14px;
+  min-width: 70px;
 }
 .race-track-tabs button span {
   font: italic 11px var(--serif);

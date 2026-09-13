@@ -7,16 +7,20 @@ export function useChoiceKeys({
   screen,
   initial,
   onBack,
+  onBrowse,
 }: {
   screen: string
   initial: string
   onBack(): void
+  onBrowse?(step: number): void
 }) {
   const root = useRef<HTMLElement>(null)
   const back = useRef(onBack)
+  const browse = useRef(onBrowse)
   useEffect(() => {
     back.current = onBack
-  }, [onBack])
+    browse.current = onBrowse
+  }, [onBack, onBrowse])
 
   useEffect(() => {
     const surface = root.current
@@ -93,6 +97,16 @@ export function useChoiceKeys({
       const at = groups.findIndex((group) => group.buttons.includes(active))
       const group = groups[at]
       const item = group.buttons.indexOf(active)
+      if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+        group.row.hasAttribute('data-choice-paged') && browse.current) {
+        browse.current(event.key === 'ArrowLeft' ? -1 : 1)
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(() => {
+          const choice = group.row.querySelector<HTMLButtonElement>('[data-choice-current]')
+          if (choice && available(choice)) mark(choice, true)
+        })
+        return
+      }
       const step =
         event.key === 'ArrowLeft' ||
         event.key === 'ArrowUp' ||

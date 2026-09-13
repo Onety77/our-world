@@ -164,20 +164,20 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
   await until(`!!document.querySelector('.hollow-library')`)
   check(
     await ev(
-      `document.querySelectorAll('.hollow-game-tile').length===3 && document.querySelector('.hollow-hub').scrollWidth<=innerWidth+1`,
+      `document.querySelectorAll('.hollow-game-tile').length===1 && document.querySelector('.hollow-hub').scrollWidth<=innerWidth+1`,
     ),
-    name + ' library shows three games without horizontal overflow',
+    name + ' library shows one game without horizontal overflow',
   )
   await capture(name + '-library')
   await click('.hollow-game-tile.ember-rally')
   await until(`!!document.querySelector('.race-setup')`)
   check(
     await ev(
-      `document.querySelectorAll('.race-track-tabs button').length===4 && document.querySelectorAll('.race-mode-list button').length===3`,
+      `document.querySelectorAll('.race-track-tabs .selected').length===1 && document.querySelectorAll('.race-track-tabs button').length===3 && document.querySelectorAll('.race-mode-list button').length===3`,
     ),
-    name + ' one click opens all tracks and race modes',
+    name + ' one click opens a single track with previous/next and race modes',
   )
-  await click('.race-track-tabs button:nth-child(2)')
+  await click('.race-track-tabs button[aria-label="Next track"]')
   check(
     await ev(
       `document.querySelector('.race-track-caption h2').textContent==='The Moonbreak' && !!document.querySelector('.race-route svg path').getAttribute('d')`,
@@ -240,12 +240,15 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
     })
   await click('.race-setup-top button:first-child')
   await until(`!!document.querySelector('.hollow-library')`)
+  await click('.hollow-page-next')
+  await click('.hollow-page-next')
   await click('.hollow-game-tile.scattergories')
   check(
     await ev(`document.querySelectorAll('.hollow-modes > button').length===1`),
     name + ' Scattergories offers only live play',
   )
   await click('.hollow-top button')
+  await click('.hollow-page-previous')
   await click('.hollow-game-tile.word-duel')
   check(
     await ev(`document.querySelectorAll('.hollow-modes > button').length===3`),
@@ -253,6 +256,7 @@ for (const [name, width, height, mobile] of process.env.HOLLOW_KEYS_ONLY
   )
   await capture(name + '-word-modes')
   await click('.hollow-top button')
+  await click('.hollow-page-previous')
   await click('.hollow-game-tile.ember-rally')
   await until(`!!document.querySelector('.race-setup')`)
   await ev('history.back()')
@@ -356,6 +360,7 @@ check(
   'Scattergories and its ready room work without a pointer',
 )
 await press('Escape')
+await press('ArrowLeft')
 await press('ArrowDown')
 check(
   await ev(`!!document.activeElement.closest('.hollow-activity')`),
@@ -396,7 +401,7 @@ await ev(
 await wait(300)
 check(
   await ev(
-    `document.querySelector('.race-track-caption h2').textContent==='The Harmattan' && [...document.querySelectorAll('.race-track-tabs button')].filter(b=>b.disabled).length===3`,
+    `document.querySelector('.race-track-caption h2').textContent==='The Harmattan' && [...document.querySelectorAll('.race-track-tabs button')].filter(b=>b.disabled).length===2`,
   ),
   'joining preserves the invited track and prevents a different selection',
 )
