@@ -344,7 +344,7 @@ const SHADE = {
   at: [greatTree.foot[0], greatTree.foot[2]] as [number, number],
   radius: greatTree.spread * 1.15,
   strength: 0.85,
-  foot: 1.55,
+  foot: 0.9,
 }
 
 export default function Tree() {

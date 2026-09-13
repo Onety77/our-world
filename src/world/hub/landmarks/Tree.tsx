@@ -54,7 +54,7 @@ export function TreeLandmark() {
 
     for (let i = 0; i < 62; i++) {
       const angle = i * 2.399 + range(rng, -0.25, 0.25)
-      const radius = 3.0 + Math.sqrt(i) * range(rng, 0.42, 0.68)
+      const radius = 2.2 + Math.sqrt(i) * range(rng, 0.42, 0.68)
       const size = range(rng, 0.13, 0.23)
 
       items.push({

@@ -40,6 +40,23 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 13 Sep · Claude · the Tree's old shape back, and the vine rearranged
+
+The owners liked everything in the entry below except the short, fat, ancient
+look: "get me back the previous tree appearance — a bit taller and thinner."
+So only the *shape* in `greatTree.ts` changed: a slim bole (0.6 → 0.4 m) clear
+to a fork at ~5.5 m, a leader and six scaffold limbs spaced evenly round and
+reaching up and out with little droop, smaller roots and a gentle flare
+(`TreeOfLetters`, `trunkAt`). 14.2 m tall, crown 18 m across. The swept bark,
+rope threads, solid wood, shade, landmark and everything else are unchanged;
+`npm run threads` passes (116 hang points, 0.0 mm worst, 0.46 ms a step).
+
+The paired-answer vine was a helix, so most blossoms were round the back. It
+now climbs the *front* of the trunk in a loose S (`heightOf`, `vineAt` in
+`QuestionVine.tsx`): blossoms alternate either side of the stem with a leaf
+between each, wider spacing for the first answers closing as it climbs so all
+seventy-two fit below the fork, and the stem grows only as far as the answers.
+
 ## 13 Sep · Claude · the Tree of Thoughts: a solid old tree, and threads that are ropes
 
 The owner, after Codex's pass: "still meh — obvious novice mistakes on the tree

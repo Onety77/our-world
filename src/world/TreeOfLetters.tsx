@@ -285,7 +285,8 @@ function buildBark(tree: AncientTree): BufferGeometry {
     for (const ra of rootAngles) lobe = Math.max(lobe, Math.pow(Math.max(0, Math.cos(angle - ra)), 10))
     // Bark ridges running up the trunk, a little spiralled.
     const ridge = Math.pow(Math.abs(Math.sin(angle * 11 + y * 0.5 + hash(ring, 3) * 0.4)), 3)
-    const r = radius * (1 + flare * (0.28 + lobe * 1.15)) * (1 - ridge * 0.035)
+    // A gentle flare into the roots — a tree in its prime, not a buttressed ancient.
+    const r = radius * (1 + flare * (0.12 + lobe * 0.4)) * (1 - ridge * 0.035)
     tint.copy(BARK).lerp(BARK_DARK, ridge * 0.55 + Math.max(0, 0.4 - y) * 0.5)
     // Moss on the shaded side of the lower trunk.
     const north = Math.max(0, -Math.sin(angle)) * Math.max(0, 1 - y / 2.4)

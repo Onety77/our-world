@@ -79,27 +79,48 @@ function paint(geometry: BufferGeometry, color: string): BufferGeometry {
 }
 
 /**
- * Where the nth paired answer blooms: on the bark itself, spiralling up the
- * trunk from knee height to the crotch.
+ * Where the nth paired answer blooms: on the bark, up the face of the trunk
+ * that looks toward the path.
  *
- * It was a fixed spiral a little under a metre from the tree's centre — which
- * the old, thin trunk was about the size of. The great tree is an old tree now,
- * a metre and more through with buttresses at its foot, and a vine at that
- * radius would be growing inside the wood. So it asks the trunk where the bark is.
+ * ---------------------------------------------------------------------------
+ * A vine climbs the side of a tree that has the light, and that is also the
+ * side you look at. It rises in a loose S across the front of the trunk —
+ * never round the back, where a helix put two thirds of the answers — with the
+ * blossoms alternating either side of the stem and a pair of leaves between
+ * each. Close together low down and opening out as it climbs is the wrong way
+ * round for a plant, so it is the other: generous spacing for the first
+ * answers, then closer, so seventy-two still fit below the fork.
+ * ---------------------------------------------------------------------------
  */
+const START_Y = 0.7
+/** Which way round the trunk is "the front": toward the camera, +z. */
+const FRONT = Math.PI / 2
+/** How far the S swings either side of the front, in radians. */
+const SWING = 0.75
+
+/** The height of the nth blossom above the foot. */
+function heightOf(slot: number): number {
+  return START_Y + 0.15 + 4.4 * (1 - Math.exp(-slot / 21))
+}
+
+/** The vine's centreline at a height above the foot. */
+function vineAt(y: number): { at: [number, number, number]; out: number } {
+  const angle = FRONT + Math.sin(y * 2.1) * SWING
+  const trunk = trunkAt(y)
+  const r = trunk.radius + 0.05
+  return { at: [trunk.x + Math.cos(angle) * r, greatTree.foot[1] + y, trunk.z + Math.sin(angle) * r], out: angle }
+}
+
 function vineSpot(index: number): [number, number, number] {
   const slot = ((index % SHOWN) + SHOWN) % SHOWN
-  /*
-    Spaced on a square root, so the first answers climb quickly and later ones
-    pack in above: evenly, fourteen answers were a knot of blossom in the
-    first half metre off the ground.
-  */
-  const y = 0.9 + Math.sqrt(slot / (SHOWN - 1)) * 2.4
-  // Climbing, not ringing: a turn every eighty centimetres or so. Flatter and it read as straps.
-  const angle = slot * 0.25 + 1.2
+  const y = heightOf(slot)
+  // Alternately either side of the stem, round the trunk.
+  const side = slot % 2 === 0 ? 1 : -1
+  const { at } = vineAt(y)
   const trunk = trunkAt(y)
-  const radius = trunk.radius + 0.07 + Math.sin(slot * 1.7) * 0.02
-  return [trunk.x + Math.cos(angle) * radius, greatTree.foot[1] + y, trunk.z + Math.sin(angle) * radius]
+  const angle = FRONT + Math.sin(y * 2.1) * SWING + side * 0.2
+  const r = trunk.radius + 0.07
+  return [trunk.x + Math.cos(angle) * r, at[1] + 0.03, trunk.z + Math.sin(angle) * r]
 }
 
 /**
@@ -107,15 +128,15 @@ function vineSpot(index: number): [number, number, number] {
  * alternating — both of you — facing out from the trunk. They were cones
  * pointing every way, which at the foot of the tree read as a spiky ball.
  */
-function flowerAt(position: [number, number, number], phase: number): BufferGeometry {
+function flowerAt(position: [number, number, number], phase: number, size = 1): BufferGeometry {
   const pieces: BufferGeometry[] = []
   // Facing out from the trunk's axis.
   const trunk = trunkAt(position[1] - greatTree.foot[1])
   const out = Math.atan2(position[2] - trunk.z, position[0] - trunk.x)
   for (let petal = 0; petal < 6; petal++) {
-    const shape = new CircleGeometry(0.075, 7)
+    const shape = new CircleGeometry(0.075 * size, 7)
     shape.scale(0.62, 1, 1)
-    shape.translate(0, 0.085, 0.004)
+    shape.translate(0, 0.085 * size, 0.004)
     shape.rotateZ((petal / 6) * Math.PI * 2 + phase)
     // Cupped a little toward the viewer.
     shape.rotateX(-0.25)
@@ -145,11 +166,47 @@ function flowerAt(position: [number, number, number], phase: number): BufferGeom
   return merged
 }
 
+/** A small leaf on the vine: a pointed oval lying against the bark, both faces. */
+function leafAt(s: number, side: number): BufferGeometry {
+  const { at, out } = vineAt(s)
+  const shape = new CircleGeometry(0.05, 6)
+  shape.scale(0.45, 1, 1)
+  shape.translate(0, 0.05, 0.006)
+  shape.rotateZ(side * 1.0)
+  shape.rotateY(Math.PI / 2 - out)
+  shape.translate(at[0], at[1], at[2])
+  const solid = paint(shape, side > 0 ? '#56703f' : '#4a6236')
+  const back = solid.clone()
+  const p = back.attributes.position
+  for (let i = 0; i < p.count; i += 3) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i)
+    p.setXYZ(i, p.getX(i + 2), p.getY(i + 2), p.getZ(i + 2))
+    p.setXYZ(i + 2, x, y, z)
+  }
+  for (const g of [solid, back]) {
+    if (g.getAttribute('uv')) g.deleteAttribute('uv')
+    if (g.getAttribute('normal')) g.deleteAttribute('normal')
+  }
+  const merged = mergeGeometries([solid, back], false)!
+  solid.dispose()
+  back.dispose()
+  return merged
+}
+
 function buildFlowers(indices: number[]): BufferGeometry | null {
   if (indices.length === 0) return null
-  const flowers = indices.map((index) => flowerAt(vineSpot(index), index * 0.37))
-  const merged = mergeGeometries(flowers, false)
-  for (const flower of flowers) flower.dispose()
+  const pieces: BufferGeometry[] = []
+  for (const index of indices) {
+    // A little variety in size, fixed per answer, so the run is not stamped.
+    const size = 1.0 + (((index * 2654435761) >>> 0) % 100) / 100 * 0.35
+    pieces.push(flowerAt(vineSpot(index), index * 0.37, size))
+    // A pair of leaves between this blossom and the next, on the other side of the stem.
+    const slot = ((index % SHOWN) + SHOWN) % SHOWN
+    const side = slot % 2 === 0 ? -1 : 1
+    pieces.push(leafAt((heightOf(slot) + heightOf(slot + 1)) / 2, side))
+  }
+  const merged = mergeGeometries(pieces, false)
+  for (const piece of pieces) piece.dispose()
   return merged
 }
 
@@ -159,14 +216,14 @@ function buildFlowers(indices: number[]): BufferGeometry | null {
  * is a vine that was planted grown.
  */
 function buildVine(count: number): BufferGeometry {
-  const reach = Math.min(SHOWN - 1, count + 1)
-  const [bx, , bz] = vineSpot(0)
-  const points = [new Vector3(bx, greatTree.foot[1] - 0.05, bz)]
-  for (let slot = 0; slot <= reach; slot++) {
-    const [x, y, z] = vineSpot(slot)
-    points.push(new Vector3(x, y - 0.04, z))
+  const top = heightOf(Math.min(SHOWN, count) - 1) + 0.25
+  const start = vineAt(0).at
+  const points = [new Vector3(start[0], greatTree.foot[1] - 0.05, start[2])]
+  for (let y = 0.1; y <= top; y += 0.1) {
+    const { at } = vineAt(y)
+    points.push(new Vector3(at[0], at[1], at[2]))
   }
-  return paint(new TubeGeometry(new CatmullRomCurve3(points), Math.max(24, reach * 6), 0.022, 5, false), '#465b36')
+  return paint(new TubeGeometry(new CatmullRomCurve3(points), Math.max(24, points.length * 3), 0.02, 5, false), '#465b36')
 }
 
 /**
