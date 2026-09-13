@@ -43,10 +43,7 @@ import { LIGHT_COLORS } from '@/systems/palette'
 import { otherHour, useWhoseHour } from '@/systems/whoseHour'
 import { useSceneEnv } from '@/world/SceneEnv'
 import { VoiceComets } from './VoiceComets'
-import { Morning } from './Morning'
-import { pullTheSky, sky, stepSky, theSkyKey } from './theme'
 import { ambience } from '@/systems/ambience'
-import { Group } from 'three'
 
 // ---------------------------------------------------------------------------
 // The dome: your night on one side, her morning on the other
@@ -405,7 +402,6 @@ function Dome({ herHour }: { herHour: number }) {
     material.uniforms.uTime.value = t.current
     // Read every frame rather than passed as a prop: the crossing changes
     // sixty times a second under a finger, and this is a sky, not a re-render.
-    material.uniforms.uCross.value = sky.at
   })
 
   return <mesh geometry={geometry} material={material} renderOrder={-1} />
@@ -786,167 +782,26 @@ export default function Stars() {
   const strength = Math.pow(Math.max(0, 1 - Math.abs(herHour - 6.5) / 5), 1.6)
 
   /*
-    The ground of the plain, which falls away when you cross.
-
-    Grouped rather than faded one piece at a time, and *sunk* rather than made
-    transparent, because that is the true shape of what happens: you have not
-    turned the plain off, you have gone up, and it is under the cloud now. The
-    sea is drawn at a height that swallows it on the way past, so nothing has to
-    dissolve.
+    There was a second sky here — "Her Morning", pulled in from the right edge
+    or with Alt+S: the plain sank under a cloudsea, the sun came up and the
+    conversation changed ink. It was taken out on the owners' word; the Stars
+    is its one night again, with her dawn as a band on the far horizon.
   */
-  const ground = useRef<Group>(null)
-  const nightAir = useRef<Group>(null)
 
-  // On the window rather than on the canvas — see `pullTheSky`.
-  useEffect(() => pullTheSky(), [])
-  // And from a keyboard, for the laptop — see `theSkyKey`.
-  useEffect(() => theSkyKey(), [])
-
-  /*
-    And it sounds different up there.
-
-    ---------------------------------------------------------------------------
-    **The plain is a room with a floor; the cloudsea is not.**
-
-    The Stars' bed is mostly `shimmer` with a little `room` under it — a high
-    sparkle over a close, contained air, which is right when you are standing on
-    ground under a sky. Above the weather there is no floor to be close to and
-    nothing near enough to reflect: what there is, is a lot of open air moving,
-    and the sparkle thins because the moonlight on the cloud has washed the
-    stars out anyway. So crossing turns `air` up, takes `room` almost out, and
-    pulls `shimmer` back.
-
-    Re-voiced rather than given a Place id of its own — see `setShade`. It is
-    the same room in different weather, and a second id would have had to be
-    added to six files and every check that walks the places in order to say
-    something untrue.
-
-    Written from the frame loop because it follows the finger: pull the sky
-    halfway and the bed is halfway, which is what makes the gesture feel like it
-    is moving you rather than switching something.
-    ---------------------------------------------------------------------------
-  */
-  const voiced = useRef(-1)
-
-  useFrame((_, rawDelta) => {
-    stepSky(Math.min(rawDelta, 1 / 20))
-    const at = sky.at
-
-    /*
-      Only when it has actually moved, and only in steps worth hearing.
-
-      The bed is re-read on a two-hertz control cadence, so writing this sixty
-      times a second is fifty-eight writes nothing reads. A fiftieth is finer
-      than any of these layers can be heard to change.
-    */
-    if (Math.abs(at - voiced.current) > 0.02) {
-      voiced.current = at
-      /*
-        The morning's own bed, *stated* rather than scaled.
-
-        -------------------------------------------------------------------
-        **The first version multiplied the night's mix and could not possibly
-        have worked.** The Stars plays no `air` and no `leaves` at all — both
-        are zeroes in its column — so asking for six times the air produced
-        six times nothing, and the second sky came out sounding identical to
-        the first. Everything looked right and nothing changed.
-
-        A morning is not a louder night. It is open air and something growing
-        in it, with the close, contained hush of a night plain taken out and
-        the cold sparkle taken almost all the way out. `setShade` sets these
-        outright now — see the note on it — so a layer the place does not
-        play can still be asked for.
-
-        Crossfaded by hand rather than switched, because the pull is
-        continuous: half a crossing is half a morning, in the ears as well.
-        -------------------------------------------------------------------
-      */
-      // And what you are writing with — a nib at night, soft pencil by day.
-      ambience.setPen(at)
-      ambience.setShade({
-        air: at * 0.85,
-        leaves: at * 0.5,
-        room: 0.3 * (1 - at) + 0.04 * at,
-        shimmer: 1 - at * 0.88,
-      })
-    }
-
-    /*
-      The night's own things leave together.
-
-      The plain sinks *and* the air above it goes — the drifting motes and the
-      two lights are as much "your night" as the ground is, and leaving them
-      hanging in a sunrise was most of why the first crossing read as two
-      pictures stacked rather than one becoming the other.
-    */
-    const g = ground.current
-    if (g) {
-      g.position.y = at * -16
-      g.visible = at < 0.985
-    }
-    const air = nightAir.current
-    if (air) air.visible = at < 0.9
-  })
-
-  /*
-    And the conversation changes ink with the sky.
-
-    ---------------------------------------------------------------------------
-    **Light words on a pale morning are not readable, and that is not a detail
-    to leave to a later pass.** The messages are cream and pale blue because
-    they hang in a night; over a sunrise they vanish. The first crossing shipped
-    without this and the conversation — the entire reason the place exists —
-    went unreadable at one end of its own gesture.
-
-    So the morning gets its own ink: dark, warm on your side and slate on hers,
-    the way writing on paper in the morning actually looks. It is not a
-    concession to legibility, it is the strongest single thing that makes the
-    two skies feel like different hours — light *in* the dark, against words
-    *on* the light.
-
-    Written as one number on the document rather than a class, so it crosses
-    continuously with the finger and the styles interpolate it themselves. A
-    ref-and-rAF rather than React state, for the reason everything else here is:
-    this changes sixty times a second under a drag and a re-render of a whole
-    conversation is what the technical law is about.
-    ---------------------------------------------------------------------------
-  */
+  // A stored morning voicing from before must not carry in with you.
   useEffect(() => {
-    const root = document.documentElement
-    let frame = 0
-    const paint = () => {
-      frame = requestAnimationFrame(paint)
-      root.style.setProperty('--dawn', sky.at.toFixed(3))
-    }
-    frame = requestAnimationFrame(paint)
-    return () => {
-      cancelAnimationFrame(frame)
-      root.style.removeProperty('--dawn')
-    }
+    ambience.setShade(null)
+    ambience.setPen(0)
   }, [])
-
-  // And it hands the voicing back on the way out, so nothing carries.
-  useEffect(
-    () => () => {
-      ambience.setShade(null)
-      ambience.setPen(0)
-    },
-    [],
-  )
 
   return (
     <>
       <Dome herHour={herHour} />
-      <group ref={ground}>
-        <Plain strength={strength} />
-        <Horizon />
-        <SkyPath />
-      </group>
-      <Morning />
-      <group ref={nightAir}>
-        <Motes />
-        <TwoLights />
-      </group>
+      <Plain strength={strength} />
+      <Horizon />
+      <SkyPath />
+      <Motes />
+      <TwoLights />
       <VoiceComets />
       {/* every message the two of you have ever sent, as a light */}
       <Conversation />

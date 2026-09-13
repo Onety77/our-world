@@ -40,6 +40,17 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 13 Sep · Claude · Her Morning is gone from the Stars
+
+The owner asked for it out: "just let us have our normal default stars theme."
+Removed whole, not hidden — `sections/stars/Morning.tsx`, `sections/stars/theme.ts`
+and `ui/SkyEdge.tsx` are deleted, with the edge pull, Alt+S, the sinking plain,
+the morning ink writer (`--dawn` is now always its CSS default 0, i.e. night)
+and the morning voicing of the bed. The Stars is its one night with her dawn as
+a band on the far horizon. A device that had `garden:stars-sky:v2 = morning`
+stored opens to night (checked). The 8 Sep entry below describes what was
+removed; leave it as history.
+
 ## 13 Sep · Claude · the Wellspring, given its due
 
 The owner: "the two that lack our attention — the Tree (Codex) and the

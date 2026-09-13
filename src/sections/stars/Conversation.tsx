@@ -19,7 +19,6 @@
  * thing in this world that should be a picture of words.
  */
 
-import { sky } from './theme'
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
@@ -286,7 +285,6 @@ export function Conversation() {
     stepWalk(Math.min(delta, 1 / 20))
     material.uniforms.uTime.value = t.current
     material.uniforms.uWalk.value = walk.at
-    material.uniforms.uDawn.value = sky.at
   })
 
   if (messages.length === 0) return null

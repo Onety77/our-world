@@ -23,7 +23,6 @@ import { useEffect,
   useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useReportTyping, useTheyAreTyping } from '@/systems/useTyping'
 import { writingLine } from '@/systems/typing'
-import { SkyEdge } from '@/ui/SkyEdge'
 
 /**
  * Whether return should send, rather than making a new line.
@@ -1434,9 +1433,6 @@ export function Talking() {
 
   return (
     <div className="talking" ref={surface}>
-      {/* The handle for the second sky. See ui/SkyEdge — it is the only thing
-          that says the crossing is there at all. */}
-      <SkyEdge />
       <div
         className={`stars-presence ${presenceState}`}
         role="status"
