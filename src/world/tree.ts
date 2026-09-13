@@ -150,6 +150,25 @@ export interface TreeOptions {
    * ---------------------------------------------------------------------------
    */
   woodDetail?: number
+  /**
+   * Also hand back the tree as a skeleton — each limb as a curve with radii,
+   * and each spray of leaves — for a tree that is drawn as one continuous
+   * surface rather than as boxes (the Tree of Thoughts). Consumes no
+   * randomness, so the tree is the same tree with or without it.
+   */
+  skeleton?: boolean
+}
+
+export interface SkeletonLimb {
+  points: [number, number, number][]
+  radii: number[]
+  depth: number
+}
+
+export interface SkeletonSpray {
+  at: [number, number, number]
+  heading: [number, number, number]
+  length: number
 }
 
 export interface TreeParts {
@@ -162,6 +181,9 @@ export interface TreeParts {
    * makes it safe to key a stored thought to one by index.
    */
   hangs: [number, number, number][]
+  /** Present when `skeleton` was asked for. World space, like everything else here. */
+  limbs?: SkeletonLimb[]
+  sprays?: SkeletonSpray[]
 }
 
 /**
@@ -342,7 +364,10 @@ export function growTree({
   density = 1,
   leafDetail = 1,
   woodDetail = 1,
+  skeleton = false,
 }: TreeOptions): TreeParts {
+  const limbs: SkeletonLimb[] = []
+  const sprays: SkeletonSpray[] = []
   const shape = SHAPE[species]
   // See `woodDetail`. Both of these change what is *drawn* and neither changes
   // where anything is, which is the property that makes them free.
@@ -392,6 +417,18 @@ export function growTree({
       from[1] + (dir[1] + bent[1]) * half,
       from[2] + (dir[2] + bent[2]) * half,
     ]
+
+    if (skeleton) {
+      limbs.push({
+        points: [
+          [ox + from[0], oy + from[1], oz + from[2]],
+          [ox + from[0] + dir[0] * half, oy + from[1] + dir[1] * half, oz + from[2] + dir[2] * half],
+          [ox + tip[0], oy + tip[1], oz + tip[2]],
+        ],
+        radii: [radius, radius * 0.86, radius * 0.8],
+        depth,
+      })
+    }
 
     // The outermost limbs live inside their own leaf spray. See `woodDetail`.
     const show = drawBarest || depth < maxDepth
@@ -449,6 +486,7 @@ export function growTree({
    */
   function foliage(tip: Vec, heading: Vec, length: number) {
     if (leafiness <= 0) return
+    if (skeleton) sprays.push({ at: [ox + tip[0], oy + tip[1], oz + tip[2]], heading, length })
 
     /*
       How big a leaf is, and how many.
@@ -607,7 +645,7 @@ export function growTree({
   const bole = segment([0, 0, 0], lean, clear, radius, 0)
   grow(bole.tip, bole.heading, (height - clear) / chain, radius * 0.86, 0)
 
-  return { wood, leaves, hangs }
+  return skeleton ? { wood, leaves, hangs, limbs, sprays } : { wood, leaves, hangs }
 }
 
 /** Picks a species with a bias, so a wood is mostly one thing and not a sampler. */

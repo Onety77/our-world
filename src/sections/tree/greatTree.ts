@@ -1,34 +1,34 @@
 /**
- * The great tree itself, grown once — as one solid old tree.
+ * The great tree itself, grown once — the tree it always was, made solid.
  *
  * ---------------------------------------------------------------------------
- * **It used to be the wood's generator, grown bigger, and it read as a sapling
- * on a pole.** `world/tree` builds a tree out of separate boxes — two per limb,
- * each a closed tube — which is exactly right for a hundred and fifty trees at
- * sixty metres and wrong for the one you stand under: the trunk showed its
- * steps where the boxes met, the limbs were sticks that passed through each
- * other at the joints, the bole ran clear for six metres before anything
- * happened, and the whole thing stood on the grass with no foot at all. The
- * oldest thing in the garden looked like it had been planted last spring.
+ * **The shape is the original tree's, exactly.** A tall straight bole, clear to
+ * well above head height, with long limbs radiating up and out of the top half
+ * of it into an open crown. That is what `world/tree` grows for this seed, and
+ * it is the tree the two of you know — a replacement "old tree" grown some
+ * other way was a different tree, and read as one. So the skeleton comes from
+ * the same generator, the same seed and the same proportions it always did.
  *
- * This grows an *old* tree, its own way:
+ * **What changed is how it is made.** `world/tree` hands back each limb as two
+ * boxes, which is right for a wood at sixty metres and wrong for the one tree
+ * you stand under: steps where the boxes met, sticks through sticks at every
+ * joint, a trunk standing on the grass with no foot. Here:
  *
- *   **a short, massive trunk** that flares into buttresses and surface roots
- *   where it meets the ground, and splits low — at head height and a bit —
- *   into a leader and five scaffold limbs;
+ *   **every limb and the limb that carries on from it are one curve** — the
+ *   generator's segments joined end to end and run through a spline, so the
+ *   trunk climbs in one line from the roots to the top and each branch is one
+ *   smooth sweep out to its twigs;
  *
- *   **limbs as curves, not sticks.** Each is a polyline that climbs, then
- *   levels, then droops under its own weight at the end, with its branches
- *   leaving *along* its length rather than only at the tip, which is how a
- *   crown gets depth instead of being a shell of blobs at one radius;
+ *   **one surface.** `TreeOfLetters` sweeps a tube along each curve, and every
+ *   branch starts inside the wood it grows from, so the bark is continuous;
  *
- *   **one surface.** `TreeOfLetters` sweeps a single tube along every limb,
- *   starting each child inside its parent, so the bark is continuous from the
- *   roots to the twigs — no seams, no steps, no gaps;
+ *   **a foot** — surface roots, and a flare into them in the renderer;
+ *
+ *   **fine ends.** A twig tapers to nothing inside its leaves instead of ending
+ *   in a blunt stub as thick as a finger;
  *
  *   **solid.** Every limb thick enough to catch a thread is also a capsule the
- *   hanging threads collide with — see `world/Letters`. A thread that swings
- *   into a branch now lies over it.
+ *   hanging threads collide with — see `world/threads`.
  *
  * Deterministic for its seed, so the papers keep their branches from one visit
  * to the next. The thing that genuinely must never move — the flower each
@@ -36,8 +36,9 @@
  * ---------------------------------------------------------------------------
  */
 
-import { makeRng, range, seedFrom, type Rng } from '@/systems/rng'
+import { makeRng, range, seedFrom } from '@/systems/rng'
 import { groundHeight } from '@/systems/terrain'
+import { growTree } from '@/world/tree'
 import { MEADOW_X, MEADOW_Z } from './layout'
 
 export type Vec = [number, number, number]
@@ -46,15 +47,20 @@ export type Vec = [number, number, number]
 export interface Limb {
   points: Vec[]
   radii: number[]
-  /** 0 trunk, 1 scaffold, 2 branch, 3 twig-bearing, 4 twig. */
+  /** How many splits from the trunk it is: 0 the trunk, then outward. */
   depth: number
 }
 
-/** A spray of leaves: where it is and which way the twig was heading. */
+/** A spray of leaves: where it is, which way the twig was heading, and how big. */
 export interface Spray {
   at: Vec
   heading: Vec
+  /** The size of one leaf card. */
   size: number
+  /** How far the spray reaches out from its twig. */
+  reach: number
+  /** How full it is: 1 at a twig's end, less along a branch. */
+  weight: number
 }
 
 /** A surface root: a curve that leaves the flare and sinks into the meadow. */
@@ -87,50 +93,55 @@ export interface AncientTree {
   /** How wide the crown spreads, and how high it reaches, for the shade and the camera. */
   spread: number
   top: number
+  /** Where the leaves begin, above the foot. */
+  crownBase: number
 }
 
-const add = (a: Vec, b: Vec): Vec => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-const scale = (a: Vec, s: number): Vec => [a[0] * s, a[1] * s, a[2] * s]
-function norm([x, y, z]: Vec): Vec {
-  const l = Math.hypot(x, y, z) || 1
-  return [x / l, y / l, z / l]
-}
+/** The tree's proportions — the ones it has always had. */
+export const GREAT_TREE = { height: 15.5, girth: 1.55, density: 2.6 } as const
 
-/** Turn a direction away from itself by `angle`, about a bearing `spin` — see `world/tree`. */
-function turn(dir: Vec, angle: number, spin: number): Vec {
-  const [dx, dy, dz] = dir
-  const ref: Vec = Math.abs(dy) > 0.95 ? [1, 0, 0] : [0, 1, 0]
-  const [ux, uy, uz] = norm([ref[1] * dz - ref[2] * dy, ref[2] * dx - ref[0] * dz, ref[0] * dy - ref[1] * dx])
-  const vx = dy * uz - dz * uy
-  const vy = dz * ux - dx * uz
-  const vz = dx * uy - dy * ux
-  const c = Math.cos(angle)
-  const s = Math.sin(angle)
-  return norm([
-    dx * c + (ux * Math.cos(spin) + vx * Math.sin(spin)) * s,
-    dy * c + (uy * Math.cos(spin) + vy * Math.sin(spin)) * s,
-    dz * c + (uz * Math.cos(spin) + vz * Math.sin(spin)) * s,
-  ])
+/** A Catmull-Rom point between `p1` and `p2`. */
+function spline(p0: Vec, p1: Vec, p2: Vec, p3: Vec, t: number): Vec {
+  const t2 = t * t
+  const t3 = t2 * t
+  const out: Vec = [0, 0, 0]
+  for (let k = 0; k < 3; k++) {
+    out[k] =
+      0.5 *
+      (2 * p1[k] +
+        (-p0[k] + p2[k]) * t +
+        (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 +
+        (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)
+  }
+  return out
 }
 
 /**
- * How it is shaped, per depth: how long, how many branches leave it, at what
- * angle, how much it droops. Tuned by looking, for a broad old tree you could
- * sit under — an oak or a lime more than anything tall.
+ * Run a polyline through a spline, so the generator's kinks become bends. The
+ * curve passes through every original point, so a branch that left from a
+ * joint still leaves from the wood. `spacing` is how far apart the new points
+ * may be, given the height and radius there.
  */
-/*
-  The owners liked the tree this replaced for its *shape* — taller, slimmer,
-  limbs reaching up into a high crown, a tree in its prime rather than an old
-  one spread wide. So these are that shape: shallow branch angles and very
-  little droop. Everything else (one surface, solid wood, roots) is kept.
-*/
-const DEPTHS = [
-  /* 0 trunk */ { step: 0.45, children: 0, angle: [0, 0], droop: 0, wander: 0.03 },
-  /* 1 scaffold */ { step: 0.55, children: 6, angle: [0.5, 0.85], droop: 0.02, wander: 0.06 },
-  /* 2 branch */ { step: 0.5, children: 4, angle: [0.5, 0.85], droop: 0.035, wander: 0.08 },
-  /* 3 twig-bearing */ { step: 0.42, children: 2, angle: [0.5, 0.9], droop: 0.04, wander: 0.1 },
-  /* 4 twig */ { step: 0.35, children: 0, angle: [0, 0], droop: 0.04, wander: 0.12 },
-] as const
+function smooth(points: Vec[], radii: number[], spacing: (y: number, r: number) => number): { points: Vec[]; radii: number[] } {
+  const outPoints: Vec[] = [points[0]]
+  const outRadii: number[] = [radii[0]]
+  const n = points.length
+  for (let i = 0; i < n - 1; i++) {
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    // Past the ends, carry straight on rather than doubling the end point, which would flatten the last bend.
+    const p0: Vec = i > 0 ? points[i - 1] : [2 * p1[0] - p2[0], 2 * p1[1] - p2[1], 2 * p1[2] - p2[2]]
+    const p3: Vec = i + 2 < n ? points[i + 2] : [2 * p2[0] - p1[0], 2 * p2[1] - p1[1], 2 * p2[2] - p1[2]]
+    const length = Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2])
+    const steps = Math.max(1, Math.ceil(length / spacing(p1[1], radii[i])))
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps
+      outPoints.push(s === steps ? p2 : spline(p0, p1, p2, p3, t))
+      outRadii.push(radii[i] + (radii[i + 1] - radii[i]) * t)
+    }
+  }
+  return { points: outPoints, radii: outRadii }
+}
 
 /**
  * Grow it. `groundAt` is the height of the ground in the same space as `foot`
@@ -138,146 +149,58 @@ const DEPTHS = [
  * which stands in its own local space.
  */
 export function growAncientTree(seed: string, foot: Vec, groundAt: (x: number, z: number) => number = groundHeight): AncientTree {
-  const rng: Rng = makeRng(seedFrom(seed))
-  const limbs: Limb[] = []
-  const sprays: Spray[] = []
+  const grown = growTree({
+    at: [0, 0, 0],
+    height: GREAT_TREE.height,
+    species: 'broad',
+    rng: makeRng(seedFrom(seed)),
+    girth: GREAT_TREE.girth,
+    density: GREAT_TREE.density,
+    skeleton: true,
+  })
+  const segments = grown.limbs ?? []
 
-  /**
-   * Lay a limb as a curve from `start` heading `dir`, and grow what comes off
-   * it. The direction bends a little every step: a wander, a pull outward from
-   * the trunk so nothing crosses back through the crown, and a droop that grows
-   * toward the end — the long limb of an old tree comes down at its tip.
-   */
-  function limb(start: Vec, dir: Vec, length: number, r0: number, r1: number, depth: number, droopScale = 1) {
-    const shape = DEPTHS[depth]
-    const steps = Math.max(3, Math.ceil(length / shape.step))
-    const points: Vec[] = [start]
-    const radii: number[] = [r0]
-    let heading = dir
-    let at = start
-    const wanderPhase = rng() * 10
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps
-      // Outward from the trunk's axis, gently, so branches fill the crown rather than cross it.
-      const out = norm([at[0], 0, at[2]])
-      const outward = depth >= 1 ? 0.035 : 0
-      const wander: Vec = [
-        Math.sin(wanderPhase + i * 1.7) * shape.wander,
-        Math.sin(wanderPhase * 1.3 + i * 1.1) * shape.wander * 0.5,
-        Math.cos(wanderPhase + i * 1.3) * shape.wander,
-      ]
-      // Nothing sags below head height: a limb that low reads as broken, and it is where people stand.
-      // Gently, and not in the first metre out of the trunk, or the limb leaves it with an elbow.
-      const floor = depth >= 1 && t > 0.25 && at[1] < 3.2 ? (3.2 - at[1]) * 0.05 : 0
-      heading = norm([
-        heading[0] + wander[0] + out[0] * outward,
-        heading[1] + wander[1] - shape.droop * droopScale * t * t * 2.2 + floor,
-        heading[2] + wander[2] + out[2] * outward,
-      ])
-      at = add(at, scale(heading, length / steps))
-      points.push(at)
-      // Taper faster near the tip, the way wood does.
-      radii.push(r0 + (r1 - r0) * Math.pow(t, 0.8))
-    }
-    limbs.push({ points, radii, depth })
+  /*
+    Join each segment to the one that carries on from it.
 
-    if (depth >= 4 || shape.children === 0) {
-      if (depth >= 3) sprays.push({ at, heading, size: range(rng, 0.55, 0.8) })
-      return
-    }
-    // A twig-bearing branch wears leaves at its own end too, so the crown is full.
-    if (depth === 3) sprays.push({ at, heading, size: range(rng, 0.6, 0.9) })
-
-    // Branches along the limb, from a third of the way out to the end.
-    const count = Math.round(shape.children * range(rng, 0.8, 1.2))
-    for (let c = 0; c < count; c++) {
-      const t = count === 1 ? 0.8 : 0.32 + (c / (count - 1)) * 0.66 + range(rng, -0.04, 0.04)
-      const index = Math.min(points.length - 2, Math.max(1, Math.round(t * steps)))
-      const from = points[index]
-      const local = norm([
-        points[index + 1][0] - points[index - 1][0],
-        points[index + 1][1] - points[index - 1][1],
-        points[index + 1][2] - points[index - 1][2],
-      ])
-      const radiusHere = radii[index]
-      const angle = range(rng, shape.angle[0], shape.angle[1])
-      // Golden angle round the parent, with jitter — never stacked in a plane.
-      let childDir = turn(local, angle, c * 2.399 + rng() * 0.9)
-      // Lean the child up a little: branches reach for the light.
-      childDir = norm([childDir[0], childDir[1] + 0.28, childDir[2]])
-      const remaining = length * (1 - t)
-      const childLength = Math.max(length * 0.28, remaining * range(rng, 0.7, 1.0) + length * 0.18) * (depth === 1 ? 0.62 : 0.7)
-      const childRadius = Math.max(0.018, radiusHere * range(rng, 0.52, 0.66))
-      limb(from, childDir, childLength, childRadius, Math.max(0.012, childRadius * 0.28), depth + 1)
-    }
-    // The end of a branch carries its own twigs too.
-    if (depth === 2) {
-      const tipDir = heading
-      limb(at, turn(tipDir, range(rng, 0.2, 0.5), rng() * 6.28), length * 0.3, radii[radii.length - 1], 0.012, Math.min(4, depth + 1))
+    The generator grows depth-first and always grows a limb's main child
+    straight after the limb itself, so a segment that starts exactly where the
+    previous one ended is its continuation; anything else is a branch leaving
+    an earlier joint, and starts a curve of its own.
+  */
+  const chains: Limb[] = []
+  for (const s of segments) {
+    const last = chains[chains.length - 1]
+    const end = last?.points[last.points.length - 1]
+    if (last && end && Math.abs(end[0] - s.points[0][0]) + Math.abs(end[1] - s.points[0][1]) + Math.abs(end[2] - s.points[0][2]) < 1e-6) {
+      // The joint: the parent ends a touch thicker than the child begins; meet in the middle.
+      last.radii[last.radii.length - 1] = (last.radii[last.radii.length - 1] + s.radii[0]) / 2
+      last.points.push(s.points[1], s.points[2])
+      last.radii.push(s.radii[1], s.radii[2])
+    } else {
+      chains.push({ points: [...s.points], radii: [...s.radii], depth: s.depth })
     }
   }
 
-  // --- the trunk --------------------------------------------------------------
-  // A clear bole to well above head height, slim, and gently tapering.
-  const splitAt = range(rng, 5.2, 5.8)
-  const lean = turn([0, 1, 0], range(rng, 0.02, 0.05), rng() * 6.28)
-  const trunkPoints: Vec[] = []
-  const trunkRadii: number[] = []
-  const TRUNK_STEPS = 12
-  for (let i = 0; i <= TRUNK_STEPS; i++) {
-    const t = i / TRUNK_STEPS
-    // A slight S in the bole, so it is grown and not turned on a lathe.
-    const sway = Math.sin(t * Math.PI) * 0.12
-    trunkPoints.push([lean[0] * splitAt * t + sway * 0.6, splitAt * t, lean[2] * splitAt * t + sway * 0.4])
-    trunkRadii.push(0.6 - t * 0.2)
-  }
-  const trunk: Limb = { points: trunkPoints, radii: trunkRadii, depth: 0 }
-  const crotch = trunkPoints[TRUNK_STEPS]
-
-  // --- the leader, and the limbs off the trunk ------------------------------------
-  // The leader climbs straight on: it is what makes the tree tall.
-  limb(add(crotch, [0, -0.25, 0]), turn([0, 1, 0], 0.06, rng() * 6.28), 8.8, 0.34, 0.04, 1, 0)
-  // Six, evenly round, so the crown is round and full from every side — not a lean.
-  const scaffolds = 6
-  const spin0 = rng() * 6.28
-  for (let i = 0; i < scaffolds; i++) {
-    const spin = spin0 + (i / scaffolds) * Math.PI * 2 + range(rng, -0.15, 0.15)
-    // Every other one leaves the trunk lower down, the rest from the fork — all reaching up and out.
-    const low = i % 2 === 1
-    const tilt = low ? range(rng, 0.88, 0.98) : range(rng, 0.66, 0.8)
-    const dir = turn([0, 1, 0], tilt, spin)
-    const from = low ? trunkPoints[Math.round(TRUNK_STEPS * range(rng, 0.7, 0.82))] : add(crotch, [0, range(rng, -0.3, 0.05), 0])
-    limb(from, dir, low ? range(rng, 8.6, 9.4) : range(rng, 9.0, 10.0), low ? 0.25 : 0.3, 0.04, 1, low ? 0.55 : 0.35)
-  }
-
-  // --- the roots ------------------------------------------------------------------
-  const roots: Root[] = []
-  const rootCount = 7
-  for (let i = 0; i < rootCount; i++) {
-    const a = (i / rootCount) * Math.PI * 2 + range(rng, -0.3, 0.3)
-    // Modest: just enough that the trunk goes into the ground rather than standing on it.
-    const length = range(rng, 1.0, 1.7)
-    const points: Vec[] = []
-    const radii: number[] = []
-    const STEPS = 8
-    for (let s = 0; s <= STEPS; s++) {
-      const t = s / STEPS
-      const d = 0.35 + t * length
-      const wiggle = Math.sin(t * 5 + i) * 0.12 * t
-      const x = Math.cos(a + wiggle) * d
-      const z = Math.sin(a + wiggle) * d
-      const ground = groundAt(foot[0] + x, foot[2] + z) - foot[1]
-      // Out of the foot and down into the meadow, gone under by the end.
-      const r = 0.24 * Math.pow(1 - t, 1.1) + 0.03
-      points.push([x, ground + r * 0.1 - t * t * 0.15 + (1 - t) * (1 - t) * 0.1, z])
-      radii.push(r)
-    }
-    roots.push({ points, radii })
+  for (const c of chains) {
+    /*
+      A little slimmer than the generator's numbers. Its boxes were drawn as
+      cones, narrowing to seven tenths at each end, so the tree everyone knows
+      was slimmer than its radii say — and a round tube at full radius read as
+      the heavy old tree the owners did not want.
+    */
+    for (let i = 0; i < c.radii.length; i++) c.radii[i] *= 0.85
+    // Every curve ends in leaves: taper its last span away to a twig's end.
+    const n = c.radii.length
+    c.radii[n - 1] = Math.max(0.012, c.radii[n - 1] * 0.35)
+    if (n > 2) c.radii[n - 2] *= 0.85
   }
 
   // --- what a thread can meet -------------------------------------------------------
+  // From the curves before smoothing: the spline passes through every one of these
+  // points, and between them it strays by millimetres, well inside a radius.
   const capsules: Capsule[] = []
-  for (const l of [trunk, ...limbs]) {
+  for (const l of chains) {
     for (let i = 0; i < l.points.length - 1; i++) {
       const r = (l.radii[i] + l.radii[i + 1]) / 2
       // Twigs are not solid to a thread: at their size it would snag on every one.
@@ -286,18 +209,111 @@ export function growAncientTree(seed: string, foot: Vec, groundAt: (x: number, z
     }
   }
 
+  // --- where thoughts hang -------------------------------------------------------------
+  const sprays: Spray[] = (grown.sprays ?? []).map((s) => ({
+    at: s.at,
+    heading: s.heading,
+    // A little finer than the wood's own leaves, and more of them — see TreeOfLetters.
+    size: Math.max(GREAT_TREE.height * 0.021, s.length * 0.52) * 1.15 * 0.8,
+    reach: Math.max(s.length, GREAT_TREE.height * 0.055) * 0.8,
+    weight: 1,
+  }))
+
+  /*
+    Leaves along the branches, not only at their ends.
+
+    The generator puts every spray at a twig's tip, and drawn as boxes with
+    six thousand leaves that was enough. Drawn as clean bark it left the inner
+    limbs bare under dark clumps at the ends — a tree after a storm. A lighter
+    spray every metre or so along the outer part of each branch fills the
+    crown from the inside, and keeps the gaps between the limbs that make it
+    an open crown rather than a ball.
+  */
+  chains.forEach((c, index) => {
+    if (index === 0) return
+    let total = 0
+    for (let i = 0; i < c.points.length - 1; i++) total += Math.hypot(c.points[i + 1][0] - c.points[i][0], c.points[i + 1][1] - c.points[i][1], c.points[i + 1][2] - c.points[i][2])
+    let travelled = 0
+    let next = Math.max(0.7, total * 0.35)
+    let side = index % 2 === 0 ? 1 : -1
+    for (let i = 0; i < c.points.length - 1; i++) {
+      const a = c.points[i]
+      const b = c.points[i + 1]
+      const length = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
+      while (next <= travelled + length && next < total - 0.6) {
+        const f = (next - travelled) / length
+        const at: Vec = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]
+        const r = c.radii[i] + (c.radii[i + 1] - c.radii[i]) * f
+        if (r < 0.15 && at[1] > 6.5) {
+          // Out to alternate sides of the branch, and up toward the light.
+          const tx = (b[0] - a[0]) / length, tz = (b[2] - a[2]) / length
+          const hx = tx - tz * side * 0.8, hz = tz + tx * side * 0.8
+          const hl = Math.hypot(hx, 0.7, hz)
+          sprays.push({ at, heading: [hx / hl, 0.7 / hl, hz / hl], size: GREAT_TREE.height * 0.021 * 0.85, reach: 0.6, weight: 0.5 })
+          side = -side
+        }
+        next += 0.95
+      }
+      travelled += length
+    }
+  })
+
+  const hangs = chooseHangs(chains.slice(1), capsules, sprays)
+
+  // --- the curves, smoothed -----------------------------------------------------------
+  const [trunkChain, ...limbChains] = chains
+  // Rings close together low on the trunk, where the flare and the roots are shaped.
+  const trunkSmooth = smooth(trunkChain.points, trunkChain.radii, (y) => (y < 3 ? 0.14 : 0.45))
+  const trunk: Limb = {
+    // Sunk half a metre into the meadow, so there is never a gap at its foot.
+    points: [[trunkSmooth.points[0][0], -0.5, trunkSmooth.points[0][2]], ...trunkSmooth.points],
+    radii: [trunkSmooth.radii[0], ...trunkSmooth.radii],
+    depth: 0,
+  }
+  const limbs: Limb[] = limbChains.map((c) => {
+    const s = smooth(c.points, c.radii, (_y, r) => (r > 0.2 ? 0.3 : r > 0.08 ? 0.4 : 0.55))
+    return { points: s.points, radii: s.radii, depth: c.depth }
+  })
+
+  // --- the roots ------------------------------------------------------------------
+  const base = trunkChain.radii[0]
+  const rng = makeRng(seedFrom(`${seed}:roots`))
+  const roots: Root[] = []
+  const rootCount = 7
+  const spin = rng() * Math.PI * 2
+  for (let i = 0; i < rootCount; i++) {
+    const a = spin + (i / rootCount) * Math.PI * 2 + range(rng, -0.3, 0.3)
+    // Modest: enough that the trunk goes into the ground rather than standing on it.
+    const length = range(rng, 1.2, 2.0)
+    const points: Vec[] = []
+    const radii: number[] = []
+    const STEPS = 9
+    for (let s = 0; s <= STEPS; s++) {
+      const t = s / STEPS
+      const d = base * 0.55 + t * length
+      const wiggle = Math.sin(t * 5 + i) * 0.12 * t
+      const x = trunkChain.points[0][0] + Math.cos(a + wiggle) * d
+      const z = trunkChain.points[0][2] + Math.sin(a + wiggle) * d
+      const ground = groundAt(foot[0] + x, foot[2] + z) - foot[1]
+      // Out of the foot and down into the meadow, gone under by the end.
+      const r = base * 0.38 * Math.pow(1 - t, 1.2) + 0.03
+      points.push([x, ground + r * 0.1 - t * t * 0.15 + (1 - t) * (1 - t) * 0.1, z])
+      radii.push(r)
+    }
+    roots.push({ points, radii })
+  }
+
   // --- the crown's extent ------------------------------------------------------------
   let spread = 0
   let top = 0
+  let crownBase = Infinity
   for (const s of sprays) {
-    spread = Math.max(spread, Math.hypot(s.at[0], s.at[2]))
-    top = Math.max(top, s.at[1])
+    spread = Math.max(spread, Math.hypot(s.at[0], s.at[2]) + s.reach * 0.6)
+    top = Math.max(top, s.at[1] + s.reach * 0.6)
+    crownBase = Math.min(crownBase, s.at[1] - s.reach * 0.4)
   }
 
-  // --- where thoughts hang -------------------------------------------------------------
-  const hangs = chooseHangs(limbs, capsules, sprays)
-
-  return { foot, trunk, limbs, roots, sprays, capsules, hangs, spread, top }
+  return { foot, trunk, limbs, roots, sprays, capsules, hangs, spread, top, crownBase }
 }
 
 /** Squared distance from a point to a segment. */
@@ -319,7 +335,7 @@ const SHORTEST = 0.6
  * The hang points, in the order thoughts take them.
  *
  * Candidates are the undersides of the branches out past the trunk, low enough
- * that the thread is not six metres long, with a clear fall beneath: a
+ * that the thread is not ten metres long, with a clear fall beneath: a
  * vertical line from the knot down past the paper's bottom that keeps a
  * paper's half-width away from every other piece of wood, and does not pass
  * through a spray of leaves. Then ordered by farthest-first, starting at the
@@ -330,8 +346,7 @@ const SHORTEST = 0.6
 function chooseHangs(limbs: Limb[], capsules: Capsule[], sprays: Spray[]): Vec[] {
   const candidates: Vec[] = []
   for (const l of limbs) {
-    if (l.depth < 2 || l.depth > 3) continue
-    // Every quarter metre or so along the limb, not only at its joints.
+    // Along the limb at its joints and half way between them; not its first span, which is inside its parent.
     for (let i = 1; i < l.points.length - 1; i += 1) for (const f of [0, 0.5]) {
       const a = l.points[i]
       const b = l.points[i + 1]
@@ -391,29 +406,27 @@ function chooseHangs(limbs: Limb[], capsules: Capsule[], sprays: Spray[]): Vec[]
       }
     }
     if (best < 0) break
-    // Two knots closer than half a metre are one knot; keep going but let the next lap have them.
     current = best
   }
   return ordered
 }
 
-/** The great tree of the meadow. */
-export const GREAT_TREE_SEED = 'tree-of-thoughts:ancient'
+/** The great tree of the meadow — the same seed it has always grown from. */
+export const GREAT_TREE_SEED = 'tree-of-thoughts:great'
 export const greatTree = growAncientTree(GREAT_TREE_SEED, [MEADOW_X, groundHeight(MEADOW_X, MEADOW_Z), MEADOW_Z])
 
 /**
  * The outside of the trunk at a height above the foot, in the world: its
- * centre and how far out the bark is (the buttresses' average, not their
- * peaks). What a vine climbs round.
+ * centre and how far out the bark is (the flare's average, not its peaks).
+ * What a vine climbs round.
  */
 export function trunkAt(y: number): { x: number; z: number; radius: number } {
   const { points, radii } = greatTree.trunk
-  const top = points[points.length - 1][1]
-  const t = Math.max(0, Math.min(1, y / top))
-  const i = Math.min(points.length - 2, Math.floor(t * (points.length - 1)))
-  const f = t * (points.length - 1) - i
+  let i = 0
+  while (i < points.length - 2 && points[i + 1][1] < y) i++
   const a = points[i]
   const b = points[i + 1]
+  const f = Math.max(0, Math.min(1, (y - a[1]) / Math.max(1e-6, b[1] - a[1])))
   const flare = Math.exp(-Math.max(0, y + 0.15) / 0.55)
   return {
     x: greatTree.foot[0] + a[0] + (b[0] - a[0]) * f,
@@ -424,10 +437,11 @@ export function trunkAt(y: number): { x: number; z: number; radius: number } {
 
 /**
  * Where the question's bud grows: out in front of the tree, between two of its
- * roots, clear of the flare — not in among them, where it was.
+ * roots, clear of the flare — not in among them.
  */
 export const budSpot: Vec = (() => {
-  const angles = greatTree.roots.map((r) => Math.atan2(r.points[1][2], r.points[1][0])).sort((a, b) => a - b)
+  const [tx, , tz] = greatTree.trunk.points[1]
+  const angles = greatTree.roots.map((r) => Math.atan2(r.points[1][2] - tz, r.points[1][0] - tx)).sort((a, b) => a - b)
   // The gap between roots nearest the front (+z, toward the camera).
   let best = Math.PI / 2
   let bestScore = -Infinity
@@ -441,23 +455,21 @@ export const budSpot: Vec = (() => {
       best = mid
     }
   }
-  const x = greatTree.foot[0] + Math.cos(best) * 1.9
-  const z = greatTree.foot[2] + Math.sin(best) * 1.9
+  const x = greatTree.foot[0] + tx + Math.cos(best) * 1.9
+  const z = greatTree.foot[2] + tz + Math.sin(best) * 1.9
   return [x, groundHeight(x, z), z]
 })()
 
 /**
  * Where the nth thought's thread is tied, in the world.
  *
- * Past the last good slot, the laps come round again a little lower and
- * offset along the branch, so two thoughts never share a knot.
+ * Past the last good slot the laps come round again — tied at the same knot, on
+ * a thread of a different length (see `hangDrop`), so it is still on a branch.
  */
 export function hangSpot(index: number): Vec {
   const [fx, fy, fz] = greatTree.foot
   const points = greatTree.hangs
   if (points.length === 0) return [fx, fy + 6, fz]
-  // Past the last slot the laps come round again — tied at the same knot, on
-  // a thread of a different length (see `hangDrop`), so it is still on a branch.
   const [x, y, z] = points[index % points.length]
   return [fx + x, fy + y, fz + z]
 }

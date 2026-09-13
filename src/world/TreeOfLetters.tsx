@@ -260,24 +260,10 @@ function buildBark(tree: AncientTree): BufferGeometry {
   const rootAngles = tree.roots.map((r) => Math.atan2(r.points[1][2], r.points[1][0]))
 
   /*
-    The trunk, resampled finely near the ground so the flare has rings to be
-    shaped in, and sunk below the meadow so there is no gap at its foot.
+    The trunk, from half a metre under the meadow to the top of the tree in one
+    curve — its rings close together low down, where the flare is shaped.
   */
-  const src = tree.trunk
-  const top = src.points[src.points.length - 1][1]
-  const heights = [-0.5, 0, 0.1, 0.22, 0.36, 0.52, 0.72, 0.96, 1.25, 1.6, 2.0, 2.45, 2.9, top - 0.2, top]
-  const trunkPoints: Vec[] = []
-  const trunkRadii: number[] = []
-  for (const y of heights) {
-    const t = Math.max(0, Math.min(1, y / top))
-    const i = Math.min(src.points.length - 2, Math.floor(t * (src.points.length - 1)))
-    const f = t * (src.points.length - 1) - i
-    const a = src.points[i]
-    const b = src.points[i + 1]
-    trunkPoints.push([a[0] + (b[0] - a[0]) * f, y, a[2] + (b[2] - a[2]) * f])
-    trunkRadii.push(src.radii[i] + (src.radii[i + 1] - src.radii[i]) * f)
-  }
-  sweep(m, trunkPoints, trunkRadii, 30, (ring, angle, radius, at) => {
+  sweep(m, tree.trunk.points, tree.trunk.radii, 30, (ring, angle, radius, at) => {
     const y = at[1]
     // Buttresses over the roots, gone by head height.
     const flare = Math.exp(-Math.max(0, y + 0.15) / 0.55)
@@ -291,17 +277,20 @@ function buildBark(tree: AncientTree): BufferGeometry {
     // Moss on the shaded side of the lower trunk.
     const north = Math.max(0, -Math.sin(angle)) * Math.max(0, 1 - y / 2.4)
     tint.lerp(MOSS, north * 0.45)
-    // Under the crown the bole is in shade.
-    tint.multiplyScalar(1 - Math.min(1, y / 4) * 0.12)
+    // Under the crown the bole is in shade, and it thins to a branch's colour at the top.
+    tint.multiplyScalar(1 - Math.min(1, Math.max(0, y) / 6) * 0.14)
+    tint.lerp(BARK_TWIG, Math.max(0, Math.min(1, (0.3 - radius) / 0.2)) * 0.6)
     return { r, colour: tint }
   }, false)
 
-  // Every limb, from inside its parent to its tip.
+  // Every limb, from inside the wood it leaves to its tip — as round as it is thick.
   for (const l of tree.limbs) {
-    const sides = l.depth <= 1 ? 16 : l.depth === 2 ? 10 : l.depth === 3 ? 6 : 4
+    const r0 = l.radii[0]
+    const sides = r0 > 0.25 ? 16 : r0 > 0.12 ? 11 : r0 > 0.06 ? 7 : 5
     sweep(m, l.points, l.radii, sides, (ring, angle, radius) => {
-      const ridge = l.depth <= 2 ? Math.pow(Math.abs(Math.sin(angle * 7 + ring * 0.7)), 3) : 0
-      tint.copy(BARK).lerp(BARK_TWIG, Math.min(1, (l.depth - 1) / 3)).lerp(BARK_DARK, ridge * 0.4)
+      const ridge = radius > 0.08 ? Math.pow(Math.abs(Math.sin(angle * 7 + ring * 0.7)), 3) : 0
+      // Rougher and darker where the wood is old and thick, paler out at the twigs.
+      tint.copy(BARK).lerp(BARK_TWIG, Math.max(0, Math.min(1, (0.3 - radius) / 0.26))).lerp(BARK_DARK, ridge * 0.4)
       return { r: radius * (1 - ridge * 0.04), colour: tint }
     }, true)
   }
@@ -332,12 +321,12 @@ function buildLeaves(tree: AncientTree, detail: number): BufferGeometry {
   }
   for (const spray of tree.sprays) {
     // Fewer, larger cards at lower detail, so the crown keeps its area and silhouette.
-    const cards = Math.max(5, Math.round(22 * detail))
-    const size = (0.5 * spray.size) / Math.sqrt(detail)
+    const cards = Math.max(3, Math.round(34 * detail * spray.weight))
+    const size = spray.size / Math.sqrt(detail)
     for (let i = 0; i < cards; i++) {
       // A wide cone round where the twig was heading, golden angle round it.
       const spin = i * 2.399 + rand() * 0.6
-      const tilt = 0.35 + rand() * 1.0
+      const tilt = 0.3 + rand() * 1.05
       const [hx, hy, hz] = spray.heading
       const refUp = Math.abs(hy) > 0.95 ? [1, 0, 0] : [0, 1, 0]
       let ux = refUp[1] * hz - refUp[2] * hy
@@ -350,7 +339,8 @@ function buildLeaves(tree: AncientTree, detail: number): BufferGeometry {
       const dx = hx * c + (ux * Math.cos(spin) + vx * Math.sin(spin)) * s
       const dy = hy * c + (uy * Math.cos(spin) + vy * Math.sin(spin)) * s
       const dz = hz * c + (uz * Math.cos(spin) + vz * Math.sin(spin)) * s
-      const along = -0.1 + rand() * 0.7
+      // Spread along a reach that never collapses to a point, or the spray is a blob.
+      const along = (-0.18 + rand()) * spray.reach
       const ox = spray.at[0] + dx * along
       const oy = spray.at[1] + dy * along
       const oz = spray.at[2] + dz * along
@@ -364,7 +354,7 @@ function buildLeaves(tree: AncientTree, detail: number): BufferGeometry {
         crown's spread, and its height against the crown's top.
       */
       const outN = Math.min(1, Math.hypot(ox, oz) / Math.max(1, tree.spread))
-      const upN = Math.min(1, Math.max(0, (oy - 3) / Math.max(1, tree.top - 3)))
+      const upN = Math.min(1, Math.max(0, (oy - tree.crownBase) / Math.max(1, tree.top - tree.crownBase)))
       const ao = 0.62 + 0.3 * outN + 0.28 * upN
       tint.copy(CANOPY[Math.floor(rand() * CANOPY.length)]).multiplyScalar(Math.min(1.12, ao))
       const flutter = 0.05 + rand()

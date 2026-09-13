@@ -40,7 +40,29 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 13 Sep · Claude · the Tree *is* the original tree again, made solid
+
+Second correction, with a photo of the tree as it used to be: that shape, not a
+new tree "a bit like it". So `growAncientTree` no longer invents a tree — it
+asks `world/tree` for the original (seed `tree-of-thoughts:great`, broad,
+15.5 m, girth 1.55, density 2.6) with the new `skeleton: true` option, which
+hands back every limb segment and spray without drawing any extra randomness.
+The segments are joined into curves (a segment that starts where the previous
+one ended is its main continuation, because the generator grows depth-first),
+run through a Catmull-Rom spline that passes through every joint, slimmed to
+0.85 (the old boxes were cones, so the tree always looked slimmer than its
+radii), and tapered to fine twig ends. Swept bark, solid capsules, rope threads,
+roots, flare, shade and landmark all carry on. New: a lighter leaf spray every
+metre along the outer branches (`weight` 0.5) so the crown is not bare limbs
+under end clumps, and leaves spread by each spray's real reach.
+
+`npm run threads` passes — 110 hang points, 6/6 draped threads rest on limbs
+and swing on, 9.5 mm worst in a gale, 0.56 ms a step. Its draped-thread test now
+picks moderately sloped limbs, since this tree's limbs climb.
+
 ## 13 Sep · Claude · the Tree's old shape back, and the vine rearranged
+
+*(Superseded for the tree's shape by the entry above; the vine stands.)*
 
 The owners liked everything in the entry below except the short, fat, ancient
 look: "get me back the previous tree appearance — a bit taller and thinner."

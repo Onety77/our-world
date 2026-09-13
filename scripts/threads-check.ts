@@ -37,7 +37,8 @@ const blocked: number[] = []
 {
   const thick = tree.capsules
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => c.r > 0.16 && Math.abs(c.a[1] - c.b[1]) < 0.35 && c.a[1] > 3 && Math.hypot(c.a[0], c.a[2]) > 2.5)
+    // Thick, and flat enough that a thread lands on it rather than sliding straight off: this tree's limbs climb.
+    .filter(({ c }) => c.r > 0.08 && Math.abs(c.a[1] - c.b[1]) < 0.6 * Math.hypot(c.b[0] - c.a[0], c.b[2] - c.a[2]) && c.a[1] > 3 && Math.hypot(c.a[0], c.a[2]) > 1.5)
   for (let n = 0; n < Math.min(6, thick.length); n++) {
     const { c } = thick[Math.floor((n / 6) * thick.length)]
     const mid: [number, number, number] = [(c.a[0] + c.b[0]) / 2, (c.a[1] + c.b[1]) / 2, (c.a[2] + c.b[2]) / 2]

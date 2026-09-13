@@ -38,6 +38,8 @@ interface TalkingState {
    * confusion of having two.
    */
   replyTo: string | null
+  /** Every reply gesture requests the cursor, even when its target is unchanged. */
+  replyFocus: number
   /** The conversation folded into the corner is open. */
   whispering: boolean
 
@@ -57,6 +59,7 @@ export const useTalking = create<TalkingState>((set) => ({
   loading: true,
   composing: false,
   replyTo: null,
+  replyFocus: 0,
   whispering: false,
 
   setMessages: (messages) => set((state) => {
@@ -89,7 +92,7 @@ export const useTalking = create<TalkingState>((set) => ({
   // you changed your mind about answering is the next thing you say landing
   // under a line you had forgotten you picked.
   stopWriting: () => set({ composing: false, replyTo: null }),
-  answer: (replyTo) => set({ replyTo }),
+  answer: (replyTo) => set(state => ({ replyTo, replyFocus: state.replyFocus + (replyTo ? 1 : 0) })),
   whisper: (whispering) => set({ whispering }),
 }))
 

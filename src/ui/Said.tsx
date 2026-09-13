@@ -39,6 +39,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { create } from 'zustand'
 import { useData } from '@/data/provider'
 import {
@@ -121,8 +122,12 @@ export function useSaidGestures(message: Message) {
   }
 
   const reply = () => {
-    answer(message.id)
-    startWriting()
+    // Mount and focus the composer within the touch event, while iOS still
+    // grants the gesture permission to activate its keyboard.
+    flushSync(() => {
+      answer(message.id)
+      startWriting()
+    })
   }
 
   return {
@@ -151,7 +156,10 @@ export function useSaidGestures(message: Message) {
         before this build reached the device.
       */
       event.preventDefault()
-      window.getSelection()?.removeAllRanges()
+      if (!(document.activeElement instanceof HTMLTextAreaElement) &&
+        !(document.activeElement instanceof HTMLInputElement)) {
+        window.getSelection()?.removeAllRanges()
+      }
       ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
       /*
         The *message's* box, not the finger's position.
@@ -227,6 +235,8 @@ export function useSaidGestures(message: Message) {
       const dy = event.clientY - start.y
 
       if (gestureAxis === 'horizontal' && dx < -SWIPE) {
+        event.preventDefault()
+        event.stopPropagation()
         reply()
         return
       }

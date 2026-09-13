@@ -498,6 +498,7 @@ export function Talking() {
   const startWriting = useTalking((s) => s.startWriting)
   const stopWriting = useTalking((s) => s.stopWriting)
   const replyTo = useTalking((s) => s.replyTo)
+  const replyFocus = useTalking((s) => s.replyFocus)
   const answer = useTalking((s) => s.answer)
   const profiles = useWorldSlice((s) => s.profiles)
   const presence = useWorldSlice((s) => s.presence)
@@ -1249,6 +1250,7 @@ export function Talking() {
 
     `replyTo` is in the dependencies for that reason — choosing something to
     answer is choosing to write, every time and not only the first.
+    `replyFocus` also changes for repeated swipes on that very same message.
 
     **A layout effect rather than an ordinary one**, and that is the iOS half
     of it: Safari only raises the keyboard for a `focus()` that happens inside
@@ -1259,8 +1261,14 @@ export function Talking() {
     ---------------------------------------------------------------------------
   */
   useLayoutEffect(() => {
-    if (composing) field.current?.focus()
-  }, [composing, replyTo])
+    const input = field.current
+    if (!composing || !input) return
+    const start = input.selectionStart, end = input.selectionEnd
+    input.focus({ preventScroll: true })
+    // Focus alone can leave WebKit's keyboard visible without a live caret
+    // after a message gesture clears selection. Preserve the draft's position.
+    input.setSelectionRange(start, end, input.selectionDirection)
+  }, [composing, replyTo, replyFocus])
 
   useEffect(() => {
     if (!here && composing) stopWriting()
