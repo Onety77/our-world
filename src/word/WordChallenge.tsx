@@ -39,6 +39,7 @@ import {
   resultText,
 } from '@/world/games/word-duel/challenge'
 import { WordPicker } from '@/world/games/word-duel/WordPicker'
+import { chip, lay, tap } from './stoneSound'
 
 function keyFor(code: string) {
   return `word:played:${code}`
@@ -107,6 +108,7 @@ export function WordChallenge() {
       return
     }
     const next = [...guesses, typed]
+    lay()
     setGuesses(next)
     setTyped('')
     setComplaint(null)
@@ -123,13 +125,20 @@ export function WordChallenge() {
       setComplaint(null)
       setTyped(typed + letter)
       setStrike((s) => ({ at: typed.length, n: s.n + 1 }))
+      // The last stone of a word lands a little heavier than the first — as in the garden.
+      chip(0.35 + (typed.length / (LENGTH - 1)) * 0.5)
+      tap()
     },
     [typed],
   )
   const rub = useCallback(() => {
     setComplaint(null)
+    if (typed.length > 0) {
+      chip(0.12)
+      tap(5)
+    }
     setTyped((t) => t.slice(0, -1))
-  }, [])
+  }, [typed])
 
   useEffect(() => {
     if (!playing) return
@@ -153,6 +162,10 @@ export function WordChallenge() {
           askName
           onBack={challenge ? () => setPicking(false) : undefined}
           backLabel="back to my board"
+          onStone={(weight) => {
+            chip(weight)
+            tap()
+          }}
         />
       </main>
     )

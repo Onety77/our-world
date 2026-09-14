@@ -92,7 +92,10 @@ export function WordPicker({
     },
     [typed, onStone],
   )
-  const rub = useCallback(() => setTyped((t) => t.slice(0, -1)), [])
+  const rub = useCallback(() => {
+    if (typed.length > 0) onStone?.(0.12)
+    setTyped((t) => t.slice(0, -1))
+  }, [typed, onStone])
 
   const again = () => {
     setLink(null)

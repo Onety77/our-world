@@ -51,6 +51,38 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* --- the Hollow behind it all (cave.ts) --- */
+
+.cave {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+  The room is lit from its walls and the middle is dark, which is where the
+  board goes. This only deepens that a little where words sit, and under the
+  keyboard, so the letters never have firelight straight behind them.
+*/
+.cave-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 42% at 50% 44%, rgba(8, 6, 4, 0.5), rgba(8, 6, 4, 0.12) 72%, transparent),
+    linear-gradient(to top, rgba(8, 6, 4, 0.72), rgba(8, 6, 4, 0.3) 30%, transparent 48%),
+    linear-gradient(to bottom, rgba(8, 6, 4, 0.45), transparent 22%);
+}
+
+#word {
+  position: relative;
+  z-index: 1;
+}
+
 /* --- the page --- */
 
 .wc {
@@ -66,9 +98,14 @@ button {
     max(0.9rem, env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
 }
 
+/* The picker sits at the bottom of the screen, so its keyboard is where the board's is: under the thumb. */
 .wc-picking {
   grid-template-rows: 1fr;
-  align-items: center;
+  align-items: end;
+}
+
+.wc-picking .picker {
+  padding-bottom: 0.2rem;
 }
 
 .wc-broken {
@@ -207,8 +244,9 @@ button {
     box-shadow 0.45s ease;
 }
 
+/* More solid than the garden's: the cave moves behind these, and see-through stones swam with it. */
 .stone-empty {
-  background: linear-gradient(163deg, rgba(88, 80, 70, 0.5), rgba(58, 52, 46, 0.5));
+  background: linear-gradient(163deg, rgba(70, 63, 55, 0.78), rgba(44, 39, 34, 0.78));
   box-shadow:
     inset 0 1px 1px rgba(255, 255, 255, 0.05),
     0 2px 5px rgba(0, 0, 0, 0.5);
@@ -368,6 +406,141 @@ button {
 .tray-key:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+/*
+  ---------------------------------------------------------------------------
+  The keyboard on this page: keys you can see and hit.
+
+  In the garden the tray is bare letters on the dark, which suits a room you
+  already know. Here it is the first thing a stranger's thumb has to find, on
+  a moving cave, so every letter sits on a soft pad of its own — full width,
+  a thumb tall, and the same three colours the stones turn so the keyboard
+  tells you which letters are spent. Pressed keys sink.
+  ---------------------------------------------------------------------------
+*/
+.wc .tray {
+  gap: clamp(0.35rem, 1.2dvh, 0.5rem);
+  width: 100%;
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+.wc .tray-row {
+  width: 100%;
+  gap: clamp(0.22rem, 1.3vw, 0.4rem);
+}
+
+/* The middle row sits in half a key, as every keyboard's does. */
+.wc .tray-row:nth-child(2) {
+  padding-inline: 4.8%;
+}
+
+.wc .tray .tray-key {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 3rem;
+  height: clamp(2.9rem, 6.6dvh, 3.4rem);
+  min-height: 0;
+  padding: 0;
+  border-radius: 0.55rem;
+  background: linear-gradient(180deg, rgba(255, 238, 212, 0.13), rgba(255, 238, 212, 0.06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 246, 228, 0.12),
+    0 2px 5px rgba(0, 0, 0, 0.35);
+  font-family: var(--serif);
+  font-size: clamp(1.1rem, 5vw, 1.35rem);
+  color: #f4ead8;
+  text-shadow: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    background 0.35s ease,
+    color 0.35s ease,
+    box-shadow 0.35s ease,
+    transform 0.08s ease;
+}
+
+.wc .tray .tray-key:active:not(:disabled) {
+  transform: translateY(1px) scale(0.95);
+  background: linear-gradient(180deg, rgba(255, 222, 172, 0.3), rgba(255, 222, 172, 0.16));
+  transition-duration: 0s;
+}
+
+@media (hover: hover) {
+  .wc .tray .tray-key:hover:not(:disabled) {
+    background: linear-gradient(180deg, rgba(255, 238, 212, 0.2), rgba(255, 238, 212, 0.1));
+    color: #fff;
+  }
+}
+
+.wc .tray .tray-key:focus-visible {
+  outline: 1px solid rgba(240, 178, 106, 0.7);
+  outline-offset: 1px;
+}
+
+/* Spent: the pad goes dark with the letter. */
+.wc .tray .tray-cold {
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  color: rgba(242, 239, 230, 0.26);
+}
+
+/* In the word, somewhere else: the warm stone. */
+.wc .tray .tray-near {
+  background: linear-gradient(163deg, rgba(122, 94, 56, 0.9), rgba(79, 58, 34, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 160, 0.2),
+    0 2px 5px rgba(0, 0, 0, 0.35);
+  color: #f7ead2;
+}
+
+/* In the right place: the ember. */
+.wc .tray .tray-lit {
+  background: linear-gradient(163deg, #b4681f, #7d3f12);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 236, 190, 0.35),
+    0 0 12px rgba(255, 150, 60, 0.35);
+  color: #fff6e4;
+}
+
+.wc .tray .tray-wide {
+  flex: 1.55 1 0;
+  max-width: 4.7rem;
+  font-family: var(--sans);
+  font-size: clamp(0.66rem, 2.9vw, 0.8rem);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+
+.wc .tray .tray-enter:not(:disabled) {
+  background: linear-gradient(180deg, rgba(240, 168, 90, 0.34), rgba(200, 120, 50, 0.22));
+  color: #ffd9a8;
+}
+
+.wc .tray .tray-rub span {
+  font-size: 1.15rem;
+}
+
+.wc .tray .tray-key:disabled {
+  opacity: 0.4;
+}
+
+/* The chips a letter knocks off its stone, a little bigger on a page this size. */
+.wc .chips i {
+  width: 3px;
+  height: 3px;
+  background: rgba(244, 232, 210, 0.95);
+}
+
+.wc-title,
+.wc-note,
+.wc-kicker,
+.picker-title,
+.picker-note,
+.picker-kicker {
+  text-shadow: var(--lift);
 }
 
 @media (prefers-reduced-motion: reduce) {

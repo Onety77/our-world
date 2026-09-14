@@ -14,10 +14,15 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { WordChallenge } from './WordChallenge'
+import { startCave } from './cave'
 import './word.css'
 
 const root = document.getElementById('word')
 if (!root) throw new Error('No #word element in word.html.')
+
+// The Hollow, behind everything. See `cave.ts`.
+const cave = document.querySelector<HTMLCanvasElement>('canvas.cave')
+if (cave) startCave(cave)
 
 createRoot(root).render(
   <StrictMode>

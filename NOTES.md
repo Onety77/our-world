@@ -67,6 +67,22 @@ board for people who are not in the garden — no account, no app.
   because the garden's rules are spread through `styles.css`. Change both.
 - Links use the page origin; a native (Capacitor) build must set
   `VITE_SHARE_ORIGIN` to the real site.
+- **Second pass (same day), the page itself:**
+  - *Sound:* `src/word/stoneSound.ts` is the garden's `ambience.chip` rebuilt
+    standalone (click of brown noise + falling triangle), a softer one on
+    rub-out, five stones settling when a guess is laid, and an 8 ms vibrate on
+    Android. The chip animation was already running; chips are 3 px here.
+  - *Keyboard:* on this page only (`.wc .tray` in `word.css`) every letter is
+    a pad — full width, ~3.1 rem tall, middle row inset half a key, pads take
+    the stone colours (spent dark, warm, ember), keys sink when pressed. The
+    garden's bare-letter tray is untouched.
+  - *Background:* `src/word/cave.ts` is the Hollow's cave rebuilt on bare
+    WebGL from `world/cave/Cave.tsx`'s numbers (same kneaded icosahedron,
+    hearths, rock shader less the ore, stones, flame tongues, embers, camera
+    drift, ACES at the garden's exposure) — ~10 KB instead of three.js. Adds
+    dim motes through the room and a wider portrait FOV so a phone sees a
+    hearth. Pixel ratio capped at 1.5; one still frame under reduced motion.
+    If `Cave.tsx` changes, change this too.
 - `npm run word-link`: 16,205 codes round-trip across every answer word,
   names with accents/emoji, and salts; 89,901 single-character damages and all
   truncations never yield a different word; the result text never contains a
