@@ -40,6 +40,38 @@ their entry first.
 > unchanged and still eager. Nothing else of yours was touched: the rally's
 > model, sampler, physics, checks and README are as you left them.
 
+## 14 Sep · Claude · Word duel: share a word with anyone, as a link
+
+A fourth way to play in the Hollow's Word duel page, **Share a word**: pick
+any five letters, get a link (`/w/<code>`), send it to anybody. It opens a
+board for people who are not in the garden — no account, no app.
+
+- **No server.** The word and sender's name travel *in* the code
+  (`word-duel/challenge.ts`), mixed with a random salt so no letters show in
+  the URL and the same word gives a different link each time, plus a check
+  byte so a cut-short link says it is broken. A veil, not a lock.
+- **Its own page.** `word.html` → `src/word/` is a second Vite entry that
+  imports nothing of the garden (no Firebase, no three): ~65 KB gzipped plus
+  the word list. `vercel.json` rewrites `/w` and `/w/*` to it, `wordPage()` in
+  `vite.config.ts` does the same for dev/preview, and the service worker now
+  answers `/w/` navigations with `word.html` instead of the garden shell.
+  Until a phone accepts the new worker, *on your own phones* a `/w/` link
+  still opens the garden; people without the garden are unaffected.
+- **The page:** six guesses on the same stones (moved to
+  `word-duel/stones.tsx`, which `WordDuel` now uses too — same markup), board
+  saved per link on the device so a reload is the same game, the answer is
+  always a legal guess even if it is not in the book. At the end: *send back
+  how you did* (the emoji grid + link, never the word) and *send a word back*,
+  which opens the same picker (`WordPicker`) asking for a name.
+- The public page's stone/tray look is a **copy** in `src/word/word.css`,
+  because the garden's rules are spread through `styles.css`. Change both.
+- Links use the page origin; a native (Capacitor) build must set
+  `VITE_SHARE_ORIGIN` to the real site.
+- `npm run word-link`: 16,205 codes round-trip across every answer word,
+  names with accents/emoji, and salts; 89,901 single-character damages and all
+  truncations never yield a different word; the result text never contains a
+  word.
+
 ## 13 Sep · Claude · the Tree *is* the original tree again, made solid
 
 Second correction, with a photo of the tree as it used to be: that shape, not a

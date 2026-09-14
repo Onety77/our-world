@@ -1,0 +1,381 @@
+/*
+  The shared-word page.
+
+  The same stones as the word game in the garden, on the same firelit dark —
+  but a page of its own, so the look it needs is here rather than borrowed from
+  the garden's stylesheet, which is half a megabyte of a world this page does
+  not load. The stone, chip and tray rules below are copied from `styles.css`
+  (the word duel's section, and "Enter and rub-out, on the keyboard"); if the
+  stones there change, change them here.
+
+  Built for a phone first: one column, the whole game inside the screen's
+  height, the keyboard where a thumb is.
+*/
+
+:root {
+  --ink: #f2efe6;
+  --ink-dim: rgba(242, 239, 230, 0.78);
+  --ink-faint: rgba(242, 239, 230, 0.52);
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', 'Hoefler Text', Georgia, serif;
+  --sans: 'Avenir Next', 'Segoe UI', Roboto, system-ui, sans-serif;
+  --lift: 0 1px 2px rgba(6, 12, 10, 0.9), 0 0 10px rgba(6, 12, 10, 0.78);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #0e0d0b;
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--serif);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  /* The fire is below the board, off the bottom of the screen. */
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 108%, rgba(190, 104, 38, 0.3), transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 30%, rgba(60, 44, 30, 0.35), transparent 75%),
+    #0e0d0b;
+  background-attachment: fixed;
+}
+
+button {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --- the page --- */
+
+.wc {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: max(1.4rem, calc(env(safe-area-inset-top) + 0.8rem)) max(0.8rem, env(safe-area-inset-right))
+    max(0.9rem, env(safe-area-inset-bottom)) max(0.8rem, env(safe-area-inset-left));
+}
+
+.wc-picking {
+  grid-template-rows: 1fr;
+  align-items: center;
+}
+
+.wc-broken {
+  grid-template-rows: auto auto;
+  align-content: center;
+  gap: 1.6rem;
+}
+
+.wc-head {
+  text-align: center;
+  animation: wc-in 0.8s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+
+.wc-kicker {
+  margin: 0;
+  font: italic 0.9rem var(--serif);
+  color: #cdb590;
+  letter-spacing: 0.04em;
+}
+
+.wc-title {
+  margin: 0.2rem 0 0.35rem;
+  font: 400 clamp(1.6rem, 7.4vw, 2.4rem) / 1.12 var(--serif);
+  color: #f3e8d6;
+  text-shadow: var(--lift);
+}
+
+.wc-note {
+  margin: 0 auto;
+  max-width: 22rem;
+  font: clamp(0.84rem, 3.6vw, 0.95rem) / 1.5 var(--serif);
+  color: #c0bcaf;
+}
+
+.wc-note b {
+  font-weight: 400;
+  color: #ffcf96;
+  letter-spacing: 0.08em;
+}
+
+.wc-board {
+  display: flex;
+  align-items: safe center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.wc-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.wc-say {
+  min-height: 1.1rem;
+  margin: 0;
+  text-align: center;
+  font: 0.72rem var(--sans);
+  letter-spacing: 0.05em;
+  color: #e8b48a;
+}
+
+.wc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.2rem 1.6rem;
+  padding-top: 0.4rem;
+}
+
+.wc-button {
+  min-height: 2.9rem;
+  padding: 0.6rem 0.5rem;
+  border: 0;
+  background: none;
+  font: 0.74rem var(--sans);
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.wc-button:hover,
+.wc-button:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
+.wc-main {
+  color: #f0b26a;
+  text-shadow: 0 0 0.9rem rgba(224, 145, 70, 0.42);
+}
+
+@keyframes wc-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* --- the stones (copied from styles.css) --- */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.25rem, min(1.4vw, 0.8dvh), 0.5rem);
+}
+
+.word {
+  display: flex;
+  gap: clamp(0.25rem, min(1.4vw, 0.8dvh), 0.5rem);
+}
+
+.stone {
+  position: relative;
+  width: clamp(2.1rem, min(15.4vw, 7.4dvh), 3.8rem);
+  height: clamp(2.1rem, min(15.4vw, 7.4dvh), 3.8rem);
+  display: grid;
+  place-items: center;
+  font-family: var(--serif);
+  font-size: clamp(1rem, min(6vw, 3dvh), 1.6rem);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--ink-dim);
+  background:
+    radial-gradient(ellipse 70% 60% at 38% 30%, rgba(255, 255, 255, 0.09), transparent 60%),
+    linear-gradient(163deg, #3f3a33, #2a2622);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.06),
+    0 2px 5px rgba(0, 0, 0, 0.45);
+  transition:
+    background 0.45s ease,
+    color 0.45s ease,
+    box-shadow 0.45s ease;
+}
+
+.stone-empty {
+  background: linear-gradient(163deg, rgba(88, 80, 70, 0.5), rgba(58, 52, 46, 0.5));
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),
+    0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.stone-held {
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse 70% 60% at 38% 30%, rgba(255, 255, 255, 0.13), transparent 60%),
+    linear-gradient(163deg, #4a443c, #332e29);
+}
+
+.stone-cold {
+  color: rgba(242, 239, 230, 0.3);
+  background: linear-gradient(163deg, #2c2926, #201d1b);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.02);
+}
+
+.stone-near {
+  color: #f7ead2;
+  background:
+    radial-gradient(ellipse 70% 60% at 38% 28%, rgba(255, 214, 150, 0.3), transparent 62%),
+    linear-gradient(163deg, #6a5334, #45341f);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 220, 160, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.stone-lit {
+  color: #fff6e4;
+  background:
+    radial-gradient(ellipse 70% 60% at 38% 28%, rgba(255, 230, 170, 0.55), transparent 64%),
+    linear-gradient(163deg, #b4681f, #7d3f12);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 236, 190, 0.4),
+    0 0 16px rgba(255, 150, 60, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.stone.struck {
+  animation: stone-knock 0.19s cubic-bezier(0.3, 1.5, 0.5, 1) 1;
+}
+
+@keyframes stone-knock {
+  0% {
+    transform: scale(0.86) translateY(-2px);
+  }
+  55% {
+    transform: scale(1.05) translateY(1px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.chips {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.chips i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  border-radius: 40% 60% 55% 45%;
+  background: rgba(236, 226, 205, 0.85);
+  animation: chip-off 0.34s ease-out 1 forwards;
+  transform: rotate(var(--a)) translateX(0);
+  opacity: 0;
+}
+
+@keyframes chip-off {
+  0% {
+    transform: rotate(var(--a)) translateX(2px) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: rotate(var(--a)) translateX(clamp(11px, 4vw, 17px)) scale(0.4);
+    opacity: 0;
+  }
+}
+
+/* --- the keyboard (copied from styles.css) --- */
+
+.tray {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: 100%;
+}
+
+.tray-row {
+  display: flex;
+  justify-content: center;
+  gap: clamp(0.1rem, 0.6vw, 0.3rem);
+}
+
+.tray-key {
+  min-width: min(8.9vw, 2.6rem);
+  min-height: 2.9rem;
+  padding: 0.4rem 0.05rem;
+  border: 0;
+  background: none;
+  font-family: var(--serif);
+  font-size: clamp(1rem, 4.4vw, 1.2rem);
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  cursor: pointer;
+  text-shadow: var(--lift);
+  transition:
+    color 0.4s ease,
+    opacity 0.4s ease;
+  touch-action: manipulation;
+}
+
+.tray-key:hover:not(:disabled),
+.tray-key:focus-visible:not(:disabled) {
+  color: #fff;
+  outline: none;
+}
+
+.tray-fresh {
+  color: var(--ink-dim);
+}
+.tray-cold {
+  color: rgba(242, 239, 230, 0.15);
+}
+.tray-near {
+  color: #d8a765;
+}
+.tray-lit {
+  color: #ff9f45;
+  text-shadow: 0 0 10px rgba(255, 150, 60, 0.5), var(--lift);
+}
+
+.tray-wide {
+  min-width: clamp(2.8rem, 13.5vw, 3.8rem);
+  font-family: var(--sans);
+  font-size: clamp(0.64rem, 2.7vw, 0.78rem);
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+  color: var(--ink-dim);
+}
+
+.tray-enter:not(:disabled) {
+  color: #f0b26a;
+}
+
+.tray-rub:not(:disabled) {
+  color: var(--ink);
+}
+
+.tray-key:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stone.struck,
+  .wc-head {
+    animation: none;
+  }
+  .chips {
+    display: none;
+  }
+}

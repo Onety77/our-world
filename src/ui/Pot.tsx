@@ -257,7 +257,7 @@ function GoalSheet() {
               className="ink pot-goal-label"
               value={label}
               onChange={(e) => setLabel(e.target.value.slice(0, 48))}
-              placeholder="the trip · the flat · her visit"
+              placeholder="the trip · the flat · the next visit"
               aria-label="what you are saving for"
             />
 

@@ -14,12 +14,15 @@ import { TrackArtwork } from './TrackArtwork'
 import { useChoiceKeys } from './useChoiceKeys'
 import { useChoiceSwipe } from './useChoiceSwipe'
 import { useBackCloses } from '@/systems/backstop'
+import { ambience } from '@/systems/ambience'
+import { WordPicker } from '@/world/games/word-duel/WordPicker'
 import './HollowLobby.css'
 
 // Keep your place when a game temporarily takes over the world.
-const useHollowMenu = create<{ selected: string | null; lastGame: string }>(() => ({
+const useHollowMenu = create<{ selected: string | null; lastGame: string; sharing: boolean }>(() => ({
   selected: null,
   lastGame: 'ember-rally',
+  sharing: false,
 }))
 const library = [...GAMES].sort((a, b) => Number(b.id === 'ember-rally') - Number(a.id === 'ember-rally'))
 
@@ -31,7 +34,7 @@ export function HollowLobby() {
   const presence = useWorldSlice((s) => s.presence)
   const them = otherUser(data.me),
     name = profiles[them].name
-  const { selected, lastGame } = useHollowMenu()
+  const { selected, lastGame, sharing } = useHollowMenu()
   const gameIndex = Math.max(0, library.findIndex(g => g.id === lastGame))
   const browseGame = (step: number) => {
     for (let offset = 1; offset <= library.length; offset++) {
@@ -43,17 +46,23 @@ export function HollowLobby() {
     }
   }
   const setSelected = (selected: string | null) => useHollowMenu.setState({ selected })
+  const stopSharing = () => useHollowMenu.setState({ sharing: false })
   useBackCloses(selected !== null, () => setSelected(null), 5)
-  const swipe = useChoiceSwipe(browseGame, !selected)
+  // Above the game's own page, so a back gesture on the picker returns to the ways to play.
+  useBackCloses(sharing, stopSharing, 6)
+  // A picker left open is not a place to come back to next visit.
+  useEffect(() => () => useHollowMenu.setState({ sharing: false }), [])
+  const swipe = useChoiceSwipe(browseGame, !selected && !sharing)
   const back = () => {
-    if (selected) setSelected(null)
+    if (sharing) stopSharing()
+    else if (selected) setSelected(null)
     else {
       useHollowMenu.setState({ selected: null, lastGame: 'ember-rally' })
       useSections.getState().leave()
     }
   }
   const choices = useChoiceKeys({
-    screen: selected ?? 'library',
+    screen: sharing ? 'sharing' : (selected ?? 'library'),
     initial: selected ? '.hollow-modes button:not(:disabled)' : '.hollow-game-tile',
     onBack: back,
     onBrowse: browseGame,
@@ -89,6 +98,32 @@ export function HollowLobby() {
     if (id === 'ember-rally') start(id, true)
     else setSelected(id)
   }
+  /*
+    Picking a word to send as a link.
+
+    Its own screen, outside the hub rather than inside it: the hub's arrow-key
+    navigation takes Enter for itself, and its button reset would restyle the
+    stones' keyboard. Nothing here touches her or the rounds — the link is the
+    whole game. See `WordPicker`.
+  */
+  if (sharing) {
+    return (
+      <section className="word-share" aria-label="Share a word">
+        <nav className="word-share-top">
+          <button type="button" onClick={stopSharing}>
+            ← Ways to play
+          </button>
+        </nav>
+        <WordPicker
+          from={profiles[data.me].name}
+          onBack={stopSharing}
+          backLabel="back to the hollow"
+          onStone={(weight) => ambience.chip(weight)}
+        />
+      </section>
+    )
+  }
+
   return (
     <section
       ref={choices}
@@ -160,6 +195,15 @@ export function HollowLobby() {
                   <span className="hollow-mode-action">
                     {bothHere ? `Play with ${name} →` : `Available when ${name} is online`}
                   </span>
+                </button>
+              )}
+              {game.id === 'word-duel' && (
+                <button onClick={() => useHollowMenu.setState({ sharing: true })}>
+                  <span className="hollow-mode-icon">✧</span>
+                  <small>with anyone</small>
+                  <strong>Share a word</strong>
+                  <p>Pick any five-letter word and send it as a link. Whoever opens it gets six guesses — no app, no account.</p>
+                  <span className="hollow-mode-action">Pick a word →</span>
                 </button>
               )}
             </div>

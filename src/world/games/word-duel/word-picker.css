@@ -1,0 +1,197 @@
+/*
+  Pick a word, get a link — see WordPicker.tsx.
+
+  Text on the dark, like the rest of the word game: no panels, no cards. The
+  link itself is the one thing with an edge round it, because it is the thing
+  you are here to take away and it has to read as something you can tap.
+*/
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  max-width: 34rem;
+  margin: 0 auto;
+  text-align: center;
+  color: var(--ink, #f2efe6);
+}
+
+.picker-kicker {
+  margin: 0;
+  font: italic 0.95rem var(--serif);
+  color: #cdb590;
+  letter-spacing: 0.03em;
+}
+
+.picker-title {
+  margin: 0;
+  font: 400 clamp(2rem, 8vw, 2.8rem) / 1.05 var(--serif);
+  color: #f3e8d6;
+}
+
+.picker-note {
+  margin: 0;
+  max-width: 24rem;
+  font: 0.95rem/1.55 var(--serif);
+  color: #c0bcaf;
+}
+
+.picker-stones {
+  margin: 0.9rem 0 0.1rem;
+}
+
+.picker .word {
+  justify-content: center;
+  gap: clamp(0.3rem, 1.6vw, 0.55rem);
+}
+
+/*
+  One row of five, so the stones can be big — the garden's own stone size is
+  for a six-row board beside her shape, and a single word at that size looked
+  like a row of beads.
+*/
+.picker .stone {
+  width: clamp(2.6rem, 15.5vw, 3.9rem);
+  height: clamp(2.6rem, 15.5vw, 3.9rem);
+  font-size: clamp(1.15rem, 6.2vw, 1.7rem);
+}
+
+/* A thumb's keyboard, wherever the picker is shown. */
+.picker .tray {
+  gap: 0.15rem;
+  width: 100%;
+  margin: 0;
+}
+
+.picker .tray-row {
+  justify-content: center;
+  gap: clamp(0.1rem, 0.6vw, 0.3rem);
+}
+
+.picker .tray-key {
+  min-width: min(8.9vw, 2.6rem);
+  min-height: 2.9rem;
+  padding: 0.4rem 0.05rem;
+  font-size: clamp(1rem, 4.4vw, 1.2rem);
+  touch-action: manipulation;
+}
+
+.picker .tray-wide {
+  min-width: clamp(2.8rem, 13.5vw, 3.8rem);
+  font-size: clamp(0.64rem, 2.7vw, 0.78rem);
+  text-transform: lowercase;
+}
+
+.picker-hint {
+  min-height: 1.1rem;
+  margin: 0 0 0.3rem;
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  color: var(--ink-dim, rgba(242, 239, 230, 0.78));
+}
+
+.picker-hint-odd {
+  color: #e8b48a;
+}
+
+.picker-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+  font: italic 0.95rem var(--serif);
+  color: #bcb39e;
+}
+
+.picker-name input {
+  width: 11rem;
+  padding: 0.35rem 0.1rem;
+  border: 0;
+  border-bottom: 1px solid rgba(242, 239, 230, 0.22);
+  border-radius: 0;
+  background: none;
+  color: #f3e8d6;
+  font: 1.05rem var(--serif);
+  text-align: center;
+  outline: none;
+}
+
+.picker-name input:focus {
+  border-bottom-color: #e4c698;
+}
+
+.picker-made {
+  gap: 0.9rem;
+}
+
+.picker-made .word {
+  margin: 0.4rem 0;
+}
+
+.picker .picker-link {
+  max-width: 100%;
+  margin: 0.2rem 0 0;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(228, 198, 152, 0.28);
+  border-radius: 999px;
+  background: rgba(20, 16, 12, 0.35);
+  color: #efd8b0;
+  font: 0.9rem var(--sans);
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.picker .picker-link:hover,
+.picker .picker-link:focus-visible {
+  border-color: rgba(240, 178, 106, 0.7);
+  outline: none;
+}
+
+.picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1.6rem;
+}
+
+.picker .picker-button {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.5rem;
+  border: 0;
+  background: none;
+  font: 0.72rem var(--sans);
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  color: var(--ink-dim, rgba(242, 239, 230, 0.78));
+  cursor: pointer;
+}
+
+.picker .picker-button:hover,
+.picker .picker-button:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
+.picker .picker-main {
+  color: #f0b26a;
+  text-shadow: 0 0 0.9rem rgba(224, 145, 70, 0.4);
+}
+
+.picker-quiet .picker-button {
+  color: rgba(242, 239, 230, 0.42);
+}
+
+.picker-said {
+  min-height: 1.1rem;
+  margin: -0.4rem 0 0;
+  font: 0.7rem var(--sans);
+  letter-spacing: 0.06em;
+  color: #e8b48a;
+}

@@ -11,7 +11,7 @@
   scrollbar-color: #ba9b6944 transparent;
 }
 /* Leave the living scenery visible without duplicating the garden's HUD. */
-body:has(.hollow-hub, .race-setup, .wheel)
+body:has(.hollow-hub, .race-setup, .wheel, .word-share)
   :is(.place-name, .leave-place, .marks, .corner, .corner-tab) {
   visibility: hidden;
 }
@@ -290,6 +290,44 @@ body:has(.hollow-hub, .race-setup, .wheel)
 }
 .hollow-modes > button:nth-child(3) {
   margin-top: 15px;
+}
+.hollow-modes > button:nth-child(4) {
+  margin-top: 40px;
+}
+
+/* Picking a word to send as a link — the hub's ground, without the hub's buttons. */
+.word-share {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  color: #eee5d5;
+  background: radial-gradient(ellipse at 52% 38%, #21171150, #0e100fe6 90%);
+  padding: env(safe-area-inset-top) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  text-shadow: 0 2px 18px #080a08;
+}
+.word-share-top {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+.word-share-top button {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 14px var(--serif);
+  color: #c0b6a6;
+  cursor: pointer;
+}
+.word-share .picker {
+  margin: auto;
+  padding-bottom: 12px;
 }
 .hollow-hub .hollow-modes > button::before {
   top: auto;

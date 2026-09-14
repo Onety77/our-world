@@ -319,6 +319,19 @@ self.addEventListener('fetch', (event) => {
     cache is what makes the world open with no signal, and it is also what
     makes it open *instantly* with a good one.
   */
+  /*
+    Except one: a shared word.
+
+    `/w/<code>` is the page a word sent as a link opens (`word.html`), and it
+    is not the garden. On a phone with the garden on it, answering it with the
+    garden's shell would open the world instead of the board somebody sent —
+    so it gets its own page, from the cache when there is one.
+  */
+  if (request.mode === 'navigate' && (url.pathname === '/w' || url.pathname.startsWith('/w/'))) {
+    event.respondWith(theWordPage(request))
+    return
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(theShell(request))
     return
@@ -337,6 +350,12 @@ async function theShell(request) {
     serve, and the browser's own offline page is a better answer than one this
     file could invent.
   */
+  return fetch(request)
+}
+
+async function theWordPage(request) {
+  const cached = await caches.match('/word.html', { cacheName: SHELL_CACHE })
+  if (cached) return cached
   return fetch(request)
 }
 

@@ -9,5 +9,9 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }]
     }
   ],
-  "rewrites": [{ "source": "/((?!assets/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/w", "destination": "/word.html" },
+    { "source": "/w/:code*", "destination": "/word.html" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
 }

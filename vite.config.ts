@@ -96,7 +96,8 @@ function gardenWorker(): Plugin {
           name.endsWith('.woff2'),
       )
 
-      const shell = ['/index.html', ...code.sort().map((name) => `/${name}`), ...SHELL_FROM_PUBLIC]
+      // `word.html` is the shared-word page — see `wordPage()` below.
+      const shell = ['/index.html', '/word.html', ...code.sort().map((name) => `/${name}`), ...SHELL_FROM_PUBLIC]
 
       /*
         The version is the shell.
@@ -130,10 +131,46 @@ function gardenWorker(): Plugin {
   }
 }
 
+/**
+ * `/w/<code>` is the shared-word page, `word.html`, and not the garden.
+ *
+ * A word picked in the Hollow becomes a link anybody can open (see
+ * `word-duel/challenge.ts`). In production `vercel.json` rewrites the address
+ * to `word.html`; this does the same for the dev server and `vite preview`,
+ * whose own fallback would otherwise hand every unknown path to `index.html`.
+ */
+function wordPage(): Plugin {
+  const rewrite = (req: { url?: string }, _res: unknown, next: () => void) => {
+    if (req.url && /^\/w(\/|$|\?)/.test(req.url)) {
+      const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''
+      // Keep the path the page reads its code from: Vite serves by `url`, the page reads `location`.
+      req.url = '/word.html' + query
+    }
+    next()
+  }
+  return {
+    name: 'word-page',
+    configureServer(server) {
+      server.middlewares.use(rewrite)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(rewrite)
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), gardenWorker()],
+  plugins: [react(), gardenWorker(), wordPage()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        word: fileURLToPath(new URL('./word.html', import.meta.url)),
+      },
+    },
   },
   server: {
     host: true, // so you can open it on your phone over the LAN

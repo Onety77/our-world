@@ -34,6 +34,7 @@
     "harmattan": "npx --yes tsx scripts/harmattan-check.ts",
     "nightfall": "npx --yes tsx scripts/nightfall-check.ts",
     "tyre-contact": "npx --yes tsx scripts/tyre-contact-check.ts",
+    "word-link": "npx --yes tsx scripts/word-link-check.ts",
     "chase": "node scripts/chase-check.mjs",
     "locks": "node scripts/locks-check.mjs",
     "lift": "npx --yes tsx scripts/lift-check.ts",
